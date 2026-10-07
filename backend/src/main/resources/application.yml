@@ -1,6 +1,15 @@
 spring:
   application:
     name: finalysis
+  # Load DB credentials from the repo-root .env (run from backend/ or the repo root).
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:finalysis}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
 
 server:
   port: 8080
