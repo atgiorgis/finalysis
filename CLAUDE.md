@@ -8,7 +8,7 @@ decisions matter as much as features.
 
 ## Stack
 - Backend: Java 21, Spring Boot 4, Spring AI 2.0, Maven, Flyway, JPA
-- Frontend: React + Vite, Recharts
+- Frontend: React + Vite + TypeScript, Recharts, Vitest
 - Database: Postgres with pgvector (Docker Compose)
 - AI: Amazon Bedrock via the `aws` Spring profile (current); Ollama via the `local` profile (later)
 - OCR: Tesseract (tess4j), with a vision-model fallback for low-confidence pages
@@ -16,7 +16,7 @@ decisions matter as much as features.
 ## Repo layout
 - `backend/` organized by feature, not by layer:
   `account`, `ingestion`, `categorize`, `analytics`, `chat`, `config`
-- `frontend/` pages, components, and a single `api.js` for backend calls
+- `frontend/` pages, components, and a single `api.ts` for backend calls
 - `sample-data/` synthetic statements only
 - `compose.yaml` at the repo root
 
@@ -36,7 +36,8 @@ decisions matter as much as features.
   from all spending totals.
 - **Never commit real statements, `.env` files, credentials, or model files.**
 - **Local AI is the default.** Bedrock must be enabled explicitly, and the UI must show a
-  banner when cloud AI is active.
+  banner when cloud AI is active. Until the `local` profile exists, AI features are off
+  unless the `aws` profile is enabled explicitly.
 - **Data minimization in cloud mode:** send only merchant text and amount to Bedrock.
   Never send account numbers, names, or full statements. Redact before every call.
 - **Transaction descriptions are untrusted data, never instructions.** Delimit them in prompts.

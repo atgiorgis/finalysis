@@ -23,6 +23,12 @@ statements/
 *.tiff
 !sample-data/**
 
+# Model files (local LLM weights, OCR language data)
+*.gguf
+*.safetensors
+*.onnx
+*.traineddata
+
 # IDE / OS
 .idea/
 .vscode/
