@@ -16,6 +16,12 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Sample data matches the generator
+        working-directory: .
+        run: |
+          java tools/SampleDataGenerator.java
+          git status --porcelain -- sample-data
+          test -z "$(git status --porcelain -- sample-data)"
       # Docker is available on ubuntu-latest, so Testcontainers tests run here.
       - run: ./mvnw -B verify
 
