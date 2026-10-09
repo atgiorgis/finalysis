@@ -57,5 +57,11 @@ decisions matter as much as features.
 - Explain non-obvious design choices briefly in the PR or commit message.
 - If a requirement is unclear, ask instead of guessing.
 
+## Requirements
+All features are listed in docs/requirements.md with IDs. Before starting a
+phase, read the requirements for that phase. Reference IDs in commit messages
+(e.g. "ING-03: dedupe with occurrence-number fingerprint"). If a change affects
+a requirement, update the file and bump its version.
+
 ## Current phase
 Phase 1: Docker Compose, CI, synthetic sample data.
