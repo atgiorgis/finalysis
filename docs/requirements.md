@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.2 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.3 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -50,7 +50,7 @@ analytics with Spring AI.
 | ING-02 | Normalize signs, dates, and merchant names across institutions. | 3 · POC | Planned |
 | ING-03 | Deduplicate re-uploaded statements while keeping genuine duplicate charges (fingerprint with occurrence number). | 3 · POC | Planned |
 | ING-04 | Block importing the same file twice (file hash) and the same statement period twice. | 3 · POC | Planned |
-| ING-05 | Detect transfers between the user's own accounts and link both sides. | 3 · POC | Planned |
+| ING-05 | Detect transfers between the user's own accounts and link both sides.<br>Invariant: a transaction belongs to at most one transfer link, enforced in the database. | 3 · POC | Planned |
 | ING-06 | Reconcile each statement: opening balance + transactions = closing balance. | 3 · POC | Planned |
 | ING-07 | Statements that fail reconciliation go to a review queue instead of being silently saved. | 3 · POC | Planned |
 | ING-10 | Reconcile each statement section against its printed total, in addition to the overall balance check. | 3 · POC | Planned |
@@ -193,3 +193,4 @@ analytics with Spring AI.
 | 1.0 | 2026-10-09 | Initial requirements, aligned with Finalysis Roadmap V4. |
 | 1.1 | 2026-10-09 | Added DAT-08, ING-10, ING-11, SEC-08, SEC-09 after analyzing a Bank of America PDF statement; moved digital PDF import (ING-08) into the POC as Phase 3b. |
 | 1.2 | 2026-10-09 | DAT-02: seeded the answer-key categories plus general-purpose ones. Merged "Internal Transfer" and "Credit Card Payment" into the answer key's "Transfer", which already labels both savings transfers and card payments; a separate name would duplicate it and break CAT-05 accuracy against the answer key. Card payments can be identified from `transfer_link` plus the counterpart account type. |
+| 1.3 | 2026-10-09 | ING-05: added the invariant that a transaction belongs to at most one transfer link, on either side. V1's unique constraints only blocked repeats on the same side; V3 adds a trigger that also blocks a txn being the out side of one link and the in side of another. |
