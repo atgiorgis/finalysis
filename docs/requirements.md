@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.6 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.7 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -33,14 +33,14 @@ analytics with Spring AI.
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| DAT-01 | Register accounts (checking, savings, credit card) with name, institution (each 1–100 characters), type, and last four digits. | 2 · POC | Planned |
-| DAT-02 | Seeded spending categories with kind (expense, income, transfer), matching the sample-data answer key. | 2 · POC | Planned |
-| DAT-03 | Store full transaction history locally in Postgres. | 2 · POC | Planned |
-| DAT-04 | Store each transaction's raw description unchanged, plus a cleaned merchant name. | 2 · POC | Planned |
-| DAT-05 | Record how each transaction was categorized (rule, AI, or user). | 2 · POC | Planned |
-| DAT-06 | Store one embedding per unique merchant (pgvector, 1024 dimensions) with the model name. | 2 · POC | Planned |
-| DAT-07 | Store each transaction's source statement line number and text (source tracing). | 2 · POC | Planned |
-| DAT-08 | Store each transaction's statement section (deposit, withdrawal, check, fee), optional check number, and optional counterparty (local only); store printed section totals per statement. | 2 · POC | Planned |
+| DAT-01 | Register accounts (checking, savings, credit card) with name, institution (each 1–100 characters), type, and last four digits. | 2 · POC | Done |
+| DAT-02 | Seeded spending categories with kind (expense, income, transfer), matching the sample-data answer key. | 2 · POC | Done |
+| DAT-03 | Store full transaction history locally in Postgres. | 2 · POC | Done |
+| DAT-04 | Store each transaction's raw description unchanged, plus a cleaned merchant name. | 2 · POC | Done |
+| DAT-05 | Record how each transaction was categorized (rule, AI, or user). | 2 · POC | Done |
+| DAT-06 | Store one embedding per unique merchant (pgvector, 1024 dimensions) with the model name. | 2 · POC | Done |
+| DAT-07 | Store each transaction's source statement line number and text (source tracing). | 2 · POC | Done |
+| DAT-08 | Store each transaction's statement section (deposit, withdrawal, check, fee), optional check number, and optional counterparty (local only); store printed section totals per statement. | 2 · POC | Done |
 
 ## 2. Statement ingestion
 
@@ -197,3 +197,4 @@ analytics with Spring AI.
 | 1.4 | 2026-10-09 | DAT-01: account name and institution limited to 1–100 characters (V4 CHECK constraints, mirrored in API validation); account REST API (create, list, get, rename). |
 | 1.5 | 2026-10-09 | DAT-02: read-only category list API (`GET /api/categories`). Sorted by name ignoring case, in Java rather than SQL, so the order does not depend on the database collation. |
 | 1.6 | 2026-10-09 | DAT-06: merchant embedding repository over JDBC (pgvector-java for vector binding): upsert, lookup, cosine nearest-neighbour search matching the HNSW index's `vector_cosine_ops`, and stale-model lookup for re-embedding. Keys are the exact cleaned `txn.merchant` value, with no normalization in the repository. |
+| 1.7 | 2026-10-09 | DAT-01 to DAT-08 marked Done (Phase 2 complete). README documents the data model (ER diagram, design decisions, migrations), the API and its error format, and local development (tests, Postman, database client). Added `scripts/reset-dev-db.sh`, which recreates the dev database only after typed confirmation and refuses any non-local target. |
