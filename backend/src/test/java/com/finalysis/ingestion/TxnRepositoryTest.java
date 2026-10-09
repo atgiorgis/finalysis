@@ -89,6 +89,24 @@ class TxnRepositoryTest {
     }
 
     @Test
+    void rawDescriptionRoundTripsUnchanged() {
+        // Untrimmed, double spaces, a wrapped line joined by a newline, a tab, and non-ASCII text.
+        String raw = "  ZELLE PAYMENT TO  J SAMPLE\n  CONF# A1B2C3\tMEMO: café  ";
+        Account account = accounts.save(EntityFixtures.account("1001"));
+        Statement statement = statements.save(EntityFixtures.statement(account));
+        Txn txn = new Txn(account, statement, LocalDate.of(2026, 4, 9), raw, new BigDecimal("-20.00"),
+                SourceSection.WITHDRAWAL, "fp-raw");
+        txn.setMerchant("Zelle");
+        Long id = txns.saveAndFlush(txn).getId();
+        entityManager.clear();
+
+        Txn loaded = txns.findById(id).orElseThrow();
+
+        assertThat(loaded.getRawDescription()).isEqualTo(raw);
+        assertThat(loaded.getMerchant()).isEqualTo("Zelle");
+    }
+
+    @Test
     void savesZeroAmount() {
         Account account = accounts.save(EntityFixtures.account("1001"));
         Statement statement = statements.save(EntityFixtures.statement(account));

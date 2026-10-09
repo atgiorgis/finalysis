@@ -157,6 +157,28 @@ class SchemaMigrationTest {
                 .hasMessageContaining("ck_transfer_link_status_matches_in");
     }
 
+    @Test
+    void rejectsCategoryWithoutSource() {
+        long account = insertAccount("1001");
+        long txn = insertTxn(account, insertStatement(account), "fp-no-source");
+
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries') WHERE id = ?",
+                txn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_txn_category_has_source");
+    }
+
+    @Test
+    void rejectsSourceWithoutCategory() {
+        long account = insertAccount("1001");
+        long txn = insertTxn(account, insertStatement(account), "fp-no-category");
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE txn SET category_source = 'AI' WHERE id = ?", txn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_txn_category_has_source");
+    }
+
     private long insertAccount(String lastFour) {
         return jdbc.queryForObject("""
                 INSERT INTO account (name, institution, type, last_four)

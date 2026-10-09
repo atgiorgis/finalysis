@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deletes and recreates the local dev database (the compose `db` service and its pgdata volume).
+# Deletes and recreates the local dev database (the compose `db` service and its own pgdata volume only).
 # ALL LOCAL DATA IS LOST. Start the backend afterwards so Flyway re-applies the migrations.
 #
 # Takes no arguments and refuses to run if anything suggests a non-local target.
@@ -48,7 +48,32 @@ if [[ ! -t 0 ]]; then
     refuse "stdin is not a terminal; run this interactively"
 fi
 
-echo "This deletes the local dev database: the compose 'db' container and its 'pgdata' volume."
+# Resolve the db volume's real Docker name from the compose config (it depends on the project name),
+# and only ever delete that one volume. db_volume_key is the compose key that db mounts.
+db_volume_key=pgdata
+config="$(docker compose config)" || refuse "docker compose config failed"
+project="$(sed -n 's/^name:[[:space:]]*//p' <<<"$config" | tr -d "\"'")"
+volume="$(awk -v key="$db_volume_key" '
+    /^[^[:space:]]/ { top = $0; in_key = 0; next }
+    top == "volumes:" && $0 ~ "^  " key ":[[:space:]]*$" { in_key = 1; next }
+    in_key && /^  [^[:space:]]/ { exit }
+    in_key && /^    name:/ { sub(/^    name:[[:space:]]*/, ""); gsub(/["\047]/, ""); print; exit }
+' <<<"$config")"
+[[ -n "$project" ]] || refuse "cannot read the compose project name"
+[[ "$volume" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || refuse "cannot resolve the '$db_volume_key' volume name (got: '$volume')"
+
+volume_exists=false
+if docker volume inspect "$volume" >/dev/null 2>&1; then
+    volume_exists=true
+    labels="$(docker volume inspect \
+        --format '{{index .Labels "com.docker.compose.project"}}/{{index .Labels "com.docker.compose.volume"}}' \
+        "$volume")"
+    if [[ "$labels" != "$project/$db_volume_key" ]]; then
+        refuse "volume $volume is not compose volume '$db_volume_key' of project '$project' (labels: $labels)"
+    fi
+fi
+
+echo "This deletes the local dev database: the compose 'db' container and the '$volume' volume."
 echo "Every account, statement, and transaction in it is lost. There is no undo."
 read -r -p 'Type "reset" to continue: ' answer || answer=""
 if [[ "$answer" != "reset" ]]; then
@@ -56,8 +81,14 @@ if [[ "$answer" != "reset" ]]; then
     exit 1
 fi
 
-# db is the project's only service, so this removes exactly its container and the pgdata volume.
-docker compose down --volumes
+# Remove only db's container and its own volume. NEVER use `docker compose down --volumes` or
+# delete any other volume: other services keep large or precious data in their own volumes (from
+# Phase 10, the ollama models volume), and a database reset must leave them untouched.
+docker compose rm --stop --force db
+if [[ "$volume_exists" == true ]]; then
+    # Fails, and set -e stops the script, if any other container still uses the volume.
+    docker volume rm "$volume"
+fi
 docker compose up -d --wait db
 
 echo

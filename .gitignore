@@ -14,6 +14,7 @@ frontend/dist/
 
 # Real bank and card statements. Only synthetic files under sample-data/ are committed.
 statements/
+private-data/
 *.csv
 *.ofx
 *.qfx

@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.7 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.8 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -53,7 +53,7 @@ analytics with Spring AI.
 | ING-05 | Detect transfers between the user's own accounts and link both sides.<br>Invariant: a transaction belongs to at most one transfer link, enforced in the database. | 3 · POC | Planned |
 | ING-06 | Reconcile each statement: opening balance + transactions = closing balance. | 3 · POC | Planned |
 | ING-07 | Statements that fail reconciliation go to a review queue instead of being silently saved. | 3 · POC | Planned |
-| ING-10 | Reconcile each statement section against its printed total, in addition to the overall balance check. | 3 · POC | Planned |
+| ING-10 | Reconcile each statement section against its printed total, in addition to the overall balance check. Validate section_totals on write: keys must be SourceSection values, amounts scale 2 and within NUMERIC(12,2) range. | 3 · POC | Planned |
 | ING-11 | Generate synthetic PDF statements that mimic real layouts, for parser tests. | 3b · POC | Planned |
 | ING-08 | Import digital PDF statements, starting with the Bank of America checking layout (sections, wrapped descriptions, page continuations, $0.00 rows, embedded purchase dates). | 3b · POC | Planned |
 | ING-09 | Import scanned or photographed statements via OCR, with a vision-model fallback for low-confidence pages. | 8 | Planned |
@@ -198,3 +198,4 @@ analytics with Spring AI.
 | 1.5 | 2026-10-09 | DAT-02: read-only category list API (`GET /api/categories`). Sorted by name ignoring case, in Java rather than SQL, so the order does not depend on the database collation. |
 | 1.6 | 2026-10-09 | DAT-06: merchant embedding repository over JDBC (pgvector-java for vector binding): upsert, lookup, cosine nearest-neighbour search matching the HNSW index's `vector_cosine_ops`, and stale-model lookup for re-embedding. Keys are the exact cleaned `txn.merchant` value, with no normalization in the repository. |
 | 1.7 | 2026-10-09 | DAT-01 to DAT-08 marked Done (Phase 2 complete). README documents the data model (ER diagram, design decisions, migrations), the API and its error format, and local development (tests, Postman, database client). Added `scripts/reset-dev-db.sh`, which recreates the dev database only after typed confirmation and refuses any non-local target. |
+| 1.8 | 2026-10-09 | Phase 2 verification. ING-10: added the note to validate `statement.section_totals` on write (deferred to Phase 3; the JSONB column itself enforces neither the keys nor NUMERIC(12,2)). `scripts/reset-dev-db.sh` now removes only the `db` container and its own volume instead of `docker compose down --volumes`, so other services' volumes survive a reset. |

@@ -73,7 +73,8 @@ scripts/reset-dev-db.sh
 ```
 
 The script removes the compose `db` container and its `pgdata` volume, then starts a fresh empty
-database. Start the backend afterwards so Flyway re-applies the migrations. It asks you to type
+database. It removes only the database volume, which it resolves from `docker compose config` and
+checks by its compose labels; other services and their volumes are never touched. Start the backend afterwards so Flyway re-applies the migrations. It asks you to type
 `reset` to confirm. It refuses to run if it is given any arguments, if stdin is not a terminal, or
 if anything suggests a non-local target: a remote `DOCKER_HOST` or Docker context, `DOCKER_CONTEXT`,
 `COMPOSE_FILE`, `COMPOSE_PROJECT_NAME` or `SPRING_DATASOURCE_URL` set, or a `POSTGRES_HOST` other
