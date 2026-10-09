@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.4 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.5 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -195,3 +195,4 @@ analytics with Spring AI.
 | 1.2 | 2026-10-09 | DAT-02: seeded the answer-key categories plus general-purpose ones. Merged "Internal Transfer" and "Credit Card Payment" into the answer key's "Transfer", which already labels both savings transfers and card payments; a separate name would duplicate it and break CAT-05 accuracy against the answer key. Card payments can be identified from `transfer_link` plus the counterpart account type. |
 | 1.3 | 2026-10-09 | ING-05: added the invariant that a transaction belongs to at most one transfer link, on either side. V1's unique constraints only blocked repeats on the same side; V3 adds a trigger that also blocks a txn being the out side of one link and the in side of another. |
 | 1.4 | 2026-10-09 | DAT-01: account name and institution limited to 1–100 characters (V4 CHECK constraints, mirrored in API validation); account REST API (create, list, get, rename). |
+| 1.5 | 2026-10-09 | DAT-02: read-only category list API (`GET /api/categories`). Sorted by name ignoring case, in Java rather than SQL, so the order does not depend on the database collation. |
