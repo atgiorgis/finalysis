@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.0 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.1 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -40,6 +40,7 @@ analytics with Spring AI.
 | DAT-05 | Record how each transaction was categorized (rule, AI, or user). | 2 · POC | Planned |
 | DAT-06 | Store one embedding per unique merchant (pgvector, 1024 dimensions) with the model name. | 2 · POC | Planned |
 | DAT-07 | Store each transaction's source statement line number and text (source tracing). | 2 · POC | Planned |
+| DAT-08 | Store each transaction's statement section (deposit, withdrawal, check, fee), optional check number, and optional counterparty (local only); store printed section totals per statement. | 2 · POC | Planned |
 
 ## 2. Statement ingestion
 
@@ -52,7 +53,9 @@ analytics with Spring AI.
 | ING-05 | Detect transfers between the user's own accounts and link both sides. | 3 · POC | Planned |
 | ING-06 | Reconcile each statement: opening balance + transactions = closing balance. | 3 · POC | Planned |
 | ING-07 | Statements that fail reconciliation go to a review queue instead of being silently saved. | 3 · POC | Planned |
-| ING-08 | Import digital PDF statements. | 8 | Planned |
+| ING-10 | Reconcile each statement section against its printed total, in addition to the overall balance check. | 3 · POC | Planned |
+| ING-11 | Generate synthetic PDF statements that mimic real layouts, for parser tests. | 3b · POC | Planned |
+| ING-08 | Import digital PDF statements, starting with the Bank of America checking layout (sections, wrapped descriptions, page continuations, $0.00 rows, embedded purchase dates). | 3b · POC | Planned |
 | ING-09 | Import scanned or photographed statements via OCR, with a vision-model fallback for low-confidence pages. | 8 | Planned |
 
 ## 3. Categorization
@@ -160,6 +163,8 @@ analytics with Spring AI.
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
 | SEC-01 | Cloud mode sends only cleaned merchant text (location and store numbers removed) and amounts. Never account numbers, names, balances, documents, or SSNs. | 4 · POC | Planned |
+| SEC-08 | Before any cloud call, strip bank identifiers from descriptions: INDN:, ID:, CO ID:, Conf#, account last-fours, and person-to-person counterparty names. Covered by tests. | 4 · POC | Planned |
+| SEC-09 | PDF statement text is never sent to Bedrock; any AI fallback for extraction runs on the local model only. | 3b · POC | Planned |
 | SEC-02 | Transaction text is treated as untrusted data and delimited in prompts, never followed as instructions. | 4, 6 · POC | Planned |
 | SEC-03 | AI tools are read-only. | 6 · POC | Planned |
 | SEC-04 | Encrypt stored statement files and document images (AES-GCM, key derived from a passphrase with Argon2id). | 8 | Planned |
@@ -186,3 +191,4 @@ analytics with Spring AI.
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-10-09 | Initial requirements, aligned with Finalysis Roadmap V4. |
+| 1.1 | 2026-10-09 | Added DAT-08, ING-10, ING-11, SEC-08, SEC-09 after analyzing a Bank of America PDF statement; moved digital PDF import (ING-08) into the POC as Phase 3b. |

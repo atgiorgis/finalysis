@@ -64,4 +64,4 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 1: Docker Compose, CI, synthetic sample data.
+Phase 2: data model (requirements DAT-01 to DAT-08).
