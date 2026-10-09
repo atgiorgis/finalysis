@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.3 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.4 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -33,7 +33,7 @@ analytics with Spring AI.
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| DAT-01 | Register accounts (checking, savings, credit card) with name, institution, type, and last four digits. | 2 · POC | Planned |
+| DAT-01 | Register accounts (checking, savings, credit card) with name, institution (each 1–100 characters), type, and last four digits. | 2 · POC | Planned |
 | DAT-02 | Seeded spending categories with kind (expense, income, transfer), matching the sample-data answer key. | 2 · POC | Planned |
 | DAT-03 | Store full transaction history locally in Postgres. | 2 · POC | Planned |
 | DAT-04 | Store each transaction's raw description unchanged, plus a cleaned merchant name. | 2 · POC | Planned |
@@ -194,3 +194,4 @@ analytics with Spring AI.
 | 1.1 | 2026-10-09 | Added DAT-08, ING-10, ING-11, SEC-08, SEC-09 after analyzing a Bank of America PDF statement; moved digital PDF import (ING-08) into the POC as Phase 3b. |
 | 1.2 | 2026-10-09 | DAT-02: seeded the answer-key categories plus general-purpose ones. Merged "Internal Transfer" and "Credit Card Payment" into the answer key's "Transfer", which already labels both savings transfers and card payments; a separate name would duplicate it and break CAT-05 accuracy against the answer key. Card payments can be identified from `transfer_link` plus the counterpart account type. |
 | 1.3 | 2026-10-09 | ING-05: added the invariant that a transaction belongs to at most one transfer link, on either side. V1's unique constraints only blocked repeats on the same side; V3 adds a trigger that also blocks a txn being the out side of one link and the in side of another. |
+| 1.4 | 2026-10-09 | DAT-01: account name and institution limited to 1–100 characters (V4 CHECK constraints, mirrored in API validation); account REST API (create, list, get, rename). |

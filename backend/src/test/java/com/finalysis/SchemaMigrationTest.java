@@ -53,6 +53,8 @@ class SchemaMigrationTest {
     @CsvSource({
             "account,             ck_account_type,                     c",
             "account,             ck_account_last_four,                c",
+            "account,             ck_account_name_length,              c",
+            "account,             ck_account_institution_length,       c",
             "statement,           ck_statement_status,                 c",
             "statement,           ck_statement_period,                 c",
             "statement,           ck_statement_section_totals_object,  c",

@@ -18,6 +18,10 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "account")
 public class Account {
 
+    // Mirror ck_account_name_length and ck_account_institution_length (V4).
+    public static final int NAME_MAX = 100;
+    public static final int INSTITUTION_MAX = 100;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -49,6 +53,10 @@ public class Account {
         this.institution = institution;
         this.type = type;
         this.lastFour = lastFour;
+    }
+
+    public void rename(String name) {
+        this.name = name;
     }
 
     public Long getId() {

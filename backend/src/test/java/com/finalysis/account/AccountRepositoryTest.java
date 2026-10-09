@@ -1,11 +1,13 @@
 package com.finalysis.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.finalysis.support.EntityFixtures;
 import com.finalysis.support.IntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 @IntegrationTest
@@ -40,5 +42,13 @@ class AccountRepositoryTest {
         Account saved = accounts.saveAndFlush(EntityFixtures.account("1001"));
 
         assertThat(saved.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    void rejectsNameLongerThanLimit() {
+        Account account = new Account("x".repeat(Account.NAME_MAX + 1), "Northfield Bank", AccountType.CHECKING, "1234");
+
+        assertThatThrownBy(() -> accounts.saveAndFlush(account))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }
