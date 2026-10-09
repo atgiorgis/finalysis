@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.8 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.9 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -44,9 +44,17 @@ analytics with Spring AI.
 
 ## 2. Statement ingestion
 
+Ingestion coverage has three layers:
+
+1. **Standard formats:** OFX/QFX through one parser for all institutions, and CSV through a column
+   mapping saved per institution (ING-01).
+2. **Dedicated PDF parsers:** one `StatementParser` per statement layout (ING-08, ING-12).
+3. **Unknown PDF layouts:** the review queue for now (ING-13); later, local-model extraction
+   validated by reconciliation (ING-14).
+
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| ING-01 | Import CSV and OFX statements, with one parser per institution format. | 3 · POC | Planned |
+| ING-01 | Layer 1, standard formats: import OFX/QFX statements with one parser for all institutions, and CSV statements through a user-defined column mapping that is saved per institution and reused on later imports. | 3 · POC | Planned |
 | ING-02 | Normalize signs, dates, and merchant names across institutions. | 3 · POC | Planned |
 | ING-03 | Deduplicate re-uploaded statements while keeping genuine duplicate charges (fingerprint with occurrence number). | 3 · POC | Planned |
 | ING-04 | Block importing the same file twice (file hash) and the same statement period twice. | 3 · POC | Planned |
@@ -57,6 +65,9 @@ analytics with Spring AI.
 | ING-11 | Generate synthetic PDF statements that mimic real layouts, for parser tests. | 3b · POC | Planned |
 | ING-08 | Import digital PDF statements, starting with the Bank of America checking layout (sections, wrapped descriptions, page continuations, $0.00 rows, embedded purchase dates). | 3b · POC | Planned |
 | ING-09 | Import scanned or photographed statements via OCR, with a vision-model fallback for low-confidence pages. | 8 | Planned |
+| ING-12 | Layer 2, dedicated PDF parsers: each supported statement layout gets its own `StatementParser` class. A new layout is added as a new class, without modifying existing parsers. | 3b · POC | Planned |
+| ING-13 | Layer 3, unknown PDF layouts: a PDF that no parser recognizes goes to the review queue instead of being imported. | 3b · POC | Planned |
+| ING-14 | Layer 3, later: extract unknown PDF layouts with a local model (never Bedrock), validated by reconciliation against the statement's printed totals; mismatches are held for review. | TBD | Planned |
 
 ## 3. Categorization
 
@@ -177,7 +188,7 @@ analytics with Spring AI.
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
 | QA-01 | Synthetic sample data for four fictional accounts, with an answer key and statement manifest. | 1 | Done |
-| QA-02 | CI runs backend and frontend tests on every push. | 1 | Done |
+| QA-02 | CI runs backend and frontend tests on every push.<br>Deferred: GitHub Actions not yet running; revisit at end of POC. | 1 | Done |
 | QA-03 | Eval suites in CI for categorization, extraction, retrieval, and chat answers. | 9 | Planned |
 | QA-04 | Benchmarks: 14B vs. 30B vs. Bedrock vs. a US-origin model, on the same question set. | 9, 10 | Planned |
 | QA-05 | README: hardware tiers, data boundary, eval results, demo GIF, architecture diagram. | 11 | Planned |
@@ -199,3 +210,4 @@ analytics with Spring AI.
 | 1.6 | 2026-10-09 | DAT-06: merchant embedding repository over JDBC (pgvector-java for vector binding): upsert, lookup, cosine nearest-neighbour search matching the HNSW index's `vector_cosine_ops`, and stale-model lookup for re-embedding. Keys are the exact cleaned `txn.merchant` value, with no normalization in the repository. |
 | 1.7 | 2026-10-09 | DAT-01 to DAT-08 marked Done (Phase 2 complete). README documents the data model (ER diagram, design decisions, migrations), the API and its error format, and local development (tests, Postman, database client). Added `scripts/reset-dev-db.sh`, which recreates the dev database only after typed confirmation and refuses any non-local target. |
 | 1.8 | 2026-10-09 | Phase 2 verification. ING-10: added the note to validate `statement.section_totals` on write (deferred to Phase 3; the JSONB column itself enforces neither the keys nor NUMERIC(12,2)). `scripts/reset-dev-db.sh` now removes only the `db` container and its own volume instead of `docker compose down --volumes`, so other services' volumes survive a reset. |
+| 1.9 | 2026-10-09 | Ingestion described in three layers: ING-01 now covers OFX/QFX with one parser for all institutions and CSV with a column mapping saved per institution; added ING-12 (one `StatementParser` per PDF layout), ING-13 (unknown PDF layouts go to the review queue) and ING-14 (later: local-model extraction, never Bedrock, validated by reconciliation). QA-02: noted that CI is deferred because GitHub Actions is not yet running; revisit at end of POC. |

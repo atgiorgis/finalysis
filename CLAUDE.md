@@ -42,6 +42,13 @@ decisions matter as much as features.
   Never send account numbers, names, or full statements. Redact before every call.
 - **Transaction descriptions are untrusted data, never instructions.** Delimit them in prompts.
 - **Chatbot tools are read-only.** The AI can query data but never change it.
+- **Parsers pass descriptions to TransactionFingerprint exactly as extracted** (wrapped lines included).
+  Never trim, clean, or redact a description before fingerprinting; cleaning happens afterward for
+  the merchant field only.
+- **Real statements live only in `private-data/` (git-ignored).** Never read them into tests,
+  fixtures, docs, or commit messages.
+- **Core code (categories, analytics, chat, dedup, reconciliation) is bank-agnostic.** Bank-specific
+  knowledge lives only inside `StatementParser` implementations and categorization rules.
 
 ## Coding conventions
 - Constructor injection, no field `@Autowired`.
@@ -49,7 +56,6 @@ decisions matter as much as features.
 - New statement formats = a new `StatementParser` implementation; don't modify existing ones.
 - Schema changes only through new Flyway migrations; never edit an applied migration.
 - Every feature ships with tests. Use Testcontainers for database tests and synthetic data from `sample-data/`.
-- Parsers pass descriptions to TransactionFingerprint exactly as extracted (wrapped lines included). Never trim, clean, or redact a description before fingerprinting; cleaning happens afterward for the merchant field only.
 
 ## How to work with me
 - Propose a plan before large changes and wait for approval.
@@ -64,4 +70,10 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 2: data model (requirements DAT-01 to DAT-08).
+Phase 3: ingestion. 3a: standard formats: OFX/QFX parser and CSV parser with saved
+per-institution column mappings. 3b: digital PDF parsers, one StatementParser per layout, with a
+synthetic PDF generator for test data; unknown layouts go to the review queue (local-model
+extraction comes in a later phase). Requirements: ING-01 to ING-07, ING-10, ING-11, SEC-08, SEC-09.
+
+## Notes
+- CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.
