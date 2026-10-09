@@ -48,8 +48,8 @@ decisions matter as much as features.
 - Java records for DTOs and AI structured-output types.
 - New statement formats = a new `StatementParser` implementation; don't modify existing ones.
 - Schema changes only through new Flyway migrations; never edit an applied migration.
-- Every feature ships with tests. Use Testcontainers for database tests and
-  synthetic data from `sample-data/`.
+- Every feature ships with tests. Use Testcontainers for database tests and synthetic data from `sample-data/`.
+- Parsers pass descriptions to TransactionFingerprint exactly as extracted (wrapped lines included). Never trim, clean, or redact a description before fingerprinting; cleaning happens afterward for the merchant field only.
 
 ## How to work with me
 - Propose a plan before large changes and wait for approval.
