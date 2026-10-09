@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.5 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.6 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -196,3 +196,4 @@ analytics with Spring AI.
 | 1.3 | 2026-10-09 | ING-05: added the invariant that a transaction belongs to at most one transfer link, on either side. V1's unique constraints only blocked repeats on the same side; V3 adds a trigger that also blocks a txn being the out side of one link and the in side of another. |
 | 1.4 | 2026-10-09 | DAT-01: account name and institution limited to 1–100 characters (V4 CHECK constraints, mirrored in API validation); account REST API (create, list, get, rename). |
 | 1.5 | 2026-10-09 | DAT-02: read-only category list API (`GET /api/categories`). Sorted by name ignoring case, in Java rather than SQL, so the order does not depend on the database collation. |
+| 1.6 | 2026-10-09 | DAT-06: merchant embedding repository over JDBC (pgvector-java for vector binding): upsert, lookup, cosine nearest-neighbour search matching the HNSW index's `vector_cosine_ops`, and stale-model lookup for re-embedding. Keys are the exact cleaned `txn.merchant` value, with no normalization in the repository. |
