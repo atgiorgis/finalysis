@@ -663,6 +663,266 @@
       ]
     },
     {
+      "name": "CSV mapping",
+      "item": [
+        {
+          "name": "Put Apex Visa CSV mapping",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{apexId}}",
+                "csv-mapping"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Saves the Apex Visa export's layout (sample-data/statements/apex-visa_*.csv). Creates the mapping (201) on the first run and replaces it (200) after that. Once a CSV import has used the mapping, changing sign, descriptionColumns or the printed-date column returns 409 mapping-locked unless ?confirmFingerprintChange=true is added."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created, or 200 if replaced', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "const body = pm.response.json();",
+                  "pm.test('sign as sent', () => pm.expect(body.sign).to.eql('INVERTED'));",
+                  "pm.test('defaults applied', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.encoding).to.eql('UTF-8'); pm.expect(body.headerRow).to.eql(true); });",
+                  "pm.test('server computed the header signature', () => pm.expect(body.headerSignature).to.match(/^sha256:[0-9a-f]{64}$/));",
+                  "pm.test('no warnings', () => pm.expect(body.warnings).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Apex Visa CSV mapping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{apexId}}",
+                "csv-mapping"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('description columns in order', () => pm.expect(body.descriptionColumns).to.eql(['Description']));",
+                  "pm.test('printed date is the post date', () => pm.expect(body.postDateColumn).to.eql('Post Date'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Error cases",
+          "item": [
+            {
+              "name": "PUT with a column not in headers \u2192 400",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{apexId}}",
+                    "csv-mapping"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Posting Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "const error = pm.response.json().errors.find(e => e.field === 'dateColumn');",
+                      "pm.test('names dateColumn', () => pm.expect(error.message).to.eql('is not one of the headers'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT card mapping without sign \u2192 400",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{apexId}}",
+                    "csv-mapping"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('sign is required for cards', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'sign', message: 'is required for credit card accounts'}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT with a bad date format \u2192 400",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{apexId}}",
+                    "csv-mapping"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('names dateFormat', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('dateFormat'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET mapping of unknown account \u2192 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/999999/csv-mapping",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "999999",
+                    "csv-mapping"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('names the account', () => pm.expect(pm.response.json().detail).to.eql('Account 999999 not found'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Categories",
       "item": [
         {

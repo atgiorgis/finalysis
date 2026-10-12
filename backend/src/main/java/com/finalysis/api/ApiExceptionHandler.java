@@ -2,7 +2,9 @@ package com.finalysis.api;
 
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
+import com.finalysis.ingestion.csv.CsvMappingLockedException;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -79,6 +81,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         if (ex.getLineNumber() != null) {
             problem.setProperty("line", ex.getLineNumber());
         }
+        return problem;
+    }
+
+    /** A change to a used CSV mapping's fingerprint fields, sent without confirmation. */
+    @ExceptionHandler(CsvMappingLockedException.class)
+    ProblemDetail handleMappingLocked(CsvMappingLockedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:mapping-locked"));
+        problem.setTitle("CSV mapping is locked");
+        problem.setProperty("fields", ex.getFields());
         return problem;
     }
 

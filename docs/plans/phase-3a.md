@@ -1,7 +1,7 @@
 # Phase 3a plan: standard-format ingestion (OFX/QFX + CSV)
 
-Status: steps 1–4 done; step 5 next. Branch `v1`. Read this before starting a step, then the
-requirements it cites in `docs/requirements.md` (currently v1.14).
+Status: steps 1–5 done; step 6 next. Branch `v1`. Read this before starting a step, then the
+requirements it cites in `docs/requirements.md` (currently v1.15).
 
 Scope: ING-01 to ING-07, ING-10, SEC-10, SEC-11 for OFX/QFX and CSV. Out of scope for 3a: PDF
 parsers (3b), transfer detection and the review-queue API (3c), categorization and merchant
@@ -121,6 +121,23 @@ These are approved and override anything older in the conversation history.
     `?confirmFingerprintChange=true` it's accepted, and the response warns that future imports
     overlapping earlier statements will produce new fingerprints and land in NEEDS_REVIEW (via
     the overlap-with-inserted-rows rule).
+- **Step 5 implementation details:**
+  - `header_row` is a boolean; `skip_rows` (0–100) counts lines skipped before the header (or
+    before the first row without one).
+  - `header_signature` is `sha256:<hex>` of the stripped header names joined with U+001F, or
+    `columns:<n>` without a header row. Header names are matched exactly (case-sensitive) after
+    stripping; a referenced name that appears twice in the headers is a 400.
+  - Index references are canonical (`0`, `12`, never `01`), so equal indexes compare equal.
+  - `PUT` returns 201 on create and 200 on replace; `used_at` and `created_at` survive a replace.
+  - SINGLE forbids debit/credit columns and DEBIT_CREDIT forbids `amount_column` (API and CHECK).
+  - Locked values are compared exactly: renaming a locked column (or switching `header_row`,
+    which turns names into indexes) needs confirmation. `amount_mode` is not locked. A changed
+    printed-date column is reported as `postDateColumn` when either side maps one, else
+    `dateColumn`.
+  - `PUT` locks the account row like an import, so a mapping can't change while an import of the
+    account is being written; step 7 should still check under that lock that the mapping it
+    parsed with is the current one.
+  - Validation errors name fields and positions (`descriptionColumns[1]`), never column names.
 - No mapping yet → 422 `mapping-required` pointing to the preview; header mismatch → 422
   `mapping-mismatch` with the preview.
 - Period: request values, else first and last transaction dates.
@@ -170,7 +187,7 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 2 | OFX tokenizer (SGML/XML, entities, charsets, hardening) | Done: `3aa8457`; fixes `371ac6c` (UNICODE, SGML recovery, source spans) |
 | 3 | OFX parser + `sample-data/ofx/` and `edge-cases/` via the generator | Done: `02dac06` |
 | 4 | Import endpoint, OFX end to end (V5, dedup, statuses, SEC-10 checks, docs) | Done: `3ef1196`; follow-ups `c1dd137` (stored warnings, out-of-period rows), `89b3d3b` (FITID out of fingerprint, overlap status rule, money as JSON strings) |
-| 5 | CSV mapping: V6 `csv_mapping` (with `used_at`), entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, locked fields with 409 `mapping-locked` and the `?confirmFingerprintChange=true` override | Next |
+| 5 | CSV mapping: V6 `csv_mapping` (with `used_at`), entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, locked fields with 409 `mapping-locked` and the `?confirmFingerprintChange=true` override | Done |
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | To do |
 | 7 | CSV import: preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings | To do |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | To do |

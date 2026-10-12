@@ -21,8 +21,8 @@ import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequ
 
 /**
  * Helpers for import tests that commit for real (no test transaction), so locks and concurrent
- * imports behave as in production. Every account created here is deleted, with its statements
- * and transactions, by {@link #deleteCreatedAccounts()}.
+ * imports behave as in production. Every account created here is deleted, with its statements,
+ * transactions and CSV mapping, by {@link #deleteCreatedAccounts()}.
  */
 public class ImportTestSupport {
 
@@ -49,6 +49,7 @@ public class ImportTestSupport {
         for (long id : created) {
             jdbc.update("DELETE FROM txn WHERE account_id = ?", id);
             jdbc.update("DELETE FROM statement WHERE account_id = ?", id);
+            jdbc.update("DELETE FROM csv_mapping WHERE account_id = ?", id);
             jdbc.update("DELETE FROM account WHERE id = ?", id);
         }
         created.clear();

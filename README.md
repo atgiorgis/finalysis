@@ -223,6 +223,7 @@ erDiagram
 | V3 `transfer_link_txn_once` | Trigger ensuring a txn belongs to at most one transfer link, on either side. |
 | V4 `account_name_lengths` | CHECK constraints limiting account name and institution to 1–100 characters. |
 | V5 `statement_import` | `txn.external_id` and `printed_amount`, `statement.parser` and `import_warnings`; drops the unique (account, period) constraint so periods can be re-imported. |
+| V6 `csv_mapping` | `csv_mapping`: one CSV column mapping per account, with CHECK constraints for its enums, amount columns and column indexes. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -238,6 +239,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 |
 | `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
 | `GET` | `/api/statements/{id}` | Get one imported statement | 200 |
+| `GET` | `/api/accounts/{id}/csv-mapping` | Get the account's CSV mapping; 404 when it has none | 200 |
+| `PUT` | `/api/accounts/{id}/csv-mapping` | Create or replace the CSV mapping; see [CSV mappings](#csv-mappings) | 201 created, 200 replaced |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
   decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
@@ -268,6 +271,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | 400 | Malformed JSON | `detail` only |
 | 404 | Unknown id, e.g. `Account 42 not found` | `detail` |
 | 409 | A database constraint was violated | generic `detail` |
+| 409 | A used CSV mapping's fingerprint fields would change (`urn:finalysis:problem:mapping-locked`) | `fields[]`, see [CSV mappings](#csv-mappings) |
 | 413, 415, 409, 422 | A statement import was refused | typed `type`, see [Importing statements](#importing-statements) |
 | 500 | Unexpected error | generic `detail` |
 
@@ -349,6 +353,53 @@ warning `account mixes import formats (...)`.
 | `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
 | `unsupported-currency` | 422 | Not USD |
 | `ambiguous-format` | 422 | More than one parser claims the file (a bug; reported, not guessed) |
+
+### CSV mappings
+
+CSV exports differ by bank, so each account saves one column mapping, which every CSV import of
+that account uses. (CSV import itself lands in the next steps.)
+
+```sh
+curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping -H 'Content-Type: application/json' -d '{
+  "headers": ["Transaction Date", "Post Date", "Description", "Category", "Amount"],
+  "dateColumn": "Transaction Date", "dateFormat": "yyyy-MM-dd", "postDateColumn": "Post Date",
+  "descriptionColumns": ["Description"],
+  "amountMode": "SINGLE", "amountColumn": "Amount", "sign": "INVERTED"
+}'
+```
+
+| Field | Notes |
+|---|---|
+| `headers` | The file's header names (from the preview). Required with a header row; every column below must be one of them, exactly, and the server computes `headerSignature` from them. |
+| `headerRow`, `columnCount` | `headerRow` defaults to `true`. Without a header row, columns are zero-based indexes written as strings (`"0"`), checked against `columnCount`. |
+| `delimiter`, `encoding`, `skipRows` | Defaults `,`, `UTF-8`, `0`. The delimiter is one character (not `"` or a line break); the encoding is `UTF-8`, `windows-1252` or `ISO-8859-1`; up to 100 lines are skipped before the header. |
+| `dateColumn`, `dateFormat`, `postDateColumn` | A strict pattern with a year, month and day, such as `MM/dd/yyyy` or `dd-MMM-yyyy`. The post date is optional. |
+| `descriptionColumns` | One to ten columns, joined in this order with one space. |
+| `amountMode` | `SINGLE` with `amountColumn`, or `DEBIT_CREDIT` with `debitColumn` and `creditColumn` (and no `amountColumn`). |
+| `sign` | `AS_IS` or `INVERTED` (the file prints money out as positive). Required for credit card accounts, `AS_IS` by default otherwise. |
+| `balanceColumn`, `checkNumberColumn` | Optional. |
+
+A column can serve only one role. Errors are 400s naming the field (`descriptionColumns[1]`), never
+the column names themselves. The response echoes the mapping with `headerSignature`, `usedAt`,
+`createdAt`, `updatedAt` and `warnings`.
+
+**Fingerprint lock.** CSV rows are fingerprinted from the printed date, the description columns
+and the sign-normalized amount. Once an import has used the mapping (`usedAt` is set), changing
+those inputs would give earlier rows new fingerprints, and an overlapping re-import would add them
+again. So these fields are locked:
+
+- `sign`;
+- `descriptionColumns`: which columns, and their order;
+- the printed-date column: `postDateColumn` when present, otherwise `dateColumn`.
+
+Locked values are compared exactly, so renaming one of these columns also counts. A `PUT` that
+changes one returns `409 mapping-locked` with `fields` listing them. Repeating it with
+`?confirmFingerprintChange=true` saves the change, and the response warns that future imports
+overlapping earlier statements will produce new fingerprints and land in `NEEDS_REVIEW`.
+Everything else stays editable after use, because it only locates or parses values: other
+columns (amount, debit and credit, the transaction date when a post date is mapped), the amount
+mode, `dateFormat`, `delimiter`, `encoding`, `headerRow`, `skipRows`, the balance and check-number
+columns, and the header signature.
 
 ## Sample data
 

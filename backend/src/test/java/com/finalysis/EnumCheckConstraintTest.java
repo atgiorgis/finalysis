@@ -11,6 +11,8 @@ import com.finalysis.ingestion.SourceSection;
 import com.finalysis.ingestion.StatementStatus;
 import com.finalysis.ingestion.TransferMethod;
 import com.finalysis.ingestion.TransferStatus;
+import com.finalysis.ingestion.csv.CsvAmountMode;
+import com.finalysis.ingestion.csv.CsvSign;
 import com.finalysis.support.IntegrationTest;
 import java.util.Arrays;
 import java.util.List;
@@ -43,7 +45,9 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_categorization_rule_match_type", RuleMatchType.class),
                 Arguments.of("ck_categorization_rule_source", RuleSource.class),
                 Arguments.of("ck_transfer_link_method", TransferMethod.class),
-                Arguments.of("ck_transfer_link_status", TransferStatus.class));
+                Arguments.of("ck_transfer_link_status", TransferStatus.class),
+                Arguments.of("ck_csv_mapping_amount_mode", CsvAmountMode.class),
+                Arguments.of("ck_csv_mapping_sign", CsvSign.class));
     }
 
     @ParameterizedTest

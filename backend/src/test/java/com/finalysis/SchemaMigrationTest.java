@@ -46,7 +46,7 @@ class SchemaMigrationTest {
 
         assertThat(tables).contains(
                 "account", "statement", "category", "txn",
-                "categorization_rule", "transfer_link", "merchant_embedding");
+                "categorization_rule", "transfer_link", "merchant_embedding", "csv_mapping");
     }
 
     @ParameterizedTest
@@ -80,6 +80,19 @@ class SchemaMigrationTest {
             "transfer_link,       ck_transfer_link_method,             c",
             "transfer_link,       ck_transfer_link_status,             c",
             "transfer_link,       ck_transfer_link_status_matches_in,  c",
+            "csv_mapping,         pk_csv_mapping,                      p",
+            "csv_mapping,         fk_csv_mapping_account,              f",
+            "csv_mapping,         ck_csv_mapping_amount_mode,          c",
+            "csv_mapping,         ck_csv_mapping_sign,                 c",
+            "csv_mapping,         ck_csv_mapping_amount_columns,       c",
+            "csv_mapping,         ck_csv_mapping_delimiter,            c",
+            "csv_mapping,         ck_csv_mapping_encoding,             c",
+            "csv_mapping,         ck_csv_mapping_skip_rows,            c",
+            "csv_mapping,         ck_csv_mapping_header_signature,     c",
+            "csv_mapping,         ck_csv_mapping_date_format_length,   c",
+            "csv_mapping,         ck_csv_mapping_description_columns,  c",
+            "csv_mapping,         ck_csv_mapping_column_length,        c",
+            "csv_mapping,         ck_csv_mapping_column_indexes,       c",
     })
     void constraintExists(String table, String constraint, String type) {
         Integer count = jdbc.queryForObject("""
