@@ -54,6 +54,17 @@ public class Statement {
     @Column(nullable = false)
     private StatementStatus status = StatementStatus.IMPORTED;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BalanceCheck balanceCheck = BalanceCheck.UNVERIFIED;
+
+    /** Rows parsed from the file, duplicates included; null for statements imported before V7. */
+    private Integer parsedCount;
+
+    /** Sum of the parsed rows' amounts, duplicates included; null with {@link #parsedCount}. */
+    @Column(precision = 14, scale = 2)
+    private BigDecimal parsedAmountTotal;
+
     @Column(nullable = false)
     private String sourceFileName;
 
@@ -73,7 +84,11 @@ public class Statement {
     @Column(nullable = false)
     private Map<SourceSection, BigDecimal> sectionTotals = new HashMap<>();
 
-    /** Warnings from the import (line numbers, counts and ids only); non-empty means NEEDS_REVIEW. */
+    /**
+     * Warnings from the import and reconciliation: line numbers, counts, ids and, for balance
+     * checks, amounts; never descriptions (SEC-10). They explain the status; the informational
+     * "no new rows" and "balance unverified" warnings don't require review.
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false)
     private List<String> importWarnings = new ArrayList<>();
@@ -132,6 +147,28 @@ public class Statement {
 
     public void setStatus(StatementStatus status) {
         this.status = status;
+    }
+
+    public BalanceCheck getBalanceCheck() {
+        return balanceCheck;
+    }
+
+    public void setBalanceCheck(BalanceCheck balanceCheck) {
+        this.balanceCheck = balanceCheck;
+    }
+
+    public Integer getParsedCount() {
+        return parsedCount;
+    }
+
+    public BigDecimal getParsedAmountTotal() {
+        return parsedAmountTotal;
+    }
+
+    /** What the file held: its row count and the sum of its amounts, duplicates included. */
+    public void setParsedRows(int count, BigDecimal amountTotal) {
+        this.parsedCount = count;
+        this.parsedAmountTotal = amountTotal;
     }
 
     public String getSourceFileName() {

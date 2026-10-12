@@ -79,7 +79,7 @@ class CsvImportTest {
 
     // ------------------------------------------------------------------ the whole sample data set
 
-    record ManifestEntry(String file, String account, String start, String end) {
+    record ManifestEntry(String file, String account, String start, String end, String opening, String closing) {
     }
 
     @Test
@@ -100,15 +100,27 @@ class CsvImportTest {
                 // The first month's suggestion, saved without edits, reads every month.
                 saveSuggestedMapping(account, entry.file());
             }
-            JsonNode summary = importOk(account, entry.file(), Map.of("periodStart", entry.start(), "periodEnd", entry.end()));
-            assertStatementMatchesAnswerKey(summary, entry.file(), "csv");
+            Map<String, String> params = new LinkedHashMap<>(Map.of("periodStart", entry.start(), "periodEnd", entry.end()));
+            if (!entry.account().startsWith("northfield")) {
+                // Card exports print no balances: the manifest's are sent, as a user would type them in.
+                params.putAll(Map.of("openingBalance", entry.opening(), "closingBalance", entry.closing()));
+            }
+            JsonNode summary = importOk(account, entry.file(), params);
+            // Northfield's balance column and the cards' request balances all reconcile.
+            assertStatementMatchesAnswerKey(summary, entry.file(), "csv", "RECONCILED");
             assertThat(summary.get("periodStart").asString()).isEqualTo(entry.start());
             assertThat(summary.get("periodEnd").asString()).isEqualTo(entry.end());
+            assertThat(summary.get("openingBalance").asString()).as(entry.file()).isEqualTo(entry.opening());
+            assertThat(summary.get("closingBalance").asString()).as(entry.file()).isEqualTo(entry.closing());
         }
         for (Path file : ofxFiles()) {
             String name = file.getFileName().toString();
-            JsonNode summary = importOk(name.startsWith("apex") ? ofxApex : ofxChecking, "ofx/" + name, Map.of());
-            assertStatementMatchesAnswerKey(summary, "statements/" + name.replaceAll("\\.(ofx|qfx)$", ".csv"), "ofx");
+            long account = name.startsWith("apex") ? ofxApex : ofxChecking;
+            boolean first = support.count("SELECT count(*) FROM statement WHERE account_id = ?", account) == 0;
+            JsonNode summary = importOk(account, "ofx/" + name, Map.of());
+            // OFX in order: the first month has nothing to continue from; later ones reconcile.
+            assertStatementMatchesAnswerKey(summary, "statements/" + name.replaceAll("\\.(ofx|qfx)$", ".csv"), "ofx",
+                    first ? "IMPORTED" : "RECONCILED");
         }
 
         // Per account: every answer-key row once, and the same total.
@@ -132,7 +144,8 @@ class CsvImportTest {
         assertThat(overlap.get("parsed").asInt()).isPositive();
         assertThat(overlap.get("inserted").asInt()).isZero();
         assertThat(overlap.get("duplicates").asInt()).isEqualTo(overlap.get("parsed").asInt());
-        assertThat(overlap.get("status").asString()).isEqualTo("IMPORTED");
+        // The informational "no new rows" warning doesn't block RECONCILED (balance column).
+        assertThat(overlap.get("status").asString()).isEqualTo("RECONCILED");
         assertThat(strings(overlap.get("warnings"))).containsExactly(
                 "period overlaps statement " + april + "; no new rows",
                 "period overlaps statement " + may + "; no new rows");
@@ -151,7 +164,7 @@ class CsvImportTest {
                 .andExpect(jsonPath("$.skipRows").value(5));
         JsonNode summary = importOk(checking, "edge-cases/csv-preamble.csv", Map.of());
 
-        assertStatementMatchesAnswerKey(summary, CHECKING_APRIL, "csv");
+        assertStatementMatchesAnswerKey(summary, CHECKING_APRIL, "csv", "RECONCILED");
         // Line numbers count the skipped preamble: the first row is on line 7.
         assertThat(support.count("SELECT min(source_line_number) FROM txn WHERE account_id = ?", checking)).isEqualTo(7);
     }
@@ -195,7 +208,8 @@ class CsvImportTest {
                 .andExpect(jsonPath("$.preview.format").value("csv"))
                 .andExpect(jsonPath("$.preview.mappingStatus").value("MISMATCH"))
                 .andExpect(jsonPath("$.preview.headers[1]").value("Details"))
-                .andExpect(jsonPath("$.preview.rows.length()").value(10))
+                // No data rows in an error response (SEC-10); the preview endpoint shows them.
+                .andExpect(jsonPath("$.preview.rows").doesNotExist())
                 .andExpect(jsonPath("$.preview.suggestedMapping.mapping.descriptionColumns[0]").value("Details"));
         assertThat(support.count("SELECT count(*) FROM statement WHERE account_id = ?", checking)).isEqualTo(2);
 
@@ -246,10 +260,14 @@ class CsvImportTest {
         int mappings = support.count("SELECT count(*) FROM csv_mapping");
 
         JsonNode preview = json(support.preview(card, "marked.csv", marked).andExpect(status().isOk()).andReturn());
-        // A mismatch response carries the preview too; it must not reach the log either.
+        // A mismatch response carries the headers but no rows, so no description, in the body or the log.
         support.putMapping(card, preview.get("suggestedMapping").get("mapping").toString()).andExpect(status().isCreated());
-        support.upload(card, "other.csv", "Date,Payee,Amount\n2026-04-01,QZX7MARKER DELI,-1.00\n".getBytes(StandardCharsets.UTF_8))
-                .andExpect(jsonPath("$.type").value(PROBLEM + "mapping-mismatch"));
+        String mismatch = support.upload(card, "other.csv",
+                        "Date,Payee,Amount\n2026-04-01,QZX7MARKER DELI,-1.00\n".getBytes(StandardCharsets.UTF_8))
+                .andExpect(jsonPath("$.type").value(PROBLEM + "mapping-mismatch"))
+                .andExpect(jsonPath("$.preview.headers[1]").value("Payee"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(mismatch).doesNotContain("QZX7MARKER");
 
         assertThat(preview.get("rows").get(0).get(1).asString()).isEqualTo("QZX7MARKER CAFE");
         assertThat(support.count("SELECT count(*) FROM statement")).isEqualTo(statements);
@@ -362,14 +380,18 @@ class CsvImportTest {
         return json(mockMvc.perform(get("/api/accounts/{id}/csv-mapping", accountId)).andExpect(status().isOk()).andReturn());
     }
 
-    private void assertStatementMatchesAnswerKey(JsonNode summary, String statementFile, String parser) {
+    private void assertStatementMatchesAnswerKey(JsonNode summary, String statementFile, String parser, String status) {
         List<String[]> expected = ImportTestSupport.answerKey(statementFile);
         long statementId = summary.get("statementId").asLong();
         assertThat(summary.get("parser").asString()).isEqualTo(parser);
         assertThat(summary.get("parsed").asInt()).as(statementFile).isEqualTo(expected.size());
         assertThat(summary.get("inserted").asInt()).as(statementFile).isEqualTo(expected.size());
-        assertThat(summary.get("status").asString()).as(statementFile).isEqualTo("IMPORTED");
-        assertThat(summary.get("warnings")).as(statementFile).isEmpty();
+        assertThat(summary.get("status").asString()).as(statementFile).isEqualTo(status);
+        if (status.equals("RECONCILED")) {
+            assertThat(summary.get("warnings")).as(statementFile).isEmpty();
+        } else {
+            assertThat(strings(summary.get("warnings"))).as(statementFile).containsExactly(Reconciliation.UNVERIFIED_WARNING);
+        }
         assertThat(jdbc.queryForObject("SELECT sum(amount) FROM txn WHERE statement_id = ?", BigDecimal.class, statementId))
                 .as(statementFile).isEqualByComparingTo(ImportTestSupport.sum(expected));
     }
@@ -387,7 +409,7 @@ class CsvImportTest {
         return Files.readAllLines(ImportTestSupport.SAMPLE_DATA.resolve("statements-manifest.csv")).stream().skip(1)
                 .map(line -> line.split(",", -1))
                 .filter(c -> c[0].startsWith("statements/"))
-                .map(c -> new ManifestEntry(c[0], c[1], c[2], c[3]))
+                .map(c -> new ManifestEntry(c[0], c[1], c[2], c[3], c[4], c[5]))
                 .toList();
     }
 

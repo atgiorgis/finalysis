@@ -1,7 +1,7 @@
 # Phase 3a plan: standard-format ingestion (OFX/QFX + CSV)
 
-Status: steps 1–7 done; step 8 next. Branch `v1`. Read this before starting a step, then the
-requirements it cites in `docs/requirements.md` (currently v1.17).
+Status: steps 1–8 done; step 9 next. Branch `v1`. Read this before starting a step, then the
+requirements it cites in `docs/requirements.md` (currently v1.18).
 
 Scope: ING-01 to ING-07, ING-10, SEC-10, SEC-11 for OFX/QFX and CSV. Out of scope for 3a: PDF
 parsers (3b), transfer detection and the review-queue API (3c), categorization and merchant
@@ -218,8 +218,8 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
   `UPDATE ... WHERE used_at IS NULL`, so `updated_at` doesn't move: marking a mapping used doesn't
   change how it reads files and must not make concurrent imports look stale.
 - Problems: 422 `mapping-required` (detail names the preview and PUT endpoints), 422
-  `mapping-mismatch` with `preview` (the one problem response that carries file contents; it goes
-  to the uploader only and is never logged), 409 `mapping-changed`.
+  `mapping-mismatch` with `preview`, 409 `mapping-changed`. *(Step 8, review change A: the
+  mismatch preview carries headers, mapping status and suggested mapping only, no data rows.)*
 - **Preview** (`POST /api/accounts/{id}/imports/preview`): same upload checks, detection and
   parsing as an import, writes nothing. CSV: `format`, `delimiter`, `encoding`, `skipRows`,
   `headers` (stripped), first 10 `rows`, `mappingStatus` (NONE / MATCHES / MISMATCH, where
@@ -239,6 +239,42 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
   accounts, overlap file, preamble, mapping lifecycle, mapping changed between snapshot and lock
   via a spy that updates the row from another thread, preview writes nothing and logs no
   contents), `CsvMappingSuggesterTest`, detection tests in `CsvStatementParserTest`.
+
+### Reconciliation (step 8)
+- `Reconciliation` (pure Java, `BigDecimal`) runs in the writer under the account lock, on the
+  parsed rows (duplicates included). Checks: printed balances (file prints both; for 3b PDFs),
+  request balances (both sent), balance column, continuity, section totals.
+- **Balance column** is pairwise: each printed balance against the previous printed balance plus
+  the amounts since (blank cells carry over). A one-cell typo flags that line and the next; a
+  missing row flags one line. Newest-first = first printed date after the last. Opening = first
+  balance minus the amounts up to it, closing = last balance plus amounts after it. Up to 10
+  failing lines listed, then counted.
+- **Continuity** applies to a file with a closing but no opening balance (OFX). Previous = the
+  account's statement with the latest `period_end` <= this start (ties: newest id), adjacent when
+  it ends on the day before or the same day, and only with a closing balance. On success the
+  opening is the previous closing (a request opening is compared with it instead).
+- Request balances: no longer merged in the service. A request balance contradicting a printed
+  one is a failed check ("the file's is kept"), replacing the step-4 merge warning.
+- Warning format: `reconciliation failed: {check}: expected {computed}, actual {stated},
+  difference {actual − expected}`; amounts with two decimals. Unverified:
+  `Reconciliation.UNVERIFIED_WARNING`.
+- **Status:** review reasons or FAILED → NEEDS_REVIEW; else PASSED → RECONCILED; else IMPORTED
+  with the unverified warning. "No new rows" stays informational.
+- **V7** (`V7__statement_reconciliation.sql`): `statement.balance_check` (PASSED / FAILED /
+  UNVERIFIED, default UNVERIFIED), `parsed_count`, `parsed_amount_total NUMERIC(14,2)` (a sum of
+  many amounts). The status enum was enough; the separate column is needed because a
+  NEEDS_REVIEW statement can still be unverified, and the late-arrival check needs the file's
+  row total, which duplicates make impossible to recompute from `txn`. Pre-V7 statements have
+  null totals and are never re-checked.
+- **Late arrival:** after saving, the statement starting on this one's last day or the next day
+  (earliest start, then oldest id) is re-checked when it is UNVERIFIED, has a closing balance, no
+  opening and stored totals. The unverified warning is replaced by the outcome; IMPORTED becomes
+  RECONCILED or NEEDS_REVIEW; NEEDS_REVIEW stays. No chaining needed: a later statement already
+  had its own predecessor.
+- `GET /api/accounts/{id}/statements` (`StatementListItem`): newest `period_start` first (then
+  `period_end`, id), `?status=` filter, owned-row counts in one grouped query. The timestamp is
+  `importedAt` (the column is `imported_at`), matching the detail.
+- Section totals are documented as sign-normalized (`ParsedStatement`).
 
 ### Other decisions
 - Merchant cleaning moves to Phase 4; `txn.merchant` stays null in Phase 3 (ING-02).
@@ -262,9 +298,9 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 5 | CSV mapping: V6 `csv_mapping` (with `used_at`), entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, locked fields with 409 `mapping-locked` and the `?confirmFingerprintChange=true` override | Done: `11a4473` |
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, windows-1252, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | Done: `56ae04c` |
 | 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings; preamble-tolerant detection; mapping snapshot with version check | Done: `be02568` |
-| 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | To do |
+| 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | Done |
 | 9 | Cross-cutting SEC-10 tests: log capture during successful and failing imports, sniffing matrix, XXE end to end | To do |
 | 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03, SEC-10 to Done when complete), change log | To do |
 
-Requirement statuses now: ING-01, ING-03, ING-04 Done; SEC-10 and SEC-11 Planned until step 9
-(and the first CSV export for SEC-11's escaping).
+Requirement statuses now: ING-01, ING-03, ING-04, ING-06, ING-10 Done; ING-07 Planned (queue API
+in 3c); SEC-10 and SEC-11 Planned until step 9 (and the first CSV export for SEC-11's escaping).

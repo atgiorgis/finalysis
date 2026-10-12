@@ -10,11 +10,11 @@ import java.util.List;
 /**
  * How the importer reads a CSV file, so the user can confirm a mapping before importing (ING-01).
  * It holds the file's headers and first rows: it goes back to the uploader only and is never
- * logged (SEC-10).
+ * logged (SEC-10). Inside an error response it carries no rows ({@link #withoutRows()}).
  *
  * @param skipRows         where detection found the table (a suggested {@code skipRows})
  * @param headers          the first record of the table, each cell stripped
- * @param rows             the first {@value #ROWS} data rows, cells as read
+ * @param rows             the first {@value #ROWS} data rows, cells as read; null without rows
  * @param suggestedMapping present unless the saved mapping matches the file
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -35,7 +35,15 @@ public record CsvPreview(String delimiter, String encoding, int skipRows, List<S
 
     public CsvPreview {
         headers = List.copyOf(headers);
-        rows = rows.stream().map(List::copyOf).toList();
+        rows = rows == null ? null : rows.stream().map(List::copyOf).toList();
+    }
+
+    /**
+     * The same preview without data rows, for the 422 mapping-mismatch response: error responses
+     * carry no file contents beyond the headers (SEC-10). The preview endpoint shows the rows.
+     */
+    public CsvPreview withoutRows() {
+        return new CsvPreview(delimiter, encoding, skipRows, headers, null, mappingStatus, suggestedMapping);
     }
 
     /**
@@ -69,6 +77,7 @@ public record CsvPreview(String delimiter, String encoding, int skipRows, List<S
     /** Counts only: headers and rows come from the user's file (SEC-10). */
     @Override
     public String toString() {
-        return "CsvPreview[" + headers.size() + " columns, " + rows.size() + " rows, " + mappingStatus + "]";
+        return "CsvPreview[" + headers.size() + " columns, " + (rows == null ? 0 : rows.size()) + " rows, "
+                + mappingStatus + "]";
     }
 }

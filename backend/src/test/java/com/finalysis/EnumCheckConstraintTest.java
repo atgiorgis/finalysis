@@ -7,6 +7,7 @@ import com.finalysis.categorize.CategoryKind;
 import com.finalysis.categorize.CategorySource;
 import com.finalysis.categorize.RuleMatchType;
 import com.finalysis.categorize.RuleSource;
+import com.finalysis.ingestion.BalanceCheck;
 import com.finalysis.ingestion.SourceSection;
 import com.finalysis.ingestion.StatementStatus;
 import com.finalysis.ingestion.TransferMethod;
@@ -39,6 +40,7 @@ class EnumCheckConstraintTest {
         return Stream.of(
                 Arguments.of("ck_account_type", AccountType.class),
                 Arguments.of("ck_statement_status", StatementStatus.class),
+                Arguments.of("ck_statement_balance_check", BalanceCheck.class),
                 Arguments.of("ck_category_kind", CategoryKind.class),
                 Arguments.of("ck_txn_source_section", SourceSection.class),
                 Arguments.of("ck_txn_category_source", CategorySource.class),

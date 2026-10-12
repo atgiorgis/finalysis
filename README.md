@@ -56,7 +56,9 @@ database. `DevDatabaseGuard` fails any test context whose datasource points at t
    (Settings → General) to the repo root, or reselect the file in the request's Body tab.
    **CSV import** runs after **CSV mapping**: it previews and imports the April Apex CSV, then
    shows `mapping-required` (Summit has no mapping), `mapping-mismatch` (a Summit file sent to
-   Apex) and the `mapping-locked` 409 for a locked field changed after use.
+   Apex) and the `mapping-locked` 409 for a locked field changed after use. **Statements** also
+   imports a May checking file with a wrong `LEDGERBAL` (a `NEEDS_REVIEW` example) and lists the
+   account's statements, all and filtered by status.
 
 Setup creates duplicate accounts if you run it twice, because accounts have no uniqueness rule.
 To start clean, reset the dev database (below).
@@ -117,6 +119,7 @@ erDiagram
         numeric opening_balance
         numeric closing_balance
         text status "IMPORTED, NEEDS_REVIEW, RECONCILED"
+        text balance_check "PASSED, FAILED, UNVERIFIED"
         text parser "ofx, csv, ..."
         jsonb import_warnings
         text file_hash UK
@@ -175,7 +178,7 @@ erDiagram
 | Table | Purpose |
 |---|---|
 | `account` | A checking, savings, or credit card account. Only the last four digits of the account number are stored. |
-| `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, and reconciliation status. A file hash blocks importing the same file twice; a re-imported period is deduplicated row by row. `parser` records which parser read the file. |
+| `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, status and balance-check outcome, and the parsed row count and total (duplicates included) that reconciliation uses. A file hash blocks importing the same file twice; a re-imported period is deduplicated row by row. `parser` records which parser read the file. |
 | `category` | Seeded spending and income categories, each with a kind. `TRANSFER` covers all movement between the user's own accounts. |
 | `txn` | One statement row: dates, raw description, cleaned merchant, signed amount, category and who set it, and where it came from in the source file. |
 | `categorization_rule` | Merchant pattern → category rules. Rules run before any AI, and user corrections become new rules. |
@@ -227,6 +230,7 @@ erDiagram
 | V4 `account_name_lengths` | CHECK constraints limiting account name and institution to 1–100 characters. |
 | V5 `statement_import` | `txn.external_id` and `printed_amount`, `statement.parser` and `import_warnings`; drops the unique (account, period) constraint so periods can be re-imported. |
 | V6 `csv_mapping` | `csv_mapping`: one CSV column mapping per account, with CHECK constraints for its enums, amount columns and column indexes. |
+| V7 `statement_reconciliation` | `statement.balance_check` (PASSED, FAILED, UNVERIFIED), `parsed_count` and `parsed_amount_total`, for reconciliation and late-arrival re-checks. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -242,7 +246,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 |
 | `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
 | `POST` | `/api/accounts/{id}/imports/preview` | Read a file as an import would, write nothing; CSV gets a suggested mapping | 200 |
-| `GET` | `/api/statements/{id}` | Get one imported statement | 200 |
+| `GET` | `/api/accounts/{id}/statements` | List the account's statements, newest period first; `?status=` filters | 200 |
+| `GET` | `/api/statements/{id}` | Get one imported statement with its warnings | 200 |
 | `GET` | `/api/accounts/{id}/csv-mapping` | Get the account's CSV mapping; 404 when it has none | 200 |
 | `PUT` | `/api/accounts/{id}/csv-mapping` | Create or replace the CSV mapping; see [CSV mappings](#csv-mappings) | 201 created, 200 replaced |
 
@@ -290,10 +295,11 @@ curl -F file=@sample-data/ofx/northfield-checking_2026-04.ofx http://localhost:8
 
 Upload one statement file per request to the account it belongs to. Optional form fields:
 `periodStart` and `periodEnd` (ISO dates) replace the file's period; `openingBalance` and
-`closingBalance` fill in balances the file doesn't print (if the file does print one and the
-request disagrees, the file's value is kept with a warning). Balances are plain decimal text such
-as `1234.56`: at most two decimals, no exponent or thousands separator. Balances are stored but
-not reconciled yet. Supported today: OFX 1.x/2.x, QFX and CSV; PDF follows in Phase 3b.
+`closingBalance` are the statement's balances as printed on paper, for files that don't carry
+them (card CSV exports), and are checked against the rows (see [Reconciliation](#reconciliation)).
+If the file prints a balance and the request disagrees, the file's value is kept and the check
+fails. Balances are plain decimal text such as `1234.56`: at most two decimals, no exponent or
+thousands separator. Supported today: OFX 1.x/2.x, QFX and CSV; PDF follows in Phase 3b.
 
 **CSV files** need the account's column mapping first. The first time, preview the file, check
 the suggested mapping, and save it:
@@ -307,7 +313,8 @@ curl -F file=@sample-data/statements/apex-visa_2026-04.csv http://localhost:8080
 
 Later CSV imports of the account reuse the mapping. Without one, an import is
 `422 mapping-required` (pointing to the preview); a file whose columns differ from the ones the
-mapping was saved for is `422 mapping-mismatch`, with the file's preview in `preview`. A CSV file
+mapping was saved for is `422 mapping-mismatch`, with the file's headers and a suggested mapping in
+`preview` (no data rows: error responses carry no file contents; the preview endpoint shows them). A CSV file
 without rows imports as an empty statement when the request gives both `periodStart` and
 `periodEnd`.
 
@@ -332,8 +339,9 @@ The response is an import summary:
 
 ```json
 {
-  "statementId": 12, "parser": "ofx", "periodStart": "2026-04-01", "periodEnd": "2026-04-30",
-  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "IMPORTED",
+  "statementId": 12, "parser": "ofx", "periodStart": "2026-05-01", "periodEnd": "2026-05-31",
+  "openingBalance": "4066.58", "closingBalance": "8236.77",
+  "parsed": 11, "inserted": 0, "duplicates": 11, "status": "RECONCILED", "balanceCheck": "PASSED",
   "warnings": ["period overlaps statement 7; no new rows"]
 }
 ```
@@ -345,22 +353,23 @@ before: rows are matched by their printed values plus an occurrence number withi
 real purchases stay separate.
 
 `status` is `NEEDS_REVIEW` whenever the import warned, and the warnings are stored with the
-statement (`GET /api/statements/{id}` returns them):
+statement (`GET /api/statements/{id}` returns them). Any of these wins over `RECONCILED`:
 
 - the parser warned, for example an OFX `TRNTYPE` that contradicts the amount's sign;
 - rows are dated outside the statement period (for example after a `periodEnd` override); they
   are imported anyway, never dropped;
 - the period overlaps an earlier statement of the account and the import added rows
-  (`period overlaps statement 7`). A re-import that adds nothing stays `IMPORTED` with the
-  informational warning `period overlaps statement 7; no new rows`;
+  (`period overlaps statement 7`). A re-import that adds nothing only gets the informational
+  warning `period overlaps statement 7; no new rows`, which doesn't block `RECONCILED`;
 - the account mixes import formats (see below);
 - a new row reuses an OFX `FITID` that the account already has under different details. That row
   is inserted anyway, since dropping it could lose a real transaction, and flagged as a possible
   duplicate;
-- a balance in the request disagrees with the file.
+- a balance check failed (see [Reconciliation](#reconciliation)).
 
-Otherwise the status is `IMPORTED`. Balance reconciliation comes later. Warnings and errors
-contain line numbers, counts and ids, never descriptions or account numbers.
+Otherwise the status is `RECONCILED` when a balance check ran and passed, and `IMPORTED` with the
+warning `balance unverified: …` when none could run. Warnings and errors contain line numbers,
+counts, ids and balance-check amounts, never descriptions or account numbers.
 
 **One format per account.** Duplicates are recognized only within one format: the same
 transaction exported as CSV and as OFX has different descriptions and dates, so it would be
@@ -376,9 +385,47 @@ warning `account mixes import formats (...)`.
 | `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
 | `unsupported-currency` | 422 | Not USD |
 | `mapping-required` | 422 | A CSV file for an account without a CSV mapping; `detail` points to the preview |
-| `mapping-mismatch` | 422 | The CSV file's columns differ from the mapping's; `preview` holds the file's preview |
+| `mapping-mismatch` | 422 | The CSV file's columns differ from the mapping's; `preview` holds its headers and a suggested mapping, no rows |
 | `mapping-changed` | 409 | The CSV mapping was saved while the file was being read; nothing was written, retry |
 | `ambiguous-format` | 422 | More than one parser claims the file (a bug; reported, not guessed) |
+
+### Reconciliation
+
+Every import checks the statement's balances against **the rows parsed from the file**, duplicates
+included (the rows it inserts skip duplicates, so they can't add up). Java `BigDecimal` does the
+arithmetic. Each check runs when its inputs exist:
+
+| Check | When | Rule |
+|---|---|---|
+| Request balances | both `openingBalance` and `closingBalance` sent | opening + rows = closing |
+| Balance column | the CSV mapping has a balance column | each row's balance = the previous balance + its amount. Newest-first files (first date after the last) are checked in reverse. Opening = first balance − first amount, closing = last balance; sent balances must agree with them |
+| Continuity | a closing balance without an opening one (OFX `LEDGERBAL`) | the previous statement's closing + rows = closing, when the account's latest earlier statement ends the day before this one starts (or that day). The opening is then the previous closing; it is never derived from `LEDGERBAL` alone |
+| Section totals | the file prints totals per section (PDFs, Phase 3b) | each total = the sum of its section's rows; a total for a section without rows must be 0 |
+| Printed balances | the file prints both balances (PDFs) | opening + rows = closing |
+
+The outcome is `balanceCheck`: `PASSED` (at least one check ran, all passed → `RECONCILED`),
+`FAILED` (→ `NEEDS_REVIEW`) or `UNVERIFIED` (none could run → `IMPORTED` with a
+`balance unverified` warning). A failed check adds a warning with the check, the expected amount
+(what the arithmetic gives), the actual one (as printed or sent) and the difference:
+
+```
+reconciliation failed: continuity: statement 7's closingBalance + rows = closingBalance: expected 8236.77, actual 8246.77, difference 10.00
+reconciliation failed: balance column, line 5: expected 2458.91, actual 2459.91, difference 1.00
+```
+
+Failing balance-column rows are listed up to 10, then counted. Amounts in warnings go back to
+the user only and are never logged.
+
+**Late arrivals.** OFX statements imported out of order still reconcile: when May arrives first,
+it is unverified; when April arrives, May's continuity check runs again in the same transaction,
+and May becomes `RECONCILED` (with April's closing as its opening) or `NEEDS_REVIEW`. A May that
+needs review for another reason stays `NEEDS_REVIEW`.
+
+**Statements.** `GET /api/accounts/{id}/statements` lists an account's statements, newest period
+first, with `id`, `parser`, `periodStart`, `periodEnd`, `openingBalance`, `closingBalance`,
+`status`, `balanceCheck`, `parsedCount` (rows in the file), `transactionCount` (rows it owns),
+`warningCount` and `importedAt`. `?status=NEEDS_REVIEW` (or `IMPORTED`, `RECONCILED`) filters.
+`GET /api/statements/{id}` adds the warnings. The review queue (ING-07) comes in Phase 3c.
 
 ### Preview
 

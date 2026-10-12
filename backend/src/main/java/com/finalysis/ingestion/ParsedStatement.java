@@ -13,7 +13,9 @@ import java.util.Objects;
  *
  * @param openingBalance null when the format doesn't print one
  * @param closingBalance null when the format doesn't print one
- * @param sectionTotals  totals as printed per section (ING-10); empty when the format prints none
+ * @param sectionTotals  totals as printed per section (ING-10), in the app's sign convention
+ *                       (negative = money out), so each equals the sum of that section's
+ *                       {@link ParsedTxn#amount()}s; empty when the format prints none
  * @param warnings       for the import summary; must never contain file contents, only line
  *                       numbers, column names and counts (SEC-10)
  */

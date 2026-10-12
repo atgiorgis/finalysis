@@ -621,6 +621,7 @@
                   "const body = pm.response.json();",
                   "if (pm.response.code === 201) {",
                   "  pm.test('10 rows parsed', () => pm.expect(body.parsed).to.eql(10));",
+                  "  pm.test('nothing earlier to continue from: unverified', () => { pm.expect(body.status).to.eql('IMPORTED'); pm.expect(body.balanceCheck).to.eql('UNVERIFIED'); });",
                   "  pm.test('Location header', () => pm.response.to.have.header('Location'));",
                   "}",
                   "pm.collectionVariables.set('statementId', body.statementId);"
@@ -655,6 +656,126 @@
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "pm.test('read by the OFX parser', () => pm.expect(pm.response.json().parser).to.eql('ofx'));",
                   "pm.test('money is a string with two decimals', () => pm.expect(pm.response.json().closingBalance).to.eql('4066.58'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import checking May with a wrong LEDGERBAL (NEEDS_REVIEW)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/edge-cases/ofx-ledgerbal-mismatch.ofx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{checkingId}}",
+                "imports"
+              ]
+            },
+            "description": "The May checking statement with a LEDGERBAL 10.00 off. April's closing balance plus May's rows doesn't reach it, so the continuity check fails and the statement needs review; the warning gives expected, actual and the difference. A second run returns 409 already-imported."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('needs review', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
+                  "  pm.test('warning names the difference', () => pm.expect(body.warnings[0]).to.include('continuity').and.to.include('difference 10.00'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List checking statements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/statements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{checkingId}}",
+                "statements"
+              ]
+            },
+            "description": "Newest period first, with balances, status, balanceCheck, counts and warningCount. GET /api/statements/{id} returns the warnings themselves."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('newest period first', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i - 1].periodStart >= items[i].periodStart).to.be.true; });",
+                  "pm.test('counts and warning count, no warnings', () => { pm.expect(items[0]).to.have.property('parsedCount'); pm.expect(items[0]).to.have.property('warningCount'); pm.expect(items[0]).to.not.have.property('warnings'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List checking statements needing review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=NEEDS_REVIEW",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{checkingId}}",
+                "statements"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "NEEDS_REVIEW"
+                }
+              ]
+            },
+            "description": "Only NEEDS_REVIEW statements, such as the May import above. The review-queue API across accounts comes in Phase 3c."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('only NEEDS_REVIEW', () => items.forEach(item => pm.expect(item.status).to.eql('NEEDS_REVIEW')));",
+                  "pm.test('the May statement is listed', () => pm.expect(items.some(item => item.periodStart === '2026-05-01')).to.be.true);"
                 ]
               }
             }
@@ -984,6 +1105,16 @@
                   "key": "file",
                   "type": "file",
                   "src": "sample-data/statements/apex-visa_2026-04.csv"
+                },
+                {
+                  "key": "openingBalance",
+                  "value": "-842.17",
+                  "type": "text"
+                },
+                {
+                  "key": "closingBalance",
+                  "value": "-242.32",
+                  "type": "text"
                 }
               ]
             },
@@ -999,7 +1130,7 @@
                 "imports"
               ]
             },
-            "description": "Imports the April Apex CSV with the saved mapping and sets the mapping's usedAt, which locks its fingerprint fields. A second run returns 409 already-imported."
+            "description": "Imports the April Apex CSV with the saved mapping and sets the mapping's usedAt, which locks its fingerprint fields. Card exports print no balances, so the statement's balances (sample-data/statements-manifest.csv) are sent and checked: opening + rows = closing. A second run returns 409 already-imported."
           },
           "event": [
             {
@@ -1012,6 +1143,7 @@
                   "if (pm.response.code === 201) {",
                   "  pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
                   "  pm.test('7 rows parsed', () => pm.expect(body.parsed).to.eql(7));",
+                  "  pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.closingBalance).to.eql('-242.32'); });",
                   "} else {",
                   "  pm.test('already imported', () => pm.expect(body.type).to.eql('urn:finalysis:problem:already-imported'));",
                   "}"
@@ -1094,7 +1226,7 @@
                     "imports"
                   ]
                 },
-                "description": "A Summit-layout file sent to the Apex account: the columns differ from the saved mapping, so the response carries the file's preview with a suggestion for its columns."
+                "description": "A Summit-layout file sent to the Apex account: the columns differ from the saved mapping, so the response carries the file's headers and a suggested mapping for them, but no data rows (the preview endpoint shows rows)."
               },
               "event": [
                 {
@@ -1105,7 +1237,7 @@
                       "pm.test('422', () => pm.response.to.have.status(422));",
                       "const body = pm.response.json();",
                       "pm.test('mapping-mismatch', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-mismatch'));",
-                      "pm.test('preview included', () => { pm.expect(body.preview.mappingStatus).to.eql('MISMATCH'); pm.expect(body.preview.headers[0]).to.eql('Trans. Date'); });",
+                      "pm.test('headers and status, but no data rows', () => { pm.expect(body.preview.mappingStatus).to.eql('MISMATCH'); pm.expect(body.preview.headers[0]).to.eql('Trans. Date'); pm.expect(body.preview).to.not.have.property('rows'); });",
                       "pm.test('suggestion for the new columns', () => pm.expect(body.preview.suggestedMapping.mapping.dateFormat).to.eql('dd-MMM-yyyy'));"
                     ]
                   }

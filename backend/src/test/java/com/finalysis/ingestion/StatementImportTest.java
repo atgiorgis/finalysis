@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -79,10 +80,13 @@ class StatementImportTest {
         }
         assertThat(files).hasSize(13);
 
+        Map<Long, Integer> imported = new HashMap<>();
         for (Path file : files) {
             String name = file.getFileName().toString();
-            List<String[]> expected = ImportTestSupport.answerKey("statements/" + name.replaceAll("\\.(ofx|qfx)$", ".csv"));
+            String statementFile = "statements/" + name.replaceAll("\\.(ofx|qfx)$", ".csv");
+            List<String[]> expected = ImportTestSupport.answerKey(statementFile);
             long account = name.startsWith("apex") ? apex : checking;
+            boolean first = imported.merge(account, 1, Integer::sum) == 1;
 
             JsonNode summary = json(support.upload(account, name, Files.readAllBytes(file))
                     .andExpect(status().isCreated())
@@ -94,8 +98,18 @@ class StatementImportTest {
             assertThat(summary.get("parsed").asInt()).as(name).isEqualTo(expected.size());
             assertThat(summary.get("inserted").asInt()).as(name).isEqualTo(expected.size());
             assertThat(summary.get("duplicates").asInt()).isZero();
-            assertThat(summary.get("status").asString()).isEqualTo("IMPORTED");
-            assertThat(summary.get("warnings")).isEmpty();
+            assertThat(summary.get("closingBalance").asString()).isEqualTo(manifest(statementFile)[5]);
+            if (first) {
+                // Nothing before it: LEDGERBAL alone proves nothing, and no opening is derived from it.
+                assertThat(summary.get("status").asString()).as(name).isEqualTo("IMPORTED");
+                assertThat(strings(summary.get("warnings"))).containsExactly(Reconciliation.UNVERIFIED_WARNING);
+                assertThat(summary.get("openingBalance").isNull()).isTrue();
+            } else {
+                // Continuity with the previous month: its closing + these rows = LEDGERBAL.
+                assertThat(summary.get("status").asString()).as(name).isEqualTo("RECONCILED");
+                assertThat(summary.get("warnings")).isEmpty();
+                assertThat(summary.get("openingBalance").asString()).isEqualTo(manifest(statementFile)[4]);
+            }
             assertThat(jdbc.queryForObject("SELECT sum(amount) FROM txn WHERE statement_id = ?", BigDecimal.class, statementId))
                     .as(name).isEqualByComparingTo(ImportTestSupport.sum(expected));
         }
@@ -138,7 +152,9 @@ class StatementImportTest {
                 .andExpect(jsonPath("$.openingBalance").isEmpty())
                 .andExpect(jsonPath("$.closingBalance").value("4066.58"))
                 .andExpect(jsonPath("$.status").value("IMPORTED"))
-                .andExpect(jsonPath("$.warnings").isEmpty())
+                .andExpect(jsonPath("$.balanceCheck").value("UNVERIFIED"))
+                .andExpect(jsonPath("$.warnings[0]").value(Reconciliation.UNVERIFIED_WARNING))
+                .andExpect(jsonPath("$.parsedCount").value(10))
                 .andExpect(jsonPath("$.transactionCount").value(10))
                 .andExpect(jsonPath("$.importedAt").isNotEmpty());
     }
@@ -177,7 +193,8 @@ class StatementImportTest {
         assertThat(second.get("inserted").asInt()).isZero();
         assertThat(second.get("duplicates").asInt()).isEqualTo(10);
         assertThat(second.get("status").asString()).isEqualTo("IMPORTED");
-        assertThat(strings(second.get("warnings"))).containsExactly("period overlaps statement " + first + "; no new rows");
+        assertThat(strings(second.get("warnings"))).containsExactly("period overlaps statement " + first + "; no new rows",
+                Reconciliation.UNVERIFIED_WARNING);
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
         mockMvc.perform(get("/api/statements/{id}", second.get("statementId").asLong()))
                 .andExpect(jsonPath("$.status").value("IMPORTED"))
@@ -200,7 +217,7 @@ class StatementImportTest {
         assertThat(full.get("inserted").asInt()).isEqualTo(1);
         assertThat(full.get("duplicates").asInt()).isEqualTo(9);
         assertThat(full.get("status").asString()).isEqualTo("NEEDS_REVIEW");
-        assertThat(strings(full.get("warnings"))).containsExactly("period overlaps statement " + first);
+        assertThat(strings(full.get("warnings"))).containsExactly("period overlaps statement " + first, Reconciliation.UNVERIFIED_WARNING);
     }
 
     @Test
@@ -218,7 +235,8 @@ class StatementImportTest {
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
         assertThat(strings(summary.get("warnings"))).containsExactlyInAnyOrder(
                 "period overlaps statement " + support.firstStatementId(checking),
-                "line 43: possible duplicate: an earlier import has a row with the same transaction id (FITID) but different details");
+                "line 43: possible duplicate: an earlier import has a row with the same transaction id (FITID) but different details",
+                Reconciliation.UNVERIFIED_WARNING);
     }
 
     @Test
@@ -229,7 +247,8 @@ class StatementImportTest {
 
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
         assertThat(strings(summary.get("warnings"))).containsExactly(
-                "line 43: TRNTYPE DEBIT with a positive amount", "line 51: TRNTYPE CREDIT with a negative amount");
+                "line 43: TRNTYPE DEBIT with a positive amount", "line 51: TRNTYPE CREDIT with a negative amount",
+                Reconciliation.UNVERIFIED_WARNING);
     }
 
     @Test
@@ -242,7 +261,8 @@ class StatementImportTest {
         JsonNode summary = importOk(checking, "april.ofx", ImportTestSupport.sample(CHECKING_APRIL));
 
         assertThat(strings(summary.get("warnings"))).containsExactly(
-                "account mixes import formats (ofx and csv); rows imported in different formats are not recognized as duplicates");
+                "account mixes import formats (ofx and csv); rows imported in different formats are not recognized as duplicates",
+                Reconciliation.UNVERIFIED_WARNING);
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
     }
 
@@ -327,7 +347,8 @@ class StatementImportTest {
         assertThat(after).isPositive();
         assertThat(summary.get("inserted").asInt()).isEqualTo(10);
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
-        assertThat(strings(summary.get("warnings"))).singleElement().asString()
+        assertThat(strings(summary.get("warnings"))).hasSize(2).last().isEqualTo(Reconciliation.UNVERIFIED_WARNING);
+        assertThat(strings(summary.get("warnings"))).first().asString()
                 .startsWith(after + " rows are dated outside the statement period 2026-04-01 to 2026-04-15 and were imported anyway (lines ");
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
     }
@@ -342,8 +363,11 @@ class StatementImportTest {
 
         assertThat(summary.get("periodStart").asString()).isEqualTo("2026-03-31");
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
-        assertThat(strings(summary.get("warnings")))
-                .containsExactly("closingBalance in the request differs from the file; the file's value was kept");
+        assertThat(strings(summary.get("warnings"))).containsExactly(
+                "reconciliation failed: request closingBalance against the file's (the file's is kept): "
+                        + "expected 4066.58, actual 4000.00, difference -66.58",
+                "reconciliation failed: request balances: openingBalance + rows = closingBalance: "
+                        + "expected 4066.58, actual 4000.00, difference -66.58");
         assertThat(jdbc.queryForMap("SELECT opening_balance, closing_balance FROM statement WHERE id = ?", id))
                 .containsEntry("opening_balance", new BigDecimal("3200.00"))
                 .containsEntry("closing_balance", new BigDecimal("4066.58"));
@@ -567,6 +591,16 @@ class StatementImportTest {
 
     private static byte[] bytes(String text) {
         return text.getBytes(StandardCharsets.ISO_8859_1);
+    }
+
+    /** The manifest row of a statement file: [file, account, start, end, opening, closing]. */
+    private static String[] manifest(String statementFile) {
+        try {
+            return Files.readAllLines(ImportTestSupport.SAMPLE_DATA.resolve("statements-manifest.csv")).stream()
+                    .map(line -> line.split(",", -1)).filter(c -> c[0].equals(statementFile)).findFirst().orElseThrow();
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private static int answerKeyRowsFor(String accountSlug) {

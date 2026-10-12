@@ -5,9 +5,8 @@ import org.springframework.http.HttpStatus;
 
 /**
  * Why an import was rejected, as an RFC 9457 problem type. Details must never contain file
- * contents, descriptions or account numbers (SEC-10). The one exception is
- * {@link #MAPPING_MISMATCH}, which carries the file's preview for the uploader to fix the mapping;
- * like every response, it is never logged.
+ * contents, descriptions or account numbers (SEC-10). {@link #MAPPING_MISMATCH} carries the
+ * file's header names and a suggested mapping, but no data rows; the preview endpoint shows rows.
  */
 public enum ImportProblem {
 

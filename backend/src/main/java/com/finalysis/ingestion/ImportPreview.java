@@ -22,6 +22,11 @@ public record ImportPreview(String format, @JsonUnwrapped CsvPreview csv, LocalD
         return new ImportPreview(CsvStatementParser.ID, csv, null, null, null);
     }
 
+    /** The CSV preview without data rows, for error responses ({@link CsvPreview#withoutRows()}). */
+    ImportPreview withoutRows() {
+        return csv == null ? this : new ImportPreview(format, csv.withoutRows(), periodStart, periodEnd, transactionCount);
+    }
+
     static ImportPreview statement(String format, ParsedStatement parsed) {
         return new ImportPreview(format, null, parsed.periodStart(), parsed.periodEnd(), parsed.txns().size());
     }

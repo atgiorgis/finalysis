@@ -17,4 +17,8 @@ public interface TxnRepository extends JpaRepository<Txn, Long> {
                                          @Param("externalIds") Collection<String> externalIds);
 
     long countByStatementId(long statementId);
+
+    /** Rows owned per statement of the account, as [statement id, count] pairs. */
+    @Query("select t.statement.id, count(t) from Txn t where t.account.id = :accountId group by t.statement.id")
+    List<Object[]> countByStatementForAccount(@Param("accountId") long accountId);
 }

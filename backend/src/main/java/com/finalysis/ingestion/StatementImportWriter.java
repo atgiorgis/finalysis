@@ -2,6 +2,7 @@ package com.finalysis.ingestion;
 
 import com.finalysis.account.Account;
 import com.finalysis.api.NotFoundException;
+import com.finalysis.ingestion.Reconciliation.RequestBalances;
 import com.finalysis.ingestion.csv.CsvMappingRepository;
 import com.finalysis.ingestion.csv.CsvMappingSpec;
 import jakarta.persistence.EntityManager;
@@ -15,6 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,13 +28,19 @@ import org.springframework.transaction.annotation.Transactional;
  * inserting the same fingerprint. Imports to different accounts don't wait for each other.
  *
  * <p><b>Status.</b> The warnings are stored with the statement to explain its status. These send
- * it to NEEDS_REVIEW: parser and request-merge warnings, rows dated outside the statement period
- * (imported anyway, never dropped), an account that mixes formats, a new row whose external id
- * (OFX FITID) the account already has under a different fingerprint (inserted anyway, since
- * dropping it could lose a real transaction, and flagged as a possible duplicate), and a period
- * that overlaps an earlier statement when the import inserted new rows. An overlapping re-import
- * that inserted nothing is IMPORTED with an informational warning. Balance reconciliation comes
- * later (ING-06).
+ * it to NEEDS_REVIEW: parser warnings, rows dated outside the statement period (imported anyway,
+ * never dropped), an account that mixes formats, a new row whose external id (OFX FITID) the
+ * account already has under a different fingerprint (inserted anyway, since dropping it could lose
+ * a real transaction, and flagged as a possible duplicate), a period that overlaps an earlier
+ * statement when the import inserted new rows, and a failed balance check. Otherwise the statement
+ * is RECONCILED when its balance checks passed, and IMPORTED with a "balance unverified" warning
+ * when none could run. An overlapping re-import that inserted nothing only gets an informational
+ * warning, which doesn't block RECONCILED.
+ *
+ * <p><b>Reconciliation</b> ({@link Reconciliation}) runs on the parsed rows, under the lock, since
+ * the continuity check reads the previous statement. Afterwards, if the account's next statement
+ * was unverified for want of this one, its continuity check is re-run in the same transaction
+ * (a statement that arrives late), using the parsed totals stored with it.
  *
  * <p><b>CSV mapping.</b> A CSV file is parsed, outside any transaction, with a snapshot of the
  * account's mapping. Under the lock, the snapshot's version must still be the saved mapping's
@@ -68,7 +76,7 @@ class StatementImportWriter {
      */
     @Transactional
     public ImportSummary write(long accountId, ImportFile file, String parser, ParsedStatement parsed,
-                               CsvMappingSpec csvMapping) {
+                               RequestBalances requestBalances, CsvMappingSpec csvMapping) {
         Account account = entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE);
         if (account == null) {
             throw new NotFoundException("Account", accountId);
@@ -125,12 +133,17 @@ class StatementImportWriter {
 
         Statement statement = new Statement(account, parsed.periodStart(), parsed.periodEnd(), file.fileName(),
                 file.sha256(), parser);
-        statement.setOpeningBalance(parsed.openingBalance());
-        statement.setClosingBalance(parsed.closingBalance());
         statement.setSectionTotals(parsed.sectionTotals());
-        statement.setStatus(needsReview ? StatementStatus.NEEDS_REVIEW : StatementStatus.IMPORTED);
-        statement.setImportWarnings(warnings);
+        statement.setParsedRows(rows.size(), Reconciliation.total(rows));
         statements.save(statement);
+
+        Reconciliation.Result balances = Reconciliation.reconcile(parsed, requestBalances, previous(statement));
+        warnings.addAll(balances.warnings());
+        statement.setOpeningBalance(balances.opening());
+        statement.setClosingBalance(balances.closing());
+        statement.setBalanceCheck(balances.check());
+        statement.setStatus(status(needsReview, balances.check()));
+        statement.setImportWarnings(warnings);
 
         List<Txn> inserted = new ArrayList<>(newRows.size());
         for (int i : newRows) {
@@ -140,9 +153,66 @@ class StatementImportWriter {
         if (csvMapping != null) {
             csvMappings.markUsed(accountId);
         }
+        reconcileNext(statement);
 
-        return new ImportSummary(statement.getId(), parser, parsed.periodStart(), parsed.periodEnd(), rows.size(),
-                inserted.size(), rows.size() - inserted.size(), statement.getStatus(), warnings);
+        return new ImportSummary(statement.getId(), parser, parsed.periodStart(), parsed.periodEnd(),
+                statement.getOpeningBalance(), statement.getClosingBalance(), rows.size(), inserted.size(),
+                rows.size() - inserted.size(), statement.getStatus(), statement.getBalanceCheck(), warnings);
+    }
+
+    /** Any review reason or a failed check wins; then passed checks reconcile; else unverified. */
+    private static StatementStatus status(boolean needsReview, BalanceCheck check) {
+        if (needsReview || check == BalanceCheck.FAILED) {
+            return StatementStatus.NEEDS_REVIEW;
+        }
+        return check == BalanceCheck.PASSED ? StatementStatus.RECONCILED : StatementStatus.IMPORTED;
+    }
+
+    /**
+     * The account's latest statement ending on the day before {@code statement} starts, or on that
+     * day, when it has a closing balance; otherwise null (a gap, or nothing earlier).
+     */
+    private Reconciliation.Previous previous(Statement statement) {
+        return statements.findEndingBy(statement.getAccount().getId(), statement.getId(), statement.getPeriodStart(),
+                        Limit.of(1)).stream()
+                .filter(earlier -> !earlier.getPeriodEnd().isBefore(statement.getPeriodStart().minusDays(1)))
+                .filter(earlier -> earlier.getClosingBalance() != null)
+                .map(earlier -> new Reconciliation.Previous(earlier.getId(), earlier.getClosingBalance()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * A late arrival: if the statement right after this one (starting on its last day or the day
+     * after) was unverified because it had a closing balance but no previous statement, re-runs its
+     * continuity check now. The unverified warning is replaced by the outcome; IMPORTED becomes
+     * RECONCILED or NEEDS_REVIEW, and NEEDS_REVIEW stays NEEDS_REVIEW.
+     */
+    private void reconcileNext(Statement statement) {
+        Statement next = statements.findStartingFrom(statement.getAccount().getId(), statement.getId(),
+                statement.getPeriodEnd(), Limit.of(1)).stream().findFirst().orElse(null);
+        if (next == null || next.getPeriodStart().isAfter(statement.getPeriodEnd().plusDays(1))
+                || next.getBalanceCheck() != BalanceCheck.UNVERIFIED || next.getClosingBalance() == null
+                || next.getOpeningBalance() != null || next.getParsedAmountTotal() == null) {
+            return;
+        }
+        Reconciliation.Previous previous = previous(next);
+        if (previous == null) {
+            return;
+        }
+        Reconciliation.Result result = Reconciliation.continuity(next.getParsedAmountTotal(), next.getClosingBalance(),
+                previous);
+        List<String> warnings = new ArrayList<>(next.getImportWarnings());
+        warnings.remove(Reconciliation.UNVERIFIED_WARNING);
+        warnings.addAll(result.warnings());
+        next.setImportWarnings(warnings);
+        next.setOpeningBalance(result.opening());
+        next.setBalanceCheck(result.check());
+        if (result.check() == BalanceCheck.FAILED) {
+            next.setStatus(StatementStatus.NEEDS_REVIEW);
+        } else if (next.getStatus() == StatementStatus.IMPORTED) {
+            next.setStatus(StatementStatus.RECONCILED);
+        }
     }
 
     /** Rows whose printed date falls outside the statement period are imported, but never silently. */

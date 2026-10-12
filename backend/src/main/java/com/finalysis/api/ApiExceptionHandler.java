@@ -73,7 +73,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     /**
      * Import refusals carry their own type and title; details never quote file contents (SEC-10).
-     * A mapping mismatch adds the file's preview, which only the uploader receives.
+     * A mapping mismatch adds the file's headers and a suggested mapping, without data rows.
      */
     @ExceptionHandler(ImportRejectedException.class)
     ProblemDetail handleImportRejected(ImportRejectedException ex) {

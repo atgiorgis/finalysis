@@ -63,7 +63,7 @@ public class ImportRejectedException extends RuntimeException {
         return lineNumber;
     }
 
-    /** The file's preview, for {@link ImportProblem#MAPPING_MISMATCH}; otherwise null. */
+    /** The file's preview without rows, for {@link ImportProblem#MAPPING_MISMATCH}; otherwise null. */
     public ImportPreview getPreview() {
         return preview;
     }

@@ -3,6 +3,7 @@ package com.finalysis.ingestion;
 import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +50,13 @@ public class StatementController {
             throws IOException {
         UploadCheck.checkSize(file.getSize());
         return imports.preview(accountId, file.getOriginalFilename(), file.getBytes());
+    }
+
+    /** The account's statements, newest period first; {@code status} filters (ING-07's queue comes in 3c). */
+    @GetMapping("/api/accounts/{accountId}/statements")
+    public List<StatementListItem> list(@PathVariable long accountId,
+                                        @RequestParam(required = false) StatementStatus status) {
+        return imports.list(accountId, status);
     }
 
     @GetMapping("/api/statements/{id}")
