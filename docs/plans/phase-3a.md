@@ -336,7 +336,7 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, windows-1252, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | Done: `56ae04c` |
 | 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings; preamble-tolerant detection; mapping snapshot with version check | Done: `be02568` |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | Done: `0ebda1b` |
-| 9 | Cross-cutting SEC-10 tests: log capture across the whole API, problem bodies, sniffing matrix, XXE end to end, file names, limits at the boundary, no temp files, exposure checks; SEC-11 through the import | Done (commit pending) |
+| 9 | Cross-cutting SEC-10 tests: log capture across the whole API, problem bodies, sniffing matrix, XXE end to end, file names, limits at the boundary, no temp files, exposure checks; SEC-11 through the import | Done: `991bfda` |
 | 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03 already Done; SEC-10 Done in step 9), change log | To do |
 
 Requirement statuses now: ING-01, ING-03, ING-04, ING-06, ING-10, SEC-10 Done; ING-07 Planned
