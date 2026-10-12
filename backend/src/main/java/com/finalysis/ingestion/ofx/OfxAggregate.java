@@ -4,12 +4,20 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** A tag with child elements, e.g. {@code <STMTTRN>...</STMTTRN>}. Children keep file order. */
-public record OfxAggregate(String name, List<OfxElement> children, int line) implements OfxElement {
+/**
+ * A tag with child elements, e.g. {@code <STMTTRN>...</STMTTRN>}. Children keep file order.
+ *
+ * @param start offset of the opening tag's {@code <} in {@link OfxDocument#body()}
+ * @param end   offset just after the closing tag; see {@link OfxDocument#sourceText(OfxAggregate)}
+ */
+public record OfxAggregate(String name, List<OfxElement> children, int line, int start, int end) implements OfxElement {
 
     public OfxAggregate {
         Objects.requireNonNull(name, "name");
         children = List.copyOf(children);
+        if (start < 0 || end < start) {
+            throw new IllegalArgumentException("invalid source span");
+        }
     }
 
     /** First child with the given name, if any. */

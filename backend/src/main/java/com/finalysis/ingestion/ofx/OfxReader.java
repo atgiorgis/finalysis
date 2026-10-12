@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
  *
  * <p><b>Headers.</b> OFX 1.x starts with a {@code KEY:VALUE} block ({@code OFXHEADER:100},
  * {@code DATA:OFXSGML}, {@code ENCODING}, {@code CHARSET}, ...) ended by a blank line or the first
- * {@code <}. {@code ENCODING:UTF-8} decodes as UTF-8; {@code ENCODING:USASCII} with
+ * {@code <}. {@code ENCODING:UTF-8} and {@code ENCODING:UNICODE} decode as UTF-8; {@code ENCODING:USASCII} with
  * {@code CHARSET:1252}, {@code NONE} or no CHARSET decodes as windows-1252 (a superset of ASCII).
  * OFX 2.x starts with an optional {@code <?xml?>} declaration (its {@code encoding}: UTF-8, the
  * default, or US-ASCII/windows-1252) and a required {@code <?OFX OFXHEADER="200" ...?>}. Any other
@@ -52,9 +52,16 @@ import java.util.regex.Pattern;
  *
  * <p><b>Structure.</b> An opening tag followed by text is a leaf; its closing tag is optional
  * (SGML) and consumed when present (XML). An opening tag followed by another opening tag is an
- * aggregate and must be closed; a missing or mismatched closing tag is a parse error. An opening
- * tag followed directly by a closing tag is a leaf with an empty value, except at the root, which
- * is always an aggregate. Tag names are letters,
+ * aggregate and must be closed. An opening tag followed directly by a closing tag is a leaf with an
+ * empty value, except at the root, which is always an aggregate.
+ *
+ * <p><b>SGML recovery.</b> In SGML an empty leaf can't be told from an aggregate when a sibling
+ * follows it: {@code <MEMO>} then {@code <CHECKNUM>123} reads as MEMO containing CHECKNUM. So in
+ * SGML mode, when a closing tag matches an ancestor rather than the innermost open element, each
+ * open element in between (none has a text value, or it would be a leaf) becomes an empty leaf,
+ * and its children move up to its parent, in document order. The example becomes MEMO="" followed
+ * by CHECKNUM=123, both children of the enclosing aggregate. XML stays strict: there, and in SGML
+ * when no ancestor matches, a missing or mismatched closing tag is a parse error. Tag names are letters,
  * digits, {@code .} and {@code _}; attributes and self-closing tags are not OFX and are rejected.
  * The document must have exactly one root, {@code <OFX>}.
  *
@@ -94,8 +101,8 @@ public final class OfxReader {
         Header header = readHeader(raw);
         String body = decode(bytes, start + header.bodyOffset(), header.charset());
         int bodyLine = 1 + countLineBreaks(raw, 0, header.bodyOffset());
-        OfxAggregate root = new Tokenizer(body, bodyLine).readRoot();
-        return new OfxDocument(header.syntax(), header.charset(), root);
+        OfxAggregate root = new Tokenizer(body, bodyLine, header.syntax()).readRoot();
+        return new OfxDocument(header.syntax(), header.charset(), root, body);
     }
 
     // ------------------------------------------------------------------ headers
@@ -157,7 +164,7 @@ public final class OfxReader {
         }
         String charset = fields.getOrDefault("CHARSET", "NONE").toUpperCase(Locale.ROOT);
         return switch (encoding.toUpperCase(Locale.ROOT)) {
-            case "UTF-8" -> StandardCharsets.UTF_8;
+            case "UTF-8", "UNICODE" -> StandardCharsets.UTF_8;
             case "USASCII" -> switch (charset) {
                 case "1252", "NONE" -> WINDOWS_1252;
                 default -> throw new StatementParseException(null, "unsupported OFX CHARSET " + headerValue(charset));
@@ -232,21 +239,23 @@ public final class OfxReader {
     // ------------------------------------------------------------------ body
 
     /** One open aggregate while its children are being read. */
-    private record Frame(String name, int line, List<OfxElement> children) {
+    private record Frame(String name, int line, int start, List<OfxElement> children) {
     }
 
     private final class Tokenizer {
 
         private final String text;
+        private final OfxDocument.Syntax syntax;
         private final Deque<Frame> open = new ArrayDeque<>();
         private final List<OfxElement> roots = new ArrayList<>();
         private int pos;
         private int line;
         private int elements;
 
-        Tokenizer(String text, int firstLine) {
+        Tokenizer(String text, int firstLine, OfxDocument.Syntax syntax) {
             this.text = text;
             this.line = firstLine;
+            this.syntax = syntax;
         }
 
         OfxAggregate readRoot() {
@@ -283,6 +292,7 @@ public final class OfxReader {
 
         private void readElement() {
             int tagLine = line;
+            int tagStart = pos;
             String name = readTag(1);
             if (++elements > limits.maxElements()) {
                 throw error("more than " + limits.maxElements() + " elements");
@@ -317,18 +327,29 @@ public final class OfxReader {
                 if (open.size() >= limits.maxDepth()) {
                     throw new StatementParseException(tagLine, "aggregates are nested deeper than " + limits.maxDepth());
                 }
-                open.push(new Frame(name, tagLine, new ArrayList<>()));
+                open.push(new Frame(name, tagLine, tagStart, new ArrayList<>()));
             }
         }
 
+        /** Called with pos just after the closing tag. */
         private void close(String name) {
             Frame top = open.peek();
+            boolean openFurtherUp = open.stream().anyMatch(frame -> frame.name().equals(name));
+            if (top != null && !top.name().equals(name) && openFurtherUp && syntax == OfxDocument.Syntax.SGML) {
+                // SGML recovery (see class Javadoc): unclosed elements in between were empty leaves.
+                while (!open.peek().name().equals(name)) {
+                    Frame empty = open.pop();
+                    List<OfxElement> parent = open.peek().children();
+                    parent.add(new OfxLeaf(empty.name(), "", empty.line()));
+                    parent.addAll(empty.children());
+                }
+                top = open.peek();
+            }
             if (top != null && top.name().equals(name)) {
                 open.pop();
-                add(new OfxAggregate(name, top.children(), top.line()));
+                add(new OfxAggregate(name, top.children(), top.line(), top.start(), pos));
                 return;
             }
-            boolean openFurtherUp = open.stream().anyMatch(frame -> frame.name().equals(name));
             if (top != null && openFurtherUp) {
                 throw error("aggregate <" + top.name() + "> (line " + top.line() + ") is not closed before </" + name + ">");
             }
@@ -345,7 +366,7 @@ public final class OfxReader {
                         throw new StatementParseException(element.line(), "text outside the OFX root element");
                     }
                     // An empty root such as <OFX></OFX> has no children, not an empty value.
-                    element = new OfxAggregate(leaf.name(), List.of(), leaf.line());
+                    element = new OfxAggregate(leaf.name(), List.of(), leaf.line(), 0, text.length());
                 }
                 roots.add(element);
             } else {

@@ -213,9 +213,26 @@ class OfxReaderTest {
         }
 
         @Test
+        void unicodeEncodingIsUtf8() {
+            String header = SGML_HEADER_UTF8.replace("ENCODING:UTF-8", "ENCODING:UNICODE");
+            OfxDocument document = read(header + "<OFX>\n<NAME>CAFÉ\n</OFX>\n", StandardCharsets.UTF_8);
+
+            assertThat(document.charset()).isEqualTo(StandardCharsets.UTF_8);
+            assertThat(document.root().leafValue("NAME")).hasValue("CAFÉ");
+        }
+
+        @Test
+        void invalidBytesUnderUnicodeEncodingAreRejected() {
+            byte[] bytes = concat((SGML_HEADER_UTF8.replace("ENCODING:UTF-8", "ENCODING:UNICODE") + "<OFX>\n<NAME>")
+                    .getBytes(StandardCharsets.US_ASCII), new byte[] {(byte) 0xE9}, "\n</OFX>\n".getBytes(StandardCharsets.US_ASCII));
+
+            assertThatThrownBy(() -> reader.read(bytes)).hasMessageContaining("not valid UTF-8");
+        }
+
+        @Test
         void unknownSgmlEncodingIsRejected() {
-            assertParseError(SGML_HEADER_1252.replace("ENCODING:USASCII", "ENCODING:UNICODE") + "<OFX></OFX>",
-                    "unsupported OFX ENCODING UNICODE");
+            assertParseError(SGML_HEADER_1252.replace("ENCODING:USASCII", "ENCODING:EBCDIC") + "<OFX></OFX>",
+                    "unsupported OFX ENCODING EBCDIC");
         }
 
         @Test
@@ -366,9 +383,18 @@ class OfxReaderTest {
 
         @Test
         void lineNumbersCountCrlfOnce() {
-            String file = crlf(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n<FITID>A\n</OFX>\n");
+            String file = crlf(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n<FITID>A\n</BANKTRANLIST>\n</OFX>\n");
 
-            assertParseError(file, "line 14: aggregate <STMTTRN> (line 12) is not closed before </OFX>");
+            assertParseError(file, "line 14: unexpected closing tag </BANKTRANLIST>");
+        }
+
+        @Test
+        void sourceTextIsTheAggregateExactlyAsWritten() {
+            String block = "<STMTTRN>\r\n  <TRNAMT>-4.50\r\n  <NAME>CAFE  &amp; BAR\r\n</STMTTRN>";
+            OfxDocument document = read(SGML_HEADER_UTF8 + "<OFX>\r\n" + block + "\r\n</OFX>\r\n", StandardCharsets.UTF_8);
+
+            assertThat(document.sourceText(document.root().aggregates("STMTTRN").getFirst())).isEqualTo(block);
+            assertThat(document.toString()).doesNotContain("CAFE");
         }
 
         @Test
@@ -401,6 +427,69 @@ class OfxReaderTest {
         @ValueSource(strings = {"<OFX><NAME id=\"1\">X</NAME></OFX>", "<OFX><NAME/></OFX>", "<OFX><>X</OFX>", "<OFX><NA-ME>X</OFX>", "<OFX><NAME"})
         void invalidTagsAreRejected(String body) {
             assertParseError(XML_HEADER + body, "invalid tag");
+        }
+    }
+
+    // ------------------------------------------------------------------ SGML recovery
+
+    @Nested
+    class SgmlRecovery {
+
+        @Test
+        void emptyMemoFollowedByCheckNumber() {
+            assertThat(transaction("<TRNAMT>-75.00\n<MEMO>\n<CHECKNUM>1042"))
+                    .containsExactly("TRNAMT=-75.00", "MEMO=", "CHECKNUM=1042");
+        }
+
+        @Test
+        void emptyNameFollowedByMemo() {
+            assertThat(transaction("<NAME>\n<MEMO>BLUE BEAN CAFE\n<FITID>A"))
+                    .containsExactly("NAME=", "MEMO=BLUE BEAN CAFE", "FITID=A");
+        }
+
+        @Test
+        void twoConsecutiveEmptyLeaves() {
+            assertThat(transaction("<FITID>A\n<NAME>\n<MEMO>\n<TRNAMT>-1.00"))
+                    .containsExactly("FITID=A", "NAME=", "MEMO=", "TRNAMT=-1.00");
+        }
+
+        @Test
+        void emptyLeafAsTheLastChild() {
+            assertThat(transaction("<FITID>A\n<TRNAMT>-1.00\n<MEMO>"))
+                    .containsExactly("FITID=A", "TRNAMT=-1.00", "MEMO=");
+        }
+
+        @Test
+        void recoveredTransactionKeepsItsSourceSpanAndLine() {
+            OfxDocument document = read(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n<MEMO>\n<CHECKNUM>1042\n</STMTTRN>\n</OFX>\n", WINDOWS_1252);
+            OfxAggregate transaction = document.root().aggregates("STMTTRN").getFirst();
+
+            assertThat(transaction.line()).isEqualTo(12);
+            assertThat(document.sourceText(transaction)).isEqualTo("<STMTTRN>\n<MEMO>\n<CHECKNUM>1042\n</STMTTRN>");
+        }
+
+        @Test
+        void closingTagMatchingNoOpenElementIsStillAnError() {
+            assertParseError(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n<MEMO>\n<CHECKNUM>1\n</BANKTRANLIST>\n</OFX>\n",
+                    "line 15: unexpected closing tag </BANKTRANLIST>");
+        }
+
+        @Test
+        void unclosedAggregateAtEndOfFileIsStillAnError() {
+            assertParseError(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n<MEMO>\n<CHECKNUM>1\n", "line 13: aggregate <MEMO> is not closed");
+        }
+
+        @Test
+        void xmlStaysStrict() {
+            assertParseError(XML_HEADER + "<OFX>\n<STMTTRN>\n<MEMO>\n<CHECKNUM>1</CHECKNUM>\n</STMTTRN>\n</OFX>",
+                    "line 7: aggregate <MEMO> (line 5) is not closed before </STMTTRN>");
+        }
+
+        private List<String> transaction(String children) {
+            OfxDocument document = read(SGML_HEADER_1252 + "<OFX>\n<STMTTRN>\n" + children + "\n</STMTTRN>\n</OFX>\n", WINDOWS_1252);
+            List<String> leaves = new ArrayList<>();
+            collect(document.root().aggregates("STMTTRN").getFirst(), leaves);
+            return leaves;
         }
     }
 
@@ -466,7 +555,8 @@ class OfxReaderTest {
                 SGML_HEADER_UTF8 + "<OFX>\n<NAME>" + secret + " &nbsp;\n</OFX>\n",
                 SGML_HEADER_UTF8 + "<OFX>\n<NAME>" + secret + " &#0;\n</OFX>\n",
                 SGML_HEADER_UTF8 + "<OFX>\n<NAME>" + secret.repeat(400) + "\n</OFX>\n",
-                SGML_HEADER_UTF8 + "<OFX>\n<STMTTRN>\n<NAME>" + secret + "\n</OFX>\n",
+                XML_HEADER + "<OFX><STMTTRN><NAME>" + secret + "</NAME></OFX>",
+                SGML_HEADER_UTF8 + "<OFX>\n<STMTTRN>\n<NAME>" + secret + "\n</BANKTRANLIST>\n</OFX>\n",
                 SGML_HEADER_UTF8 + "<OFX>\n<STMTTRN>\n<NAME>" + secret + "\n",
                 SGML_HEADER_UTF8 + "<OFX>\n<A><X>1</A>" + secret + "\n</OFX>\n",
                 SGML_HEADER_UTF8 + secret + "<OFX></OFX>",
