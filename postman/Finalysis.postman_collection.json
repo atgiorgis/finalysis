@@ -1,55 +1,19 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend. Run against the local dev app (`./mvnw spring-boot:run`). Uses only fictional sample accounts.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there (`npx newman run postman/Finalysis.postman_collection.json -e postman/Finalysis-Local.postman_environment.json`), or set Postman's working directory (Settings → General) to the repo root. Uses only fictional sample data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "checkingId",
-      "value": ""
-    },
-    {
-      "key": "savingsId",
-      "value": ""
-    },
-    {
-      "key": "apexId",
-      "value": ""
-    },
-    {
-      "key": "summitId",
-      "value": ""
-    },
-    {
-      "key": "statementId",
-      "value": ""
-    }
-  ],
   "item": [
     {
-      "name": "Status",
+      "name": "1. Setup",
       "item": [
         {
           "name": "Get status",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "status"
-              ]
-            },
-            "description": "Backend health check, shown by the frontend."
+            "url": "{{baseUrl}}/api/status"
           },
           "event": [
             {
@@ -63,217 +27,414 @@
               }
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "Accounts",
-      "item": [
+        },
         {
-          "name": "Setup: create sample accounts",
-          "item": [
+          "name": "Actuator health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/actuator/health"
+          },
+          "event": [
             {
-              "name": "Create Northfield Bank Checking",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Northfield Bank Checking\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                      "const body = pm.response.json();",
-                      "pm.collectionVariables.set('checkingId', body.id);",
-                      "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Create Northfield Bank Savings",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Northfield Bank Savings\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"SAVINGS\",\n  \"lastFour\": \"1002\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                      "const body = pm.response.json();",
-                      "pm.collectionVariables.set('savingsId', body.id);",
-                      "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Create Apex Rewards Visa",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Apex Rewards Visa\",\n  \"institution\": \"Apex\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"2001\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                      "const body = pm.response.json();",
-                      "pm.collectionVariables.set('apexId', body.id);",
-                      "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Create Summit Cash Card",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Summit Cash Card\",\n  \"institution\": \"Summit\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"3001\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                      "const body = pm.response.json();",
-                      "pm.collectionVariables.set('summitId', body.id);",
-                      "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
-                    ]
-                  }
-                }
-              ]
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('UP', () => pm.expect(body.status).to.eql('UP'));",
+                  "pm.test('no component details', () => { pm.expect(body).to.not.have.property('components'); pm.expect(body).to.not.have.property('details'); });"
+                ]
+              }
             }
           ]
         },
+        {
+          "name": "Create Northfield Bank Checking",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Northfield Bank Checking\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('checkingId', body.id);",
+                  "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Northfield Bank Savings",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Northfield Bank Savings\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"SAVINGS\",\n  \"lastFour\": \"1002\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('savingsId', body.id);",
+                  "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Apex Rewards Visa",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Apex Rewards Visa\",\n  \"institution\": \"Apex\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"2001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('apexId', body.id);",
+                  "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Summit Cash Card",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Summit Cash Card\",\n  \"institution\": \"Summit\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"3001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('summitId', body.id);",
+                  "pm.test('Location header present', () => pm.response.to.have.header('Location'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save Apex Visa CSV mapping",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "A mapping written by hand. The Summit mapping below comes from the preview's suggestion instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('sign as sent', () => pm.expect(body.sign).to.eql('INVERTED'));",
+                  "pm.test('defaults applied', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.encoding).to.eql('UTF-8'); pm.expect(body.headerRow).to.eql(true); });",
+                  "pm.test('server computed the header signature', () => pm.expect(body.headerSignature).to.match(/^sha256:[0-9a-f]{64}$/));",
+                  "pm.test('not used yet, no warnings', () => { pm.expect(body.usedAt).to.eql(null); pm.expect(body.warnings).to.eql([]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview Summit CSV (suggested mapping)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/summit-card_2026-04.csv"
+                }
+              ]
+            },
+            "description": "Writes nothing. Stores `suggestedMapping.mapping` in `summitMapping` for the next request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('read as CSV', () => pm.expect(body.format).to.eql('csv'));",
+                  "pm.test('no saved mapping yet', () => pm.expect(body.mappingStatus).to.eql('NONE'));",
+                  "pm.test('first rows shown', () => { pm.expect(body.headers).to.eql(['Trans. Date', 'Merchant Name', 'Amount']); pm.expect(body.rows.length).to.eql(10); });",
+                  "const suggestion = body.suggestedMapping;",
+                  "pm.test('suggested date format and sign', () => { pm.expect(suggestion.mapping.dateFormat).to.eql('dd-MMM-yyyy'); pm.expect(suggestion.mapping.sign).to.eql('AS_IS'); });",
+                  "pm.test('description from Merchant Name', () => pm.expect(suggestion.mapping.descriptionColumns).to.eql(['Merchant Name']));",
+                  "pm.collectionVariables.set('summitMapping', JSON.stringify(suggestion.mapping));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save suggested Summit mapping",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{summitId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{{summitMapping}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Sends the preview's suggestion unedited, as the user would after checking it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('the suggestion, unedited', () => { pm.expect(body.dateColumn).to.eql('Trans. Date'); pm.expect(body.amountColumn).to.eql('Amount'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import checking April (OFX)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/ofx/northfield-checking_2026-04.ofx"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                  "pm.test('10 rows parsed and inserted', () => { pm.expect(body.parsed).to.eql(10); pm.expect(body.inserted).to.eql(10); pm.expect(body.duplicates).to.eql(0); });",
+                  "pm.test('nothing earlier to continue from: unverified', () => { pm.expect(body.status).to.eql('IMPORTED'); pm.expect(body.balanceCheck).to.eql('UNVERIFIED'); });",
+                  "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/statements/' + body.statementId + '$')));",
+                  "pm.collectionVariables.set('statementId', body.statementId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import checking May with a wrong LEDGERBAL (NEEDS_REVIEW)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/edge-cases/ofx-ledgerbal-mismatch.ofx"
+                }
+              ]
+            },
+            "description": "The May checking statement with a `LEDGERBAL` $10.00 too high. Saved, but flagged for review."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('continues April, but the balance is off', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
+                  "pm.test('warning names the difference', () => pm.expect(body.warnings[0]).to.include('continuity').and.to.include('difference 10.00'));",
+                  "pm.collectionVariables.set('reviewStatementId', body.statementId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import Apex Visa April (CSV, with balances)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/apex-visa_2026-04.csv"
+                },
+                {
+                  "key": "openingBalance",
+                  "value": "-842.17",
+                  "type": "text"
+                },
+                {
+                  "key": "closingBalance",
+                  "value": "-242.32",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "A card CSV has no balances, so the request sends the printed ones (from `statements-manifest.csv`)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                  "pm.test('7 rows parsed', () => pm.expect(body.parsed).to.eql(7));",
+                  "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); pm.expect(body.closingBalance).to.eql('-242.32'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import Summit April (CSV, no balances)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/summit-card_2026-04.csv"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('12 rows parsed', () => pm.expect(body.parsed).to.eql(12));",
+                  "pm.test('nothing to check against: unverified', () => { pm.expect(body.status).to.eql('IMPORTED'); pm.expect(body.balanceCheck).to.eql('UNVERIFIED'); });",
+                  "pm.test('says so', () => pm.expect(body.warnings.some(w => w.startsWith('balance unverified'))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Creates the four sample accounts, saves two CSV mappings (one by hand, one from the preview's suggestion) and imports four statements: one of each status. Strict: run against a freshly reset dev database."
+    },
+    {
+      "name": "2. Accounts",
+      "item": [
         {
           "name": "List accounts",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts"
-              ]
-            },
-            "description": ""
+            "url": "{{baseUrl}}/api/accounts"
           },
           "event": [
             {
@@ -283,6 +444,7 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const names = pm.response.json().map(a => a.name);",
+                  "pm.test('the four sample accounts', () => pm.expect(names.length).to.eql(4));",
                   "pm.test('Sorted by name', () => pm.expect(names).to.eql([...names].sort()));"
                 ]
               }
@@ -294,18 +456,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}"
-              ]
-            },
-            "description": ""
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}"
           },
           "event": [
             {
@@ -324,24 +475,8 @@
           "name": "Rename account",
           "request": {
             "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}"
-              ]
-            },
-            "description": "",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Apex Visa (travel card)\"\n}",
@@ -364,32 +499,288 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "3. CSV mappings and preview",
+      "item": [
+        {
+          "name": "Get Apex Visa CSV mapping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('description columns in order', () => pm.expect(body.descriptionColumns).to.eql(['Description']));",
+                  "pm.test('printed date is the post date', () => pm.expect(body.postDateColumn).to.eql('Post Date'));",
+                  "pm.test('marked used by the import', () => pm.expect(body.usedAt).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Error cases",
+          "name": "Replace Apex Visa mapping (unchanged locked fields) → 200",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Editable after use: everything except sign, description columns and the printed-date column."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK (replaced)', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('usedAt survives a replace', () => pm.expect(body.usedAt).to.be.a('string'));",
+                  "pm.test('no warnings', () => pm.expect(body.warnings).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview Apex Visa CSV (mapping matches)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/apex-visa_2026-05.csv"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('read as CSV', () => pm.expect(body.format).to.eql('csv'));",
+                  "pm.test('detected layout', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.skipRows).to.eql(0); pm.expect(body.headers[0]).to.eql('Transaction Date'); });",
+                  "pm.test('saved mapping matches', () => pm.expect(body.mappingStatus).to.eql('MATCHES'));",
+                  "pm.test('no suggestion needed', () => pm.expect(body).to.not.have.property('suggestedMapping'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview checking June (OFX)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/ofx/northfield-checking_2026-06.ofx"
+                }
+              ]
+            },
+            "description": "Writes nothing: the June file is still importable afterwards."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('OFX summary only', () => pm.expect(body).to.eql({format: 'ofx', periodStart: '2026-06-01', periodEnd: '2026-06-30', transactionCount: 10}));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Statements",
+      "item": [
+        {
+          "name": "Get statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{statementId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                  "pm.test('money is a string with two decimals', () => pm.expect(body.closingBalance).to.eql('4066.58'));",
+                  "pm.test('warnings stored with the statement', () => pm.expect(body.warnings.some(w => w.startsWith('balance unverified'))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get statement needing review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{reviewStatementId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('NEEDS_REVIEW, FAILED', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
+                  "pm.test('no opening: it is set from April only when continuity passes', () => pm.expect(body.openingBalance).to.eql(null));",
+                  "pm.test('closing as printed', () => pm.expect(body.closingBalance).to.eql('8246.77'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List checking statements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('April and May', () => pm.expect(items.length).to.eql(2));",
+                  "pm.test('newest period first', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i - 1].periodStart >= items[i].periodStart).to.be.true; });",
+                  "pm.test('counts and warning count, no warnings', () => { pm.expect(items[0]).to.have.property('parsedCount'); pm.expect(items[0]).to.have.property('transactionCount'); pm.expect(items[0]).to.have.property('warningCount'); pm.expect(items[0]).to.not.have.property('warnings'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List checking statements needing review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=NEEDS_REVIEW"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('only the May statement', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].status).to.eql('NEEDS_REVIEW'); pm.expect(items[0].periodStart).to.eql('2026-05-01'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List reconciled Apex statements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{apexId}}/statements?status=RECONCILED"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json();",
+                  "pm.test('the April CSV', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].parser).to.eql('csv'); pm.expect(items[0].transactionCount).to.eql(7); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Categories",
+      "item": [
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('19 seeded categories', () => pm.expect(pm.response.json().length).to.eql(19));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Errors",
+      "item": [
+        {
+          "name": "Accounts",
           "item": [
             {
-              "name": "PATCH with extra field \u2192 400",
+              "name": "PATCH with extra field → 400",
               "request": {
                 "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}"
-                  ]
-                },
-                "description": "",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"name\": \"Apex Visa\",\n  \"type\": \"CHECKING\"\n}",
@@ -414,26 +805,11 @@
               ]
             },
             {
-              "name": "POST with invalid fields \u2192 400",
+              "name": "POST with invalid fields → 400",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"name\": \"  \",\n  \"institution\": \"Apex\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"12a4\"\n}",
@@ -459,26 +835,11 @@
               ]
             },
             {
-              "name": "POST with bad type \u2192 400",
+              "name": "POST with bad type → 400",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"name\": \"Test\",\n  \"institution\": \"Test Bank\",\n  \"type\": \"FOO\",\n  \"lastFour\": \"9999\"\n}",
@@ -495,33 +856,19 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('Names the field', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('type'));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "POST with extra field \u2192 400",
+              "name": "POST with extra field → 400",
               "request": {
                 "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts"
-                  ]
-                },
-                "description": "",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"id\": 99,\n  \"name\": \"Test\",\n  \"institution\": \"Test Bank\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"9999\"\n}",
@@ -538,29 +885,19 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('Names the field', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('id'));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "Unknown account \u2192 404",
+              "name": "Unknown account → 404",
               "request": {
                 "method": "GET",
                 "header": [],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/999999",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "999999"
-                  ]
-                },
-                "description": ""
+                "url": "{{baseUrl}}/api/accounts/999999"
               },
               "event": [
                 {
@@ -576,324 +913,16 @@
               ]
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "Statements",
-      "item": [
-        {
-          "name": "Import checking April (OFX)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "sample-data/ofx/northfield-checking_2026-04.ofx"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{checkingId}}",
-                "imports"
-              ]
-            },
-            "description": "Uploads a sample OFX statement to the checking account. The file path is relative to Postman's working directory (Settings > General), which should be the repo root. A second run returns 409 already-imported with the same statementId."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
-                  "const body = pm.response.json();",
-                  "if (pm.response.code === 201) {",
-                  "  pm.test('10 rows parsed', () => pm.expect(body.parsed).to.eql(10));",
-                  "  pm.test('nothing earlier to continue from: unverified', () => { pm.expect(body.status).to.eql('IMPORTED'); pm.expect(body.balanceCheck).to.eql('UNVERIFIED'); });",
-                  "  pm.test('Location header', () => pm.response.to.have.header('Location'));",
-                  "}",
-                  "pm.collectionVariables.set('statementId', body.statementId);"
-                ]
-              }
-            }
-          ]
         },
         {
-          "name": "Get statement",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/statements/{{statementId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "statements",
-                "{{statementId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('read by the OFX parser', () => pm.expect(pm.response.json().parser).to.eql('ofx'));",
-                  "pm.test('money is a string with two decimals', () => pm.expect(pm.response.json().closingBalance).to.eql('4066.58'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Import checking May with a wrong LEDGERBAL (NEEDS_REVIEW)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "sample-data/edge-cases/ofx-ledgerbal-mismatch.ofx"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{checkingId}}",
-                "imports"
-              ]
-            },
-            "description": "The May checking statement with a LEDGERBAL 10.00 off. April's closing balance plus May's rows doesn't reach it, so the continuity check fails and the statement needs review; the warning gives expected, actual and the difference. A second run returns 409 already-imported."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
-                  "const body = pm.response.json();",
-                  "if (pm.response.code === 201) {",
-                  "  pm.test('needs review', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
-                  "  pm.test('warning names the difference', () => pm.expect(body.warnings[0]).to.include('continuity').and.to.include('difference 10.00'));",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "List checking statements",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/statements",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{checkingId}}",
-                "statements"
-              ]
-            },
-            "description": "Newest period first, with balances, status, balanceCheck, counts and warningCount. GET /api/statements/{id} returns the warnings themselves."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json();",
-                  "pm.test('newest period first', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i - 1].periodStart >= items[i].periodStart).to.be.true; });",
-                  "pm.test('counts and warning count, no warnings', () => { pm.expect(items[0]).to.have.property('parsedCount'); pm.expect(items[0]).to.have.property('warningCount'); pm.expect(items[0]).to.not.have.property('warnings'); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "List checking statements needing review",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=NEEDS_REVIEW",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{checkingId}}",
-                "statements"
-              ],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "NEEDS_REVIEW"
-                }
-              ]
-            },
-            "description": "Only NEEDS_REVIEW statements, such as the May import above. The review-queue API across accounts comes in Phase 3c."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json();",
-                  "pm.test('only NEEDS_REVIEW', () => items.forEach(item => pm.expect(item.status).to.eql('NEEDS_REVIEW')));",
-                  "pm.test('the May statement is listed', () => pm.expect(items.some(item => item.periodStart === '2026-05-01')).to.be.true);"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "CSV mapping",
-      "item": [
-        {
-          "name": "Put Apex Visa CSV mapping",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}",
-                "csv-mapping"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "Saves the Apex Visa export's layout (sample-data/statements/apex-visa_*.csv). Creates the mapping (201) on the first run and replaces it (200) after that. Once a CSV import has used the mapping, changing sign, descriptionColumns or the printed-date column returns 409 mapping-locked unless ?confirmFingerprintChange=true is added."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created, or 200 if replaced', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
-                  "const body = pm.response.json();",
-                  "pm.test('sign as sent', () => pm.expect(body.sign).to.eql('INVERTED'));",
-                  "pm.test('defaults applied', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.encoding).to.eql('UTF-8'); pm.expect(body.headerRow).to.eql(true); });",
-                  "pm.test('server computed the header signature', () => pm.expect(body.headerSignature).to.match(/^sha256:[0-9a-f]{64}$/));",
-                  "pm.test('no warnings', () => pm.expect(body.warnings).to.eql([]));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Get Apex Visa CSV mapping",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}",
-                "csv-mapping"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('description columns in order', () => pm.expect(body.descriptionColumns).to.eql(['Description']));",
-                  "pm.test('printed date is the post date', () => pm.expect(body.postDateColumn).to.eql('Post Date'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Error cases",
+          "name": "CSV mappings",
           "item": [
             {
-              "name": "PUT with a column not in headers \u2192 400",
+              "name": "PUT with a column not in headers → 400",
               "request": {
                 "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}",
-                    "csv-mapping"
-                  ]
-                },
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Posting Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
@@ -919,27 +948,11 @@
               ]
             },
             {
-              "name": "PUT card mapping without sign \u2192 400",
+              "name": "PUT card mapping without sign → 400",
               "request": {
                 "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}",
-                    "csv-mapping"
-                  ]
-                },
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\"\n}",
@@ -964,27 +977,11 @@
               ]
             },
             {
-              "name": "PUT with a bad date format \u2192 400",
+              "name": "PUT with a bad date format → 400",
               "request": {
                 "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}",
-                    "csv-mapping"
-                  ]
-                },
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
@@ -1009,20 +1006,158 @@
               ]
             },
             {
-              "name": "GET mapping of unknown account \u2192 404",
+              "name": "GET mapping of an account without one → 404",
               "request": {
                 "method": "GET",
                 "header": [],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/999999/csv-mapping",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "999999",
-                    "csv-mapping"
+                "url": "{{baseUrl}}/api/accounts/{{savingsId}}/csv-mapping"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "GET mapping of unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/999999/csv-mapping"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('names the account', () => pm.expect(pm.response.json().detail).to.eql('Account 999999 not found'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT locked field after use → 409 mapping-locked",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"AS_IS\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "const body = pm.response.json();",
+                      "pm.test('mapping-locked', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-locked'));",
+                      "",
+                      "pm.test('names sign', () => pm.expect(body.fields).to.eql(['sign']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT locked field, confirmed → 200 with warning",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping?confirmFingerprintChange=true",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"AS_IS\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('saved', () => pm.expect(body.sign).to.eql('AS_IS'));",
+                      "pm.test('warns about new fingerprints', () => pm.expect(body.warnings.length).to.eql(1));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Restore the Apex sign, confirmed → 200",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping?confirmFingerprintChange=true",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"INVERTED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Puts the mapping back so the Apex account can keep importing its CSV files."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('back to INVERTED', () => pm.expect(pm.response.json().sign).to.eql('INVERTED'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Imports",
+          "item": [
+            {
+              "name": "Import to unknown account → 404",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/999999/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-06.ofx"
+                    }
                   ]
                 }
               },
@@ -1038,151 +1173,90 @@
                   }
                 }
               ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "CSV import",
-      "item": [
-        {
-          "name": "Preview Apex Visa CSV",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "sample-data/statements/apex-visa_2026-04.csv"
-                }
-              ]
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports/preview",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}",
-                "imports",
-                "preview"
-              ]
-            },
-            "description": "Reads the file as an import would and writes nothing. Runs after 'Put Apex Visa CSV mapping', so the saved mapping matches and no suggestion is returned. On an account without a mapping, mappingStatus is NONE and suggestedMapping.mapping is a ready PUT body."
-          },
-          "event": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('read as CSV', () => pm.expect(body.format).to.eql('csv'));",
-                  "pm.test('detected layout', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.skipRows).to.eql(0); pm.expect(body.headers[0]).to.eql('Transaction Date'); });",
-                  "pm.test('saved mapping matches', () => pm.expect(body.mappingStatus).to.eql('MATCHES'));",
-                  "pm.test('no suggestion needed', () => pm.expect(body).to.not.have.property('suggestedMapping'));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Import Apex Visa April (CSV)",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "sample-data/statements/apex-visa_2026-04.csv"
-                },
-                {
-                  "key": "openingBalance",
-                  "value": "-842.17",
-                  "type": "text"
-                },
-                {
-                  "key": "closingBalance",
-                  "value": "-242.32",
-                  "type": "text"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "accounts",
-                "{{apexId}}",
-                "imports"
-              ]
-            },
-            "description": "Imports the April Apex CSV with the saved mapping and sets the mapping's usedAt, which locks its fingerprint fields. Card exports print no balances, so the statement's balances (sample-data/statements-manifest.csv) are sent and checked: opening + rows = closing. A second run returns 409 already-imported."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
-                  "const body = pm.response.json();",
-                  "if (pm.response.code === 201) {",
-                  "  pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
-                  "  pm.test('7 rows parsed', () => pm.expect(body.parsed).to.eql(7));",
-                  "  pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.closingBalance).to.eql('-242.32'); });",
-                  "} else {",
-                  "  pm.test('already imported', () => pm.expect(body.type).to.eql('urn:finalysis:problem:already-imported'));",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Error cases",
-          "item": [
-            {
-              "name": "CSV import without a mapping \u2192 422 mapping-required",
+              "name": "Disallowed extension → 415 unsupported-format",
               "request": {
                 "method": "POST",
                 "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
                 "body": {
                   "mode": "formdata",
                   "formdata": [
                     {
                       "key": "file",
                       "type": "file",
-                      "src": "sample-data/statements/summit-card_2026-04.csv"
+                      "src": "compose.yaml"
                     }
                   ]
                 },
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{summitId}}",
-                    "imports"
+                "description": "Any file with an extension other than .ofx, .qfx, .csv or .txt."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('415', () => pm.response.to.have.status(415));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "const body = pm.response.json();",
+                      "pm.test('unsupported-format', () => pm.expect(body.type).to.eql('urn:finalysis:problem:unsupported-format'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Same file again → 409 already-imported",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-04.ofx"
+                    }
                   ]
-                },
-                "description": "The Summit account has no CSV mapping in this collection, so the import points to the preview."
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "const body = pm.response.json();",
+                      "pm.test('already-imported', () => pm.expect(body.type).to.eql('urn:finalysis:problem:already-imported'));",
+                      "",
+                      "pm.test('names the existing statement', () => pm.expect(body.statementId).to.eql(Number(pm.collectionVariables.get('statementId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "OFX with a DTD (XXE) → 422 parse-error",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/edge-cases/ofx-xxe.ofx"
+                    }
+                  ]
+                }
               },
               "event": [
                 {
@@ -1191,8 +1265,76 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('422', () => pm.response.to.have.status(422));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "const body = pm.response.json();",
+                      "pm.test('parse-error', () => pm.expect(body.type).to.eql('urn:finalysis:problem:parse-error'));",
+                      "",
+                      "pm.test('says why, without file contents', () => pm.expect(body.detail).to.include('DTD declarations'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Checking file to the savings account → 422 account-mismatch",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{savingsId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-06.ofx"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "const body = pm.response.json();",
+                      "pm.test('account-mismatch', () => pm.expect(body.type).to.eql('urn:finalysis:problem:account-mismatch'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "CSV import without a mapping → 422 mapping-required",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{savingsId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/northfield-savings_2026-04.csv"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
                       "const body = pm.response.json();",
                       "pm.test('mapping-required', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-required'));",
+                      "",
                       "pm.test('points to the preview', () => pm.expect(body.detail).to.include('/imports/preview'));"
                     ]
                   }
@@ -1200,33 +1342,21 @@
               ]
             },
             {
-              "name": "CSV with other columns \u2192 422 mapping-mismatch",
+              "name": "CSV with other columns → 422 mapping-mismatch",
               "request": {
                 "method": "POST",
                 "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
                 "body": {
                   "mode": "formdata",
                   "formdata": [
                     {
                       "key": "file",
                       "type": "file",
-                      "src": "sample-data/statements/summit-card_2026-04.csv"
+                      "src": "sample-data/statements/summit-card_2026-05.csv"
                     }
                   ]
-                },
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}",
-                    "imports"
-                  ]
-                },
-                "description": "A Summit-layout file sent to the Apex account: the columns differ from the saved mapping, so the response carries the file's headers and a suggested mapping for them, but no data rows (the preview endpoint shows rows)."
+                }
               },
               "event": [
                 {
@@ -1235,8 +1365,10 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('422', () => pm.response.to.have.status(422));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
                       "const body = pm.response.json();",
                       "pm.test('mapping-mismatch', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-mismatch'));",
+                      "",
                       "pm.test('headers and status, but no data rows', () => { pm.expect(body.preview.mappingStatus).to.eql('MISMATCH'); pm.expect(body.preview.headers[0]).to.eql('Trans. Date'); pm.expect(body.preview).to.not.have.property('rows'); });",
                       "pm.test('suggestion for the new columns', () => pm.expect(body.preview.suggestedMapping.mapping.dateFormat).to.eql('dd-MMM-yyyy'));"
                     ]
@@ -1245,37 +1377,26 @@
               ]
             },
             {
-              "name": "PUT locked field after use \u2192 409 mapping-locked",
+              "name": "Balance with three decimals → 400",
               "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "accounts",
-                    "{{apexId}}",
-                    "csv-mapping"
-                  ]
-                },
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"AS_IS\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-05.csv"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "12.345",
+                      "type": "text"
                     }
-                  }
-                },
-                "description": "Changes sign to AS_IS after the import above used the mapping. Without ?confirmFingerprintChange=true this is refused."
+                  ]
+                }
               },
               "event": [
                 {
@@ -1283,10 +1404,105 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('names the field', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('closingBalance'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Preview of a disallowed file → 415 unsupported-format",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports/preview",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "compose.yaml"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('415', () => pm.response.to.have.status(415));",
+                      "pm.test('problem+json', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
                       "const body = pm.response.json();",
-                      "pm.test('mapping-locked', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-locked'));",
-                      "pm.test('names sign', () => pm.expect(body.fields).to.eql(['sign']));"
+                      "pm.test('unsupported-format', () => pm.expect(body.type).to.eql('urn:finalysis:problem:unsupported-format'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Reachable from sample files. Not covered here (the backend tests cover them): `payload-too-large` (needs a file over 10 MB), `unsupported-currency` (no non-USD sample), `ambiguous-format` and `mapping-changed` (need a test-only parser or a concurrent mapping save)."
+        },
+        {
+          "name": "Statements",
+          "item": [
+            {
+              "name": "Unknown statement → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Statements of unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/999999/statements"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown status filter → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=DONE"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
                     ]
                   }
                 }
@@ -1294,42 +1510,42 @@
             }
           ]
         }
-      ]
+      ],
+      "description": "Every request here is refused, and nothing is written (except the confirmed mapping change, which is restored)."
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
     },
     {
-      "name": "Categories",
-      "item": [
-        {
-          "name": "List categories",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/categories",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "categories"
-              ]
-            },
-            "description": "Available after Phase 2, step 6."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('19 seeded categories', () => pm.expect(pm.response.json().length).to.eql(19));"
-                ]
-              }
-            }
-          ]
-        }
-      ]
+      "key": "checkingId",
+      "value": ""
+    },
+    {
+      "key": "savingsId",
+      "value": ""
+    },
+    {
+      "key": "apexId",
+      "value": ""
+    },
+    {
+      "key": "summitId",
+      "value": ""
+    },
+    {
+      "key": "summitMapping",
+      "value": ""
+    },
+    {
+      "key": "statementId",
+      "value": ""
+    },
+    {
+      "key": "reviewStatementId",
+      "value": ""
     }
   ]
 }

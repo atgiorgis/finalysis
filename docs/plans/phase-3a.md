@@ -1,7 +1,7 @@
 # Phase 3a plan: standard-format ingestion (OFX/QFX + CSV)
 
-Status: steps 1–9 done; step 10 next. Branch `v1`. Read this before starting a step, then the
-requirements it cites in `docs/requirements.md` (currently v1.19).
+Status: **complete** (all ten steps; tag `phase-3a-done`). Branch `v1`. Requirements as of
+`docs/requirements.md` v1.20.
 
 Scope: ING-01 to ING-07, ING-10, SEC-10, SEC-11 for OFX/QFX and CSV. Out of scope for 3a: PDF
 parsers (3b), transfer detection and the review-queue API (3c), categorization and merchant
@@ -10,6 +10,73 @@ cleaning (Phase 4), the upload UI (Phase 7).
 Working rules: one step per commit (small follow-up commits are fine), run
 `cd backend && ./mvnw clean verify` and `cd frontend && npm test` before every commit (CI is not
 active), report test counts, push `v1`, and stop for review before the next step.
+
+## Phase 3a complete
+
+OFX/QFX and CSV statements import end to end: detection by content, one parser per format, CSV
+mappings saved per account with suggestions and a fingerprint lock, row-level deduplication,
+reconciliation with late arrivals, a statement list, and upload hardening tested across the API.
+
+| Step | Commits | Backend tests after the step |
+|---|---|---|
+| Start (Phase 2 + scope) | `b51b52f` | 159 |
+| 1 Parser contract | `17fabfe` | 182 |
+| 2 OFX tokenizer | `3aa8457`, `371ac6c` | 261 |
+| 3 OFX parser + samples | `02dac06` | 347 |
+| 4 Import endpoint (OFX) | `3ef1196`, `c1dd137`, `89b3d3b` | 432 |
+| 5 CSV mapping API | `11a4473` | 590 |
+| 6 CSV parser | `56ae04c` | 801 |
+| 7 CSV import + preview | `be02568` | 844 |
+| 8 Reconciliation + statement list | `0ebda1b` | 871 |
+| 9 Security tests | `991bfda` | 940 |
+| 10 Docs, Postman, requirements | "Phase 3a complete: docs, Postman, requirements" | 940 |
+
+Counts are JUnit test cases (parameterized and `@Nested` cases each count), measured by running
+`./mvnw clean verify` at each step's last commit; every run passed. Plan-only docs commits are
+left out. Frontend: 1 test throughout (no frontend work in 3a). The Postman collection runs 51
+requests with 145 assertions against a freshly reset dev database, all passing.
+
+**Requirements:** ING-01, ING-03, ING-04, ING-06, ING-10 and SEC-10 Done. Planned: ING-02
+(done for OFX/QFX and CSV; the PDF parsers must normalize too), ING-07 (queue API in 3c), SEC-11
+(escaping with the first CSV export).
+
+### Known limitations (final)
+
+- One format per account: deduplication across CSV and OFX for the same account isn't
+  guaranteed; mixing formats is flagged for review.
+- Footer or total rows at the end of a CSV fail the import (`parse-error`); a `skip_footer_rows`
+  mapping option needs a migration and waits for a real export that needs it.
+- CSV fingerprints use the sign-normalized amount (debit/credit files have no printed signed
+  amount); a confirmed change to a locked mapping field re-adds rows on overlapping re-imports.
+- Institutions that reissue FITIDs: the FITID isn't hashed, so reissued ids don't duplicate rows,
+  but the possible-duplicate flag only works where FITIDs are stable.
+- Raw descriptions may contain identifiers (account numbers in OFX `NAME`/`MEMO`, masked
+  numbers, Zelle names); they are never logged or returned in errors, and SEC-08 redacts them
+  before cloud calls in Phase 4.
+- File bytes are discarded after parsing until SEC-04 (Phase 8); only the hash, file name and
+  source lines are kept, so statements can't be re-parsed from storage.
+- Non-USD statements are rejected.
+- Postman can't reach `payload-too-large`, `unsupported-currency`, `ambiguous-format` or
+  `mapping-changed` from sample files; the backend tests cover them.
+
+### Carry-overs
+
+**3b (digital PDF parsers):**
+- One `StatementParser` per PDF layout (ING-08, ING-12), starting with the Bank of America
+  checking layout, plus the synthetic PDF generator (ING-11); unknown layouts go to the review
+  queue (ING-13). The upload checks refuse `%PDF` today (415); 3b must allow it for PDFs only.
+- Section totals in use: the ING-10 check (`Reconciliation`, sign-normalized
+  `Statement.sectionTotals`) is built and tested but no 3a parser prints totals, so it has never
+  run on real input.
+- Opening + closing printed-balance check: likewise built for files that print both balances and
+  never exercised by OFX or CSV; the PDF parsers are its first users.
+- ING-02 sign and date normalization for the PDF layouts; SEC-09 (PDF text never sent to
+  Bedrock).
+
+**3c (transfers and review):**
+- Transfer detection between the user's own accounts with `transfer_link` (ING-05), including
+  card payments that appear 1–3 days apart with different descriptions.
+- Review-queue API (ING-07, ING-13): list and resolve `NEEDS_REVIEW` statements across accounts.
 
 ## Decisions
 
@@ -337,8 +404,6 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings; preamble-tolerant detection; mapping snapshot with version check | Done: `be02568` |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | Done: `0ebda1b` |
 | 9 | Cross-cutting SEC-10 tests: log capture across the whole API, problem bodies, sniffing matrix, XXE end to end, file names, limits at the boundary, no temp files, exposure checks; SEC-11 through the import | Done: `991bfda` |
-| 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03 already Done; SEC-10 Done in step 9), change log | To do |
+| 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03 already Done; SEC-10 Done in step 9), change log | Done: "Phase 3a complete: docs, Postman, requirements", tag `phase-3a-done` |
 
-Requirement statuses now: ING-01, ING-03, ING-04, ING-06, ING-10, SEC-10 Done; ING-07 Planned
-(queue API in 3c); SEC-11 Planned until the first CSV export escapes formula cells (storing them
-unchanged is done and tested).
+Final requirement statuses: see "Phase 3a complete" above.

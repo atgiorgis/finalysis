@@ -46,22 +46,26 @@ database. `DevDatabaseGuard` fails any test context whose datasource points at t
 
 ### Postman
 
-1. Import both files from `postman/`: `Finalysis.postman_collection.json` and
-   `Finalysis-Local.postman_environment.json`.
-2. Select the **Finalysis Local** environment (`baseUrl` = `http://localhost:8080`).
-3. Run the **Accounts → Setup: create sample accounts** folder once. It creates the four
-   sample-data accounts and stores their ids for the other requests.
-4. Run the rest of the collection. **Statements → Import checking April (OFX)** uploads
-   `sample-data/ofx/northfield-checking_2026-04.ofx`: set Postman's working directory
-   (Settings → General) to the repo root, or reselect the file in the request's Body tab.
-   **CSV import** runs after **CSV mapping**: it previews and imports the April Apex CSV, then
-   shows `mapping-required` (Summit has no mapping), `mapping-mismatch` (a Summit file sent to
-   Apex) and the `mapping-locked` 409 for a locked field changed after use. **Statements** also
-   imports a May checking file with a wrong `LEDGERBAL` (a `NEEDS_REVIEW` example) and lists the
-   account's statements, all and filtered by status.
+`postman/` holds a collection with tests for every endpoint and a local environment
+(`baseUrl` = `http://localhost:8080`). It runs top to bottom against a **freshly reset** dev
+database: **1. Setup** creates the four sample accounts, saves the Apex mapping by hand and the
+Summit mapping from the preview's suggestion, and imports four statements (two `IMPORTED`, one
+`RECONCILED`, one `NEEDS_REVIEW`); folders 2 to 5 read accounts, mappings, previews, statements
+and categories; **6. Errors** sends a request for each error the sample files can trigger.
+Setup is strict, so a second run without a reset fails.
 
-Setup creates duplicate accounts if you run it twice, because accounts have no uniqueness rule.
-To start clean, reset the dev database (below).
+```sh
+scripts/reset-dev-db.sh                    # wipes the dev database; see below
+(cd backend && ./mvnw spring-boot:run)     # in another terminal
+npx newman run postman/Finalysis.postman_collection.json \
+    -e postman/Finalysis-Local.postman_environment.json --working-dir .
+```
+
+Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
+import both files, select the **Finalysis Local** environment, set the working directory
+(Settings → General) to the repo root, and run the collection with the **Collection Runner**.
+`payload-too-large`, `unsupported-currency`, `ambiguous-format` and `mapping-changed` need files
+or timing the sample data can't provide; the backend tests cover them.
 
 ### Database client
 
@@ -91,11 +95,13 @@ than localhost.
 
 Postgres 17 with pgvector. The schema is owned by Flyway (`backend/src/main/resources/db/migration`).
 Hibernate only validates it. Requirements: DAT-01 to DAT-08 in [docs/requirements.md](docs/requirements.md).
+Columns added by Phase 3a's migrations are marked V5, V6 and V7 below.
 
 ```mermaid
 erDiagram
     account ||--o{ statement : has
     account ||--o{ txn : has
+    account ||--o| csv_mapping : "reads CSV with"
     statement ||--o{ txn : contains
     category ||--o{ txn : categorizes
     category ||--o{ categorization_rule : "assigned by"
@@ -119,11 +125,36 @@ erDiagram
         numeric opening_balance
         numeric closing_balance
         text status "IMPORTED, NEEDS_REVIEW, RECONCILED"
-        text balance_check "PASSED, FAILED, UNVERIFIED"
-        text parser "ofx, csv, ..."
-        jsonb import_warnings
+        text balance_check "V7: PASSED, FAILED, UNVERIFIED"
+        int parsed_count "V7: rows in the file"
+        numeric parsed_amount_total "V7: their sum"
+        text parser "V5: ofx, csv, ..."
+        jsonb import_warnings "V5"
+        text source_file_name
         text file_hash UK
         jsonb section_totals
+        timestamptz imported_at
+    }
+    csv_mapping {
+        bigint account_id PK,FK "V6"
+        text delimiter
+        text encoding
+        boolean header_row
+        int skip_rows
+        text header_signature
+        text date_column
+        text date_format
+        text post_date_column
+        text_array description_columns
+        text amount_mode "SINGLE, DEBIT_CREDIT"
+        text amount_column
+        text debit_column
+        text credit_column
+        text sign "AS_IS, INVERTED"
+        text balance_column
+        text check_number_column
+        timestamptz used_at "locks fingerprint fields"
+        timestamptz updated_at
     }
     category {
         bigint id PK
@@ -143,8 +174,8 @@ erDiagram
         text source_section
         varchar check_number
         text counterparty "local only"
-        text external_id "OFX FITID"
-        text printed_amount"
+        text external_id "V5: OFX FITID"
+        text printed_amount "V5: as printed"
         bigint category_id FK
         text category_source "RULE, AI, USER"
         boolean is_transfer
@@ -181,6 +212,7 @@ erDiagram
 | `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, status and balance-check outcome, and the parsed row count and total (duplicates included) that reconciliation uses. A file hash blocks importing the same file twice; a re-imported period is deduplicated row by row. `parser` records which parser read the file. |
 | `category` | Seeded spending and income categories, each with a kind. `TRANSFER` covers all movement between the user's own accounts. |
 | `txn` | One statement row: dates, raw description, cleaned merchant, signed amount, category and who set it, and where it came from in the source file. |
+| `csv_mapping` | How to read one account's CSV exports: delimiter, encoding, table start, which columns hold the date, description, amount (single or debit/credit), balance and check number, and the sign. `used_at` is set by the first import that uses it, which locks the fields that feed fingerprints. |
 | `categorization_rule` | Merchant pattern → category rules. Rules run before any AI, and user corrections become new rules. |
 | `transfer_link` | Pairs the outgoing and incoming side of a transfer between the user's own accounts, such as a card payment. |
 | `merchant_embedding` | One embedding per cleaned merchant name, used to find similar merchants for categorization and search. |
@@ -236,20 +268,21 @@ Applied migrations are never edited. Every schema change is a new migration.
 
 ## API
 
-| Method | Path | Purpose | Success |
-|---|---|---|---|
-| `GET` | `/api/status` | Backend health, shown by the frontend | 200 |
-| `POST` | `/api/accounts` | Register an account (DAT-01) | 201, `Location` header |
-| `GET` | `/api/accounts` | List accounts, sorted by name | 200 |
-| `GET` | `/api/accounts/{id}` | Get one account | 200 |
-| `PATCH` | `/api/accounts/{id}` | Rename an account | 200 |
-| `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 |
-| `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
-| `POST` | `/api/accounts/{id}/imports/preview` | Read a file as an import would, write nothing; CSV gets a suggested mapping | 200 |
-| `GET` | `/api/accounts/{id}/statements` | List the account's statements, newest period first; `?status=` filters | 200 |
-| `GET` | `/api/statements/{id}` | Get one imported statement with its warnings | 200 |
-| `GET` | `/api/accounts/{id}/csv-mapping` | Get the account's CSV mapping; 404 when it has none | 200 |
-| `PUT` | `/api/accounts/{id}/csv-mapping` | Create or replace the CSV mapping; see [CSV mappings](#csv-mappings) | 201 created, 200 replaced |
+| Method | Path | Purpose | Success | Problem types (besides 400/404) |
+|---|---|---|---|---|
+| `GET` | `/api/status` | Backend health, shown by the frontend | 200 | — |
+| `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details | 200 | — |
+| `POST` | `/api/accounts` | Register an account (DAT-01) | 201, `Location` | — |
+| `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
+| `GET` | `/api/accounts/{id}` | Get one account | 200 | — |
+| `PATCH` | `/api/accounts/{id}` | Rename an account (only `name`) | 200 | — |
+| `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 | — |
+| `GET` | `/api/accounts/{id}/csv-mapping` | Get the account's CSV mapping; 404 when it has none | 200 | — |
+| `PUT` | `/api/accounts/{id}/csv-mapping` | Create or replace the CSV mapping; `?confirmFingerprintChange=true` accepts a change to a locked field. See [CSV mappings](#csv-mappings) | 201 created, 200 replaced | `mapping-locked` |
+| `POST` | `/api/accounts/{id}/imports/preview` | Read a file as an import would and write nothing; CSV gets a suggested mapping. See [Preview](#preview) | 200 | `payload-too-large`, `unsupported-format`, `ambiguous-format`, `parse-error`, `account-mismatch`, `unsupported-currency` |
+| `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart `file`; optional `periodStart`, `periodEnd`, `openingBalance`, `closingBalance`). See [Importing statements](#importing-statements) | 201, `Location` | all import types: see the [error catalogue](#error-catalogue) |
+| `GET` | `/api/accounts/{id}/statements` | List the account's statements, newest period first; `?status=IMPORTED\|RECONCILED\|NEEDS_REVIEW` filters | 200 | — |
+| `GET` | `/api/statements/{id}` | Get one imported statement with its warnings | 200 | — |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
   decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
@@ -274,60 +307,77 @@ Applied migrations are never edited. Every schema change is a new migration.
   }
   ```
 
-| Status | When | Body |
-|---|---|---|
-| 400 | Invalid field, unknown field (`"is not allowed"`), or bad enum value (lists the allowed values) | `errors[]` |
-| 400 | Malformed JSON | `detail` only |
-| 404 | Unknown id, e.g. `Account 42 not found` | `detail` |
-| 409 | A database constraint was violated | generic `detail` |
-| 409 | A used CSV mapping's fingerprint fields would change (`urn:finalysis:problem:mapping-locked`) | `fields[]`, see [CSV mappings](#csv-mappings) |
-| 413, 415, 409, 422 | A statement import or preview was refused | typed `type`, see [Importing statements](#importing-statements) |
-| 500 | Unexpected error | generic `detail` |
+### Error catalogue
 
-Constraint names, SQL, and stack traces are logged on the server and never returned. Spring's own
-errors (405, 415, a non-numeric id) use the same format.
+Typed problems have a `type` of `urn:finalysis:problem:<name>`; the others use the default
+`about:blank`. No problem response quotes file contents, descriptions, file names or account
+numbers (SEC-10). Constraint names, SQL and stack traces are logged on the server and never
+returned.
+
+| Status | `type` | Meaning | What to do |
+|---|---|---|---|
+| 400 | — | Invalid field, unknown field (`"is not allowed"`), bad enum value (lists the allowed values), a JSON number for money, a balance form field with more than two decimals, an inverted period. `errors[]` names each field | Fix the named fields and resend |
+| 400 | — | Malformed JSON, or a non-numeric id | Send valid JSON and numeric ids |
+| 404 | — | Unknown id (`Account 42 not found`), or an account without a CSV mapping on `GET …/csv-mapping` | Check the id with `GET /api/accounts`; save a mapping first |
+| 405, 415 | — | Wrong HTTP method, or a JSON/multipart body sent where the other is expected (Spring's own errors, same format) | Use the method and body type from the API table |
+| 409 | — | A database constraint was violated; generic `detail` | Should not happen through the API; check the server log and report it |
+| 409 | `mapping-locked` | A used CSV mapping's fingerprint fields (sign, description columns, printed-date column) would change; `fields[]` lists them | If the change is intended, resend with `?confirmFingerprintChange=true`; overlapping re-imports will then add rows again and need review |
+| 413 | `payload-too-large` | File over 10 MB | Export a shorter date range |
+| 415 | `unsupported-format` | Disallowed extension, empty, PDF, ZIP/XLSX, saved web page, binary or invalid text, or no parser recognizes the content | Download the statement as OFX, QFX or CSV (PDF support comes in Phase 3b) |
+| 409 | `already-imported` | This exact file was imported before; `statementId` names it | Nothing to do: open that statement |
+| 422 | `parse-error` | A row or the file structure can't be read; `line` (and the column position for CSV) when known. Nothing was written | Check that the file wasn't edited or cut short and download it again. For CSV, check the mapping's `dateFormat`, amount columns and `skipRows` against the [preview](#preview); footer rows are a [known limitation](#known-limitations) |
+| 422 | `account-mismatch` | The file's account type or last four digits differ from the account's | Upload it to the account it belongs to |
+| 422 | `unsupported-currency` | The statement isn't in USD | Not supported yet |
+| 422 | `mapping-required` | A CSV file for an account without a CSV mapping; `detail` points to the preview | Preview the file, check `suggestedMapping.mapping`, `PUT` it, import again |
+| 422 | `mapping-mismatch` | The CSV file's columns differ from the mapping's; `preview` holds its headers, mapping status and a suggested mapping, no rows | Check it's the right account. If the bank changed its export, `PUT` the suggested mapping (confirm if locked fields change) |
+| 409 | `mapping-changed` | The CSV mapping was saved while the file was being read; nothing was written | Import again |
+| 422 | `ambiguous-format` | More than one parser claims the file: a detection bug, never guessed | Report it (with the file's format, not the file) |
+| 500 | — | Unexpected error; generic `detail` | Check the server log (it holds no statement data) and report it |
 
 ## Importing statements
 
-```sh
-curl -F file=@sample-data/ofx/northfield-checking_2026-04.ofx http://localhost:8080/api/accounts/1/imports
+Upload one statement file per request to the account it belongs to. Supported today: OFX
+1.x/2.x, QFX and CSV; PDF follows in Phase 3b. Optional form fields: `periodStart` and
+`periodEnd` (ISO dates) replace the file's period; `openingBalance` and `closingBalance` are the
+statement's balances as printed on paper, for files that don't carry them (card CSV exports), and
+are checked against the rows (see [Reconciliation](#reconciliation)). If the file prints a
+balance and the request disagrees, the file's value is kept and the check fails. Balances are
+plain decimal text such as `1234.56`: at most two decimals, no exponent or thousands separator.
+
+### Pipeline
+
+```mermaid
+flowchart TD
+    upload["POST /api/accounts/{id}/imports<br/>multipart file + optional period and balances"] --> validate
+    validate{"Validate<br/>account exists, request fields,<br/>≤ 10 MB, extension, sniffed as text"}
+    validate -- fails --> e1["400 · 404 · 413 payload-too-large<br/>415 unsupported-format"]
+    validate --> hash["SHA-256 of the bytes"]
+    hash -- "hash already stored" --> e2["409 already-imported"]
+    hash --> detect{"Detect by content<br/>OFX = definite, CSV = fallback"}
+    detect -- "none / several" --> e3["415 unsupported-format<br/>422 ambiguous-format"]
+    detect --> parse["Parse, outside any transaction<br/>CSV: with a snapshot of the account's mapping"]
+    parse -- "bad row · no or other mapping" --> e4["422 parse-error<br/>422 mapping-required · mapping-mismatch"]
+    parse --> match{"Account match<br/>currency, type, last four"}
+    match -- differs --> e5["422 unsupported-currency<br/>422 account-mismatch"]
+    match --> lock["One transaction, account row locked<br/>CSV: mapping still the parsed one?"]
+    lock -- "mapping saved meanwhile" --> e6["409 mapping-changed"]
+    lock --> dedup["Fingerprint each row<br/>skip rows already stored"]
+    dedup --> save["Save statement + new rows<br/>first CSV import sets the mapping's usedAt"]
+    save --> reconcile["Reconcile the parsed rows<br/>re-check a later statement waiting for this one"]
+    reconcile --> summary["201 import summary<br/>IMPORTED · RECONCILED · NEEDS_REVIEW"]
 ```
 
-Upload one statement file per request to the account it belongs to. Optional form fields:
-`periodStart` and `periodEnd` (ISO dates) replace the file's period; `openingBalance` and
-`closingBalance` are the statement's balances as printed on paper, for files that don't carry
-them (card CSV exports), and are checked against the rows (see [Reconciliation](#reconciliation)).
-If the file prints a balance and the request disagrees, the file's value is kept and the check
-fails. Balances are plain decimal text such as `1234.56`: at most two decimals, no exponent or
-thousands separator. Supported today: OFX 1.x/2.x, QFX and CSV; PDF follows in Phase 3b.
-
-**CSV files** need the account's column mapping first. The first time, preview the file, check
-the suggested mapping, and save it:
-
-```sh
-curl -F file=@sample-data/statements/apex-visa_2026-04.csv http://localhost:8080/api/accounts/3/imports/preview
-# edit suggestedMapping.mapping if needed, then:
-curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping -H 'Content-Type: application/json' -d @mapping.json
-curl -F file=@sample-data/statements/apex-visa_2026-04.csv http://localhost:8080/api/accounts/3/imports
-```
-
-Later CSV imports of the account reuse the mapping. Without one, an import is
-`422 mapping-required` (pointing to the preview); a file whose columns differ from the ones the
-mapping was saved for is `422 mapping-mismatch`, with the file's headers and a suggested mapping in
-`preview` (no data rows: error responses carry no file contents; the preview endpoint shows them). A CSV file
-without rows imports as an empty statement when the request gives both `periodStart` and
-`periodEnd`.
-
-1. **Checks.** At most 10 MB; the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the
-   bytes must be UTF-8 or windows-1252 text (PDFs, ZIP/XLSX, web pages and binary data are
-   refused). The
-   client's content type is ignored. Uploads are held in memory and discarded after parsing; only
-   a SHA-256 hash and the file name are kept.
-2. **Same file again** (same hash): `409 already-imported` with the existing `statementId`.
+1. **Validate.** The account must exist and the request fields be well formed. At most 10 MB;
+   the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the bytes must be UTF-8 or
+   windows-1252 text (PDFs, ZIP/XLSX, web pages and binary data are refused). The client's
+   content type is ignored. Uploads are held in memory and discarded after parsing; only a
+   SHA-256 hash, the file name and each row's source line are kept.
+2. **Hash.** The same file again (same hash) is `409 already-imported` with the existing
+   `statementId`.
 3. **Detect and parse** by content, outside any database transaction. Any unreadable row fails
    the whole file (`422 parse-error`, with the line number); nothing is written. A CSV file is
    read with a snapshot of the account's mapping, taken just before parsing.
-4. **Account check.** The file's last four digits, account type and currency must match the
+4. **Account match.** The file's currency, last four digits and account type must match the
    account when the file carries them.
 5. **Save** in one transaction, with the account row locked so imports to one account run one
    at a time. A CSV import first checks that the mapping is still the one it parsed with (a
@@ -335,60 +385,90 @@ without rows imports as an empty statement when the request gives both `periodSt
    uses a mapping sets its `usedAt`. Each row is fingerprinted from its raw values; rows already
    imported for this account are skipped as duplicates, so re-importing a period or an
    overlapping export adds only rows that are new.
+6. **Reconcile** the rows parsed from the file against the balances (see
+   [Reconciliation](#reconciliation)), then answer with the import summary.
 
-The response is an import summary:
+### Walkthrough
+
+**OFX or QFX.** Download the statement as OFX/QFX (often called "Quicken" or "Money") and upload
+it. Nothing else is needed: the file names the account, the period and the closing balance.
+
+```sh
+curl -F file=@sample-data/ofx/northfield-checking_2026-04.ofx http://localhost:8080/api/accounts/1/imports
+```
 
 ```json
 {
-  "statementId": 12, "parser": "ofx", "periodStart": "2026-05-01", "periodEnd": "2026-05-31",
-  "openingBalance": "4066.58", "closingBalance": "8236.77",
-  "parsed": 11, "inserted": 0, "duplicates": 11, "status": "RECONCILED", "balanceCheck": "PASSED",
-  "warnings": ["period overlaps statement 7; no new rows"]
+  "statementId": 1, "parser": "ofx", "periodStart": "2026-04-01", "periodEnd": "2026-04-30",
+  "openingBalance": null, "closingBalance": "4066.58",
+  "parsed": 10, "inserted": 10, "duplicates": 0, "status": "IMPORTED", "balanceCheck": "UNVERIFIED",
+  "warnings": ["balance unverified: nothing to check the rows against (send openingBalance and closingBalance, or import the previous statement)"]
 }
 ```
 
-**Look-alike rows are kept.** Two purchases with the same amount at the same store on the same
-day are both imported, and a refund is its own row. Deduplication only skips a row imported
-before: rows are matched by their printed values plus an occurrence number within the statement
-(the first identical row is 1, the next 2), so re-uploading a file finds every row again while two
-real purchases stay separate.
+The first statement of an account is `IMPORTED`: OFX prints only the closing balance, so there is
+nothing to check it against yet. Importing May then checks April's closing + May's rows = May's
+closing and gives `RECONCILED`; importing them in the other order works too (late arrival).
 
-`status` is `NEEDS_REVIEW` whenever the import warned, and the warnings are stored with the
-statement (`GET /api/statements/{id}` returns them). Any of these wins over `RECONCILED`:
+**CSV.** CSV exports differ by bank, so the account needs a column mapping, saved once:
 
+```sh
+# 1. Preview: how the file will be read, plus a suggested mapping. Writes nothing.
+curl -F file=@sample-data/statements/apex-visa_2026-04.csv \
+     http://localhost:8080/api/accounts/3/imports/preview > preview.json
+
+# 2. Check suggestedMapping (confidence MATCHED / GUESSED / MISSING, notes), edit if needed, save it.
+jq .suggestedMapping.mapping preview.json > mapping.json
+curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping \
+     -H 'Content-Type: application/json' -d @mapping.json
+
+# 3. Import. A card CSV has no balances, so send the ones printed on the statement.
+curl -F file=@sample-data/statements/apex-visa_2026-04.csv \
+     -F openingBalance=-842.17 -F closingBalance=-242.32 \
+     http://localhost:8080/api/accounts/3/imports
+```
+
+Later CSV imports of the account reuse the mapping. Without one, an import is
+`422 mapping-required`; a file whose columns differ from the mapping's is
+`422 mapping-mismatch`, with the file's headers and a suggested mapping (no data rows). A CSV file
+without rows imports as an empty statement when the request gives both `periodStart` and
+`periodEnd`. A CSV with a balance column (Northfield) reconciles row by row without sending
+balances.
+
+**Statuses.**
+
+| `status` | `balanceCheck` | Meaning | What to do |
+|---|---|---|---|
+| `RECONCILED` | `PASSED` | At least one balance check ran, all passed, and nothing needs review | Nothing |
+| `IMPORTED` | `UNVERIFIED` | Saved, but no check could run (no balances, no adjacent earlier statement); warning `balance unverified: …` | Send `openingBalance` and `closingBalance` next time, or import the previous statement: an OFX statement is re-checked when its predecessor arrives |
+| `NEEDS_REVIEW` | any | Saved with the reasons in `warnings` | Read the warnings (`GET /api/statements/{id}`) |
+
+**What lands in review.** `NEEDS_REVIEW` whenever any of these happened; it wins over
+`RECONCILED`:
+
+- a balance check failed (see [Reconciliation](#reconciliation));
 - the parser warned, for example an OFX `TRNTYPE` that contradicts the amount's sign;
 - rows are dated outside the statement period (for example after a `periodEnd` override); they
   are imported anyway, never dropped;
 - the period overlaps an earlier statement of the account and the import added rows
   (`period overlaps statement 7`). A re-import that adds nothing only gets the informational
   warning `period overlaps statement 7; no new rows`, which doesn't block `RECONCILED`;
-- the account mixes import formats (see below);
+- the account mixes import formats (`account mixes import formats (...)`, see
+  [Known limitations](#known-limitations));
 - a new row reuses an OFX `FITID` that the account already has under different details. That row
   is inserted anyway, since dropping it could lose a real transaction, and flagged as a possible
-  duplicate;
-- a balance check failed (see [Reconciliation](#reconciliation)).
+  duplicate.
 
-Otherwise the status is `RECONCILED` when a balance check ran and passed, and `IMPORTED` with the
-warning `balance unverified: …` when none could run. Warnings and errors contain line numbers,
-counts, ids and balance-check amounts, never descriptions or account numbers.
+Statements needing review are listed by `GET /api/accounts/{id}/statements?status=NEEDS_REVIEW`.
+Everything is saved either way; the review-queue API (resolving a statement) comes in Phase 3c.
+Warnings contain line numbers, counts, ids and balance-check amounts, never descriptions or
+account numbers.
 
-**One format per account.** Duplicates are recognized only within one format: the same
-transaction exported as CSV and as OFX has different descriptions and dates, so it would be
-imported twice. Pick one format per account. An import that mixes formats on an account gets the
-warning `account mixes import formats (...)`.
-
-| Problem `type` (`urn:finalysis:problem:…`) | Status | When |
-|---|---|---|
-| `payload-too-large` | 413 | File over 10 MB |
-| `unsupported-format` | 415 | Disallowed extension, empty, PDF, ZIP/XLSX, web page, binary, or no parser recognizes it |
-| `already-imported` | 409 | Identical file imported before; `statementId` names it |
-| `parse-error` | 422 | A row or the file structure can't be read; `line` when known |
-| `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
-| `unsupported-currency` | 422 | Not USD |
-| `mapping-required` | 422 | A CSV file for an account without a CSV mapping; `detail` points to the preview |
-| `mapping-mismatch` | 422 | The CSV file's columns differ from the mapping's; `preview` holds its headers and a suggested mapping, no rows |
-| `mapping-changed` | 409 | The CSV mapping was saved while the file was being read; nothing was written, retry |
-| `ambiguous-format` | 422 | More than one parser claims the file (a bug; reported, not guessed) |
+**Look-alike rows are kept.** Two purchases with the same amount at the same store on the same
+day are both imported, and a refund is its own row. Deduplication only skips a row imported
+before: rows are matched by their printed values plus an occurrence number within the statement
+(the first identical row is 1, the next 2), so re-uploading a file finds every row again while two
+real purchases stay separate.
 
 ### Reconciliation
 
@@ -515,6 +595,34 @@ Everything else stays editable after use, because it only locates or parses valu
 columns (amount, debit and credit, the transaction date when a post date is mapped), the amount
 mode, `dateFormat`, `delimiter`, `encoding`, `headerRow`, `skipRows`, the balance and check-number
 columns, and the header signature.
+
+### Known limitations
+
+- **One format per account.** Duplicates are recognized only within one format: the same
+  transaction exported as CSV and as OFX has different descriptions and dates, so it would be
+  imported twice. Pick one format per account; an import that mixes formats on an account is
+  flagged for review.
+- **Footer rows in CSV.** A trailing total or footer row (`Total,,1234.56`) fails the import with
+  `422 parse-error` at that line. Remove it before importing; a `skipFooterRows` mapping option
+  will be added if a real bank export needs it.
+- **CSV fingerprints use the sign-normalized amount**, not the printed one: files with separate
+  debit and credit columns have no single printed signed amount. The mapping lock protects this;
+  changing a locked field with confirmation gives later rows new fingerprints, so an overlapping
+  re-import adds them again and needs review.
+- **Institutions that reissue FITIDs.** Deduplication uses printed values, not the OFX `FITID`,
+  so a reissued id doesn't duplicate a row. The flip side: the possible-duplicate check (a known
+  `FITID` with new details) only helps where ids are stable. At an institution that reissues them,
+  a row whose printed details changed between downloads is imported again without a flag.
+- **Descriptions may contain identifiers.** Descriptions are stored exactly as printed (they feed
+  the fingerprint), so a full account number in an OFX `NAME`/`MEMO`, a masked number in a
+  transfer description or a person's name in a Zelle payment stays in `raw_description`. They are
+  never logged or returned in errors, and no AI runs yet; SEC-08 redacts them before any cloud
+  call in Phase 4.
+- **File bytes are discarded** after parsing until encrypted storage (SEC-04, Phase 8). Only the
+  hash, the file name and each row's source line are kept, so a statement can't be re-parsed or
+  downloaded later; import the original file again instead.
+- **Not yet:** PDF statements (Phase 3b), transfer detection and the review-queue API (Phase 3c),
+  merchant cleaning and categorization (Phase 4), non-USD statements.
 
 ## Security
 
