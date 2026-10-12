@@ -21,6 +21,26 @@ class UploadCheckTest {
         assertThat(UploadCheck.cleanFileName("a".repeat(300) + ".ofx")).hasSize(255);
     }
 
+    @Test
+    void longNamesKeepTheirExtension() {
+        String cleaned = UploadCheck.cleanFileName("a".repeat(300) + ".ofx");
+
+        assertThat(cleaned).isEqualTo("a".repeat(251) + ".ofx");
+        assertThatCode(() -> UploadCheck.checkFileName(cleaned)).doesNotThrowAnyException();
+        // A surrogate pair at the cut is dropped whole, never split.
+        assertThat(UploadCheck.cleanFileName("a".repeat(250) + "\uD83D\uDE00" + "b".repeat(50) + ".csv"))
+                .isEqualTo("a".repeat(250) + ".csv");
+        // Not an extension: the name is cut at 255 and fails the extension check.
+        assertThat(UploadCheck.cleanFileName("a".repeat(250) + "." + "b".repeat(50))).hasSize(255);
+    }
+
+    @Test
+    void formatCharactersThatCanDisguiseAnExtensionAreRemoved() {
+        // U+202E (right-to-left override) would display "statement\u202Etxt.exe" as "statementexe.txt".
+        assertThat(UploadCheck.cleanFileName("statement\u202Etxt.exe")).isEqualTo("statementtxt.exe");
+        assertThat(UploadCheck.cleanFileName("\uFEFFapril\u200B.csv")).isEqualTo("april.csv");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"april.ofx", "APRIL.QFX", "export.csv", "export.Txt", "a.b.ofx"})
     void allowedExtensions(String name) {
@@ -52,6 +72,16 @@ class UploadCheckTest {
         assertRejected("%PDF-1.4".getBytes(StandardCharsets.US_ASCII), "PDF");
         assertRejected(new byte[] {'P', 'K', 3, 4}, "ZIP");
         assertRejected(new byte[0], "empty");
+    }
+
+    @Test
+    void webPagesAreUnsupported() {
+        assertRejected("<!DOCTYPE html>\n<html>".getBytes(StandardCharsets.US_ASCII), "web page");
+        assertRejected("\uFEFF \r\n<HTML lang=en>".getBytes(StandardCharsets.UTF_8), "web page");
+        assertThatCode(() -> UploadCheck.checkContent("<?xml version=\"1.0\"?>\n<OFX>".getBytes(StandardCharsets.US_ASCII)))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> UploadCheck.checkContent("<OFX>\n<html".getBytes(StandardCharsets.US_ASCII)))
+                .doesNotThrowAnyException();
     }
 
     @Test

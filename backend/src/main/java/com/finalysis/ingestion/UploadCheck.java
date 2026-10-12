@@ -21,6 +21,7 @@ final class UploadCheck {
     static final int MAX_FILE_NAME = 255;
 
     private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
     private UploadCheck() {
     }
@@ -31,13 +32,29 @@ final class UploadCheck {
         }
     }
 
-    /** The file name without any path, with control characters removed, at most 255 characters. */
+    /**
+     * The file name without any path, with control and format characters (such as bidirectional
+     * overrides, which can disguise an extension) removed, at most 255 characters. A long name
+     * loses the end of its stem, not its extension, so the extension check still sees it.
+     */
     static String cleanFileName(String original) {
         String name = original == null ? "" : original;
         name = name.substring(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1);
-        name = name.codePoints().filter(c -> !Character.isISOControl(c))
+        name = name.codePoints().filter(c -> !Character.isISOControl(c) && Character.getType(c) != Character.FORMAT)
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString().strip();
-        return name.length() > MAX_FILE_NAME ? name.substring(0, MAX_FILE_NAME) : name;
+        if (name.length() <= MAX_FILE_NAME) {
+            return name;
+        }
+        int dot = name.lastIndexOf('.');
+        String extension = dot > 0 && name.length() - dot <= 16 ? name.substring(dot) : "";
+        return truncate(name.substring(0, name.length() - extension.length()), MAX_FILE_NAME - extension.length())
+                + extension;
+    }
+
+    /** At most {@code length} chars, never splitting a surrogate pair. */
+    private static String truncate(String text, int length) {
+        int end = Character.isHighSurrogate(text.charAt(length - 1)) ? length - 1 : length;
+        return text.substring(0, end);
     }
 
     static void checkFileName(String fileName) {
@@ -48,7 +65,7 @@ final class UploadCheck {
         }
     }
 
-    /** Rejects empty files, PDFs, ZIP containers (including XLSX), binary data and invalid text. */
+    /** Rejects empty files, PDFs, ZIP containers (including XLSX), web pages, binary data and invalid text. */
     static void checkContent(byte[] bytes) {
         if (bytes.length == 0) {
             throw unsupported("The file is empty");
@@ -59,6 +76,9 @@ final class UploadCheck {
         if (startsWith(bytes, new byte[] {'P', 'K', 3, 4})) {
             throw unsupported("ZIP and spreadsheet files are not supported; export the statement as OFX or CSV");
         }
+        if (isHtml(bytes)) {
+            throw unsupported("The file is a web page, not a statement export");
+        }
         for (byte b : bytes) {
             // NUL and other C0 controls other than tab, LF, FF and CR don't occur in text statements.
             if (b >= 0 && b < 0x20 && b != '\t' && b != '\n' && b != '\f' && b != '\r') {
@@ -68,6 +88,21 @@ final class UploadCheck {
         if (!decodes(bytes, StandardCharsets.UTF_8) && !decodes(bytes, WINDOWS_1252)) {
             throw unsupported("The file is not valid UTF-8 or windows-1252 text");
         }
+    }
+
+    /**
+     * A saved web page (often a bank's sign-in or error page downloaded instead of the export).
+     * Commas in its scripts or styles could otherwise pass for a delimited table. OFX in XML
+     * starts with {@code <?xml}, {@code <?OFX} or {@code <OFX>}, never with these.
+     */
+    private static boolean isHtml(byte[] bytes) {
+        int start = startsWith(bytes, UTF8_BOM) ? UTF8_BOM.length : 0;
+        while (start < bytes.length && Character.isWhitespace(bytes[start])) {
+            start++;
+        }
+        String head = new String(bytes, start, Math.min(bytes.length - start, 16), StandardCharsets.ISO_8859_1)
+                .toLowerCase(Locale.ROOT);
+        return head.startsWith("<!doctype html") || head.startsWith("<html");
     }
 
     private static boolean startsWith(byte[] bytes, byte[] prefix) {

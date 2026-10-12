@@ -1,7 +1,7 @@
 # Phase 3a plan: standard-format ingestion (OFX/QFX + CSV)
 
-Status: steps 1–8 done; step 9 next. Branch `v1`. Read this before starting a step, then the
-requirements it cites in `docs/requirements.md` (currently v1.18).
+Status: steps 1–9 done; step 10 next. Branch `v1`. Read this before starting a step, then the
+requirements it cites in `docs/requirements.md` (currently v1.19).
 
 Scope: ING-01 to ING-07, ING-10, SEC-10, SEC-11 for OFX/QFX and CSV. Out of scope for 3a: PDF
 parsers (3b), transfer detection and the review-queue API (3c), categorization and merchant
@@ -276,6 +276,43 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
   `importedAt` (the column is `imported_at`), matching the detail.
 - Section totals are documented as sign-normalized (`ParsedStatement`).
 
+### Security tests (step 9)
+- **Test classes:** `SensitiveDataLeakTest` (every endpoint, success and every failure type, with
+  markers in descriptions, file names, header names, cells and account numbers; app packages at
+  DEBUG; logs and problem bodies checked), `UploadHardeningTest` (sniffing matrix, XXE, file
+  names, row and record limits, SEC-11 through the import), `MultipartDiskTest` and its control
+  `MultipartDiskControlTest` (real Tomcat: a spy lists the multipart location while the
+  controller runs; exactly 10 MB passes the multipart limit, one byte more is 413),
+  `ExposureTest` and `ExposureWithProfilesTest` (Actuator, CORS, leak-prone settings, every
+  config file and profile section).
+- **`mapping-mismatch` keeps header names** in its `preview` (step 8 decision; SEC-10 allows
+  column names). The leak test exempts only that node and still checks it for rows, descriptions,
+  cells, file names and account numbers.
+- **Ambiguous format and mapping-changed** are reached in the leak test with a test-only parser
+  that claims marked OFX files and a spy that returns a stale mapping snapshot.
+- **Fixes:**
+  - saved web pages (`<!DOCTYPE html` / `<html` after an optional BOM and whitespace) are a 415:
+    commas in their styles and scripts could pass CSV detection;
+  - a file name over 255 characters is cut in its stem, keeping an extension of up to 15
+    characters (it was cut at the end, so a long `.ofx` name failed the extension check); a
+    surrogate pair is never split; Unicode format characters (bidirectional overrides,
+    zero-width characters, a BOM) are removed with the control characters;
+  - `logServerErrorDetail=false` on the JDBC connection: Postgres details ("Failing row contains
+    (...)", "Key (x)=(y)") quote row values, and the exception handler logs constraint violations
+    with their stack traces;
+  - Actuator exposes `health` only (was `health,info`);
+  - `spring.devtools.add-properties: false` and `spring.web.error.include-*: never`: under
+    `spring-boot:run`, devtools turned on stack traces, messages and binding errors in Boot's
+    error responses and logged every resolved exception (a malformed JSON body's message quotes
+    the input).
+- File names are not redacted beyond path, control and format characters: a person's name in a
+  file name is the user's own data, stored for display, never logged or returned.
+- Invalid UTF-8 that is valid windows-1252 (e.g. `C3 28`) is read as windows-1252 by design; only
+  bytes invalid in both (e.g. `0x81`) are a 415.
+- Framework DEBUG logging (`org.springframework.web`, `org.hibernate`) prints request bodies and
+  bind values; the README says not to enable it with real statements, and `ExposureTest` refuses
+  it in any config file.
+
 ### Other decisions
 - Merchant cleaning moves to Phase 4; `txn.merchant` stays null in Phase 3 (ING-02).
 - Non-USD statements are rejected with 422.
@@ -299,8 +336,9 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, windows-1252, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | Done: `56ae04c` |
 | 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings; preamble-tolerant detection; mapping snapshot with version check | Done: `be02568` |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | Done: `0ebda1b` |
-| 9 | Cross-cutting SEC-10 tests: log capture during successful and failing imports, sniffing matrix, XXE end to end | To do |
-| 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03, SEC-10 to Done when complete), change log | To do |
+| 9 | Cross-cutting SEC-10 tests: log capture across the whole API, problem bodies, sniffing matrix, XXE end to end, file names, limits at the boundary, no temp files, exposure checks; SEC-11 through the import | Done (commit pending) |
+| 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03 already Done; SEC-10 Done in step 9), change log | To do |
 
-Requirement statuses now: ING-01, ING-03, ING-04, ING-06, ING-10 Done; ING-07 Planned (queue API
-in 3c); SEC-10 and SEC-11 Planned until step 9 (and the first CSV export for SEC-11's escaping).
+Requirement statuses now: ING-01, ING-03, ING-04, ING-06, ING-10, SEC-10 Done; ING-07 Planned
+(queue API in 3c); SEC-11 Planned until the first CSV export escapes formula cells (storing them
+unchanged is done and tested).

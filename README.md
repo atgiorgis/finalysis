@@ -319,7 +319,8 @@ without rows imports as an empty statement when the request gives both `periodSt
 `periodEnd`.
 
 1. **Checks.** At most 10 MB; the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the
-   bytes must be UTF-8 or windows-1252 text (PDFs, ZIP/XLSX and binary data are refused). The
+   bytes must be UTF-8 or windows-1252 text (PDFs, ZIP/XLSX, web pages and binary data are
+   refused). The
    client's content type is ignored. Uploads are held in memory and discarded after parsing; only
    a SHA-256 hash and the file name are kept.
 2. **Same file again** (same hash): `409 already-imported` with the existing `statementId`.
@@ -379,7 +380,7 @@ warning `account mixes import formats (...)`.
 | Problem `type` (`urn:finalysis:problem:…`) | Status | When |
 |---|---|---|
 | `payload-too-large` | 413 | File over 10 MB |
-| `unsupported-format` | 415 | Disallowed extension, empty, PDF, ZIP/XLSX, binary, or no parser recognizes it |
+| `unsupported-format` | 415 | Disallowed extension, empty, PDF, ZIP/XLSX, web page, binary, or no parser recognizes it |
 | `already-imported` | 409 | Identical file imported before; `statementId` names it |
 | `parse-error` | 422 | A row or the file structure can't be read; `line` when known |
 | `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
@@ -514,6 +515,38 @@ Everything else stays editable after use, because it only locates or parses valu
 columns (amount, debit and credit, the transaction date when a post date is mapped), the amount
 mode, `dateFormat`, `delimiter`, `encoding`, `headerRow`, `skipRows`, the balance and check-number
 columns, and the header signature.
+
+## Security
+
+Statement files are untrusted input and hold personal data, so uploads are hardened (SEC-10):
+
+- **Limits.** 10 MB per file (the multipart limit and a check in code), 50,000 CSV rows and
+  64 KB per CSV record; OFX nesting, tag, value and element counts are bounded.
+- **Content sniffing.** The client's content type is ignored. The extension must be `.ofx`,
+  `.qfx`, `.csv` or `.txt` (`statement.csv.exe` is refused), and the bytes must be UTF-8 or
+  windows-1252 text: PDFs, ZIP containers (XLSX), saved web pages, executables, NUL bytes,
+  UTF-16 and invalid text get `415 unsupported-format`. Formats are then detected by content.
+- **No XML parser, no XXE.** OFX is read by an in-house tokenizer that rejects DTDs, entity
+  declarations (general, parameter and external), comments, CDATA and processing instructions in
+  the body, so external entities and entity expansion (billion laughs) can't happen.
+- **Nothing on disk.** The multipart threshold is above the size limit, so uploads stay in memory
+  and are discarded after parsing. Kept: the SHA-256 hash, each row's source line, and the file
+  name without path, control or format characters (at most 255 characters, extension kept).
+- **No statement data in logs or errors.** Logs carry ids, counts, statuses and parser ids.
+  Problem responses carry line numbers, column positions, field names, counts and sizes, never
+  cell values, descriptions, file names or account numbers. The one exception is
+  `422 mapping-mismatch`, whose preview shows the file's header names so the mapping can be
+  fixed. Postgres error details (which quote the failing row) are turned off on the connection.
+- **Little exposure.** Actuator exposes `health` only, without details; there is no CORS policy
+  (the frontend reaches the API through the Vite proxy); devtools may not turn on error details
+  or exception logging under `spring-boot:run`.
+- **Formula cells (SEC-11).** Descriptions starting with `=`, `+`, `-`, `@`, a tab or a carriage
+  return are stored unchanged; any future CSV export must escape them.
+
+Don't raise `org.springframework.web` or `org.hibernate` logging to DEBUG or TRACE with real
+statements: the framework then logs request and response bodies and SQL bind values. The app's
+own packages (`com.finalysis`) are safe at DEBUG. These rules are covered by
+`SensitiveDataLeakTest`, `UploadHardeningTest`, `MultipartDiskTest` and `ExposureTest`.
 
 ## Sample data
 

@@ -10,6 +10,11 @@ spring:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:finalysis}
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+    hikari:
+      data-source-properties:
+        # Postgres puts row values in error details ("Failing row contains (...)", "Key (x)=(y)").
+        # Without them, a logged constraint violation can't carry a description (SEC-10).
+        logServerErrorDetail: false
   servlet:
     multipart:
       # Statement uploads (SEC-10). The threshold is above the limit, so an upload is never written
@@ -17,6 +22,17 @@ spring:
       max-file-size: 10MB
       max-request-size: 11MB
       file-size-threshold: 11MB
+  web:
+    # Problem responses come from ApiExceptionHandler; Boot's fallback /error page must not add
+    # exception messages, stack traces or rejected values either (SEC-10).
+    error:
+      include-message: never
+      include-stacktrace: never
+      include-binding-errors: never
+  devtools:
+    # Devtools (active under spring-boot:run) would otherwise turn on stack traces and messages in
+    # error responses and log every resolved exception's message.
+    add-properties: false
   jpa:
     # Flyway owns the schema; Hibernate only checks that every entity matches it at startup.
     hibernate:
@@ -31,4 +47,5 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # Health only (SEC-10); its details stay hidden (show-details defaults to never).
+        include: health
