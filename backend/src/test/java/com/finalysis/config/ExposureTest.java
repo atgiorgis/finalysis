@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.apache.commons.logging.LogFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -98,6 +99,11 @@ class ExposureTest {
                 "org.hibernate.type.descriptor.sql")) {
             assertThat(LoggerFactory.getLogger(logger).isTraceEnabled()).as(logger).isFalse();
         }
+        // PDFBox's warnings quote glyphs and font names. It logs through Commons Logging, so the
+        // check goes through that path rather than SLF4J's.
+        for (String logger : List.of("org.apache.pdfbox.pdmodel.font.PDType1Font", "org.apache.fontbox.ttf.TTFParser")) {
+            assertThat(LogFactory.getLog(logger).isErrorEnabled()).as(logger).isFalse();
+        }
     }
 
     /**
@@ -141,6 +147,7 @@ class ExposureTest {
                         || key.contains("highlight_sql")) && value.equals("true"),
                 "verbose framework logging", key.matches("logging\\.level\\.(org\\.hibernate|org\\.springframework\\.web"
                         + "|org\\.apache\\.(tomcat|catalina|coyote)|root|web|sql).*") && verbose,
+                "pdf library logging", key.matches("logging\\.level\\.org\\.apache\\.(pdfbox|fontbox).*") && !value.equals("off"),
                 "disk uploads", key.equals("spring.servlet.multipart.file-size-threshold") && !value.equals("11mb"));
         return rules.values().stream().anyMatch(Boolean::booleanValue);
     }

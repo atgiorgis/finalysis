@@ -13,6 +13,10 @@ public enum ImportProblem {
     UNSUPPORTED_FORMAT(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "unsupported-format", "Unsupported file format"),
     AMBIGUOUS_FORMAT(HttpStatus.UNPROCESSABLE_CONTENT, "ambiguous-format", "Ambiguous file format"),
     PARSE_ERROR(HttpStatus.UNPROCESSABLE_CONTENT, "parse-error", "Statement could not be read"),
+    /** A PDF that needs a password to open (SEC-10; reachable once PDF imports are routed, Phase 3b step 3). */
+    PDF_ENCRYPTED(HttpStatus.UNPROCESSABLE_CONTENT, "pdf-encrypted", "PDF is password-protected"),
+    /** A PDF beyond the extraction limits in {@code PdfLimits} (SEC-10; reachable from Phase 3b step 3). */
+    PDF_TOO_COMPLEX(HttpStatus.UNPROCESSABLE_CONTENT, "pdf-too-complex", "PDF exceeds processing limits"),
     ACCOUNT_MISMATCH(HttpStatus.UNPROCESSABLE_CONTENT, "account-mismatch", "Statement is for a different account"),
     UNSUPPORTED_CURRENCY(HttpStatus.UNPROCESSABLE_CONTENT, "unsupported-currency", "Unsupported currency"),
     MAPPING_REQUIRED(HttpStatus.UNPROCESSABLE_CONTENT, "mapping-required", "CSV mapping required"),

@@ -22,6 +22,9 @@
         <spring-ai.version>2.0.1</spring-ai.version>
         <pgvector.version>0.1.6</pgvector.version>
         <commons-csv.version>1.14.1</commons-csv.version>
+        <!-- Fingerprint-relevant: extracted PDF text feeds transaction fingerprints. Upgrade manually,
+             never automatically (docs/plans/phase-3b.md §1.3). -->
+        <pdfbox.version>3.0.8</pdfbox.version>
     </properties>
 
     <dependencyManagement>
@@ -80,6 +83,11 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>${commons-csv.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -49,3 +49,11 @@ management:
       exposure:
         # Health only (SEC-10); its details stay hidden (show-details defaults to never).
         include: health
+
+logging:
+  level:
+    # PDFBox warns at glyph level ("No glyph for U+0041 ...") and quotes font names and object
+    # contents, which leaks statement text one character at a time (SEC-10). Its failures reach the
+    # app as exceptions, which PdfTextExtractor maps to fixed messages.
+    org.apache.pdfbox: "OFF"
+    org.apache.fontbox: "OFF"

@@ -1,6 +1,6 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved** (step 0 done; next: step 1). Branch `v1`. Requirements as of
+Status: **approved**; steps 0–1 done, next: step 2. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
@@ -166,7 +166,7 @@ FALLBACK. The OFX and CSV parsers are not modified.
 ### 2.1 Limits (`PdfLimits`, one record, overridable in tests)
 
 | Limit | Value | Enforced where | Problem |
-|---|---|---|---|
+|---|---|---|---|---|
 | File size | 10 MB (unchanged) | multipart + `UploadCheck` | 413 `payload-too-large` |
 | Pages | 50 | after load, before extraction | 422 `pdf-too-complex` |
 | Heap for decoded streams | 64 MB | `MemoryUsageSetting.setupMainMemoryOnly` | 422 `pdf-too-complex` |
@@ -693,18 +693,58 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 
 ## 8. Steps
 
-| # | Step | Commit content | Main tests |
-|---|---|---|---|
-| 0 | Plan and scope | This file; requirements v1.22 recording the approved decisions; CLAUDE.md current phase. Commit "Phase 3b plan and scope" | — |
-| 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory |
-| 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant |
-| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions |
-| 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests |
-| 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` |
-| 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` |
-| 7 | Import end to end | Registered bean; open unparsed upload resolved once recognized; reconciliation on printed balances and totals; the six Northfield PDFs imported against the answer key; Postman PDF requests (synthetic fixtures, plus the real-file folder pointing at `private-data/` through your local environment, nothing committed, run by you) | `PdfImportTest`, selection test |
-| 8 | Cross-cutting security | Leak test PDF cases, no-temp and no-font-cache on a real server, ArchUnit no-AI rule, exposure checks | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` |
-| 9 | Docs | README (PDF import, limits, unparsed uploads, debug tool, PDFBox upgrade rule, limitations, **note that the project is not affiliated with any bank**), requirement statuses (ING-02, ING-08, ING-11, ING-12, ING-13, SEC-09 → Done), change log, `TransactionFingerprint` Javadoc, phase summary in this file | Postman run against a reset database |
+| # | Step | Commit content | Main tests | Status |
+|---|---|---|---|---|
+| 0 | Plan and scope | This file; requirements v1.22 recording the approved decisions; CLAUDE.md current phase. Commit "Phase 3b plan and scope" | — | Done: `1dee291` |
+| 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory | Done: "Phase 3b step 1: PDF text extraction layer" |
+| 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Planned |
+| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions | Planned |
+| 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Planned |
+| 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
+| 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
+| 7 | Import end to end | Registered bean; open unparsed upload resolved once recognized; reconciliation on printed balances and totals; the six Northfield PDFs imported against the answer key; Postman PDF requests (synthetic fixtures, plus the real-file folder pointing at `private-data/` through your local environment, nothing committed, run by you) | `PdfImportTest`, selection test | Planned |
+| 8 | Cross-cutting security | Leak test PDF cases, no-temp and no-font-cache on a real server, ArchUnit no-AI rule, exposure checks | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Planned |
+| 9 | Docs | README (PDF import, limits, unparsed uploads, debug tool, PDFBox upgrade rule, limitations, **note that the project is not affiliated with any bank**), requirement statuses (ING-02, ING-08, ING-11, ING-12, ING-13, SEC-09 → Done), change log, `TransactionFingerprint` Javadoc, phase summary in this file | Postman run against a reset database | Planned |
+
+### Step 1 notes (decisions beyond the plan)
+
+- **PDFBox 3.0.8**, the latest 3.0.x release, pinned in `pom.xml` with a note that upgrades are
+  manual (§1.3).
+- **Decoded-size limits use an own pre-scan.** PDFBox's `Filter.decode` inflates a whole stream into
+  an uncapped heap buffer, and the `MemoryUsageSetting` cap doesn't apply to decoding. So before
+  extraction every non-image stream is decoded through PDFBox's own filter classes into a sink that
+  throws at the limit. The 64 MB limit is the total across all such streams (content, forms, fonts,
+  object streams) and also caps the stream cache. Plain objects are measured first, then objects
+  inside object streams, so an object-stream bomb is caught before PDFBox opens it. The 8 MB page
+  limit is then checked per page from the measured sizes. A stream marked as an image is skipped by
+  the document pass, but still measured if a page uses it as content.
+  **Residual risk:** a bomb in the cross-reference stream is decoded by PDFBox while loading, before
+  any check can run. Documented for step 9's known limitations.
+- **One more limit, `NESTING`:** a `StackOverflowError` from deeply nested objects is reported as
+  `pdf-too-complex`, not a crash.
+- **Limit exceptions are unchecked.** PDFBox logs and swallows `IOException`s thrown inside a form
+  (`Do`) operator, which would silently skip a limit.
+- **One exception type**, `PdfExtractionException`, with a `Reason` (password required, too complex,
+  unreadable) and the exceeded `Limit`. PDFBox's exception is never chained as the cause, so a logged
+  stack trace can't print its message.
+- **`NoSystemFontsMapper`** maps every non-embedded font to PDFBox's bundled Liberation Sans.
+  PDFBox's own mapper class is package-private, so swapping just its font provider isn't possible.
+  The mapper is installed when `PdfTextExtractor` loads; the test helper installs it before building
+  fonts.
+- **Pages without a content stream are still recorded** (the stripper skips them), so page numbers
+  match the document.
+- **Word gap** is measured against the font size of the glyph before the gap; **line tolerance**
+  against the line's topmost glyph.
+- **Fonts with zero glyph widths** (a malformed font) put every glyph at one x, so the fake-bold rule
+  collapses repeated letters. Found with a broken test font; acceptable for malformed input.
+- **A truncated PDF** may still load, because PDFBox recovers what it can. It is either read or
+  refused as unreadable, never a crash.
+- **`PdfTextExtractor` is not a Spring bean yet**; step 3 wires it into the import.
+- **`ExposureTest`** already checks the PDFBox and FontBox loggers (planned for step 8). The check
+  goes through Commons Logging, the path PDFBox uses, and refuses any config that sets them above
+  `OFF`. The YAML value is the quoted string `"OFF"`, because bare `OFF` is a YAML boolean.
+- Tests: `PdfTextExtractorTest` (20) and `PdfSecurityTest` (27), all PDFs built in memory. Backend
+  tests 956 → 1003; frontend 1.
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.
