@@ -104,17 +104,23 @@ These are approved and override anything older in the conversation history.
 - Mapping fields: delimiter, encoding (UTF-8 default, BOM stripped), header row / skip rows,
   `header_signature`, date column + date format, optional post-date column, ordered description
   columns (joined with one space), amount mode SINGLE or DEBIT_CREDIT with the relevant columns,
-  sign AS_IS or INVERTED, optional balance column, optional check-number column. Columns by
-  header name, or index when there is no header row.
+  sign AS_IS or INVERTED, optional balance column, optional check-number column, `used_at`.
+  Columns by header name, or index when there is no header row.
 - **CSV fingerprint uses the sign-normalized amount** (a documented exception to "raw printed
   values": debit/credit files have no single printed signed amount). Printed date = post date
   when mapped. Sections by sign: bank DEPOSIT/WITHDRAWAL, card PAYMENT/PURCHASE, CHECK when a
   check number is present.
-- **Fingerprint-protected mapping fields:** once a mapping has been used for an import, `PUT`
-  returns 409 for changes to fields that feed the fingerprint (sign, date/post-date columns and
-  format, description columns, amount columns/mode, check-number column) unless the request sets
-  `confirmFingerprintChange=true`, which applies the change; rows from earlier imports may then
-  not be recognized as duplicates. Other fields stay freely editable.
+- **Fingerprint-protected mapping fields.** The mapping records `used_at` when an import first
+  uses it.
+  - Locked once `used_at` is set: sign; `description_columns` (set or order); and the
+    printed-date column (`post_date_column` when present, otherwise `date_column`).
+  - Everything else stays editable: column names/indexes for the same roles, `date_format`,
+    `delimiter`, `encoding`, `header_row`, `skip_rows`, balance and check-number columns,
+    `header_signature`.
+  - A `PUT` changing a locked field returns 409 `mapping-locked` naming the fields. With
+    `?confirmFingerprintChange=true` it's accepted, and the response warns that future imports
+    overlapping earlier statements will produce new fingerprints and land in NEEDS_REVIEW (via
+    the overlap-with-inserted-rows rule).
 - No mapping yet → 422 `mapping-required` pointing to the preview; header mismatch → 422
   `mapping-mismatch` with the preview.
 - Period: request values, else first and last transaction dates.
@@ -164,7 +170,7 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 2 | OFX tokenizer (SGML/XML, entities, charsets, hardening) | Done: `3aa8457`; fixes `371ac6c` (UNICODE, SGML recovery, source spans) |
 | 3 | OFX parser + `sample-data/ofx/` and `edge-cases/` via the generator | Done: `02dac06` |
 | 4 | Import endpoint, OFX end to end (V5, dedup, statuses, SEC-10 checks, docs) | Done: `3ef1196`; follow-ups `c1dd137` (stored warnings, out-of-period rows), `89b3d3b` (FITID out of fingerprint, overlap status rule, money as JSON strings) |
-| 5 | CSV mapping: V6 `csv_mapping`, entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, fingerprint-protected fields with `confirmFingerprintChange` | Next |
+| 5 | CSV mapping: V6 `csv_mapping` (with `used_at`), entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, locked fields with 409 `mapping-locked` and the `?confirmFingerprintChange=true` override | Next |
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | To do |
 | 7 | CSV import: preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings | To do |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | To do |
