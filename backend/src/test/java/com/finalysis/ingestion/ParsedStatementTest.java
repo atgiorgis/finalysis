@@ -134,6 +134,18 @@ class ParsedStatementTest {
         return new ParsedStatement(AccountHints.none(), APRIL_1, APRIL_30, opening, closing, totals, txns, List.of());
     }
 
+    @Test
+    void runningBalanceIsOptionalAndValidatedLikeAmounts() {
+        assertThat(txn("-1.00").runningBalance()).isNull();
+        assertThat(txnWithBalance("12.5").runningBalance()).isEqualTo(new BigDecimal("12.50"));
+        assertThatThrownBy(() -> txnWithBalance("12.505")).hasMessageContaining("runningBalance");
+    }
+
+    private static ParsedTxn txnWithBalance(String balance) {
+        return new ParsedTxn(APRIL_1, APRIL_1, null, "GREENLEAF MARKET", "-1.00", new BigDecimal("-1.00"),
+                SourceSection.WITHDRAWAL, null, null, 2, "04/01/2026,GREENLEAF MARKET,-1.00", new BigDecimal(balance));
+    }
+
     private static ParsedTxn txn(String amount) {
         return new ParsedTxn(APRIL_1, APRIL_1, null, "GREENLEAF MARKET", amount, new BigDecimal(amount),
                 SourceSection.WITHDRAWAL, null, null, 2, "04/01/2026,GREENLEAF MARKET," + amount);

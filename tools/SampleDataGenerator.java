@@ -18,10 +18,12 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class SampleDataGenerator {
@@ -123,9 +125,11 @@ public class SampleDataGenerator {
             ofxFiles++;
         }
         writeOfxEdgeCases(checking);
+        writeCsvEdgeCases(checking, summit);
 
         System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
-                + "%d transactions to %s/%n", statements.size(), ofxFiles, OFX_EDGE_CASES, txns.size(), out);
+                + "%d transactions to %s/%n", statements.size(), ofxFiles, OFX_EDGE_CASES + CSV_EDGE_CASES, txns.size(),
+                out);
     }
 
     // ---------------------------------------------------------------- transactions
@@ -552,6 +556,81 @@ public class SampleDataGenerator {
         String xxe = qfx.replace("<?OFX", "<!DOCTYPE OFX [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<?OFX")
                 .replace("<NAME>NETFLIX.COM</NAME>", "<NAME>&xxe;</NAME>");
         write("edge-cases/ofx-xxe.ofx", xxe, StandardCharsets.UTF_8);
+    }
+
+    // ---------------------------------------------------------------- CSV edge cases
+
+    static final int CSV_EDGE_CASES = 7;
+
+    /**
+     * Hand-built CSV files for parser and import edge cases; not part of the answer key. Written
+     * last and without the random generator, so adding one never changes the other files.
+     */
+    void writeCsvEdgeCases(List<Statement> checking, List<Statement> summit) throws IOException {
+        String summitHeader = "Trans. Date,Merchant Name,Amount";
+
+        // Summit layout, UTF-8 with a BOM and CRLF line endings: a quoted comma, a line break inside a
+        // quoted cell, doubled quotes, a non-ASCII merchant and a cell with surrounding spaces.
+        write("edge-cases/csv-quoted-fields.csv", "\uFEFF" + csvLines("\r\n", summitHeader,
+                csvRow("03-Apr-2026", "BLUE BEAN CAFE, ARLINGTON VA", "-4.50"),
+                csvRow("04-Apr-2026", "NAKAMURA RAMEN\nTIP ADJUSTMENT", "-12.00"),
+                csvRow("05-Apr-2026", "THE \"GOOD\" DELI", "-9.25"),
+                csvRow("06-Apr-2026", "CAFÉ MÜNCHEN 東京", "-18.40"),
+                csvRow("07-Apr-2026", "  PADDED MERCHANT  ", "-3.00")));
+
+        // SEC-11: formula-leading descriptions are data and are stored unchanged.
+        write("edge-cases/csv-formula-descriptions.csv", csvLines("\n", summitHeader,
+                csvRow("08-Apr-2026", "=SUM(A1:A9)", "-1.00"),
+                csvRow("08-Apr-2026", "+1 PREMIUM CAFE", "-2.00"),
+                csvRow("08-Apr-2026", "-CANCELLED ORDER", "-3.00"),
+                csvRow("08-Apr-2026", "@HANDLE COFFEE", "-4.00")));
+
+        // Two genuine identical purchases on one day, plus near-duplicates differing only in amount.
+        write("edge-cases/csv-duplicates.csv", csvLines("\n", summitHeader,
+                csvRow("10-Apr-2026", "CHIPOTLE 2291", "-14.25"),
+                csvRow("10-Apr-2026", "CHIPOTLE 2291", "-14.25"),
+                csvRow("10-Apr-2026", "CHIPOTLE 2291", "-14.52"),
+                csvRow("10-Apr-2026", "CHIPOTLE 2291", "-14.26")));
+
+        // Apex layout (purchases positive): a purchase and its refund.
+        write("edge-cases/csv-card-refund.csv", csvLines("\n", "Transaction Date,Post Date,Description,Category,Amount",
+                csvRow("2026-04-11", "2026-04-12", "TARGET 00023481 ARLINGTON VA", "Merchandise", "120.00"),
+                csvRow("2026-04-18", "2026-04-19", "TARGET 00023481 ARLINGTON VA", "Merchandise", "-120.00")));
+
+        // The April Summit statement, newest first.
+        Statement april = summit.stream().filter(s -> s.period().label().equals("2026-04")).findFirst().orElseThrow();
+        List<Txn> newestFirst = new ArrayList<>(april.rows());
+        Collections.reverse(newestFirst);
+        write("edge-cases/csv-newest-first.csv", render(Account.SUMMIT, april.opening(), newestFirst));
+
+        // Northfield layout in windows-1252: É is 0xC9 and the curly apostrophe 0x92, invalid as UTF-8.
+        write("edge-cases/csv-windows-1252.csv", csvLines("\r\n", "Date,Description,Debit,Credit,Balance",
+                csvRow("04/05/2026", "CAFÉ RÉSUMÉ ARLINGTON VA", "12.75", "", "987.25"),
+                csvRow("04/06/2026", "JOSÉ’S TACOS", "8.50", "", "978.75")), WINDOWS_1252);
+
+        // A checking export for 04-15 to 05-14, overlapping the April and May statements.
+        LocalDate from = LocalDate.of(2026, 4, 15);
+        LocalDate to = LocalDate.of(2026, 5, 14);
+        List<Txn> aprilAndMay = Stream.concat(checking.get(0).rows().stream(), checking.get(1).rows().stream()).toList();
+        BigDecimal opening = sum(checking.get(0).opening(),
+                aprilAndMay.stream().filter(t -> t.postDate().isBefore(from)).toList());
+        List<Txn> overlap = aprilAndMay.stream()
+                .filter(t -> !t.postDate().isBefore(from) && !t.postDate().isAfter(to)).toList();
+        write("edge-cases/csv-northfield-checking_2026-04-15_2026-05-14.csv", render(Account.CHECKING, opening, overlap));
+    }
+
+    static String csvLines(String lineBreak, String header, String... rows) {
+        return header + lineBreak + String.join(lineBreak, rows) + lineBreak;
+    }
+
+    static String csvRow(String... cells) {
+        return Stream.of(cells).map(SampleDataGenerator::csvCell).collect(Collectors.joining(","));
+    }
+
+    /** RFC 4180: cells with a comma, quote or line break are quoted, quotes doubled. */
+    static String csvCell(String cell) {
+        boolean quote = cell.contains(",") || cell.contains("\"") || cell.contains("\n") || cell.contains("\r");
+        return quote ? "\"" + cell.replace("\"", "\"\"") + "\"" : cell;
     }
 
     static String ofxDate(LocalDate d) {

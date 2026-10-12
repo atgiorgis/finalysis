@@ -20,11 +20,13 @@ import java.util.Objects;
  * @param externalId       the institution's own transaction id (OFX FITID), or null
  * @param sourceLineNumber 1-based line in the file where the row starts (DAT-07)
  * @param sourceLineText   the row's text as it appears in the file (DAT-07)
+ * @param runningBalance   the account balance printed on the row (a CSV balance column), or null;
+ *                         used for reconciliation only (ING-06), never stored per row
  */
 public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate postDate,
                         String rawDescription, String printedAmount, BigDecimal amount,
                         SourceSection section, String checkNumber, String externalId,
-                        int sourceLineNumber, String sourceLineText) {
+                        int sourceLineNumber, String sourceLineText, BigDecimal runningBalance) {
 
     /** Width of {@code txn.check_number}. */
     static final int CHECK_NUMBER_MAX = 20;
@@ -40,6 +42,9 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
         Objects.requireNonNull(section, "section");
         Objects.requireNonNull(sourceLineText, "sourceLineText");
         amount = Money.requireNumeric12x2(amount, "amount");
+        if (runningBalance != null) {
+            runningBalance = Money.requireNumeric12x2(runningBalance, "runningBalance");
+        }
         if (checkNumber != null && checkNumber.length() > CHECK_NUMBER_MAX) {
             throw new IllegalArgumentException("checkNumber is longer than " + CHECK_NUMBER_MAX + " characters");
         }
@@ -52,6 +57,15 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
         if (sourceLineNumber < 1) {
             throw new IllegalArgumentException("sourceLineNumber must be 1 or more");
         }
+    }
+
+    /** A row without a printed running balance. */
+    public ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate postDate,
+                     String rawDescription, String printedAmount, BigDecimal amount,
+                     SourceSection section, String checkNumber, String externalId,
+                     int sourceLineNumber, String sourceLineText) {
+        this(printedDate, txnDate, postDate, rawDescription, printedAmount, amount, section, checkNumber,
+                externalId, sourceLineNumber, sourceLineText, null);
     }
 
     /** Line and section only: descriptions, amounts and line text are file contents (SEC-10). */
