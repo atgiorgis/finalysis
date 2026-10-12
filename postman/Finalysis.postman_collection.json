@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there (`npx newman run postman/Finalysis.postman_collection.json -e postman/Finalysis-Local.postman_environment.json`), or set Postman's working directory (Settings → General) to the repo root. Uses only fictional sample data.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there (the README gives the newman command, which leaves out **7. Real-file test**), or set Postman's working directory (Settings → General) to the repo root. Folders 1 to 6 use only fictional sample data; **7. Real-file test** is for manual runs with your own file, selected in Postman.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1512,6 +1512,209 @@
         }
       ],
       "description": "Every request here is refused, and nothing is written (except the confirmed mapping change, which is restored)."
+    },
+    {
+      "name": "7. Real-file test",
+      "description": "Manual testing with your own statement: select the file in the body of **Preview real file** and **Import real file**, then run the requests one by one, top to bottom. Nothing is asserted: results are logged to the Postman console (View → Show Postman Console). Edit the account in **Create real account** first. Not part of the newman run. Never commit real statements or paste their contents into this collection.",
+      "item": [
+        {
+          "name": "Create real account",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Real Checking\",\n  \"institution\": \"Bank of America\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Edit the last four (and type, for a card) before sending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Create real account:', pm.response.code);",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('realAccountId', pm.response.json().id);",
+                  "    console.log('realAccountId =', pm.collectionVariables.get('realAccountId'));",
+                  "} else {",
+                  "    console.log(pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview real file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realAccountId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select your file under Body → form-data → file. Writes nothing. For a CSV, stores the PUT csv-mapping body built from the suggestion in `realMappingBody`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Preview real file:', pm.response.code);",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const body = pm.response.json();",
+                  "console.log('format =', body.format);",
+                  "console.log('mappingStatus =', body.mappingStatus);",
+                  "console.log('skipRows =', body.skipRows);",
+                  "console.log('headers =', JSON.stringify(body.headers));",
+                  "const suggestion = body.suggestedMapping;",
+                  "if (!suggestion) {",
+                  "    console.log('no suggested mapping (not a CSV, or the saved mapping matches)');",
+                  "    return;",
+                  "}",
+                  "Object.entries(suggestion.confidence).forEach(([field, confidence]) => console.log(`  ${field}: ${confidence}`));",
+                  "(suggestion.notes || []).forEach(note => console.log('note:', note));",
+                  "const mapping = Object.assign({}, suggestion.mapping, { headers: body.headers });",
+                  "pm.collectionVariables.set('realMappingBody', JSON.stringify(mapping));",
+                  "console.log('realMappingBody =', JSON.stringify(mapping, null, 2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save real mapping",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realAccountId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{{realMappingBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "CSV only. Sends the preview's suggestion; edit the `realMappingBody` collection variable first if a field is GUESSED or MISSING."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Save real mapping:', pm.response.code);",
+                  "console.log(JSON.stringify(pm.response.json(), null, 2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import real file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realAccountId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select the same file under Body → form-data → file."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Import real file:', pm.response.code);",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code !== 201) {",
+                  "    console.log(JSON.stringify(body, null, 2));",
+                  "    return;",
+                  "}",
+                  "console.log('status =', body.status, '| balanceCheck =', body.balanceCheck, '| parser =', body.parser);",
+                  "console.log('period =', body.periodStart, 'to', body.periodEnd);",
+                  "console.log('parsed =', body.parsed, '| inserted =', body.inserted, '| duplicates =', body.duplicates);",
+                  "console.log('opening =', body.openingBalance, '| closing =', body.closingBalance);",
+                  "(body.warnings || []).forEach(warning => console.log('warning:', warning));",
+                  "pm.collectionVariables.set('realStatementUrl', pm.response.headers.get('Location'));",
+                  "console.log('realStatementUrl =', pm.collectionVariables.get('realStatementUrl'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get real statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{realStatementUrl}}",
+            "description": "The statement at the import's Location header."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Get real statement:', pm.response.code);",
+                  "console.log(JSON.stringify(pm.response.json(), null, 2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List real statements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realAccountId}}/statements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('List real statements:', pm.response.code);",
+                  "console.log(JSON.stringify(pm.response.json(), null, 2));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1545,6 +1748,18 @@
     },
     {
       "key": "reviewStatementId",
+      "value": ""
+    },
+    {
+      "key": "realAccountId",
+      "value": ""
+    },
+    {
+      "key": "realMappingBody",
+      "value": ""
+    },
+    {
+      "key": "realStatementUrl",
       "value": ""
     }
   ]

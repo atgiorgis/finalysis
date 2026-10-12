@@ -51,14 +51,17 @@ database. `DevDatabaseGuard` fails any test context whose datasource points at t
 database: **1. Setup** creates the four sample accounts, saves the Apex mapping by hand and the
 Summit mapping from the preview's suggestion, and imports four statements (two `IMPORTED`, one
 `RECONCILED`, one `NEEDS_REVIEW`); folders 2 to 5 read accounts, mappings, previews, statements
-and categories; **6. Errors** sends a request for each error the sample files can trigger.
+and categories; **6. Errors** sends a request for each error the sample files can trigger;
+**7. Real-file test** is for your own files (below).
 Setup is strict, so a second run without a reset fails.
 
 ```sh
 scripts/reset-dev-db.sh                    # wipes the dev database; see below
 (cd backend && ./mvnw spring-boot:run)     # in another terminal
 npx newman run postman/Finalysis.postman_collection.json \
-    -e postman/Finalysis-Local.postman_environment.json --working-dir .
+    -e postman/Finalysis-Local.postman_environment.json --working-dir . \
+    --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
+    --folder "4. Statements" --folder "5. Categories" --folder "6. Errors"
 ```
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
@@ -66,6 +69,12 @@ import both files, select the **Finalysis Local** environment, set the working d
 (Settings → General) to the repo root, and run the collection with the **Collection Runner**.
 `payload-too-large`, `unsupported-currency`, `ambiguous-format` and `mapping-changed` need files
 or timing the sample data can't provide; the backend tests cover them.
+
+The `--folder` flags leave out **7. Real-file test**, which is for manual runs with your own
+statement: in the Postman app, select the file in **Preview real file** and **Import real file**,
+send the six requests in order, and read the results in the Postman console. It asserts nothing;
+untick it in the Collection Runner.
+Real statements stay in `private-data/`; don't save a file selection or response into the collection.
 
 ### Database client
 
