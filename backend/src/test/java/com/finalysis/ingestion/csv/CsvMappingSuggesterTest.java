@@ -97,6 +97,25 @@ class CsvMappingSuggesterTest {
     }
 
     @Test
+    void summaryPreambleFileSuggestsTheRealTableBelowTheSummaryBlock() {
+        CsvPreview preview = previewSample("edge-cases/csv-summary-preamble-balance-row.csv", AccountType.CHECKING);
+        SuggestedCsvMapping suggested = preview.suggestedMapping();
+
+        // Five summary lines and a blank line above the 4-column header.
+        assertThat(preview.skipRows()).isEqualTo(6);
+        assertThat(preview.headers()).containsExactly("Date", "Description", "Amount", "Running Bal.");
+        assertThat(suggested.mapping().skipRows()).isEqualTo(6);
+        assertThat(suggested.mapping().dateFormat()).isEqualTo("MM/dd/yyyy");
+        assertThat(suggested.mapping().balanceColumn()).isEqualTo("Running Bal.");
+        assertThat(suggested.confidence()).containsAllEntriesOf(Map.of(
+                "dateColumn", Confidence.MATCHED,
+                "dateFormat", Confidence.MATCHED,
+                "descriptionColumns", Confidence.MATCHED,
+                "amountColumn", Confidence.MATCHED,
+                "balanceColumn", Confidence.MATCHED));
+    }
+
+    @Test
     void previewShowsTheFirstTenRowsButGuessesFromAllOfThem() {
         CsvPreview preview = previewSample("statements/apex-visa_2026-05.csv", AccountType.CREDIT_CARD);
 
@@ -164,6 +183,16 @@ class CsvMappingSuggesterTest {
         assertThat(m.balanceColumn()).isEqualTo("Running Balance");
         assertThat(m.checkNumberColumn()).isEqualTo("Check No.");
         assertThat(suggested.confidence()).doesNotContainValue(Confidence.MISSING);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Running Bal.", "Bal", "BAL.", "Running  Bal"})
+    void shortBalanceHeadersMatch(String header) {
+        SuggestedCsvMapping suggested = suggest(List.of("Date", "Description", "Amount", header),
+                List.of(List.of("04/01/2026", "CAFE", "-4.50", "95.50")), AccountType.CHECKING);
+
+        assertThat(suggested.mapping().balanceColumn()).isEqualTo(header);
+        assertThat(suggested.confidence()).containsEntry("balanceColumn", Confidence.MATCHED);
     }
 
     @Test

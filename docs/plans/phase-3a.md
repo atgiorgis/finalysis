@@ -271,6 +271,7 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
   `skip_rows`. Detection reads at most 1 MB. Rows after the run are the parser's to check. Edge
   case `csv-preamble.csv`: the April checking statement below 4 summary lines (3 with a comma, so
   they form a short 2-column run that must not win) and a blank line; resolves to `skip_rows` 5.
+  *(Replaced after 3a by the longest-run rule: see "Post-3a fixes from real-file test".)*
 - **Mapping snapshot** (review change B). `CsvMappingSpec(CsvMappingValues values, updatedAt)` is
   built by `CsvMappingService.snapshot` in a read-only transaction; `ParseContext` carries it and
   the parser never touches JPA. `CsvMappingValues` became public for this.
@@ -407,3 +408,58 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03 already Done; SEC-10 Done in step 9), change log | Done: "Phase 3a complete: docs, Postman, requirements", tag `phase-3a-done` |
 
 Final requirement statuses: see "Phase 3a complete" above.
+
+## Post-3a fixes from real-file test
+
+A manual import of a real bank CSV (kept outside the repo, never read into code, tests or docs)
+found three bugs. Fixed with synthetic data only, in one commit ("CSV: longest-run preamble
+detection, balance-only rows, balance synonyms"), requirements v1.21 (ING-01, ING-06).
+
+The file's structure, without values: a 3-column summary block (header `Description,,Summary Amt.`
+with an empty middle header, then beginning balance, total credits, total debits and ending
+balance rows with quoted amounts), a blank line, the 4-column header
+`Date,Description,Amount,Running Bal.`, a first row with a date, a "beginning balance" text, an
+empty amount and a running balance, then signed transactions with quoted thousands.
+
+1. **Preamble detection picked the summary block.** It is five consistent records, so "the first
+   run of 5" chose it. New rule (`CsvStatementParser.detectTable`): among runs of consecutive
+   records sharing one column count (two or more columns, blank lines skipped) that start within
+   the first 100 lines, the run with the most records wins; a tie goes to the later run (a block
+   above a table of the same size is the preamble); the same run under two delimiters goes to the
+   earlier delimiter. A run needs at least two records, unless it is the whole file. Each run
+   counts at most 100 records, so detection stays cheap; a start inside a run already read is
+   skipped (its run is a shorter suffix). `skipRows` is the run's physical line, blank lines
+   included, so the saved mapping lands on the real header (line 7 of the edge case, `skipRows` 6).
+   Trade-off, documented in the Javadoc and README: a table shorter than the block above it, or
+   one split by a row with another column count early on, is found at the longer part; the preview
+   shows `skipRows` for the user to correct. A malformed quote ends a run instead of discarding it.
+2. **Balance-only rows failed the import** (`amount is empty`). Now, with a mapped balance column,
+   a row with a valid date and a balance but a blank amount (blank debit and credit in
+   DEBIT_CREDIT mode; zeros are still amounts) is not a transaction. The oldest row (the first, or
+   the last in a newest-first file, judged from the transactions' dates as reconciliation does)
+   becomes `ParsedStatement.openingBalance`; any other is skipped with the warning
+   `line N: skipped a row with a balance but no amount (not a transaction)`, which makes the
+   statement NEEDS_REVIEW like every warning. Judged by cell shape only, never description text,
+   so it stays bank-agnostic. Without a balance column an empty amount is still a parse error.
+   The period spans transaction dates only. Reconciliation gains one check: a printed opening
+   balance must equal the opening derived from the balance column ("printed openingBalance
+   against the balance column"), so the row's balance is verified, not just stored.
+3. **`Running Bal.` was not suggested as the balance column.** Balance synonyms are now
+   `balance`, `running balance`, `running bal`, `bal` (punctuation is already ignored).
+4. **Edge case** `sample-data/edge-cases/csv-summary-preamble-balance-row.csv`, built by
+   `tools/SampleDataGenerator.java` (fictional institution, made-up merchants, no names or account
+   numbers), reproduces the structure: 5-record summary block, blank line, header, balance-only
+   opening row, 10 transactions whose running balance ends at the summary's ending balance.
+
+Tests: detection (longest run over the summary block, tie to the later run, updated earlier
+cases), suggester (the edge case's preview: `skipRows` 6, date, description, amount and balance
+MATCHED, `MM/dd/yyyy`; short balance headers), parser (first, newest-first last, middle,
+DEBIT_CREDIT, no balance column, bad date, balance-only file), reconciliation (printed opening
+agrees / disagrees), and import end to end (unedited suggested mapping imports 10 rows,
+RECONCILED with opening 2415.30 and closing 4293.52; a middle balance-only row warns with its line
+and goes to NEEDS_REVIEW). The existing `csv-preamble.csv` tests pass unchanged.
+
+| | Backend tests | Frontend tests |
+|---|---|---|
+| Before (Phase 3a complete) | 940 | 1 |
+| After the fixes | 956 | 1 |

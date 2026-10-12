@@ -560,7 +560,7 @@ public class SampleDataGenerator {
 
     // ---------------------------------------------------------------- CSV edge cases
 
-    static final int CSV_EDGE_CASES = 8;
+    static final int CSV_EDGE_CASES = 9;
 
     /**
      * Hand-built CSV files for parser and import edge cases; not part of the answer key. Written
@@ -628,6 +628,58 @@ public class SampleDataGenerator {
                 "Statement period,04/01/2026 to 04/30/2026",
                 "Opening balance," + format(aprilChecking.opening()),
                 "") + "\n" + render(Account.CHECKING, aprilChecking.opening(), aprilChecking.rows()));
+
+        write("edge-cases/csv-summary-preamble-balance-row.csv", summaryPreambleBalanceRow());
+    }
+
+    /**
+     * A checking export in the layout of a fictional Larkspur Credit Union: a 3-column summary block
+     * (empty middle header, four balance and total rows) and a blank line above the 4-column table,
+     * whose first row is a balance-only row (date, text and running balance, no amount). Amounts
+     * are signed, with quoted thousands. The summary block is five consistent records, so a
+     * "first run of five" table detection picks it instead of the table.
+     */
+    static String summaryPreambleBalanceRow() {
+        BigDecimal opening = money("2415.30");
+        record Row(LocalDate date, String description, BigDecimal amount) {}
+        List<Row> rows = List.of(
+                new Row(LocalDate.of(2026, 5, 2), "MAPLEWOOD GROCERY #214 DEBIT CARD PURCHASE", money("-86.42")),
+                new Row(LocalDate.of(2026, 5, 5), "HARBORLINE FREIGHT PAYROLL DIRECT DEP", money("2310.55")),
+                new Row(LocalDate.of(2026, 5, 6), "ONLINE TRANSFER TO SAVINGS", money("-1000.00")),
+                new Row(LocalDate.of(2026, 5, 9), "CEDAR HILL APARTMENTS RENT, WEB PMT", money("-1425.00")),
+                new Row(LocalDate.of(2026, 5, 12), "BRIGHTSPARK ELECTRIC ONLINE PMT", money("-112.37")),
+                new Row(LocalDate.of(2026, 5, 15), "CORNER BEAN CAFE DEBIT CARD PURCHASE", money("-6.75")),
+                new Row(LocalDate.of(2026, 5, 19), "HARBORLINE FREIGHT PAYROLL DIRECT DEP", money("2310.55")),
+                new Row(LocalDate.of(2026, 5, 22), "NORTHGATE FUEL #88 DEBIT CARD PURCHASE", money("-48.19")),
+                new Row(LocalDate.of(2026, 5, 26), "ORBITNET INTERNET AUTOPAY", money("-64.99")),
+                new Row(LocalDate.of(2026, 5, 28), "INTEREST EARNED", money("0.84")));
+        LocalDate first = LocalDate.of(2026, 5, 1);
+        LocalDate last = rows.getLast().date();
+        BigDecimal credits = rows.stream().map(Row::amount).filter(a -> a.signum() > 0).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal debits = rows.stream().map(Row::amount).filter(a -> a.signum() < 0).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal closing = opening.add(credits).add(debits);
+
+        List<String> lines = new ArrayList<>(List.of(
+                csvRow("Description", "", "Summary Amt."),
+                csvRow("Beginning balance as of " + northfieldDate(first), "", thousands(opening)),
+                csvRow("Total credits", "", thousands(credits)),
+                csvRow("Total debits", "", thousands(debits)),
+                csvRow("Ending balance as of " + northfieldDate(last), "", thousands(closing)),
+                "",
+                csvRow("Date", "Description", "Amount", "Running Bal."),
+                csvRow(northfieldDate(first), "Beginning balance as of " + northfieldDate(first), "", thousands(opening))));
+        BigDecimal balance = opening;
+        for (Row row : rows) {
+            balance = balance.add(row.amount());
+            lines.add(csvRow(northfieldDate(row.date()), row.description(), thousands(row.amount()), thousands(balance)));
+        }
+        require(balance.compareTo(closing) == 0, "summary preamble: running balance must end at the closing balance");
+        return String.join("\n", lines) + "\n";
+    }
+
+    /** Two decimals with comma thousands separators, e.g. -1,425.00 (quoted by csvCell). */
+    static String thousands(BigDecimal amount) {
+        return String.format(Locale.ROOT, "%,.2f", amount.setScale(2, RoundingMode.UNNECESSARY));
     }
 
     static String csvLines(String lineBreak, String header, String... rows) {

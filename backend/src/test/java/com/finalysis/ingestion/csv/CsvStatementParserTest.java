@@ -63,13 +63,35 @@ class CsvStatementParserTest {
     }
 
     @Test
-    void aTableIsFiveConsistentRecordsOrAllThatRemain() {
-        // Five consistent records make a table; later rows are the parser's to check.
-        assertThat(parser.detect(file("a,b\n" + "1,2\n\n".repeat(4) + "1,2,3\n"))).isEqualTo(FormatMatch.FALLBACK);
-        // Four, then a break, and no later start has two consistent records left.
-        assertThat(parser.detect(file("a,b\n" + "1,2\n".repeat(3) + "1,2,3\n"))).isEqualTo(FormatMatch.NONE);
-        // Fewer than five records are a table when all of them agree.
+    void aTableIsARunOfAtLeastTwoConsistentRecords() {
+        // Blank lines don't break a run; rows after it are the parser's to check.
+        assertThat(CsvStatementParser.detectTable(bytes("a,b\n" + "1,2\n\n".repeat(4) + "1,2,3\n")))
+                .contains(new CsvTable(',', "UTF-8", 0));
         assertThat(CsvStatementParser.detectTable(bytes("a,b\n1,2\n"))).contains(new CsvTable(',', "UTF-8", 0));
+        // One record is a table only when it is the whole file.
+        assertThat(CsvStatementParser.detectTable(bytes("a,b"))).contains(new CsvTable(',', "UTF-8", 0));
+        assertThat(parser.detect(file("a,b\n1,2,3\n"))).isEqualTo(FormatMatch.NONE);
+    }
+
+    @Test
+    void theLongestRunWinsOverASummaryBlockAbove() {
+        // A 3-column summary block of five records, a blank line, then the 4-column table of six.
+        String summary = "Description,,Summary Amt.\n" + "Total,,\"1,000.00\"\n".repeat(4) + "\n";
+        String table = "Date,Description,Amount,Running Bal.\n" + "05/02/2026,CAFE,-1.00,\"2,000.00\"\n".repeat(5);
+
+        // skipRows counts the blank line: the header is on line 7.
+        assertThat(CsvStatementParser.detectTable(bytes(summary + table))).contains(new CsvTable(',', "UTF-8", 6));
+    }
+
+    @Test
+    void aTieBetweenRunsGoesToTheLaterOne() {
+        String block = "a,b,c\n1,2,3\n1,2,3\n";
+        String table = "Date,Description,Amount,Balance\n1,2,3,4\n1,2,3,4\n";
+
+        assertThat(CsvStatementParser.detectTable(bytes(block + table))).contains(new CsvTable(',', "UTF-8", 3));
+        // One more record above and the block is the longer run.
+        assertThat(CsvStatementParser.detectTable(bytes(block + "1,2,3\n" + table)))
+                .contains(new CsvTable(',', "UTF-8", 0));
     }
 
     @Test
@@ -78,7 +100,7 @@ class CsvStatementParserTest {
                 + "Opening balance,3200.00\n\n";
         String table = NORTHFIELD_HEADER + "04/01/2026,RENT,1850.00,,1350.00\n".repeat(6);
 
-        // The two-column preamble lines are only three in a row, so the table starts at the header (line 6).
+        // The two-column preamble lines are a run of three; the table, of seven, starts at the header (line 6).
         assertThat(CsvStatementParser.detectTable(bytes(preamble + table))).contains(new CsvTable(',', "UTF-8", 5));
         // A short table below a preamble: all remaining records, header and one row.
         assertThat(CsvStatementParser.detectTable(bytes("Summary\n" + SIMPLE_HEADER + "2026-04-01,CAFE,-4.50\n")))
@@ -95,12 +117,12 @@ class CsvStatementParserTest {
     }
 
     @Test
-    void theEarliestTableStartWinsAcrossDelimiters() {
-        // Semicolons agree from the first line; commas only from the second.
+    void theLongestRunWinsAcrossDelimiters() {
+        // Semicolons agree from the first line, a run of eight; commas only from the second, seven.
         String text = "x;y\n1,5;2\n1,2;3\n" + "4,5;6\n".repeat(5);
 
         assertThat(CsvStatementParser.detectTable(bytes(text))).contains(new CsvTable(';', "UTF-8", 0));
-        // A tie goes to the earlier delimiter in , ; TAB |.
+        // The same run under two delimiters goes to the earlier one in , ; TAB |.
         assertThat(CsvStatementParser.detectTable(bytes("a,b;c\n1,2;3\n"))).contains(new CsvTable(',', "UTF-8", 0));
     }
 
@@ -279,7 +301,11 @@ class CsvStatementParserTest {
             "' '   | ''    | are both empty",
     })
     void debitCreditRejectsBothOrNeither(String debit, String credit, String problem) {
-        assertThatThrownBy(() -> parse(NORTHFIELD_HEADER + northfieldRow(debit, credit), TestCsvMapping.northfield()))
+        // Without a balance column: with one, blank debit and credit next to a balance is a balance-only row.
+        TestCsvMapping noBalance = TestCsvMapping.northfield();
+        noBalance.balanceColumn = null;
+
+        assertThatThrownBy(() -> parse(NORTHFIELD_HEADER + northfieldRow(debit, credit), noBalance))
                 .isInstanceOf(StatementParseException.class)
                 .hasMessage("line 2: debit (column 3) and credit (column 4) " + problem);
     }
@@ -433,6 +459,92 @@ class CsvStatementParserTest {
         assertThat(txns).extracting(ParsedTxn::runningBalance).containsExactly(new BigDecimal("1350.00"), null);
         assertThatThrownBy(() -> parse(NORTHFIELD_HEADER + "04/01/2026,RENT,1850.00,,n/a\n", TestCsvMapping.northfield()))
                 .hasMessage("line 2: column 5 (balance) is not an amount");
+    }
+
+    // ------------------------------------------------------------------ balance-only rows
+
+    private static final String BALANCE_HEADER = "Date,Description,Amount,Running Bal.\n";
+
+    private static TestCsvMapping withBalance() {
+        TestCsvMapping m = new TestCsvMapping();
+        m.headers = List.of("Date", "Description", "Amount", "Running Bal.");
+        m.dateColumn = "Date";
+        m.dateFormat = "MM/dd/yyyy";
+        m.descriptionColumns = List.of("Description");
+        m.amountColumn = "Amount";
+        m.balanceColumn = "Running Bal.";
+        return m;
+    }
+
+    @Test
+    void aFirstBalanceOnlyRowIsTheOpeningBalanceAndNotATransaction() {
+        ParsedStatement parsed = parse(BALANCE_HEADER
+                + "05/01/2026,ANY TEXT AT ALL,,\"2,415.30\"\n"
+                + "05/02/2026,CAFE,-6.75,\"2,408.55\"\n"
+                + "05/03/2026,PAYROLL,\"1,000.00\",\"3,408.55\"\n", withBalance());
+
+        assertThat(parsed.openingBalance()).isEqualTo(new BigDecimal("2415.30"));
+        assertThat(parsed.txns()).extracting(ParsedTxn::sourceLineNumber).containsExactly(3, 4);
+        assertThat(parsed.periodStart()).isEqualTo(LocalDate.of(2026, 5, 2));
+        assertThat(parsed.warnings()).isEmpty();
+    }
+
+    @Test
+    void inANewestFirstFileTheLastBalanceOnlyRowIsTheOpeningBalance() {
+        ParsedStatement parsed = parse(BALANCE_HEADER
+                + "05/03/2026,PAYROLL,\"1,000.00\",\"3,408.55\"\n"
+                + "05/02/2026,CAFE,-6.75,\"2,408.55\"\n"
+                + "05/01/2026,OPENING,,\"2,415.30\"\n", withBalance());
+
+        assertThat(parsed.openingBalance()).isEqualTo(new BigDecimal("2415.30"));
+        assertThat(parsed.txns()).hasSize(2);
+        assertThat(parsed.warnings()).isEmpty();
+    }
+
+    @Test
+    void aBalanceOnlyRowAnywhereElseIsSkippedWithAWarning() {
+        ParsedStatement parsed = parse(BALANCE_HEADER
+                + "05/02/2026,CAFE,-6.75,\"2,408.55\"\n"
+                + "05/15/2026," + MARKER + ",,\"2,408.55\"\n"
+                + "05/16/2026,PAYROLL,\"1,000.00\",\"3,408.55\"\n", withBalance());
+
+        assertThat(parsed.openingBalance()).isNull();
+        assertThat(parsed.txns()).extracting(ParsedTxn::sourceLineNumber).containsExactly(2, 4);
+        assertThat(parsed.warnings())
+                .containsExactly("line 3: skipped a row with a balance but no amount (not a transaction)");
+    }
+
+    @Test
+    void debitCreditBalanceOnlyRowsNeedBothSidesBlank() {
+        ParsedStatement parsed = parse(NORTHFIELD_HEADER
+                + "04/01/2026,OPENING,,,\"3,200.00\"\n"
+                + "04/02/2026,RENT,\"1,850.00\",,\"1,350.00\"\n", TestCsvMapping.northfield());
+
+        assertThat(parsed.openingBalance()).isEqualTo(new BigDecimal("3200.00"));
+        assertThat(parsed.txns()).hasSize(1);
+        // Zeros are amounts here, not blanks: still "both empty".
+        assertThatThrownBy(() -> parse(NORTHFIELD_HEADER + "04/01/2026,OPENING,0.00,,\"3,200.00\"\n",
+                TestCsvMapping.northfield()))
+                .hasMessage("line 2: debit (column 3) and credit (column 4) are both empty");
+    }
+
+    @Test
+    void withoutABalanceColumnOrValidDateAnEmptyAmountStaysAnError() {
+        TestCsvMapping noBalance = withBalance();
+        noBalance.balanceColumn = null;
+
+        assertThatThrownBy(() -> parse(BALANCE_HEADER + "05/01/2026,OPENING,,\"2,415.30\"\n", noBalance))
+                .hasMessage("line 2: column 3 (amount) is empty");
+        assertThatThrownBy(() -> parse(BALANCE_HEADER + "2026-05-01,OPENING,,\"2,415.30\"\n", withBalance()))
+                .hasMessage("line 2: column 1 (date) is not a date in the mapping's date format");
+        assertThatThrownBy(() -> parse(BALANCE_HEADER + "05/01/2026,OPENING,,n/a\n", withBalance()))
+                .hasMessage("line 2: column 4 (balance) is not an amount");
+    }
+
+    @Test
+    void aFileOfOnlyABalanceOnlyRowIsAnEmptyStatement() {
+        assertThatThrownBy(() -> parse(BALANCE_HEADER + "05/01/2026,OPENING,,\"2,415.30\"\n", withBalance()))
+                .hasMessageContaining("the file has no transactions");
     }
 
     // ------------------------------------------------------------------ limits

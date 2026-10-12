@@ -43,7 +43,7 @@ final class CsvMappingSuggester {
     static final List<String> AMOUNT = List.of("amount", "transaction amount");
     static final List<String> DEBIT = List.of("debit", "withdrawal", "withdrawals", "money out");
     static final List<String> CREDIT = List.of("credit", "deposit", "deposits", "money in");
-    static final List<String> BALANCE = List.of("balance", "running balance");
+    static final List<String> BALANCE = List.of("balance", "running balance", "running bal", "bal");
     static final List<String> CHECK_NUMBER = List.of("check", "check number", "check no");
     /** Tried in this order; the US formats come first, so they win when dates are ambiguous. */
     static final List<String> DATE_FORMATS = List.of("MM/dd/yyyy", "M/d/yyyy", "yyyy-MM-dd", "dd-MMM-yyyy", "MM/dd/yy",

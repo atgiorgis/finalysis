@@ -169,6 +169,42 @@ class CsvImportTest {
         assertThat(support.count("SELECT min(source_line_number) FROM txn WHERE account_id = ?", checking)).isEqualTo(7);
     }
 
+    @Test
+    void summaryPreambleWithABalanceOnlyRowImportsWithItsSuggestedMappingAndReconciles() throws Exception {
+        String sample = "edge-cases/csv-summary-preamble-balance-row.csv";
+        long checking = support.account(AccountType.CHECKING, "1001");
+
+        JsonNode preview = preview(checking, sample);
+        assertThat(preview.get("skipRows").asInt()).isEqualTo(6);
+        saveSuggestedMapping(checking, sample);
+        JsonNode summary = importOk(checking, sample, Map.of());
+
+        // The balance-only first row is the opening balance, not a transaction; the running balance checks out.
+        assertThat(summary.get("parsed").asInt()).isEqualTo(10);
+        assertThat(summary.get("inserted").asInt()).isEqualTo(10);
+        assertThat(summary.get("status").asString()).isEqualTo("RECONCILED");
+        assertThat(summary.get("balanceCheck").asString()).isEqualTo("PASSED");
+        assertThat(summary.get("warnings")).isEmpty();
+        assertThat(summary.get("openingBalance").asString()).isEqualTo("2415.30");
+        assertThat(summary.get("closingBalance").asString()).isEqualTo("4293.52");
+        assertThat(summary.get("periodStart").asString()).isEqualTo("2026-05-02");
+        assertThat(support.count("SELECT min(source_line_number) FROM txn WHERE account_id = ?", checking)).isEqualTo(9);
+
+        // The same file with a balance-only row in the middle: skipped, with a warning naming its line.
+        long other = support.account(AccountType.CHECKING, "2001");
+        saveSuggestedMapping(other, sample);
+        String text = new String(ImportTestSupport.sample(sample), StandardCharsets.UTF_8);
+        String middle = text.replace("\n05/15/2026,", "\n05/12/2026,Balance as of 05/12/2026,,\"2,102.06\"\n05/15/2026,");
+        JsonNode withMiddle = json(support.upload(other, "middle.csv", middle.getBytes(StandardCharsets.UTF_8))
+                .andExpect(status().isCreated()).andReturn());
+
+        assertThat(withMiddle.get("parsed").asInt()).isEqualTo(10);
+        assertThat(withMiddle.get("balanceCheck").asString()).isEqualTo("PASSED");
+        assertThat(withMiddle.get("status").asString()).isEqualTo("NEEDS_REVIEW");
+        assertThat(strings(withMiddle.get("warnings")))
+                .containsExactly("line 14: skipped a row with a balance but no amount (not a transaction)");
+    }
+
     // ------------------------------------------------------------------ mapping lifecycle
 
     @Test

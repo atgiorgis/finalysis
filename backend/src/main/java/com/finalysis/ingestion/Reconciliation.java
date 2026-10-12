@@ -21,7 +21,8 @@ import java.util.TreeMap;
  *   <li><b>Balance column:</b> each row's printed running balance = the previous one + the amounts
  *       since. A newest-first file (first date after the last) is checked in reverse. The opening
  *       is derived as the first balance minus the amounts up to it, the closing as the last
- *       balance plus any amounts after it; request balances must agree with them.</li>
+ *       balance plus any amounts after it; a printed opening balance (a CSV balance-only row) and
+ *       request balances must agree with them.</li>
  *   <li><b>Continuity</b> (a closing balance without an opening one, as OFX prints LEDGERBAL): the
  *       previous statement's closing + rows = closing. On success the previous closing becomes this
  *       opening. Never derived from the closing alone.</li>
@@ -89,6 +90,10 @@ final class Reconciliation {
 
         BalanceColumn column = BalanceColumn.of(parsed.txns(), checks);
         if (column != null) {
+            if (parsed.openingBalance() != null) {
+                checks.compare("printed openingBalance against the balance column", column.opening(),
+                        parsed.openingBalance());
+            }
             if (request.opening() != null) {
                 checks.compare("request openingBalance against the balance column", column.opening(), request.opening());
             }

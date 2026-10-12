@@ -151,6 +151,22 @@ class ReconciliationTest {
     }
 
     @Test
+    void aPrintedOpeningBalanceMustAgreeWithTheBalanceColumn() {
+        // A CSV balance-only row gives the opening balance; the balance column has to start from it.
+        Result agreeing = reconcile(statement(money("100.00"), null, Map.of(),
+                balanceRow(2, 1, "-10.00", "90.00"), balanceRow(3, 2, "-5.00", "85.00")));
+        Result disagreeing = reconcile(statement(money("101.00"), null, Map.of(),
+                balanceRow(2, 1, "-10.00", "90.00"), balanceRow(3, 2, "-5.00", "85.00")));
+
+        assertThat(agreeing.check()).isEqualTo(BalanceCheck.PASSED);
+        assertThat(agreeing.opening()).isEqualByComparingTo("100.00");
+        assertThat(agreeing.closing()).isEqualByComparingTo("85.00");
+        assertThat(disagreeing.check()).isEqualTo(BalanceCheck.FAILED);
+        assertThat(disagreeing.warnings()).containsExactly("reconciliation failed: printed openingBalance against the "
+                + "balance column: expected 100.00, actual 101.00, difference 1.00");
+    }
+
+    @Test
     void requestBalancesMustAgreeWithTheBalanceColumn() {
         ParsedStatement statement = statement(null, null, Map.of(), balanceRow(2, 1, "-10.00", "90.00"));
 

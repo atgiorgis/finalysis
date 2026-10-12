@@ -488,7 +488,7 @@ arithmetic. Each check runs when its inputs exist:
 | Check | When | Rule |
 |---|---|---|
 | Request balances | both `openingBalance` and `closingBalance` sent | opening + rows = closing |
-| Balance column | the CSV mapping has a balance column | each row's balance = the previous balance + its amount. Newest-first files (first date after the last) are checked in reverse. Opening = first balance − first amount, closing = last balance; sent balances must agree with them |
+| Balance column | the CSV mapping has a balance column | each row's balance = the previous balance + its amount. Newest-first files (first date after the last) are checked in reverse. Opening = first balance − first amount, closing = last balance; a balance-only opening row and sent balances must agree with them |
 | Continuity | a closing balance without an opening one (OFX `LEDGERBAL`) | the previous statement's closing + rows = closing, when the account's latest earlier statement ends the day before this one starts (or that day). The opening is then the previous closing; it is never derived from `LEDGERBAL` alone |
 | Section totals | the file prints totals per section (PDFs, Phase 3b) | each total = the sum of its section's rows; a total for a section without rows must be 0 |
 | Printed balances | the file prints both balances (PDFs) | opening + rows = closing |
@@ -543,13 +543,16 @@ read, with a suggested mapping unless the saved one already matches:
 
 - `rows` are the first 10 data rows. `mappingStatus` is `NONE` (no mapping), `MATCHES` (the saved
   mapping reads this file) or `MISMATCH`.
-- **Detection** finds the table even below a preamble (summary lines, blank lines): the first of
-  the first 100 lines where at least 5 records in a row (or all remaining ones, if fewer) share
-  one column count of 2 or more, with `,` `;` tab or `|`. Its line becomes `skipRows`. The
-  encoding is UTF-8 when the bytes are valid UTF-8, else windows-1252.
+- **Detection** finds the table even below a preamble (summary lines, a summary block with its
+  own header, blank lines). Among the runs of consecutive records sharing one column count of 2
+  or more (blank lines skipped), starting within the first 100 lines, with `,` `;` tab or `|`,
+  the run with the most records is the table; a tie goes to the later run. Its first line
+  becomes `skipRows`, counting blank lines. A table shorter than a summary block above it is
+  found at the block: check `skipRows` in the preview. The encoding is UTF-8 when the bytes are
+  valid UTF-8, else windows-1252.
 - **Suggestions** are plain Java, no AI. Headers match known names ignoring case, spaces and
   punctuation (`Trans. Date`, `Posting Date`, `Merchant Name`, `Debit`/`Credit`, `Money Out`,
-  `Running Balance`, `Check No`, …). With both a transaction and a post date, the post date is
+  `Running Balance`, `Running Bal.`, `Bal`, `Check No`, …). With both a transaction and a post date, the post date is
   the printed date. The date format is the first of `MM/dd/yyyy`, `M/d/yyyy`, `yyyy-MM-dd`,
   `dd-MMM-yyyy`, `MM/dd/yy`, `dd/MM/yyyy` that reads every date in the file; if another one also
   does but gives different dates (04/05 as April 5 or May 4), the US format is picked with an
@@ -581,7 +584,7 @@ curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping -H 'Content-Type: a
 | `descriptionColumns` | One to ten columns, joined in this order with one space. |
 | `amountMode` | `SINGLE` with `amountColumn`, or `DEBIT_CREDIT` with `debitColumn` and `creditColumn` (and no `amountColumn`). |
 | `sign` | `AS_IS` or `INVERTED` (the file prints money out as positive). Required for credit card accounts, `AS_IS` by default otherwise. |
-| `balanceColumn`, `checkNumberColumn` | Optional. |
+| `balanceColumn`, `checkNumberColumn` | Optional. With a balance column, a row with a valid date and a balance but no amount (blank amount, or blank debit and credit) is a balance-only row, not a transaction: the oldest row (the first, or the last in a newest-first file) is the statement's opening balance; anywhere else it is skipped with a warning naming its line. Judged by the cells alone, never the description. Without a balance column, an empty amount is a `parse-error`. |
 
 A column can serve only one role. Errors are 400s naming the field (`descriptionColumns[1]`), never
 the column names themselves. The response echoes the mapping with `headerSignature`, `usedAt`,
@@ -696,8 +699,9 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
   with a `BANKACCTTO` account number. CSV: quoted cells (commas, line breaks, doubled quotes, BOM,
   non-ASCII), formula-leading descriptions, identical same-day rows, a card refund, a newest-first
   file, windows-1252, a Northfield export for 04-15 to 05-14 overlapping two statements, and the
-  April checking statement below a four-line summary and a blank line (`csv-preamble.csv`). Not in
-  the answer key.
+  April checking statement below a four-line summary and a blank line (`csv-preamble.csv`), and a
+  checking export below a five-record summary block, whose first row is a balance-only opening
+  row (`csv-summary-preamble-balance-row.csv`). Not in the answer key.
 
 **Planted anomalies**
 

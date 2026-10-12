@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -60,9 +61,14 @@ import org.springframework.stereotype.Component;
  *   <li>The section comes from {@link #section}; the table is locked by a test because it feeds the
  *       fingerprint.</li>
  *   <li>The balance column, when mapped, becomes {@link ParsedTxn#runningBalance()} (blank = none).</li>
+ *   <li>A balance-only row (valid date and balance, no amount; see {@link #balanceOnly}) is not a
+ *       transaction. The oldest row (the first, or the last in a newest-first file) gives the
+ *       statement's opening balance, which reconciliation checks against the balance column;
+ *       anywhere else it is skipped with a warning naming its line.</li>
  * </ul>
- * The period is the earliest to the latest printed date; a file without rows takes the request's
- * period ({@link ParseContext}). CSV exports carry no account hints and no statement balances.
+ * The period is the earliest to the latest printed transaction date; a file without transactions
+ * takes the request's period ({@link ParseContext}). CSV exports carry no account hints and no
+ * closing balance; the opening balance comes only from a balance-only row.
  *
  * <p><b>Errors.</b> Any row that can't be read fails the whole file. Messages give the line and the
  * 1-based column position with its role, never cell values or header names (SEC-10). Limits:
@@ -81,8 +87,8 @@ public class CsvStatementParser implements StatementParser {
     static final int MAX_RECORD_CHARS = 64 * 1024;
     /** A table start is searched for in this many lines (mapping skipRows allows up to 100). */
     static final int DETECTION_LINES = 100;
-    /** Consistent records that make a table, or all remaining records when there are fewer. */
-    static final int DETECTION_RUN = 5;
+    /** Records counted per run: enough to tell a table from any preamble. */
+    static final int DETECTION_RUN_CAP = 100;
     /** Detection reads at most this much text. */
     static final int DETECTION_CHARS = 1024 * 1024;
     static final List<Character> DETECTION_DELIMITERS = List.of(',', ';', '\t', '|');
@@ -112,13 +118,22 @@ public class CsvStatementParser implements StatementParser {
      * Finds the table in a delimited-text file, tolerating a preamble (summary lines, blank lines).
      * The text is UTF-8 when valid, else windows-1252; a NUL byte means binary, never a table.
      *
-     * <p>Each non-blank line among the first {@value #DETECTION_LINES} is a candidate start. A start
-     * qualifies when the records from it share one column count of at least two for
-     * {@value #DETECTION_RUN} records, or for all remaining records when fewer are left (at least
-     * two, so a lone last line doesn't count, unless the whole file is that one record). The
-     * earliest qualifying start wins across the delimiters {@code , ; TAB |}, earlier delimiters
-     * first on a tie. Rows after the run are the parser's to check: each must have the header's
-     * column count.
+     * <p>The rule: <b>the longest run wins</b>. A run is a sequence of consecutive records (blank
+     * lines skipped) that share one column count. For each delimiter {@code , ; TAB |}, runs are
+     * read from the non-blank lines among the first {@value #DETECTION_LINES}; each run counts at
+     * most {@value #DETECTION_RUN_CAP} records, which may extend past those lines. A run qualifies
+     * when it has two or more columns and at least two records (one record only when it is the
+     * whole file). The qualifying run with the most records is the table; a tie goes to the later
+     * run (a summary block above a table of the same size is the preamble), and the same run under
+     * two delimiters goes to the earlier delimiter. The table's first line is {@code skipRows}:
+     * physical lines, blank ones included.
+     *
+     * <p>Why not the first run of a fixed length: a summary block (a header and a few total rows)
+     * above the real table is itself a consistent run and was picked. The trade-off: a table
+     * shorter than the block above it, or one split by a row with another column count within the
+     * first lines, is detected at the longer part; the preview shows where, and the user can
+     * change {@code skipRows}. Rows after the run are the parser's to check: each must have the
+     * header's column count.
      */
     public static Optional<CsvTable> detectTable(byte[] bytes) {
         for (byte b : bytes) {
@@ -136,24 +151,44 @@ public class CsvStatementParser implements StatementParser {
             encoding = WINDOWS_1252.name();
         }
         String window = text.length() > DETECTION_CHARS ? text.substring(0, DETECTION_CHARS) : text;
+        LineIndex lines = new LineIndex(window);
         List<Line> candidates = nonBlankLines(window);
-        CsvTable found = null;
+        Run best = null;
+        char bestDelimiter = 0;
         for (char delimiter : DETECTION_DELIMITERS) {
+            int next = 0;
             for (Line line : candidates) {
-                if (found != null && line.number() >= found.skipRows()) {
-                    break;
+                // A start inside a run read already gives a suffix of it, which is shorter.
+                if (line.number() < next) {
+                    continue;
                 }
-                if (startsTable(window, line.start(), delimiter, line == candidates.getFirst())) {
-                    found = new CsvTable(delimiter, encoding, line.number());
-                    break;
+                Run run = run(window, lines, line, delimiter);
+                next = run.next();
+                boolean qualifies = run.columns() >= 2
+                        && (run.records() >= 2 || run.records() == 1 && run.toEnd() && line == candidates.getFirst());
+                if (qualifies && (best == null || run.records() > best.records()
+                        || run.records() == best.records() && run.start() > best.start())) {
+                    best = run;
+                    bestDelimiter = delimiter;
                 }
             }
         }
-        return Optional.ofNullable(found);
+        return best == null ? Optional.empty() : Optional.of(new CsvTable(bestDelimiter, encoding, best.start()));
     }
 
     /** A physical line: its zero-based number and where it starts. */
     private record Line(int number, int start) {
+    }
+
+    /**
+     * Consecutive records sharing one column count.
+     *
+     * @param start   zero-based line of the first record
+     * @param columns the shared column count, or -1 when no record was read
+     * @param toEnd   whether the run reached the end of the text
+     * @param next    the first line a later run may start on
+     */
+    private record Run(int start, int columns, int records, boolean toEnd, int next) {
     }
 
     /** The non-blank lines among the first {@value #DETECTION_LINES} (CRLF, LF and CR each end a line). */
@@ -174,29 +209,33 @@ public class CsvStatementParser implements StatementParser {
     }
 
     /**
-     * Whether the records from {@code start} form a table: {@value #DETECTION_RUN} records, or all
-     * that remain (at least two unless {@code wholeFile}), with one column count of two or more.
+     * The run from {@code line}: up to {@value #DETECTION_RUN_CAP} records, ending before the first
+     * record with another column count, or where the quoting becomes malformed.
      */
-    private static boolean startsTable(String text, int start, char delimiter, boolean wholeFile) {
-        try (CSVParser parser = format(delimiter).parse(readerFrom(text, start))) {
-            int columns = -1;
-            int run = 0;
+    private static Run run(String text, LineIndex lines, Line line, char delimiter) {
+        int columns = -1;
+        int records = 0;
+        int next = line.number() + 1;
+        try (CSVParser parser = format(delimiter).parse(readerFrom(text, line.start()))) {
             for (CSVRecord record : parser) {
                 if (isBlank(record)) {
                     continue;
                 }
+                int recordLine = lines.lineAt(skipLineBreaks(text,
+                        line.start() + Math.toIntExact(record.getCharacterPosition()))) - 1;
                 if (columns == -1) {
                     columns = record.size();
                 } else if (record.size() != columns) {
-                    return false;
+                    return new Run(line.number(), columns, records, false, recordLine);
                 }
-                if (++run == DETECTION_RUN) {
-                    break;
+                next = recordLine + 1;
+                if (++records == DETECTION_RUN_CAP) {
+                    return new Run(line.number(), columns, records, false, next);
                 }
             }
-            return columns >= 2 && (run >= 2 || wholeFile);
+            return new Run(line.number(), columns, records, true, next);
         } catch (IOException | UncheckedIOException | IllegalStateException e) {
-            return false;
+            return new Run(line.number(), columns, records, false, next);
         }
     }
 
@@ -232,21 +271,69 @@ public class CsvStatementParser implements StatementParser {
                 .orElseThrow(() -> new StatementParseException(null, "the CSV mapping's date format is invalid"));
 
         List<RawRecord> rows = records.subList(mapping.headerRow() ? 1 : 0, records.size());
-        if (rows.isEmpty()) {
+        List<ParsedTxn> txns = new ArrayList<>(rows.size());
+        Map<Integer, BigDecimal> balanceOnly = new TreeMap<>();
+        for (int i = 0; i < rows.size(); i++) {
+            RawRecord row = rows.get(i);
+            BigDecimal balance = balanceOnly(row, layout, mapping, dates);
+            if (balance != null) {
+                balanceOnly.put(i, balance);
+            } else {
+                txns.add(txn(row, layout, mapping, dates, context.accountType()));
+            }
+        }
+
+        // The opening row is the oldest: the first, or the last in a newest-first file (as reconciliation orders rows).
+        boolean newestFirst = txns.size() >= 2 && txns.getFirst().printedDate().isAfter(txns.getLast().printedDate());
+        int openingRow = newestFirst ? rows.size() - 1 : 0;
+        BigDecimal opening = null;
+        List<String> warnings = new ArrayList<>();
+        for (Map.Entry<Integer, BigDecimal> entry : balanceOnly.entrySet()) {
+            if (entry.getKey() == openingRow) {
+                opening = entry.getValue();
+            } else {
+                warnings.add("line " + rows.get(entry.getKey()).line()
+                        + ": skipped a row with a balance but no amount (not a transaction)");
+            }
+        }
+
+        if (txns.isEmpty()) {
             if (context.periodStart() == null || context.periodEnd() == null) {
                 throw new StatementParseException(null,
                         "the file has no transactions; send periodStart and periodEnd to import it as an empty statement");
             }
-            return new ParsedStatement(AccountHints.none(), context.periodStart(), context.periodEnd(), null, null,
-                    Map.of(), List.of(), List.of());
-        }
-        List<ParsedTxn> txns = new ArrayList<>(rows.size());
-        for (RawRecord row : rows) {
-            txns.add(txn(row, layout, mapping, dates, context.accountType()));
+            return new ParsedStatement(AccountHints.none(), context.periodStart(), context.periodEnd(), opening, null,
+                    Map.of(), List.of(), warnings);
         }
         LocalDate start = txns.stream().map(ParsedTxn::printedDate).min(Comparator.naturalOrder()).orElseThrow();
         LocalDate end = txns.stream().map(ParsedTxn::printedDate).max(Comparator.naturalOrder()).orElseThrow();
-        return new ParsedStatement(AccountHints.none(), start, end, null, null, Map.of(), txns, List.of());
+        return new ParsedStatement(AccountHints.none(), start, end, opening, null, Map.of(), txns, warnings);
+    }
+
+    /**
+     * The balance of a balance-only row, or null when the row is something else. A balance-only
+     * row has a valid date and a balance but no amount (blank amount, or blank debit and credit);
+     * it needs a mapped balance column, so without one an empty amount stays a parse error. Judged
+     * by the cells' shape alone, never by description text, so it holds for any bank.
+     */
+    private static BigDecimal balanceOnly(RawRecord row, Layout layout, CsvMappingValues mapping,
+                                          DateTimeFormatter dates) {
+        if (layout.balance() == null || row.values().size() != layout.columns()
+                || cell(row, layout.balance()).isBlank()) {
+            return null;
+        }
+        boolean noAmount = mapping.amountMode() == CsvAmountMode.SINGLE
+                ? cell(row, layout.amount()).isBlank()
+                : cell(row, layout.debit()).isBlank() && cell(row, layout.credit()).isBlank();
+        if (!noAmount) {
+            return null;
+        }
+        try {
+            LocalDate.parse(cell(row, layout.date()).strip(), dates);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+        return amount(row, layout.balance(), "balance");
     }
 
     /**
