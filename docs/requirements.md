@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.10 · **Date:** 2026-10-12 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.11 · **Date:** 2026-10-12 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -47,17 +47,17 @@ analytics with Spring AI.
 Ingestion coverage has three layers:
 
 1. **Standard formats:** OFX/QFX through one parser for all institutions, and CSV through a column
-   mapping saved per institution (ING-01).
+   mapping saved per account (ING-01).
 2. **Dedicated PDF parsers:** one `StatementParser` per statement layout (ING-08, ING-12).
 3. **Unknown PDF layouts:** the review queue for now (ING-13); later, local-model extraction
    validated by reconciliation (ING-14).
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| ING-01 | Layer 1, standard formats: import OFX/QFX statements with one parser for all institutions, and CSV statements through a user-defined column mapping that is saved per institution and reused on later imports. | 3 · POC | Planned |
-| ING-02 | Normalize signs, dates, and merchant names across institutions. | 3 · POC | Planned |
-| ING-03 | Deduplicate re-uploaded statements while keeping genuine duplicate charges (fingerprint with occurrence number). | 3 · POC | Planned |
-| ING-04 | Block importing the same file twice (file hash) and the same statement period twice. | 3 · POC | Planned |
+| ING-01 | Layer 1, standard formats: import OFX/QFX statements with one parser for all institutions, and CSV statements through a user-defined column mapping that is saved per account and reused on later imports. | 3 · POC | Planned |
+| ING-02 | Normalize signs and dates across institutions.<br>Merchant-name cleaning moves to Phase 4, with categorization; `txn.merchant` stays null until then. | 3 · POC | Planned |
+| ING-03 | Deduplicate re-uploaded statements while keeping genuine duplicate charges (fingerprint with occurrence number).<br>CSV fingerprints use the sign-normalized amount: a documented exception to "raw printed values", because files with separate debit and credit columns have no single printed signed amount. Protected by the CSV mapping lock: once a mapping has been used, the fields that feed the fingerprint can't change.<br>Limitation: deduplication across formats (CSV and OFX for the same account) is not guaranteed, because descriptions and dates differ between formats. Use one format per account; an import that mixes formats on one account carries a warning. | 3 · POC | Planned |
+| ING-04 | Block importing the same file twice (file hash, 409). Re-importing a period that already has a statement is allowed: existing rows are skipped by fingerprint (ING-03), and the import summary warns that the period overlaps statement {id}. | 3 · POC | Planned |
 | ING-05 | Detect transfers between the user's own accounts and link both sides.<br>Invariant: a transaction belongs to at most one transfer link, enforced in the database. | 3 · POC | Planned |
 | ING-06 | Reconcile each statement: opening balance + transactions = closing balance. | 3 · POC | Planned |
 | ING-07 | Statements that fail reconciliation go to a review queue instead of being silently saved. | 3 · POC | Planned |
@@ -176,6 +176,8 @@ Ingestion coverage has three layers:
 | SEC-01 | Cloud mode sends only cleaned merchant text (location and store numbers removed) and amounts. Never account numbers, names, balances, documents, or SSNs. | 4 · POC | Planned |
 | SEC-08 | Before any cloud call, strip bank identifiers from descriptions: INDN:, ID:, CO ID:, Conf#, account last-fours, and person-to-person counterparty names. Covered by tests. | 4 · POC | Planned |
 | SEC-09 | PDF statement text is never sent to Bedrock; any AI fallback for extraction runs on the local model only. | 3b · POC | Planned |
+| SEC-10 | Statement uploads are hardened: file size and row limits; allowed types checked by content sniffing, never by the client's content type alone; OFX parsed without DTD or external-entity processing (XXE and entity-expansion safe); no file contents or descriptions in logs or error responses (only line numbers, column names, counts, sizes and hash prefixes). Covered by tests. | 3a · POC | Planned |
+| SEC-11 | Text cells beginning with `=`, `+`, `-`, `@`, tab or carriage return are stored unchanged (DAT-04) and escaped on any CSV export, so spreadsheet apps don't run them as formulas. | 3a · POC | Planned |
 | SEC-02 | Transaction text is treated as untrusted data and delimited in prompts, never followed as instructions. | 4, 6 · POC | Planned |
 | SEC-03 | AI tools are read-only. | 6 · POC | Planned |
 | SEC-04 | Encrypt stored statement files and document images (AES-GCM, key derived from a passphrase with Argon2id). | 8 | Planned |
@@ -212,3 +214,4 @@ Ingestion coverage has three layers:
 | 1.8 | 2026-10-09 | Phase 2 verification. ING-10: added the note to validate `statement.section_totals` on write (deferred to Phase 3; the JSONB column itself enforces neither the keys nor NUMERIC(12,2)). `scripts/reset-dev-db.sh` now removes only the `db` container and its own volume instead of `docker compose down --volumes`, so other services' volumes survive a reset. |
 | 1.9 | 2026-10-09 | Ingestion described in three layers: ING-01 now covers OFX/QFX with one parser for all institutions and CSV with a column mapping saved per institution; added ING-12 (one `StatementParser` per PDF layout), ING-13 (unknown PDF layouts go to the review queue) and ING-14 (later: local-model extraction, never Bedrock, validated by reconciliation). QA-02: noted that CI is deferred because GitHub Actions is not yet running; revisit at end of POC. |
 | 1.10 | 2026-10-12 | Phase 3 scope: CLAUDE.md's Phase 3 list now includes the PDF parser requirements ING-08, ING-12 and ING-13. QA-02 set to Planned while GitHub Actions is not running (deferred note kept). ING-14 assigned to Phase 8, with the local vision and extraction work. |
+| 1.11 | 2026-10-12 | Phase 3a plan decisions. ING-01: CSV mappings are saved per account, not per institution. ING-02: merchant-name cleaning moves to Phase 4; `txn.merchant` stays null in Phase 3. ING-03: CSV fingerprints use the sign-normalized amount (documented exception, protected by the mapping lock); cross-format deduplication is not guaranteed, so use one format per account, with a warning on mixed formats. ING-04: an identical file is still blocked (409), but re-importing a period is allowed with an overlap warning; the `uq_statement_account_period` constraint is dropped by a new migration in Phase 3a step 4. Added SEC-10 (upload hardening; Phase 3a steps 2, 4 and 9) and SEC-11 (formula-leading cells stored unchanged and escaped on any CSV export; stored-unchanged test in step 6, escaping applies when the first CSV export is built). ING-10's section-total validation is implemented in step 1. |

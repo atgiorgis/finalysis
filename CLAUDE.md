@@ -73,7 +73,7 @@ a requirement, update the file and bump its version.
 Phase 3: ingestion. 3a: standard formats: OFX/QFX parser and CSV parser with saved
 per-institution column mappings. 3b: digital PDF parsers, one StatementParser per layout, with a
 synthetic PDF generator for test data; unknown layouts go to the review queue (local-model
-extraction comes in a later phase). Requirements: ING-01 to ING-08, ING-10 to ING-13, SEC-08, SEC-09.
+extraction comes in a later phase). Requirements: ING-01 to ING-08, ING-10 to ING-13, SEC-08 to SEC-11.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

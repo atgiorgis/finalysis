@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.hibernate.annotations.Generated;
@@ -57,10 +58,14 @@ public class Statement {
     @Column(nullable = false)
     private String fileHash;
 
-    /** Printed totals keyed by {@link SourceSection} name (DAT-08), used to reconcile each section (ING-10). */
+    /**
+     * Printed totals per section (DAT-08), used to reconcile each section (ING-10). Stored as a JSON
+     * object keyed by {@link SourceSection} name; the column itself enforces neither the keys nor
+     * NUMERIC(12,2), so {@link #setSectionTotals} validates on write.
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false)
-    private Map<String, BigDecimal> sectionTotals = new HashMap<>();
+    private Map<SourceSection, BigDecimal> sectionTotals = new HashMap<>();
 
     @Generated
     private OffsetDateTime importedAt;
@@ -125,12 +130,18 @@ public class Statement {
         return fileHash;
     }
 
-    public Map<String, BigDecimal> getSectionTotals() {
-        return sectionTotals;
+    public Map<SourceSection, BigDecimal> getSectionTotals() {
+        return Collections.unmodifiableMap(sectionTotals);
     }
 
-    public void setSectionTotals(Map<String, BigDecimal> sectionTotals) {
-        this.sectionTotals = new HashMap<>(sectionTotals);
+    /**
+     * Replaces the section totals. Amounts must be scale 2 or less and fit NUMERIC(12,2); they are
+     * stored with scale 2.
+     *
+     * @throws IllegalArgumentException if an amount is invalid
+     */
+    public void setSectionTotals(Map<SourceSection, BigDecimal> sectionTotals) {
+        this.sectionTotals = new HashMap<>(ParsedStatement.validSectionTotals(sectionTotals));
     }
 
     public OffsetDateTime getImportedAt() {
