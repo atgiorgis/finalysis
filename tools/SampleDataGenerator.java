@@ -1,6 +1,8 @@
 // Generates fully synthetic bank and credit card statements for tests and demos.
 //
-// Run from the repo root:  java tools/SampleDataGenerator.java
+// Run from the repo root:  java tools/SampleDataGenerator.java [output-dir]
+// The output directory defaults to sample-data; SampleDataTest writes to a temporary directory
+// and compares the result with the committed files.
 //
 // Output is byte-identical on every run: fixed seed, fixed date range, no timestamps,
 // locale-independent formatting. All institutions, account numbers, and the employer
@@ -9,6 +11,7 @@
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,7 +28,7 @@ public class SampleDataGenerator {
 
     static final LocalDate START = LocalDate.of(2026, 4, 1);
     static final LocalDate END = LocalDate.of(2026, 9, 30);
-    static final Path OUT = Path.of("sample-data");
+    static Path out = Path.of("sample-data");
     static final String[] MONTH_ABBREVIATIONS =
             {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
@@ -63,6 +66,9 @@ public class SampleDataGenerator {
         if (!Files.isRegularFile(Path.of("tools", "SampleDataGenerator.java"))) {
             System.err.println("Run from the repo root: java tools/SampleDataGenerator.java");
             System.exit(1);
+        }
+        if (args.length > 0) {
+            out = Path.of(args[0]);
         }
         new SampleDataGenerator().run();
     }
@@ -106,8 +112,20 @@ public class SampleDataGenerator {
         write("statements-manifest.csv", manifest(Stream.concat(statements.stream(), Stream.of(broken)).toList()));
         write("answer-key.csv", answerKey(statements));
 
-        System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d transactions to %s/%n",
-                statements.size(), txns.size(), OUT);
+        // OFX versions of the same statements: Northfield checking as OFX 1.x SGML, Apex as QFX (OFX 2.x XML).
+        int ofxFiles = 0;
+        for (Statement s : checking) {
+            write(ofxFile(s, ".ofx"), northfieldOfx(s.period(), s.closing(), ofxRows(s)), WINDOWS_1252);
+            ofxFiles++;
+        }
+        for (Statement s : apex) {
+            write(ofxFile(s, ".qfx"), apexQfx(s.period(), s.closing(), ofxRows(s)), StandardCharsets.UTF_8);
+            ofxFiles++;
+        }
+        writeOfxEdgeCases(checking);
+
+        System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
+                + "%d transactions to %s/%n", statements.size(), ofxFiles, OFX_EDGE_CASES, txns.size(), out);
     }
 
     // ---------------------------------------------------------------- transactions
@@ -380,14 +398,178 @@ public class SampleDataGenerator {
         return amount.setScale(2, RoundingMode.UNNECESSARY).toPlainString();
     }
 
+    // ---------------------------------------------------------------- OFX formats
+
+    static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
+    static final int OFX_EDGE_CASES = 4;
+    /** Fictional account numbers; only their last four digits match the accounts' last_four. */
+    static final String NORTHFIELD_ROUTING = "999000111";
+    static final String NORTHFIELD_CHECKING_ID = "0047391001";
+    static final String NORTHFIELD_SAVINGS_ID = "0047391002";
+    static final String APEX_CARD_ID = "4999000011112001";
+    /** OFX 1.x limits NAME to 32 characters; longer descriptions continue in MEMO. */
+    static final int OFX_NAME_MAX = 32;
+
+    /** One STMTTRN. {@code memo} is "" when empty; {@code transferTo} is a BANKACCTTO account id or null. */
+    record OfxRow(String type, LocalDate posted, LocalDate user, BigDecimal amount, String fitId, String name,
+                  String memo, String transferTo) {}
+
+    static String ofxFile(Statement s, String extension) {
+        return "ofx/" + s.account().slug + "_" + s.period().label() + extension;
+    }
+
+    static List<OfxRow> ofxRows(Statement s) {
+        boolean card = s.account() == Account.APEX;
+        List<OfxRow> rows = new ArrayList<>();
+        for (Txn t : s.rows()) {
+            String type;
+            if (card) {
+                type = t.amount().signum() < 0 ? "DEBIT" : "PAYMENT";
+            } else if (t.transfer()) {
+                type = "XFER";
+            } else if (t.amount().signum() > 0) {
+                type = t.description().contains("PAYROLL") ? "DIRECTDEP" : "CREDIT";
+            } else {
+                type = "DEBIT";
+            }
+            String[] nameAndMemo = nameAndMemo(t.description());
+            String fitId = (card ? "AX" : "NF") + t.postDate().toString().replace("-", "") + String.format(Locale.ROOT, "%05d", t.seq());
+            rows.add(new OfxRow(type, t.postDate(), card ? t.date() : null, t.amount(), fitId, nameAndMemo[0],
+                    nameAndMemo[1], null));
+        }
+        return rows;
+    }
+
+    /** Splits at the last space within NAME's limit, so NAME + " " + MEMO is the description again. */
+    static String[] nameAndMemo(String description) {
+        if (description.length() <= OFX_NAME_MAX) {
+            return new String[] {description, ""};
+        }
+        int split = description.lastIndexOf(' ', OFX_NAME_MAX);
+        require(split > 0, "description cannot be split into NAME and MEMO: " + description);
+        return new String[] {description.substring(0, split), description.substring(split + 1)};
+    }
+
+    /** OFX 1.x SGML with CRLF line endings, unclosed leaf tags and an empty MEMO for short descriptions. */
+    static String northfieldOfx(Period period, BigDecimal closing, List<OfxRow> rows) {
+        List<String> lines = new ArrayList<>(List.of(
+                "OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "SECURITY:NONE", "ENCODING:USASCII", "CHARSET:1252",
+                "COMPRESSION:NONE", "OLDFILEUID:NONE", "NEWFILEUID:NONE", "",
+                "<OFX>", "<SIGNONMSGSRSV1>", "<SONRS>", "<STATUS>", "<CODE>0", "<SEVERITY>INFO", "</STATUS>",
+                "<DTSERVER>" + ofxDate(period.end().plusDays(1)) + "080000", "<LANGUAGE>ENG",
+                "<FI>", "<ORG>NORTHFIELD", "<FID>9901", "</FI>", "</SONRS>", "</SIGNONMSGSRSV1>",
+                "<BANKMSGSRSV1>", "<STMTTRNRS>", "<TRNUID>1", "<STATUS>", "<CODE>0", "<SEVERITY>INFO", "</STATUS>",
+                "<STMTRS>", "<CURDEF>USD",
+                "<BANKACCTFROM>", "<BANKID>" + NORTHFIELD_ROUTING, "<ACCTID>" + NORTHFIELD_CHECKING_ID,
+                "<ACCTTYPE>CHECKING", "</BANKACCTFROM>",
+                "<BANKTRANLIST>", "<DTSTART>" + ofxDate(period.start()), "<DTEND>" + ofxDate(period.end())));
+        for (OfxRow row : rows) {
+            lines.add("<STMTTRN>");
+            lines.add("<TRNTYPE>" + row.type());
+            lines.add("<DTPOSTED>" + ofxDate(row.posted()) + "120000[-5:EST]");
+            lines.add("<TRNAMT>" + format(row.amount()));
+            lines.add("<FITID>" + row.fitId());
+            lines.add("<NAME>" + sgmlText(row.name()));
+            lines.add("<MEMO>" + sgmlText(row.memo()));
+            if (row.transferTo() != null) {
+                lines.addAll(List.of("<BANKACCTTO>", "<BANKID>" + NORTHFIELD_ROUTING, "<ACCTID>" + row.transferTo(),
+                        "<ACCTTYPE>SAVINGS", "</BANKACCTTO>"));
+            }
+            lines.add("</STMTTRN>");
+        }
+        lines.addAll(List.of("</BANKTRANLIST>", "<LEDGERBAL>", "<BALAMT>" + format(closing),
+                "<DTASOF>" + ofxDate(period.end()), "</LEDGERBAL>", "</STMTRS>", "</STMTTRNRS>", "</BANKMSGSRSV1>",
+                "</OFX>"));
+        return String.join("\r\n", lines) + "\r\n";
+    }
+
+    /** QFX: OFX 2.x XML with closed tags and an Intuit INTU.BID; MEMO is omitted when empty. */
+    static String apexQfx(Period period, BigDecimal closing, List<OfxRow> rows) {
+        StringBuilder xml = new StringBuilder();
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n")
+                .append("<?OFX OFXHEADER=\"200\" VERSION=\"220\" SECURITY=\"NONE\" OLDFILEUID=\"NONE\" NEWFILEUID=\"NONE\"?>\n")
+                .append("<OFX>\n")
+                .append("  <SIGNONMSGSRSV1>\n    <SONRS>\n")
+                .append("      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n")
+                .append("      <DTSERVER>").append(ofxDate(period.end().plusDays(1))).append("080000.000</DTSERVER>\n")
+                .append("      <LANGUAGE>ENG</LANGUAGE>\n")
+                .append("      <FI><ORG>APEX</ORG><FID>7702</FID></FI>\n")
+                .append("      <INTU.BID>7702</INTU.BID>\n")
+                .append("    </SONRS>\n  </SIGNONMSGSRSV1>\n")
+                .append("  <CREDITCARDMSGSRSV1>\n    <CCSTMTTRNRS>\n      <TRNUID>1</TRNUID>\n")
+                .append("      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>\n")
+                .append("      <CCSTMTRS>\n        <CURDEF>USD</CURDEF>\n")
+                .append("        <CCACCTFROM><ACCTID>").append(APEX_CARD_ID).append("</ACCTID></CCACCTFROM>\n")
+                .append("        <BANKTRANLIST>\n")
+                .append("          <DTSTART>").append(ofxDate(period.start())).append("</DTSTART>\n")
+                .append("          <DTEND>").append(ofxDate(period.end())).append("</DTEND>\n");
+        for (OfxRow row : rows) {
+            xml.append("          <STMTTRN>\n")
+                    .append("            <TRNTYPE>").append(row.type()).append("</TRNTYPE>\n")
+                    .append("            <DTPOSTED>").append(ofxDate(row.posted())).append("000000.000</DTPOSTED>\n")
+                    .append("            <DTUSER>").append(ofxDate(row.user())).append("000000.000</DTUSER>\n")
+                    .append("            <TRNAMT>").append(format(row.amount())).append("</TRNAMT>\n")
+                    .append("            <FITID>").append(row.fitId()).append("</FITID>\n")
+                    .append("            <NAME>").append(sgmlText(row.name())).append("</NAME>\n");
+            if (!row.memo().isEmpty()) {
+                xml.append("            <MEMO>").append(sgmlText(row.memo())).append("</MEMO>\n");
+            }
+            xml.append("          </STMTTRN>\n");
+        }
+        xml.append("        </BANKTRANLIST>\n")
+                .append("        <LEDGERBAL><BALAMT>").append(format(closing)).append("</BALAMT>")
+                .append("<DTASOF>").append(ofxDate(period.end())).append("</DTASOF></LEDGERBAL>\n")
+                .append("      </CCSTMTRS>\n    </CCSTMTTRNRS>\n  </CREDITCARDMSGSRSV1>\n</OFX>\n");
+        return xml.toString();
+    }
+
+    /** Hand-built OFX files for parser and import edge cases; not part of the answer key. */
+    void writeOfxEdgeCases(List<Statement> checking) throws IOException {
+        Period april = new Period(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30), "2026-04");
+        LocalDate day = LocalDate.of(2026, 4, 10);
+
+        // TRNTYPE contradicts the sign: a DEBIT that adds money and a CREDIT that removes it.
+        write("edge-cases/ofx-trntype-contradicts-sign.ofx", northfieldOfx(april, money("1015.00"), List.of(
+                new OfxRow("DEBIT", day, null, money("25.00"), "EDGE0001", "MERCHANT ADJUSTMENT", "", null),
+                new OfxRow("CREDIT", day, null, money("-10.00"), "EDGE0002", "MONTHLY SERVICE FEE", "", null),
+                new OfxRow("DEBIT", day, null, money("-0.00"), "EDGE0003", "FEE WAIVER", "ZERO AMOUNT", null))),
+                WINDOWS_1252);
+
+        // LEDGERBAL disagrees with the May checking statement's rows by 10.00.
+        Statement may = checking.stream().filter(s -> s.period().label().equals("2026-05")).findFirst().orElseThrow();
+        write("edge-cases/ofx-ledgerbal-mismatch.ofx",
+                northfieldOfx(may.period(), may.closing().add(money("10.00")), ofxRows(may)), WINDOWS_1252);
+
+        // A transfer to the user's own savings account, with the full target account number in BANKACCTTO.
+        write("edge-cases/ofx-bankacctto-transfer.ofx", northfieldOfx(april, money("2500.00"), List.of(
+                new OfxRow("XFER", LocalDate.of(2026, 4, 2), null, money("-500.00"), "EDGE0101",
+                        "ONLINE TRANSFER TO SAVINGS", "XXXXXX1002", NORTHFIELD_SAVINGS_ID))),
+                WINDOWS_1252);
+
+        // XXE: a DOCTYPE with an external entity. The reader must reject it before any entity is resolved.
+        String qfx = apexQfx(april, money("-15.49"), List.of(
+                new OfxRow("DEBIT", day, day, money("-15.49"), "EDGE0201", "NETFLIX.COM", "", null)));
+        String xxe = qfx.replace("<?OFX", "<!DOCTYPE OFX [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<?OFX")
+                .replace("<NAME>NETFLIX.COM</NAME>", "<NAME>&xxe;</NAME>");
+        write("edge-cases/ofx-xxe.ofx", xxe, StandardCharsets.UTF_8);
+    }
+
+    static String ofxDate(LocalDate d) {
+        return d.toString().replace("-", "");
+    }
+
+    static String sgmlText(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
     // ---------------------------------------------------------------- output
 
     static void clearOutput() throws IOException {
-        for (String dir : List.of("statements", "broken")) {
-            Path path = OUT.resolve(dir);
+        for (String dir : List.of("statements", "broken", "ofx", "edge-cases")) {
+            Path path = out.resolve(dir);
             if (Files.isDirectory(path)) {
                 try (Stream<Path> files = Files.list(path)) {
-                    for (Path file : files.filter(f -> f.toString().endsWith(".csv")).toList()) {
+                    for (Path file : files.filter(SampleDataGenerator::isGenerated).toList()) {
                         Files.delete(file);
                     }
                 }
@@ -395,10 +577,19 @@ public class SampleDataGenerator {
         }
     }
 
+    static boolean isGenerated(Path file) {
+        String name = file.getFileName().toString();
+        return name.endsWith(".csv") || name.endsWith(".ofx") || name.endsWith(".qfx");
+    }
+
     static void write(String relativePath, String content) throws IOException {
-        Path path = OUT.resolve(relativePath);
+        write(relativePath, content, StandardCharsets.UTF_8);
+    }
+
+    static void write(String relativePath, String content, Charset charset) throws IOException {
+        Path path = out.resolve(relativePath);
         Files.createDirectories(path.getParent());
-        Files.writeString(path, content, StandardCharsets.UTF_8);
+        Files.writeString(path, content, charset);
     }
 
     // ---------------------------------------------------------------- helpers

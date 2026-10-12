@@ -40,6 +40,13 @@ public record ParsedStatement(AccountHints hints, LocalDate periodStart, LocalDa
         warnings = List.copyOf(warnings);
     }
 
+    /** Period and counts only: balances, rows and warnings come from the file (SEC-10). */
+    @Override
+    public String toString() {
+        return "ParsedStatement[" + periodStart + " to " + periodEnd + ", " + txns.size() + " txns, "
+                + warnings.size() + " warnings]";
+    }
+
     /**
      * Keys are {@link SourceSection} values by type; amounts must be non-null, scale 2 and within
      * NUMERIC(12,2) (ING-10). Returns an unmodifiable copy with scale-2 amounts.

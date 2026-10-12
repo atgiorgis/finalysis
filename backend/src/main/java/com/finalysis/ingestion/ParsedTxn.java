@@ -45,6 +45,12 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
         }
     }
 
+    /** Line and section only: descriptions, amounts and line text are file contents (SEC-10). */
+    @Override
+    public String toString() {
+        return "ParsedTxn[line " + sourceLineNumber + ", " + section + "]";
+    }
+
     /** The raw values that identify this row (ING-03); derived values are deliberately left out. */
     public TransactionFingerprint.Input fingerprintInput(long accountId) {
         return new TransactionFingerprint.Input(accountId, printedDate, amount, rawDescription, section);

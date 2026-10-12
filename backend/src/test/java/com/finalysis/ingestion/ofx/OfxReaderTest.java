@@ -257,7 +257,7 @@ class OfxReaderTest {
 
         @Test
         void missingOrWrongHeadersAreRejected() {
-            assertParseError("<OFX></OFX>", "not an OFX file");
+            assertParseError("<OFX></OFX>", "OFX file has no OFX header");
             assertParseError("Date,Description,Amount\n04/01/2026,CAFE,-4.50\n", "not an OFX file");
             assertParseError(SGML_HEADER_1252.replace("OFXHEADER:100", "OFXHEADER:200") + "<OFX></OFX>", "OFXHEADER must be 100");
             assertParseError(SGML_HEADER_1252.replace("DATA:OFXSGML", "DATA:OFXXML") + "<OFX></OFX>", "DATA must be OFXSGML");
@@ -266,7 +266,8 @@ class OfxReaderTest {
             assertParseError(SGML_HEADER_1252.replace("SECURITY:NONE", "SECURITY NONE") + "<OFX></OFX>", "invalid OFX header line");
             assertParseError(SGML_HEADER_1252.replace("\n\n", "\n"), "not followed by a body");
             assertParseError(XML_HEADER.replace("OFXHEADER=\"200\"", "OFXHEADER=\"100\"") + "<OFX></OFX>", "OFXHEADER must be 200");
-            assertParseError(XML_HEADER.replace("<?OFX", "<?BANK") + "<OFX></OFX>", "missing <?OFX?> declaration");
+            assertParseError(XML_HEADER.replace("<?OFX", "<?BANK") + "<OFX></OFX>", "not an OFX file");
+            assertParseError(XML_HEADER.replace("?>\n<?OFX", "?>\n<?BANK?>\n<?OFX") + "<OFX></OFX>", "missing <?OFX?> declaration");
         }
 
         @Test

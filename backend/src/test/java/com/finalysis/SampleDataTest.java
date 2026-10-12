@@ -15,8 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Checks the committed synthetic data in {@code sample-data/} (produced by
@@ -124,6 +127,34 @@ class SampleDataTest {
                     .map(r -> new Row(r.date(), r.description(), r.amount(), null)).toList();
             assertThat(answerKey.get(entry.file())).as(entry.file()).containsExactlyElementsOf(fromStatement);
         }
+    }
+
+    /** Runs the generator into a temporary directory; its output must equal the committed files byte for byte. */
+    @Test
+    void generatorOutputMatchesCommittedFiles(@TempDir Path output) throws Exception {
+        String java = ProcessHandle.current().info().command().orElse("java");
+        Process process = new ProcessBuilder(java, "tools/SampleDataGenerator.java", output.toAbsolutePath().toString())
+                .directory(SAMPLE_DATA.getParent().toFile())
+                .redirectErrorStream(true)
+                .start();
+        String log = new String(process.getInputStream().readAllBytes());
+        assertThat(process.waitFor(2, TimeUnit.MINUTES)).isTrue();
+        assertThat(process.exitValue()).as(log).isZero();
+
+        Map<Path, byte[]> generated = filesUnder(output);
+        Map<Path, byte[]> committed = filesUnder(SAMPLE_DATA);
+        assertThat(generated.keySet()).containsExactlyInAnyOrderElementsOf(committed.keySet());
+        generated.forEach((file, bytes) -> assertThat(bytes).as(file.toString()).isEqualTo(committed.get(file)));
+    }
+
+    private static Map<Path, byte[]> filesUnder(Path root) throws IOException {
+        Map<Path, byte[]> files = new LinkedHashMap<>();
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path file : walk.filter(Files::isRegularFile).sorted().toList()) {
+                files.put(root.relativize(file), Files.readAllBytes(file));
+            }
+        }
+        return files;
     }
 
     private static boolean reconciles(ManifestEntry entry) {

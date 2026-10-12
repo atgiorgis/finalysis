@@ -110,15 +110,46 @@ public final class OfxReader {
     private record Header(OfxDocument.Syntax syntax, Charset charset, int bodyOffset) {
     }
 
+    /** How a file announces itself as OFX, judged from its first bytes. */
+    private enum Signature { SGML_HEADER, XML_HEADER, BARE_OFX, NONE }
+
+    /** The 2.x {@code <?OFX?>} declaration must appear within this many bytes after an {@code <?xml?>}. */
+    private static final int SIGNATURE_WINDOW = 1024;
+
+    /**
+     * True if the file starts, after an optional UTF-8 BOM and whitespace, with an OFX 1.x
+     * {@code OFXHEADER:} block, an {@code <?xml?>} declaration followed by {@code <?OFX} within the
+     * first 1 KB, an {@code <?OFX} declaration, or a bare {@code <OFX>}. Cheap: reads at most 1 KB.
+     * A bare {@code <OFX>} counts as OFX here but {@link #read} rejects it for lack of a header.
+     */
+    public static boolean hasOfxSignature(byte[] bytes) {
+        int start = hasUtf8Bom(bytes) ? 3 : 0;
+        String head = new String(bytes, start, Math.min(bytes.length - start, SIGNATURE_WINDOW), StandardCharsets.ISO_8859_1);
+        return signature(head, skipWhitespace(head, 0)) != Signature.NONE;
+    }
+
+    private static Signature signature(String head, int pos) {
+        if (head.startsWith("OFXHEADER:", pos)) {
+            return Signature.SGML_HEADER;
+        }
+        if (head.startsWith("<?OFX", pos)) {
+            return Signature.XML_HEADER;
+        }
+        if (head.startsWith("<?xml", pos)) {
+            int ofx = head.indexOf("<?OFX", pos);
+            return ofx >= 0 && ofx < SIGNATURE_WINDOW ? Signature.XML_HEADER : Signature.NONE;
+        }
+        return head.startsWith("<OFX>", pos) ? Signature.BARE_OFX : Signature.NONE;
+    }
+
     private static Header readHeader(String raw) {
         int pos = skipWhitespace(raw, 0);
-        if (raw.startsWith("<?xml", pos) || raw.startsWith("<?OFX", pos)) {
-            return readXmlHeader(raw, pos);
-        }
-        if (raw.startsWith("OFXHEADER", pos)) {
-            return readSgmlHeader(raw, pos);
-        }
-        throw new StatementParseException(null, "not an OFX file: no OFX header");
+        return switch (signature(raw, pos)) {
+            case SGML_HEADER -> readSgmlHeader(raw, pos);
+            case XML_HEADER -> readXmlHeader(raw, pos);
+            case BARE_OFX -> throw new StatementParseException(null, "OFX file has no OFX header");
+            case NONE -> throw new StatementParseException(null, "not an OFX file: no OFX header");
+        };
     }
 
     private static Header readSgmlHeader(String raw, int pos) {
