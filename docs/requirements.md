@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.9 · **Date:** 2026-10-09 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.10 · **Date:** 2026-10-12 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -67,7 +67,7 @@ Ingestion coverage has three layers:
 | ING-09 | Import scanned or photographed statements via OCR, with a vision-model fallback for low-confidence pages. | 8 | Planned |
 | ING-12 | Layer 2, dedicated PDF parsers: each supported statement layout gets its own `StatementParser` class. A new layout is added as a new class, without modifying existing parsers. | 3b · POC | Planned |
 | ING-13 | Layer 3, unknown PDF layouts: a PDF that no parser recognizes goes to the review queue instead of being imported. | 3b · POC | Planned |
-| ING-14 | Layer 3, later: extract unknown PDF layouts with a local model (never Bedrock), validated by reconciliation against the statement's printed totals; mismatches are held for review. | TBD | Planned |
+| ING-14 | Layer 3, later: extract unknown PDF layouts with a local model (never Bedrock), validated by reconciliation against the statement's printed totals; mismatches are held for review. | 8 | Planned |
 
 ## 3. Categorization
 
@@ -188,7 +188,7 @@ Ingestion coverage has three layers:
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
 | QA-01 | Synthetic sample data for four fictional accounts, with an answer key and statement manifest. | 1 | Done |
-| QA-02 | CI runs backend and frontend tests on every push.<br>Deferred: GitHub Actions not yet running; revisit at end of POC. | 1 | Done |
+| QA-02 | CI runs backend and frontend tests on every push.<br>Deferred: GitHub Actions not yet running; revisit at end of POC. | 1 | Planned |
 | QA-03 | Eval suites in CI for categorization, extraction, retrieval, and chat answers. | 9 | Planned |
 | QA-04 | Benchmarks: 14B vs. 30B vs. Bedrock vs. a US-origin model, on the same question set. | 9, 10 | Planned |
 | QA-05 | README: hardware tiers, data boundary, eval results, demo GIF, architecture diagram. | 11 | Planned |
@@ -211,3 +211,4 @@ Ingestion coverage has three layers:
 | 1.7 | 2026-10-09 | DAT-01 to DAT-08 marked Done (Phase 2 complete). README documents the data model (ER diagram, design decisions, migrations), the API and its error format, and local development (tests, Postman, database client). Added `scripts/reset-dev-db.sh`, which recreates the dev database only after typed confirmation and refuses any non-local target. |
 | 1.8 | 2026-10-09 | Phase 2 verification. ING-10: added the note to validate `statement.section_totals` on write (deferred to Phase 3; the JSONB column itself enforces neither the keys nor NUMERIC(12,2)). `scripts/reset-dev-db.sh` now removes only the `db` container and its own volume instead of `docker compose down --volumes`, so other services' volumes survive a reset. |
 | 1.9 | 2026-10-09 | Ingestion described in three layers: ING-01 now covers OFX/QFX with one parser for all institutions and CSV with a column mapping saved per institution; added ING-12 (one `StatementParser` per PDF layout), ING-13 (unknown PDF layouts go to the review queue) and ING-14 (later: local-model extraction, never Bedrock, validated by reconciliation). QA-02: noted that CI is deferred because GitHub Actions is not yet running; revisit at end of POC. |
+| 1.10 | 2026-10-12 | Phase 3 scope: CLAUDE.md's Phase 3 list now includes the PDF parser requirements ING-08, ING-12 and ING-13. QA-02 set to Planned while GitHub Actions is not running (deferred note kept). ING-14 assigned to Phase 8, with the local vision and extraction work. |
