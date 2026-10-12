@@ -51,7 +51,9 @@ database. `DevDatabaseGuard` fails any test context whose datasource points at t
 2. Select the **Finalysis Local** environment (`baseUrl` = `http://localhost:8080`).
 3. Run the **Accounts → Setup: create sample accounts** folder once. It creates the four
    sample-data accounts and stores their ids for the other requests.
-4. Run the rest of the collection.
+4. Run the rest of the collection. **Statements → Import checking April (OFX)** uploads
+   `sample-data/ofx/northfield-checking_2026-04.ofx`: set Postman's working directory
+   (Settings → General) to the repo root, or reselect the file in the request's Body tab.
 
 Setup creates duplicate accounts if you run it twice, because accounts have no uniqueness rule.
 To start clean, reset the dev database (below).
@@ -112,6 +114,7 @@ erDiagram
         numeric opening_balance
         numeric closing_balance
         text status "IMPORTED, NEEDS_REVIEW, RECONCILED"
+        text parser "ofx, csv, ..."
         text file_hash UK
         jsonb section_totals
     }
@@ -133,6 +136,8 @@ erDiagram
         text source_section
         varchar check_number
         text counterparty "local only"
+        text external_id "OFX FITID"
+        text printed_amount"
         bigint category_id FK
         text category_source "RULE, AI, USER"
         boolean is_transfer
@@ -166,7 +171,7 @@ erDiagram
 | Table | Purpose |
 |---|---|
 | `account` | A checking, savings, or credit card account. Only the last four digits of the account number are stored. |
-| `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, and reconciliation status. A file hash and a unique (account, period) block double imports. |
+| `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, and reconciliation status. A file hash blocks importing the same file twice; a re-imported period is deduplicated row by row. `parser` records which parser read the file. |
 | `category` | Seeded spending and income categories, each with a kind. `TRANSFER` covers all movement between the user's own accounts. |
 | `txn` | One statement row: dates, raw description, cleaned merchant, signed amount, category and who set it, and where it came from in the source file. |
 | `categorization_rule` | Merchant pattern → category rules. Rules run before any AI, and user corrections become new rules. |
@@ -214,6 +219,7 @@ erDiagram
 | V2 `seed_categories` | Seeds the categories: the sample-data answer key's categories plus general-purpose ones. |
 | V3 `transfer_link_txn_once` | Trigger ensuring a txn belongs to at most one transfer link, on either side. |
 | V4 `account_name_lengths` | CHECK constraints limiting account name and institution to 1–100 characters. |
+| V5 `statement_import` | `txn.external_id` and `printed_amount`, `statement.parser`; drops the unique (account, period) constraint so periods can be re-imported. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -227,6 +233,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/accounts/{id}` | Get one account | 200 |
 | `PATCH` | `/api/accounts/{id}` | Rename an account | 200 |
 | `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 |
+| `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
+| `GET` | `/api/statements/{id}` | Get one imported statement | 200 |
 
 - **Strict bodies.** Request bodies reject unknown fields. `PATCH /api/accounts/{id}` accepts only
   `name`, so trying to change the type or last four digits returns a 400 that names the field.
@@ -253,10 +261,68 @@ Applied migrations are never edited. Every schema change is a new migration.
 | 400 | Malformed JSON | `detail` only |
 | 404 | Unknown id, e.g. `Account 42 not found` | `detail` |
 | 409 | A database constraint was violated | generic `detail` |
+| 413, 415, 409, 422 | A statement import was refused | typed `type`, see [Importing statements](#importing-statements) |
 | 500 | Unexpected error | generic `detail` |
 
 Constraint names, SQL, and stack traces are logged on the server and never returned. Spring's own
 errors (405, 415, a non-numeric id) use the same format.
+
+## Importing statements
+
+```sh
+curl -F file=@sample-data/ofx/northfield-checking_2026-04.ofx http://localhost:8080/api/accounts/1/imports
+```
+
+Upload one statement file per request to the account it belongs to. Optional form fields:
+`periodStart` and `periodEnd` (ISO dates) replace the file's period; `openingBalance` and
+`closingBalance` fill in balances the file doesn't print (if the file does print one and the
+request disagrees, the file's value is kept with a warning). Supported today: OFX 1.x/2.x and QFX.
+CSV follows in the next steps; PDF in Phase 3b.
+
+1. **Checks.** At most 10 MB; the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the
+   bytes must be UTF-8 or windows-1252 text (PDFs, ZIP/XLSX and binary data are refused). The
+   client's content type is ignored. Uploads are held in memory and discarded after parsing; only
+   a SHA-256 hash and the file name are kept.
+2. **Same file again** (same hash): `409 already-imported` with the existing `statementId`.
+3. **Detect and parse** by content, outside any database transaction. Any unreadable row fails
+   the whole file (`422 parse-error`, with the line number); nothing is written.
+4. **Account check.** The file's last four digits, account type and currency must match the
+   account when the file carries them.
+5. **Save** in one transaction, with the account row locked so imports to one account run one
+   at a time. Each row is fingerprinted from its raw values; rows already imported for this
+   account are skipped as duplicates, so re-importing a period or an overlapping export adds only
+   rows that are new.
+
+The response is an import summary:
+
+```json
+{
+  "statementId": 12, "parser": "ofx", "periodStart": "2026-04-01", "periodEnd": "2026-04-30",
+  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "IMPORTED",
+  "warnings": ["period overlaps statement 7"]
+}
+```
+
+`status` is `NEEDS_REVIEW` when the parser warned (for example an OFX `TRNTYPE` that contradicts
+the amount's sign) or when a new row reuses an OFX transaction id (FITID) that this account
+already has under different details. That row is inserted anyway, since dropping it could lose a
+real transaction, and flagged as a possible duplicate. Balance reconciliation comes later.
+Warnings and errors contain line numbers, counts and ids, never descriptions or account numbers.
+
+**One format per account.** Duplicates are recognized only within one format: the same
+transaction exported as CSV and as OFX has different descriptions and dates, so it would be
+imported twice. Pick one format per account. An import that mixes formats on an account gets the
+warning `account mixes import formats (...)`.
+
+| Problem `type` (`urn:finalysis:problem:…`) | Status | When |
+|---|---|---|
+| `payload-too-large` | 413 | File over 10 MB |
+| `unsupported-format` | 415 | Disallowed extension, empty, PDF, ZIP/XLSX, binary, or no parser recognizes it |
+| `already-imported` | 409 | Identical file imported before; `statementId` names it |
+| `parse-error` | 422 | A row or the file structure can't be read; `line` when known |
+| `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
+| `unsupported-currency` | 422 | Not USD |
+| `ambiguous-format` | 422 | More than one parser claims the file (a bug; reported, not guessed) |
 
 ## Sample data
 
@@ -281,6 +347,12 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
   sign convention (card balances owed are negative), so `opening + sum(amounts) = closing`.
 - `broken/summit-card_2026-06.csv` — the June Summit statement with one transaction missing.
   Its manifest balances are correct, so it does not reconcile; use it to test the review queue.
+- `ofx/` — the same Northfield checking statements as OFX 1.x SGML (`CHARSET:1252`, CRLF, empty
+  `MEMO`s) and the same Apex statements as QFX (OFX 2.x XML). Descriptions longer than 32
+  characters are split at a space into `NAME` and `MEMO`, so `NAME MEMO` equals the CSV description.
+- `edge-cases/` — hand-built files for parser and import tests: a `TRNTYPE` that contradicts the
+  sign, a `LEDGERBAL` that doesn't match the rows, an XXE payload, and a transfer with a
+  `BANKACCTTO` account number. Not in the answer key.
 
 **Planted anomalies**
 
@@ -298,8 +370,8 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
 java tools/SampleDataGenerator.java
 ```
 
-CI regenerates the data and fails if it differs from what is committed. `SampleDataTest` checks
-that every statement reconciles with the manifest, the broken one does not, every card payment
+`SampleDataTest` runs the generator into a temporary directory and fails if any file differs from
+what is committed (CI does the same once it is active). It also checks that every statement reconciles with the manifest, the broken one does not, every card payment
 has a matching checking transfer, and the answer key matches the statements.
 
 ## License

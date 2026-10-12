@@ -366,10 +366,11 @@ class OfxStatementParserTest {
         }
 
         @Test
-        void onlyUsdIsSupported() {
-            assertThatThrownBy(() -> parseText(bank("").replace("<CURDEF>USD", "<CURDEF>EUR")))
-                    .isInstanceOf(StatementParseException.class)
-                    .hasMessageContaining("only USD statements are supported, not EUR");
+        void currencyBecomesAHintAndMustBeACode() {
+            // The import, not the parser, rejects anything but USD (unsupported-currency).
+            assertThat(parseText(bank("").replace("<CURDEF>USD", "<CURDEF>EUR")).hints().currency()).isEqualTo("EUR");
+            assertThatThrownBy(() -> parseText(bank("").replace("<CURDEF>USD", "<CURDEF>usd")))
+                    .hasMessage("line 27: invalid currency code in <CURDEF>");
             assertThatThrownBy(() -> parseText(bank("").replace("<CURDEF>USD\n", "")))
                     .hasMessageContaining("<STMTRS> has no <CURDEF>");
         }

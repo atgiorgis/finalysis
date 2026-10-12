@@ -16,6 +16,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.ServletWebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -61,5 +66,18 @@ class ApiExceptionHandlerTest {
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(body).doesNotContain("secret").doesNotContain("IllegalStateException").doesNotContain("at com.");
+    }
+
+    /** The servlet's multipart limit fails before any controller runs, so the handler is called directly. */
+    @Test
+    void uploadOverTheMultipartLimitReturns413Problem() throws Exception {
+        ResponseEntity<Object> response = new ApiExceptionHandler().handleException(
+                new MaxUploadSizeExceededException(10L * 1024 * 1024), new ServletWebRequest(new MockHttpServletRequest()));
+
+        assertThat(response).isNotNull();
+        assertThat(response.getStatusCode().value()).isEqualTo(413);
+        ProblemDetail problem = (ProblemDetail) response.getBody();
+        assertThat(problem.getType()).hasToString("urn:finalysis:problem:payload-too-large");
+        assertThat(problem.getDetail()).isEqualTo("Statement files are limited to 10 MB");
     }
 }

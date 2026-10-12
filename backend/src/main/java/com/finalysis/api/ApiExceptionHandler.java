@@ -1,5 +1,7 @@
 package com.finalysis.api;
 
+import com.finalysis.ingestion.ImportProblem;
+import com.finalysis.ingestion.ImportRejectedException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.exc.InvalidFormatException;
@@ -58,6 +61,32 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, problem, headers, status, request);
     }
 
+    @ExceptionHandler(InvalidRequestException.class)
+    ProblemDetail handleInvalidRequest(InvalidRequestException ex) {
+        return invalidRequest(ex.getErrors());
+    }
+
+    /** Import refusals carry their own type and title; details never quote file contents (SEC-10). */
+    @ExceptionHandler(ImportRejectedException.class)
+    ProblemDetail handleImportRejected(ImportRejectedException ex) {
+        ProblemDetail problem = importProblem(ex.getProblem(), ex.getMessage());
+        if (ex.getStatementId() != null) {
+            problem.setProperty("statementId", ex.getStatementId());
+        }
+        if (ex.getLineNumber() != null) {
+            problem.setProperty("line", ex.getLineNumber());
+        }
+        return problem;
+    }
+
+    /** Uploads over spring.servlet.multipart.max-file-size, rejected before the controller runs. */
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ProblemDetail problem = importProblem(ImportProblem.PAYLOAD_TOO_LARGE, "Statement files are limited to 10 MB");
+        return handleExceptionInternal(ex, problem, headers, ImportProblem.PAYLOAD_TOO_LARGE.status(), request);
+    }
+
     @ExceptionHandler(NotFoundException.class)
     ProblemDetail handleNotFound(NotFoundException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
@@ -73,6 +102,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unhandled exception", ex);
         return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    private static ProblemDetail importProblem(ImportProblem type, String detail) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(type.status(), detail);
+        problem.setType(type.type());
+        problem.setTitle(type.title());
+        return problem;
     }
 
     private static ProblemDetail invalidRequest(List<InvalidField> errors) {

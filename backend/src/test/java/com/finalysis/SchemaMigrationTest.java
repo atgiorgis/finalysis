@@ -59,7 +59,7 @@ class SchemaMigrationTest {
             "statement,           ck_statement_period,                 c",
             "statement,           ck_statement_section_totals_object,  c",
             "statement,           uq_statement_file_hash,              u",
-            "statement,           uq_statement_account_period,         u",
+            "statement,           ck_statement_parser,                 c",
             "category,            uq_category_name,                    u",
             "category,            ck_category_kind,                    c",
             "category,            fk_category_parent,                  f",
@@ -69,6 +69,8 @@ class SchemaMigrationTest {
             "txn,                 ck_txn_category_source,              c",
             "txn,                 ck_txn_category_has_source,          c",
             "txn,                 uq_txn_fingerprint,                  u",
+            "txn,                 ck_txn_external_id_length,           c",
+            "txn,                 ck_txn_printed_amount_length,        c",
             "categorization_rule, ck_categorization_rule_match_type,   c",
             "categorization_rule, ck_categorization_rule_source,       c",
             "transfer_link,       uq_transfer_link_out,                u",
@@ -93,7 +95,8 @@ class SchemaMigrationTest {
                 "SELECT indexname FROM pg_indexes WHERE tablename = 'txn'", String.class);
 
         assertThat(indexes).contains(
-                "ix_txn_account_date", "ix_txn_category", "ix_txn_transfer_date", "ix_txn_statement_section");
+                "ix_txn_account_date", "ix_txn_category", "ix_txn_transfer_date", "ix_txn_statement_section",
+                "ix_txn_account_external_id");
     }
 
     @Test
@@ -179,6 +182,34 @@ class SchemaMigrationTest {
                 .hasMessageContaining("ck_txn_category_has_source");
     }
 
+    @Test
+    void samePeriodCanBeImportedTwice() {
+        long account = insertAccount("1001");
+
+        assertThat(insertStatement(account)).isNotEqualTo(insertStatement(account));
+    }
+
+    @Test
+    void rejectsStatementWithoutParser() {
+        long account = insertAccount("1001");
+
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash)
+                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', 'x.ofx', 'hash-no-parser')""", account))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rejectsInvalidParserId() {
+        long account = insertAccount("1001");
+
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser)
+                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', 'x.ofx', 'hash-bad-parser', 'OFX 1')""", account))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_statement_parser");
+    }
+
     private long insertAccount(String lastFour) {
         return jdbc.queryForObject("""
                 INSERT INTO account (name, institution, type, last_four)
@@ -188,9 +219,9 @@ class SchemaMigrationTest {
 
     private long insertStatement(long accountId) {
         return jdbc.queryForObject("""
-                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash)
-                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', 'test.csv', ?) RETURNING id
-                """, Long.class, accountId, "hash-" + accountId);
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser)
+                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', 'test.csv', ?, 'fixture') RETURNING id
+                """, Long.class, accountId, "hash-" + accountId + "-" + System.nanoTime());
     }
 
     private long insertTxn(long accountId, long statementId, String fingerprint) {

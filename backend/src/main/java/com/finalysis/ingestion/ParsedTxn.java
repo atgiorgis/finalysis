@@ -28,6 +28,9 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
 
     /** Width of {@code txn.check_number}. */
     static final int CHECK_NUMBER_MAX = 20;
+    /** Limits of ck_txn_external_id_length and ck_txn_printed_amount_length. */
+    static final int EXTERNAL_ID_MAX = 255;
+    static final int PRINTED_AMOUNT_MAX = 64;
 
     public ParsedTxn {
         Objects.requireNonNull(printedDate, "printedDate");
@@ -39,6 +42,12 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
         amount = Money.requireNumeric12x2(amount, "amount");
         if (checkNumber != null && checkNumber.length() > CHECK_NUMBER_MAX) {
             throw new IllegalArgumentException("checkNumber is longer than " + CHECK_NUMBER_MAX + " characters");
+        }
+        if (externalId != null && (externalId.isEmpty() || externalId.length() > EXTERNAL_ID_MAX)) {
+            throw new IllegalArgumentException("externalId must be 1 to " + EXTERNAL_ID_MAX + " characters");
+        }
+        if (printedAmount.isEmpty() || printedAmount.length() > PRINTED_AMOUNT_MAX) {
+            throw new IllegalArgumentException("printedAmount must be 1 to " + PRINTED_AMOUNT_MAX + " characters");
         }
         if (sourceLineNumber < 1) {
             throw new IllegalArgumentException("sourceLineNumber must be 1 or more");

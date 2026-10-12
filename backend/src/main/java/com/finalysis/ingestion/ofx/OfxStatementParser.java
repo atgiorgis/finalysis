@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
  * money out of the account) for both bank and card statements (ING-02).
  *
  * <p><b>Mapping.</b> A file must hold exactly one statement: {@code BANKMSGSRSV1/STMTTRNRS/STMTRS}
- * (bank) or {@code CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS} (card), in {@code CURDEF} USD. Per
+ * (bank) or {@code CREDITCARDMSGSRSV1/CCSTMTTRNRS/CCSTMTRS} (card). {@code CURDEF} becomes the currency hint; the import rejects anything but USD. Per
  * {@code STMTTRN}:
  * <ul>
  *   <li>{@code DTPOSTED} is the printed date (fingerprinted) and post date; {@code DTUSER}, when
@@ -87,10 +87,10 @@ public class OfxStatementParser implements StatementParser {
         List<String> warnings = new ArrayList<>();
 
         String currency = required(statement, "CURDEF");
-        if (!currency.equals("USD")) {
-            throw new StatementParseException(statement.line(), "only USD statements are supported, not " + code(currency));
+        if (!currency.matches("[A-Z]{3}")) {
+            throw new StatementParseException(statement.line(), "invalid currency code in <CURDEF>");
         }
-        AccountHints hints = accountHints(statement, response.card(), warnings);
+        AccountHints hints = accountHints(statement, response.card(), currency, warnings);
 
         OfxAggregate transactionList = statement.aggregates("BANKTRANLIST").stream().findFirst()
                 .orElseThrow(() -> new StatementParseException(statement.line(), "statement has no <BANKTRANLIST>"));
@@ -149,7 +149,7 @@ public class OfxStatementParser implements StatementParser {
         }
     }
 
-    private static AccountHints accountHints(OfxAggregate statement, boolean card, List<String> warnings) {
+    private static AccountHints accountHints(OfxAggregate statement, boolean card, String currency, List<String> warnings) {
         String accountTag = card ? "CCACCTFROM" : "BANKACCTFROM";
         OfxAggregate account = statement.aggregates(accountTag).stream().findFirst()
                 .orElseThrow(() -> new StatementParseException(statement.line(), "statement has no <" + accountTag + ">"));
@@ -168,7 +168,7 @@ public class OfxStatementParser implements StatementParser {
                 warnings.add("line " + account.line() + ": ACCTTYPE " + code(accountType) + " is not mapped to an account type");
             }
         }
-        return new AccountHints(lastFour, type, "USD");
+        return new AccountHints(lastFour, type, currency);
     }
 
     // ------------------------------------------------------------------ transactions

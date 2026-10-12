@@ -51,6 +51,7 @@ class StatementRepositoryTest {
         assertThat(loaded.getStatus()).isEqualTo(StatementStatus.IMPORTED);
         assertThat(loaded.getSourceFileName()).isEqualTo("northfield-2026-04.csv");
         assertThat(loaded.getFileHash()).isEqualTo(statement.getFileHash());
+        assertThat(loaded.getParser()).isEqualTo("fixture");
         assertThat(loaded.getSectionTotals()).isEmpty();
         assertThat(loaded.getImportedAt()).isNotNull();
     }

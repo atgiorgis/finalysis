@@ -81,6 +81,12 @@ public class Txn {
 
     private String sourceLineText;
 
+    /** The institution's own id for the row (OFX FITID), or null. Not unique: see StatementImportWriter. */
+    private String externalId;
+
+    /** The amount exactly as printed in the file, for tracing (DAT-07). */
+    private String printedAmount;
+
     @Generated
     private OffsetDateTime createdAt;
 
@@ -202,5 +208,21 @@ public class Txn {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.externalId = externalId;
+    }
+
+    public String getPrintedAmount() {
+        return printedAmount;
+    }
+
+    public void setPrintedAmount(String printedAmount) {
+        this.printedAmount = printedAmount;
     }
 }

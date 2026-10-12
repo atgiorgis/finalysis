@@ -58,6 +58,10 @@ public class Statement {
     @Column(nullable = false)
     private String fileHash;
 
+    /** {@link StatementParser#id()} of the parser that read the file. */
+    @Column(nullable = false)
+    private String parser;
+
     /**
      * Printed totals per section (DAT-08), used to reconcile each section (ING-10). Stored as a JSON
      * object keyed by {@link SourceSection} name; the column itself enforces neither the keys nor
@@ -74,12 +78,13 @@ public class Statement {
     }
 
     public Statement(Account account, LocalDate periodStart, LocalDate periodEnd,
-                     String sourceFileName, String fileHash) {
+                     String sourceFileName, String fileHash, String parser) {
         this.account = account;
         this.periodStart = periodStart;
         this.periodEnd = periodEnd;
         this.sourceFileName = sourceFileName;
         this.fileHash = fileHash;
+        this.parser = parser;
     }
 
     public Long getId() {
@@ -128,6 +133,10 @@ public class Statement {
 
     public String getFileHash() {
         return fileHash;
+    }
+
+    public String getParser() {
+        return parser;
     }
 
     public Map<SourceSection, BigDecimal> getSectionTotals() {

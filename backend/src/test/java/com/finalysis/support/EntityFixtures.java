@@ -22,7 +22,7 @@ public final class EntityFixtures {
     /** April 2026 statement with a unique file hash. */
     public static Statement statement(Account account) {
         return new Statement(account, LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30),
-                "northfield-2026-04.csv", "hash-" + UUID.randomUUID());
+                "northfield-2026-04.csv", "hash-" + UUID.randomUUID(), "fixture");
     }
 
     public static Txn txn(Account account, Statement statement, String fingerprint) {

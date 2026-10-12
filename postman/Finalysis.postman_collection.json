@@ -24,6 +24,10 @@
     {
       "key": "summitId",
       "value": ""
+    },
+    {
+      "key": "statementId",
+      "value": ""
     }
   ],
   "item": [
@@ -570,6 +574,88 @@
                   }
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Statements",
+      "item": [
+        {
+          "name": "Import checking April (OFX)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/ofx/northfield-checking_2026-04.ofx"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{checkingId}}",
+                "imports"
+              ]
+            },
+            "description": "Uploads a sample OFX statement to the checking account. The file path is relative to Postman's working directory (Settings > General), which should be the repo root. A second run returns 409 already-imported with the same statementId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('10 rows parsed', () => pm.expect(body.parsed).to.eql(10));",
+                  "  pm.test('Location header', () => pm.response.to.have.header('Location'));",
+                  "}",
+                  "pm.collectionVariables.set('statementId', body.statementId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/statements/{{statementId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "statements",
+                "{{statementId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('read by the OFX parser', () => pm.expect(pm.response.json().parser).to.eql('ofx'));"
+                ]
+              }
             }
           ]
         }
