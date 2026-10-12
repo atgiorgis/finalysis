@@ -102,7 +102,7 @@ class ParsedStatementTest {
 
         assertThat(txn.rawDescription()).isEqualTo(raw);
         assertThat(input).isEqualTo(new TransactionFingerprint.Input(
-                7, LocalDate.of(2026, 7, 6), new BigDecimal("-4.50"), raw, SourceSection.WITHDRAWAL));
+                7, LocalDate.of(2026, 7, 6), new BigDecimal("-4.50"), raw, SourceSection.WITHDRAWAL, "FIT-1"));
     }
 
     @Test

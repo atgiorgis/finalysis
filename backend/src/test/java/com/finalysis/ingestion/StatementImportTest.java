@@ -137,6 +137,7 @@ class StatementImportTest {
                 .andExpect(jsonPath("$.openingBalance").isEmpty())
                 .andExpect(jsonPath("$.closingBalance").value(4066.58))
                 .andExpect(jsonPath("$.status").value("IMPORTED"))
+                .andExpect(jsonPath("$.warnings").isEmpty())
                 .andExpect(jsonPath("$.transactionCount").value(10))
                 .andExpect(jsonPath("$.importedAt").isNotEmpty());
     }
@@ -174,9 +175,13 @@ class StatementImportTest {
         assertThat(second.get("parsed").asInt()).isEqualTo(10);
         assertThat(second.get("inserted").asInt()).isZero();
         assertThat(second.get("duplicates").asInt()).isEqualTo(10);
-        assertThat(second.get("status").asString()).isEqualTo("IMPORTED");
+        assertThat(second.get("status").asString()).isEqualTo("NEEDS_REVIEW");
         assertThat(strings(second.get("warnings"))).containsExactly("period overlaps statement " + first);
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
+        mockMvc.perform(get("/api/statements/{id}", second.get("statementId").asLong()))
+                .andExpect(jsonPath("$.status").value("NEEDS_REVIEW"))
+                .andExpect(jsonPath("$.warnings[0]").value("period overlaps statement " + first))
+                .andExpect(jsonPath("$.transactionCount").value(0));
     }
 
     @Test
@@ -218,10 +223,93 @@ class StatementImportTest {
 
         assertThat(strings(summary.get("warnings"))).containsExactly(
                 "account mixes import formats (ofx and csv); rows imported in different formats are not recognized as duplicates");
-        assertThat(summary.get("status").asString()).isEqualTo("IMPORTED");
+        assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
+    }
+
+    // ------------------------------------------------------------------ look-alike rows are kept
+
+    /** Two coffees at the same store, same amount, same day, plus a refund: three real rows. */
+    private static final String LOOK_ALIKES = """
+            <STMTTRN>
+            <TRNTYPE>DEBIT
+            <DTPOSTED>20260410
+            <TRNAMT>-4.50
+            %s<NAME>SQ *BLUE BEAN CAFE 4412
+            </STMTTRN>
+            <STMTTRN>
+            <TRNTYPE>DEBIT
+            <DTPOSTED>20260410
+            <TRNAMT>-4.50
+            %s<NAME>SQ *BLUE BEAN CAFE 4412
+            </STMTTRN>
+            <STMTTRN>
+            <TRNTYPE>CREDIT
+            <DTPOSTED>20260410
+            <TRNAMT>4.50
+            %s<NAME>SQ *BLUE BEAN CAFE 4412
+            </STMTTRN>
+            """;
+
+    @Test
+    void identicalSameDayPurchasesWithTransactionIdsAreBothKept() throws Exception {
+        assertLookAlikesKeptAndReimportAddsNothing(LOOK_ALIKES.formatted("<FITID>F1\n", "<FITID>F2\n", "<FITID>F3\n"));
+    }
+
+    @Test
+    void identicalSameDayPurchasesWithoutTransactionIdsAreBothKept() throws Exception {
+        assertLookAlikesKeptAndReimportAddsNothing(LOOK_ALIKES.formatted("", "", ""));
+    }
+
+    private void assertLookAlikesKeptAndReimportAddsNothing(String transactions) throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        byte[] file = bytes(ofx(transactions, "20260501080000"));
+
+        JsonNode first = importOk(checking, "cafe.ofx", file);
+        assertThat(first.get("inserted").asInt()).isEqualTo(3);
+        assertThat(first.get("status").asString()).isEqualTo("IMPORTED");
+        assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ? AND amount = -4.50", checking)).isEqualTo(2);
+        assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ? AND amount = 4.50", checking)).isEqualTo(1);
+
+        // The same file again is refused; the same rows in a new download add nothing.
+        support.upload(checking, "cafe.ofx", file).andExpect(status().isConflict());
+        JsonNode again = importOk(checking, "cafe-again.ofx", bytes(ofx(transactions, "20260502093000")));
+        assertThat(again.get("inserted").asInt()).isZero();
+        assertThat(again.get("duplicates").asInt()).isEqualTo(3);
+        assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(3);
+    }
+
+    @Test
+    void sampleDuplicateChargeOnTheSameDayIsImportedTwice() throws Exception {
+        long apex = support.account(AccountType.CREDIT_CARD, "2001");
+
+        importOk(apex, "june.qfx", ImportTestSupport.sample("ofx/apex-visa_2026-06.qfx"));
+        importOk(apex, "july.qfx", ImportTestSupport.sample("ofx/apex-visa_2026-07.qfx"));
+
+        // The planted anomaly: SAFEWAY #1234 charged 84.12 twice on June 13. The charges posted on
+        // June 14 and 15, so they fall in different statements (cycles close on the 14th).
+        assertThat(support.count("""
+                SELECT count(*) FROM txn WHERE account_id = ? AND txn_date = DATE '2026-06-13'
+                AND raw_description = 'SAFEWAY #1234 ARLINGTON VA' AND amount = -84.12""", apex)).isEqualTo(2);
     }
 
     // ------------------------------------------------------------------ request values
+
+    @Test
+    void rowsOutsideAnOverriddenPeriodAreImportedButNeedReview() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        long after = ImportTestSupport.answerKey("statements/northfield-checking_2026-04.csv").stream()
+                .filter(c -> c[2].compareTo("2026-04-15") > 0).count();
+
+        JsonNode summary = importOk(checking, "april.ofx", ImportTestSupport.sample(CHECKING_APRIL),
+                Map.of("periodEnd", "2026-04-15"));
+
+        assertThat(after).isPositive();
+        assertThat(summary.get("inserted").asInt()).isEqualTo(10);
+        assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
+        assertThat(strings(summary.get("warnings"))).singleElement().asString()
+                .startsWith(after + " rows are dated outside the statement period 2026-04-01 to 2026-04-15 and were imported anyway (lines ");
+        assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
+    }
 
     @Test
     void requestPeriodOverridesAndBalancesFillGaps() throws Exception {
@@ -389,6 +477,50 @@ class StatementImportTest {
 
     private static List<String> strings(JsonNode array) {
         return array.valueStream().map(JsonNode::asString).toList();
+    }
+
+    /** A minimal OFX 1.x statement for account ...1001 with the given STMTTRN blocks. */
+    private static String ofx(String transactions, String serverTime) {
+        return """
+                OFXHEADER:100
+                DATA:OFXSGML
+                VERSION:102
+                SECURITY:NONE
+                ENCODING:USASCII
+                CHARSET:1252
+                COMPRESSION:NONE
+                OLDFILEUID:NONE
+                NEWFILEUID:NONE
+
+                <OFX>
+                <SIGNONMSGSRSV1>
+                <SONRS>
+                <STATUS>
+                <CODE>0
+                <SEVERITY>INFO
+                </STATUS>
+                <DTSERVER>%s
+                </SONRS>
+                </SIGNONMSGSRSV1>
+                <BANKMSGSRSV1>
+                <STMTTRNRS>
+                <TRNUID>1
+                <STMTRS>
+                <CURDEF>USD
+                <BANKACCTFROM>
+                <BANKID>999000111
+                <ACCTID>0047391001
+                <ACCTTYPE>CHECKING
+                </BANKACCTFROM>
+                <BANKTRANLIST>
+                <DTSTART>20260401
+                <DTEND>20260430
+                %s</BANKTRANLIST>
+                </STMTRS>
+                </STMTTRNRS>
+                </BANKMSGSRSV1>
+                </OFX>
+                """.formatted(serverTime, transactions);
     }
 
     private static byte[] bytes(String text) {

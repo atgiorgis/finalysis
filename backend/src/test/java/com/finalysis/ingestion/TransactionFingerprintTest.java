@@ -122,7 +122,46 @@ class TransactionFingerprintTest {
 
         assertThat(components)
                 .as("Only raw, as-printed values may be fingerprinted; see TransactionFingerprint Javadoc")
-                .containsExactly("accountId", "printedDate", "amount", "rawDescription", "sourceSection");
+                .containsExactly("accountId", "printedDate", "amount", "rawDescription", "sourceSection", "externalId");
+    }
+
+    /** Locks the encoding: rows without a transaction id kept their fingerprint when ids were added. */
+    @Test
+    void fingerprintWithoutTransactionIdIsUnchanged() {
+        Input row = new Input(7L, LocalDate.of(2026, 7, 6), new BigDecimal("-6.45"), "SQ *BLUE BEAN CAFE 4412",
+                SourceSection.WITHDRAWAL);
+
+        assertThat(TransactionFingerprint.of(row, 1))
+                .isEqualTo("e38a243f74e90e1a81733b6edf7d44e69c6896e735fedab9d1e8da0ef2c2ffad");
+    }
+
+    @Test
+    void lookAlikeRowsWithDifferentTransactionIdsAreDifferentRows() {
+        List<String> fingerprints = TransactionFingerprint.forStatement(List.of(
+                withId(coffee(), "FIT-1"), withId(coffee(), "FIT-2")));
+
+        assertThat(fingerprints).doesNotHaveDuplicates();
+        // Each id is its own key, so both are occurrence 1: their fingerprints don't depend on order.
+        assertThat(fingerprints.get(0)).isEqualTo(TransactionFingerprint.of(withId(coffee(), "FIT-1"), 1));
+        assertThat(fingerprints.get(1)).isEqualTo(TransactionFingerprint.of(withId(coffee(), "FIT-2"), 1));
+    }
+
+    @Test
+    void transactionIdIsPartOfTheFingerprintAndReproducible() {
+        assertThat(TransactionFingerprint.of(withId(coffee(), "FIT-1"), 1))
+                .isEqualTo(TransactionFingerprint.of(withId(coffee(), "FIT-1"), 1))
+                .isNotEqualTo(TransactionFingerprint.of(coffee(), 1))
+                .isNotEqualTo(TransactionFingerprint.of(withId(coffee(), "fit-1"), 1));
+    }
+
+    @Test
+    void rejectsEmptyTransactionId() {
+        assertThatThrownBy(() -> withId(coffee(), "")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static Input withId(Input row, String externalId) {
+        return new Input(row.accountId(), row.printedDate(), row.amount(), row.rawDescription(), row.sourceSection(),
+                externalId);
     }
 
     @Test

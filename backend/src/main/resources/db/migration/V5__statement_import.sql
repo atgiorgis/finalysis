@@ -17,6 +17,12 @@ ALTER TABLE statement ADD COLUMN parser TEXT NOT NULL DEFAULT 'unknown';
 ALTER TABLE statement ALTER COLUMN parser DROP DEFAULT;
 ALTER TABLE statement ADD CONSTRAINT ck_statement_parser CHECK (parser ~ '^[a-z0-9][a-z0-9-]{0,31}$');
 
+-- Why an import needs review (ING-07): the warnings from the import summary, kept for the review
+-- queue. Line numbers, counts and statement ids only, never file contents (SEC-10).
+ALTER TABLE statement
+    ADD COLUMN import_warnings JSONB NOT NULL DEFAULT '[]',
+    ADD CONSTRAINT ck_statement_import_warnings_array CHECK (jsonb_typeof(import_warnings) = 'array');
+
 -- Re-importing a period is allowed (ING-04): rows already imported are skipped by fingerprint,
 -- and the import summary warns about the overlap. An identical file is still blocked by
 -- uq_statement_file_hash.

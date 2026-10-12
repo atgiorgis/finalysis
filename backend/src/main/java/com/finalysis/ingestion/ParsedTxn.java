@@ -62,6 +62,6 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
 
     /** The raw values that identify this row (ING-03); derived values are deliberately left out. */
     public TransactionFingerprint.Input fingerprintInput(long accountId) {
-        return new TransactionFingerprint.Input(accountId, printedDate, amount, rawDescription, section);
+        return new TransactionFingerprint.Input(accountId, printedDate, amount, rawDescription, section, externalId);
     }
 }

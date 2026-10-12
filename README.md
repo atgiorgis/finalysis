@@ -115,6 +115,7 @@ erDiagram
         numeric closing_balance
         text status "IMPORTED, NEEDS_REVIEW, RECONCILED"
         text parser "ofx, csv, ..."
+        jsonb import_warnings
         text file_hash UK
         jsonb section_totals
     }
@@ -189,9 +190,10 @@ erDiagram
   then checks opening balance + all rows = closing balance. A missing row shows up in a specific
   section, not just as an overall mismatch.
 - **Fingerprint.** `txn.fingerprint` is a SHA-256 of raw printed values only (account, printed
-  date, amount, description, section) plus an occurrence number. Re-importing a statement
-  reproduces the same fingerprints, so its rows are skipped, while two genuinely identical charges
-  get occurrence 1 and 2 and are both kept. Derived values (merchant, category, embedded
+  date, amount, description, section), the institution's transaction id (OFX `FITID`) when the
+  file has one, and an occurrence number. Re-importing a statement reproduces the same
+  fingerprints, so its rows are skipped. Two genuinely identical charges are both kept: with
+  transaction ids their ids differ; without (CSV) they get occurrence 1 and 2. Derived values (merchant, category, embedded
   `txn_date`, counterparty) are excluded because they change as parsing improves. If they were
   hashed, a better parser would re-insert every old row.
 - **Source tracing.** `source_line_number` and `source_line_text` record where each row came from
@@ -219,7 +221,7 @@ erDiagram
 | V2 `seed_categories` | Seeds the categories: the sample-data answer key's categories plus general-purpose ones. |
 | V3 `transfer_link_txn_once` | Trigger ensuring a txn belongs to at most one transfer link, on either side. |
 | V4 `account_name_lengths` | CHECK constraints limiting account name and institution to 1–100 characters. |
-| V5 `statement_import` | `txn.external_id` and `printed_amount`, `statement.parser`; drops the unique (account, period) constraint so periods can be re-imported. |
+| V5 `statement_import` | `txn.external_id` and `printed_amount`, `statement.parser` and `import_warnings`; drops the unique (account, period) constraint so periods can be re-imported. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -298,16 +300,31 @@ The response is an import summary:
 ```json
 {
   "statementId": 12, "parser": "ofx", "periodStart": "2026-04-01", "periodEnd": "2026-04-30",
-  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "IMPORTED",
+  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "NEEDS_REVIEW",
   "warnings": ["period overlaps statement 7"]
 }
 ```
 
-`status` is `NEEDS_REVIEW` when the parser warned (for example an OFX `TRNTYPE` that contradicts
-the amount's sign) or when a new row reuses an OFX transaction id (FITID) that this account
-already has under different details. That row is inserted anyway, since dropping it could lose a
-real transaction, and flagged as a possible duplicate. Balance reconciliation comes later.
-Warnings and errors contain line numbers, counts and ids, never descriptions or account numbers.
+**Look-alike rows are kept.** Two purchases with the same amount at the same store on the same
+day are both imported, and a refund is its own row. Deduplication only skips a row imported
+before: rows with an OFX transaction id (`FITID`) are matched by that id plus their details, rows
+without one (CSV) by their details plus an occurrence number within the statement.
+
+`status` is `NEEDS_REVIEW` whenever the import warned, and the warnings are stored with the
+statement (`GET /api/statements/{id}` returns them):
+
+- the parser warned, for example an OFX `TRNTYPE` that contradicts the amount's sign;
+- rows are dated outside the statement period (for example after a `periodEnd` override); they
+  are imported anyway, never dropped;
+- the period overlaps an earlier statement of the account (`period overlaps statement 7`);
+- the account mixes import formats (see below);
+- a new row reuses an OFX `FITID` that the account already has under different details. That row
+  is inserted anyway, since dropping it could lose a real transaction, and flagged as a possible
+  duplicate;
+- a balance in the request disagrees with the file.
+
+Otherwise the status is `IMPORTED`. Balance reconciliation comes later. Warnings and errors
+contain line numbers, counts and ids, never descriptions or account numbers.
 
 **One format per account.** Duplicates are recognized only within one format: the same
 transaction exported as CSV and as OFX has different descriptions and dates, so it would be

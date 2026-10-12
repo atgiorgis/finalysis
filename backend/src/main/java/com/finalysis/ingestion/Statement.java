@@ -15,8 +15,10 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -70,6 +72,11 @@ public class Statement {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false)
     private Map<SourceSection, BigDecimal> sectionTotals = new HashMap<>();
+
+    /** Warnings from the import (line numbers, counts and ids only); non-empty means NEEDS_REVIEW. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false)
+    private List<String> importWarnings = new ArrayList<>();
 
     @Generated
     private OffsetDateTime importedAt;
@@ -151,6 +158,14 @@ public class Statement {
      */
     public void setSectionTotals(Map<SourceSection, BigDecimal> sectionTotals) {
         this.sectionTotals = new HashMap<>(ParsedStatement.validSectionTotals(sectionTotals));
+    }
+
+    public List<String> getImportWarnings() {
+        return Collections.unmodifiableList(importWarnings);
+    }
+
+    public void setImportWarnings(List<String> importWarnings) {
+        this.importWarnings = new ArrayList<>(importWarnings);
     }
 
     public OffsetDateTime getImportedAt() {

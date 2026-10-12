@@ -60,6 +60,7 @@ class SchemaMigrationTest {
             "statement,           ck_statement_section_totals_object,  c",
             "statement,           uq_statement_file_hash,              u",
             "statement,           ck_statement_parser,                 c",
+            "statement,           ck_statement_import_warnings_array,  c",
             "category,            uq_category_name,                    u",
             "category,            ck_category_kind,                    c",
             "category,            fk_category_parent,                  f",
