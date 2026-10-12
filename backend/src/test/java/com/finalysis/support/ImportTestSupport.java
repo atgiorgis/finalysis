@@ -89,6 +89,11 @@ public class ImportTestSupport {
         return answerKeyRows.stream().map(c -> new BigDecimal(c[4])).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    public long firstStatementId(long accountId) {
+        Long id = jdbc.queryForObject("SELECT min(id) FROM statement WHERE account_id = ?", Long.class, accountId);
+        return id == null ? -1 : id;
+    }
+
     public int count(String sql, Object... args) {
         Integer count = jdbc.queryForObject(sql, Integer.class, args);
         return count == null ? 0 : count;

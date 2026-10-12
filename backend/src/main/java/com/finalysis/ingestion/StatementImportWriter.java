@@ -23,13 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
  * after another: a second import sees the first one's rows and skips them, instead of both
  * inserting the same fingerprint. Imports to different accounts don't wait for each other.
  *
- * <p><b>Status.</b> Every warning sends the statement to NEEDS_REVIEW, and the warnings are stored
- * with it to explain why: parser and request-merge warnings, rows dated outside the statement
- * period (imported anyway, never dropped), a period that overlaps an earlier statement, an
- * account that mixes formats, and a new row whose external id (OFX FITID) the account already
- * has under a different fingerprint (inserted anyway, since dropping it could lose a real
- * transaction, and flagged as a possible duplicate). Otherwise IMPORTED. Balance reconciliation
- * comes later (ING-06).
+ * <p><b>Status.</b> The warnings are stored with the statement to explain its status. These send
+ * it to NEEDS_REVIEW: parser and request-merge warnings, rows dated outside the statement period
+ * (imported anyway, never dropped), an account that mixes formats, a new row whose external id
+ * (OFX FITID) the account already has under a different fingerprint (inserted anyway, since
+ * dropping it could lose a real transaction, and flagged as a possible duplicate), and a period
+ * that overlaps an earlier statement when the import inserted new rows. An overlapping re-import
+ * that inserted nothing is IMPORTED with an informational warning. Balance reconciliation comes
+ * later (ING-06).
  */
 @Component
 class StatementImportWriter {
@@ -84,13 +85,21 @@ class StatementImportWriter {
                         + "with the same transaction id (FITID) but different details");
             }
         }
+        // Every warning so far needs review; an overlap only does when it brought new rows.
+        boolean needsReview = !warnings.isEmpty();
         for (long overlapping : statements.findOverlappingIds(accountId, parsed.periodStart(), parsed.periodEnd())) {
-            warnings.add("period overlaps statement " + overlapping);
+            if (newRows.isEmpty()) {
+                warnings.add("period overlaps statement " + overlapping + "; no new rows");
+            } else {
+                warnings.add("period overlaps statement " + overlapping);
+                needsReview = true;
+            }
         }
         List<String> otherParsers = statements.findParsersUsed(accountId).stream().filter(p -> !p.equals(parser)).toList();
         if (!otherParsers.isEmpty()) {
             warnings.add("account mixes import formats (" + parser + " and " + String.join(", ", otherParsers)
                     + "); rows imported in different formats are not recognized as duplicates");
+            needsReview = true;
         }
 
         Statement statement = new Statement(account, parsed.periodStart(), parsed.periodEnd(), file.fileName(),
@@ -98,7 +107,7 @@ class StatementImportWriter {
         statement.setOpeningBalance(parsed.openingBalance());
         statement.setClosingBalance(parsed.closingBalance());
         statement.setSectionTotals(parsed.sectionTotals());
-        statement.setStatus(warnings.isEmpty() ? StatementStatus.IMPORTED : StatementStatus.NEEDS_REVIEW);
+        statement.setStatus(needsReview ? StatementStatus.NEEDS_REVIEW : StatementStatus.IMPORTED);
         statement.setImportWarnings(warnings);
         statements.save(statement);
 

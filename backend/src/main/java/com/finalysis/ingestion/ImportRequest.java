@@ -1,6 +1,5 @@
 package com.finalysis.ingestion;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -8,10 +7,12 @@ import java.util.Objects;
  * One upload. The optional period overrides the file's; the optional balances fill in only
  * what the file doesn't print.
  *
- * @param fileName the client's file name, unchecked
+ * @param fileName       the client's file name, unchecked
+ * @param openingBalance money text as sent, e.g. "1234.56", unchecked
+ * @param closingBalance money text as sent, unchecked
  */
 public record ImportRequest(long accountId, String fileName, byte[] bytes, LocalDate periodStart, LocalDate periodEnd,
-                            BigDecimal openingBalance, BigDecimal closingBalance) {
+                            String openingBalance, String closingBalance) {
 
     public ImportRequest {
         Objects.requireNonNull(bytes, "bytes");

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -135,7 +136,7 @@ class StatementImportTest {
                 .andExpect(jsonPath("$.periodStart").value("2026-04-01"))
                 .andExpect(jsonPath("$.periodEnd").value("2026-04-30"))
                 .andExpect(jsonPath("$.openingBalance").isEmpty())
-                .andExpect(jsonPath("$.closingBalance").value(4066.58))
+                .andExpect(jsonPath("$.closingBalance").value("4066.58"))
                 .andExpect(jsonPath("$.status").value("IMPORTED"))
                 .andExpect(jsonPath("$.warnings").isEmpty())
                 .andExpect(jsonPath("$.transactionCount").value(10))
@@ -175,13 +176,31 @@ class StatementImportTest {
         assertThat(second.get("parsed").asInt()).isEqualTo(10);
         assertThat(second.get("inserted").asInt()).isZero();
         assertThat(second.get("duplicates").asInt()).isEqualTo(10);
-        assertThat(second.get("status").asString()).isEqualTo("NEEDS_REVIEW");
-        assertThat(strings(second.get("warnings"))).containsExactly("period overlaps statement " + first);
+        assertThat(second.get("status").asString()).isEqualTo("IMPORTED");
+        assertThat(strings(second.get("warnings"))).containsExactly("period overlaps statement " + first + "; no new rows");
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
         mockMvc.perform(get("/api/statements/{id}", second.get("statementId").asLong()))
-                .andExpect(jsonPath("$.status").value("NEEDS_REVIEW"))
-                .andExpect(jsonPath("$.warnings[0]").value("period overlaps statement " + first))
+                .andExpect(jsonPath("$.status").value("IMPORTED"))
+                .andExpect(jsonPath("$.warnings[0]").value("period overlaps statement " + first + "; no new rows"))
                 .andExpect(jsonPath("$.transactionCount").value(0));
+    }
+
+    @Test
+    void overlappingImportThatAddsRowsNeedsReview() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        String april = new String(ImportTestSupport.sample(CHECKING_APRIL), StandardCharsets.ISO_8859_1);
+        // An earlier download that was missing the last row of the month.
+        int lastRow = april.lastIndexOf("<STMTTRN>");
+        String partial = (april.substring(0, lastRow) + april.substring(april.indexOf("</STMTTRN>\r\n", lastRow) + 12))
+                .replace("<DTSERVER>20260501080000", "<DTSERVER>20260429080000");
+        long first = importOk(checking, "april-partial.ofx", bytes(partial)).get("statementId").asLong();
+
+        JsonNode full = importOk(checking, "april.ofx", bytes(april));
+
+        assertThat(full.get("inserted").asInt()).isEqualTo(1);
+        assertThat(full.get("duplicates").asInt()).isEqualTo(9);
+        assertThat(full.get("status").asString()).isEqualTo("NEEDS_REVIEW");
+        assertThat(strings(full.get("warnings"))).containsExactly("period overlaps statement " + first);
     }
 
     @Test
@@ -197,7 +216,8 @@ class StatementImportTest {
         assertThat(summary.get("inserted").asInt()).isEqualTo(1);
         assertThat(summary.get("duplicates").asInt()).isEqualTo(9);
         assertThat(summary.get("status").asString()).isEqualTo("NEEDS_REVIEW");
-        assertThat(strings(summary.get("warnings"))).contains(
+        assertThat(strings(summary.get("warnings"))).containsExactlyInAnyOrder(
+                "period overlaps statement " + support.firstStatementId(checking),
                 "line 43: possible duplicate: an earlier import has a row with the same transaction id (FITID) but different details");
     }
 
@@ -273,6 +293,7 @@ class StatementImportTest {
         // The same file again is refused; the same rows in a new download add nothing.
         support.upload(checking, "cafe.ofx", file).andExpect(status().isConflict());
         JsonNode again = importOk(checking, "cafe-again.ofx", bytes(ofx(transactions, "20260502093000")));
+        assertThat(again.get("status").asString()).isEqualTo("IMPORTED");
         assertThat(again.get("inserted").asInt()).isZero();
         assertThat(again.get("duplicates").asInt()).isEqualTo(3);
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(3);
@@ -316,7 +337,7 @@ class StatementImportTest {
         long checking = support.account(AccountType.CHECKING, "1001");
 
         JsonNode summary = importOk(checking, "april.ofx", ImportTestSupport.sample(CHECKING_APRIL), Map.of(
-                "periodStart", "2026-03-31", "openingBalance", "3200.00", "closingBalance", "4000.00"));
+                "periodStart", "2026-03-31", "openingBalance", "3200", "closingBalance", "4000.00"));
         long id = summary.get("statementId").asLong();
 
         assertThat(summary.get("periodStart").asString()).isEqualTo("2026-03-31");
@@ -326,6 +347,17 @@ class StatementImportTest {
         assertThat(jdbc.queryForMap("SELECT opening_balance, closing_balance FROM statement WHERE id = ?", id))
                 .containsEntry("opening_balance", new BigDecimal("3200.00"))
                 .containsEntry("closing_balance", new BigDecimal("4066.58"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1.005", "1e3", "1E+3", "12,50", "+5.00", "$5.00", " 5.00", "12345678901.00", ""})
+    void moneyFieldsAcceptOnlyPlainDecimalStrings(String value) throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+
+        support.upload(checking, "april.ofx", ImportTestSupport.sample(CHECKING_APRIL), Map.of("openingBalance", value))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("openingBalance"))
+                .andExpect(jsonPath("$.errors[0].message", containsString("e.g. \"1234.56\"")));
     }
 
     @Test

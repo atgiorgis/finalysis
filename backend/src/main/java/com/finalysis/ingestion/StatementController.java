@@ -1,7 +1,6 @@
 package com.finalysis.ingestion;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.net.URI;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -32,8 +31,9 @@ public class StatementController {
             @RequestPart("file") MultipartFile file,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd,
-            @RequestParam(required = false) BigDecimal openingBalance,
-            @RequestParam(required = false) BigDecimal closingBalance) throws IOException {
+            // Money as text such as "1234.56", parsed strictly (no exponents, at most two decimals).
+            @RequestParam(required = false) String openingBalance,
+            @RequestParam(required = false) String closingBalance) throws IOException {
         // Size first, before the bytes are copied; the multipart limit normally rejects larger files earlier.
         UploadCheck.checkSize(file.getSize());
         ImportSummary summary = imports.importStatement(new ImportRequest(accountId, file.getOriginalFilename(),

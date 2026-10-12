@@ -4,6 +4,7 @@ import com.finalysis.account.Account;
 import com.finalysis.account.AccountRepository;
 import com.finalysis.api.InvalidField;
 import com.finalysis.api.InvalidRequestException;
+import com.finalysis.api.MoneyJson;
 import com.finalysis.api.NotFoundException;
 import com.finalysis.ingestion.StatementParserRegistry.AmbiguousFormatException;
 import com.finalysis.ingestion.StatementParserRegistry.UnsupportedFormatException;
@@ -127,14 +128,14 @@ public class StatementImportService {
                 parsed.txns(), warnings);
     }
 
-    private static BigDecimal validMoney(BigDecimal value, String field, List<InvalidField> errors) {
-        if (value == null) {
+    private static BigDecimal validMoney(String text, String field, List<InvalidField> errors) {
+        if (text == null) {
             return null;
         }
         try {
-            return Money.requireNumeric12x2(value, field);
+            return MoneyJson.parse(text);
         } catch (IllegalArgumentException e) {
-            errors.add(new InvalidField(field, "must have at most two decimal places and ten digits before the point"));
+            errors.add(new InvalidField(field, MoneyJson.EXPECTED));
             return null;
         }
     }

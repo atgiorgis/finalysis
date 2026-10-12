@@ -28,7 +28,6 @@ import java.util.regex.Pattern;
  *   <li>the raw description, with wrapped lines joined by a single space, trimmed, uppercased and
  *       whitespace collapsed;</li>
  *   <li>the statement section the row was printed in;</li>
- *   <li>the institution's own transaction id (OFX FITID), when the file has one;</li>
  *   <li>an occurrence number (see below).</li>
  * </ul>
  *
@@ -39,23 +38,18 @@ import java.util.regex.Pattern;
  * statement would insert every row a second time. {@link Input} has no field for them, so they
  * cannot be passed in by mistake.
  *
- * <p><b>Identical rows are kept.</b> A statement can legitimately contain two identical rows, such
- * as the same coffee bought twice on one day; deduplication must only catch the same row imported
- * again, never two real purchases that look alike.
- * <ul>
- *   <li><b>With a transaction id</b> (OFX FITID), the id is part of the fingerprint, so look-alike
- *       rows with different ids are different rows wherever they appear, and a re-download with
- *       the same ids is recognized. Trade-off: an institution that issues new ids for old rows on
- *       a later download makes them look new; such an import overlaps an earlier statement, which
- *       sends it to review.</li>
- *   <li><b>Without one</b> (CSV, most PDFs), occurrence numbers separate them: within one
- *       statement, the first row with a given set of normalized inputs gets occurrence 1, the next
- *       identical row gets 2, and so on ({@link #forStatement}). Re-uploading the statement
- *       reproduces the same numbers, so its rows are recognized as duplicates, while both genuine
- *       charges are kept.</li>
- * </ul>
- * Rows without an id are encoded exactly as before ids were added, so their fingerprints did not
- * change.
+ * <p><b>Occurrence numbers.</b> A statement can legitimately contain two identical rows, such as
+ * the same coffee bought twice on one day. Within one statement, the first row with a given set of
+ * normalized inputs gets occurrence 1, the next identical row gets 2, and so on
+ * ({@link #forStatement}). Re-uploading the statement reproduces the same numbers, so its rows are
+ * recognized as duplicates, while both genuine charges are kept. A refund is a separate row: its
+ * amount has the opposite sign.
+ *
+ * <p><b>Why the institution's transaction id is excluded.</b> OFX files carry a FITID per row, but
+ * not every institution keeps FITIDs stable across downloads. Hashing it would make a re-download
+ * with reissued ids insert every row again. The id is stored in {@code txn.external_id} instead,
+ * where the import uses it only as a safety net: a new row whose id the account already has under a
+ * different fingerprint is inserted and flagged as a possible duplicate.
  *
  * <p><b>Changing the algorithm.</b> Each of the following changes every fingerprint already in
  * the database, so it needs a data migration that recomputes them:
@@ -65,8 +59,7 @@ import java.util.regex.Pattern;
  *   <li>a parser's mapping from printed section headings to {@link SourceSection}. A parser
  *       derives the section rather than copying it as printed, so remapping a heading (for
  *       example "Service fees" from {@code OTHER} to {@code FEE}) silently changes the
- *       fingerprints of every row under it;</li>
- *   <li>a parser starting or stopping passing a transaction id.</li>
+ *       fingerprints of every row under it.</li>
  * </ul>
  */
 public final class TransactionFingerprint {
@@ -83,35 +76,25 @@ public final class TransactionFingerprint {
      *                    printed); never a date taken from the description
      * @param rawDescription the description as extracted; wrapped lines may be separated by
      *                       newlines or spaces
-     * @param externalId     the institution's transaction id (OFX FITID) exactly as given, or null
      */
     public record Input(long accountId, LocalDate printedDate, BigDecimal amount,
-                        String rawDescription, SourceSection sourceSection, String externalId) {
+                        String rawDescription, SourceSection sourceSection) {
 
         public Input {
             Objects.requireNonNull(printedDate, "printedDate");
             Objects.requireNonNull(amount, "amount");
             Objects.requireNonNull(rawDescription, "rawDescription");
             Objects.requireNonNull(sourceSection, "sourceSection");
-            if (externalId != null && externalId.isEmpty()) {
-                throw new IllegalArgumentException("externalId must be null or non-empty");
-            }
-        }
-
-        /** A row without a transaction id. */
-        public Input(long accountId, LocalDate printedDate, BigDecimal amount, String rawDescription,
-                     SourceSection sourceSection) {
-            this(accountId, printedDate, amount, rawDescription, sourceSection, null);
         }
     }
 
     /** Normalized inputs; equal keys mean identical rows for occurrence counting. */
     private record Key(long accountId, LocalDate printedDate, String amount, String description,
-                       SourceSection sourceSection, String externalId) {
+                       SourceSection sourceSection) {
 
         static Key of(Input row) {
             return new Key(row.accountId(), row.printedDate(), normalizeAmount(row.amount()),
-                    normalizeDescription(row.rawDescription()), row.sourceSection(), row.externalId());
+                    normalizeDescription(row.rawDescription()), row.sourceSection());
         }
     }
 
@@ -157,19 +140,14 @@ public final class TransactionFingerprint {
             throw new IllegalArgumentException("Occurrence must be 1 or more: " + occurrence);
         }
         // Length-prefix every field so no description content can shift a field boundary.
-        List<String> fields = new ArrayList<>(List.of(
+        StringBuilder encoded = new StringBuilder();
+        for (String field : List.of(
                 Long.toString(key.accountId()),
                 key.printedDate().toString(),
                 key.amount(),
                 key.description(),
                 key.sourceSection().name(),
-                Integer.toString(occurrence)));
-        // Appended only when present, so rows without an id keep their original encoding.
-        if (key.externalId() != null) {
-            fields.add(key.externalId());
-        }
-        StringBuilder encoded = new StringBuilder();
-        for (String field : fields) {
+                Integer.toString(occurrence))) {
             encoded.append(field.length()).append(':').append(field);
         }
         return HexFormat.of().formatHex(sha256().digest(encoded.toString().getBytes(StandardCharsets.UTF_8)));

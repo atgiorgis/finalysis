@@ -2,6 +2,7 @@ package com.finalysis.api;
 
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -53,6 +54,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = switch (ex.getCause()) {
             case UnrecognizedPropertyException unknown ->
                     invalidRequest(List.of(new InvalidField(unknown.getPropertyName(), "is not allowed")));
+            case InvalidFormatException invalid when invalid.getTargetType() == BigDecimal.class ->
+                    invalidRequest(List.of(new InvalidField(fieldName(invalid), MoneyJson.EXPECTED)));
             case InvalidFormatException invalid when invalid.getTargetType().isEnum() ->
                     invalidRequest(List.of(new InvalidField(fieldName(invalid),
                             "must be one of " + enumValues(invalid.getTargetType()))));

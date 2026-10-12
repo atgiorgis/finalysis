@@ -60,8 +60,11 @@ public record ParsedTxn(LocalDate printedDate, LocalDate txnDate, LocalDate post
         return "ParsedTxn[line " + sourceLineNumber + ", " + section + "]";
     }
 
-    /** The raw values that identify this row (ING-03); derived values are deliberately left out. */
+    /**
+     * The raw values that identify this row (ING-03). Derived values and the external id are
+     * deliberately left out; see {@link TransactionFingerprint}.
+     */
     public TransactionFingerprint.Input fingerprintInput(long accountId) {
-        return new TransactionFingerprint.Input(accountId, printedDate, amount, rawDescription, section, externalId);
+        return new TransactionFingerprint.Input(accountId, printedDate, amount, rawDescription, section);
     }
 }

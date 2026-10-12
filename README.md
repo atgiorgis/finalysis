@@ -190,10 +190,11 @@ erDiagram
   then checks opening balance + all rows = closing balance. A missing row shows up in a specific
   section, not just as an overall mismatch.
 - **Fingerprint.** `txn.fingerprint` is a SHA-256 of raw printed values only (account, printed
-  date, amount, description, section), the institution's transaction id (OFX `FITID`) when the
-  file has one, and an occurrence number. Re-importing a statement reproduces the same
-  fingerprints, so its rows are skipped. Two genuinely identical charges are both kept: with
-  transaction ids their ids differ; without (CSV) they get occurrence 1 and 2. Derived values (merchant, category, embedded
+  date, amount, description, section) plus an occurrence number. Re-importing a statement
+  reproduces the same fingerprints, so its rows are skipped, while two genuinely identical charges
+  get occurrence 1 and 2 and are both kept. The OFX transaction id (`FITID`) is deliberately not
+  hashed, because some institutions reissue ids on later downloads; it is kept in
+  `txn.external_id` to flag possible duplicates. Derived values (merchant, category, embedded
   `txn_date`, counterparty) are excluded because they change as parsing improves. If they were
   hashed, a better parser would re-insert every old row.
 - **Source tracing.** `source_line_number` and `source_line_text` record where each row came from
@@ -238,6 +239,10 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
 | `GET` | `/api/statements/{id}` | Get one imported statement | 200 |
 
+- **Money is a string.** Every money field in a response is a JSON string with exactly two
+  decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
+  number gets a 400 naming the field. JavaScript reads JSON numbers as binary floating point, which
+  can lose cents.
 - **Strict bodies.** Request bodies reject unknown fields. `PATCH /api/accounts/{id}` accepts only
   `name`, so trying to change the type or last four digits returns a 400 that names the field.
   Accounts cannot be deleted.
@@ -278,7 +283,8 @@ curl -F file=@sample-data/ofx/northfield-checking_2026-04.ofx http://localhost:8
 Upload one statement file per request to the account it belongs to. Optional form fields:
 `periodStart` and `periodEnd` (ISO dates) replace the file's period; `openingBalance` and
 `closingBalance` fill in balances the file doesn't print (if the file does print one and the
-request disagrees, the file's value is kept with a warning). Supported today: OFX 1.x/2.x and QFX.
+request disagrees, the file's value is kept with a warning). Balances are plain decimal text such
+as `1234.56`: at most two decimals, no exponent or thousands separator. Supported today: OFX 1.x/2.x and QFX.
 CSV follows in the next steps; PDF in Phase 3b.
 
 1. **Checks.** At most 10 MB; the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the
@@ -300,15 +306,16 @@ The response is an import summary:
 ```json
 {
   "statementId": 12, "parser": "ofx", "periodStart": "2026-04-01", "periodEnd": "2026-04-30",
-  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "NEEDS_REVIEW",
-  "warnings": ["period overlaps statement 7"]
+  "parsed": 10, "inserted": 0, "duplicates": 10, "status": "IMPORTED",
+  "warnings": ["period overlaps statement 7; no new rows"]
 }
 ```
 
 **Look-alike rows are kept.** Two purchases with the same amount at the same store on the same
 day are both imported, and a refund is its own row. Deduplication only skips a row imported
-before: rows with an OFX transaction id (`FITID`) are matched by that id plus their details, rows
-without one (CSV) by their details plus an occurrence number within the statement.
+before: rows are matched by their printed values plus an occurrence number within the statement
+(the first identical row is 1, the next 2), so re-uploading a file finds every row again while two
+real purchases stay separate.
 
 `status` is `NEEDS_REVIEW` whenever the import warned, and the warnings are stored with the
 statement (`GET /api/statements/{id}` returns them):
@@ -316,7 +323,9 @@ statement (`GET /api/statements/{id}` returns them):
 - the parser warned, for example an OFX `TRNTYPE` that contradicts the amount's sign;
 - rows are dated outside the statement period (for example after a `periodEnd` override); they
   are imported anyway, never dropped;
-- the period overlaps an earlier statement of the account (`period overlaps statement 7`);
+- the period overlaps an earlier statement of the account and the import added rows
+  (`period overlaps statement 7`). A re-import that adds nothing stays `IMPORTED` with the
+  informational warning `period overlaps statement 7; no new rows`;
 - the account mixes import formats (see below);
 - a new row reuses an OFX `FITID` that the account already has under different details. That row
   is inserted anyway, since dropping it could lose a real transaction, and flagged as a possible

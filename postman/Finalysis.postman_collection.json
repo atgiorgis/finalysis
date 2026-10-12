@@ -653,7 +653,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('read by the OFX parser', () => pm.expect(pm.response.json().parser).to.eql('ofx'));"
+                  "pm.test('read by the OFX parser', () => pm.expect(pm.response.json().parser).to.eql('ofx'));",
+                  "pm.test('money is a string with two decimals', () => pm.expect(pm.response.json().closingBalance).to.eql('4066.58'));"
                 ]
               }
             }

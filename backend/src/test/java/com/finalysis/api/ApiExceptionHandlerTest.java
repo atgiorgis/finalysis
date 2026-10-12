@@ -15,7 +15,12 @@ import com.finalysis.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
+import tools.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -79,5 +84,23 @@ class ApiExceptionHandlerTest {
         ProblemDetail problem = (ProblemDetail) response.getBody();
         assertThat(problem.getType()).hasToString("urn:finalysis:problem:payload-too-large");
         assertThat(problem.getDetail()).isEqualTo("Statement files are limited to 10 MB");
+    }
+
+    @Test
+    void moneySentAsAJsonNumberReturns400NamingTheField() throws Exception {
+        InvalidFormatException cause = null;
+        try {
+            JsonMapper.builder().build().readValue("{\"amount\":12.5}", MoneyJsonTest.Balance.class);
+        } catch (InvalidFormatException e) {
+            cause = e;
+        }
+        ResponseEntity<Object> response = new ApiExceptionHandler().handleException(
+                new HttpMessageNotReadableException("unreadable", cause, new MockHttpInputMessage(new byte[0])),
+                new ServletWebRequest(new MockHttpServletRequest()));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(400);
+        ProblemDetail problem = (ProblemDetail) response.getBody();
+        assertThat(problem.getProperties().get("errors")).asInstanceOf(InstanceOfAssertFactories.LIST)
+                .containsExactly(new InvalidField("amount", MoneyJson.EXPECTED));
     }
 }
