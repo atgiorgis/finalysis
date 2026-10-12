@@ -63,6 +63,15 @@ public class CsvMappingService {
     }
 
     /**
+     * The account's mapping as an immutable snapshot for parsing, or null when it has none. Read in
+     * its own transaction; the import then parses without one.
+     */
+    @Transactional(readOnly = true)
+    public CsvMappingSpec snapshot(long accountId) {
+        return mappings.findById(accountId).map(CsvMapping::toSpec).orElse(null);
+    }
+
+    /**
      * Creates or replaces the mapping.
      *
      * @param confirmFingerprintChange allows changing locked fields of a mapping already used

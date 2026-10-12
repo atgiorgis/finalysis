@@ -63,11 +63,53 @@ class CsvStatementParserTest {
     }
 
     @Test
-    void detectionLooksAtTheFirstTwentyNonBlankRecordsOnly() {
-        String twentyConsistent = "a,b\n" + "1,2\n\n".repeat(19);
+    void aTableIsFiveConsistentRecordsOrAllThatRemain() {
+        // Five consistent records make a table; later rows are the parser's to check.
+        assertThat(parser.detect(file("a,b\n" + "1,2\n\n".repeat(4) + "1,2,3\n"))).isEqualTo(FormatMatch.FALLBACK);
+        // Four, then a break, and no later start has two consistent records left.
+        assertThat(parser.detect(file("a,b\n" + "1,2\n".repeat(3) + "1,2,3\n"))).isEqualTo(FormatMatch.NONE);
+        // Fewer than five records are a table when all of them agree.
+        assertThat(CsvStatementParser.detectTable(bytes("a,b\n1,2\n"))).contains(new CsvTable(',', "UTF-8", 0));
+    }
 
-        assertThat(parser.detect(file(twentyConsistent + "1,2,3\n"))).isEqualTo(FormatMatch.FALLBACK);
-        assertThat(parser.detect(file("a,b\n" + "1,2\n".repeat(18) + "1,2,3\n"))).isEqualTo(FormatMatch.NONE);
+    @Test
+    void aTableMayStartBelowAPreamble() {
+        String preamble = "Account Activity\nAccount number,XXXXXX1001\nPeriod,04/01/2026 to 04/30/2026\n"
+                + "Opening balance,3200.00\n\n";
+        String table = NORTHFIELD_HEADER + "04/01/2026,RENT,1850.00,,1350.00\n".repeat(6);
+
+        // The two-column preamble lines are only three in a row, so the table starts at the header (line 6).
+        assertThat(CsvStatementParser.detectTable(bytes(preamble + table))).contains(new CsvTable(',', "UTF-8", 5));
+        // A short table below a preamble: all remaining records, header and one row.
+        assertThat(CsvStatementParser.detectTable(bytes("Summary\n" + SIMPLE_HEADER + "2026-04-01,CAFE,-4.50\n")))
+                .contains(new CsvTable(',', "UTF-8", 1));
+        // A lone last line is not a table.
+        assertThat(parser.detect(file("Summary\nTotal\n1,2\n"))).isEqualTo(FormatMatch.NONE);
+    }
+
+    @Test
+    void aTableMustStartWithinTheFirstHundredLines() {
+        assertThat(CsvStatementParser.detectTable(bytes("note\n".repeat(99) + "a,b\n1,2\n")))
+                .contains(new CsvTable(',', "UTF-8", 99));
+        assertThat(parser.detect(file("note\n".repeat(100) + "a,b\n1,2\n"))).isEqualTo(FormatMatch.NONE);
+    }
+
+    @Test
+    void theEarliestTableStartWinsAcrossDelimiters() {
+        // Semicolons agree from the first line; commas only from the second.
+        String text = "x;y\n1,5;2\n1,2;3\n" + "4,5;6\n".repeat(5);
+
+        assertThat(CsvStatementParser.detectTable(bytes(text))).contains(new CsvTable(';', "UTF-8", 0));
+        // A tie goes to the earlier delimiter in , ; TAB |.
+        assertThat(CsvStatementParser.detectTable(bytes("a,b;c\n1,2;3\n"))).contains(new CsvTable(',', "UTF-8", 0));
+    }
+
+    @Test
+    void aQuoteInThePreambleDoesNotHideTheTable() {
+        // The quote opens a cell that never closes, so reading from line 1 fails; line 2 starts the table.
+        String text = "\"Note: unclosed\n" + SIMPLE_HEADER + "2026-04-01,CAFE,-4.50\n".repeat(5);
+
+        assertThat(CsvStatementParser.detectTable(bytes(text))).contains(new CsvTable(',', "UTF-8", 1));
     }
 
     @Test
@@ -75,6 +117,7 @@ class CsvStatementParserTest {
         assertThat(parser.detect(ImportFile.of("x.csv", new byte[] {'a', ',', 0, '\n'}))).isEqualTo(FormatMatch.NONE);
         byte[] windows1252 = "Date,Description\n04/01/2026,CAFÉ\n".getBytes(Charset.forName("windows-1252"));
         assertThat(parser.detect(ImportFile.of("x.csv", windows1252))).isEqualTo(FormatMatch.FALLBACK);
+        assertThat(CsvStatementParser.detectTable(windows1252)).contains(new CsvTable(',', "windows-1252", 0));
     }
 
     // ------------------------------------------------------------------ mapping
@@ -153,12 +196,25 @@ class CsvStatementParserTest {
     }
 
     @Test
-    void aFileWithoutRowsIsAParseError() {
+    void aFileWithoutRowsIsAParseErrorWithoutARequestPeriod() {
         assertThatThrownBy(() -> parse(SIMPLE_HEADER, TestCsvMapping.simple()))
                 .isInstanceOf(StatementParseException.class)
-                .hasMessage("the file has no transactions");
+                .hasMessage("the file has no transactions; send periodStart and periodEnd to import it as an empty statement");
+        assertThatThrownBy(() -> parser.parse(file(SIMPLE_HEADER), new ParseContext(AccountType.CHECKING,
+                TestCsvMapping.simple().build(), LocalDate.of(2026, 4, 1), null)))
+                .isInstanceOf(StatementParseException.class);
         assertThatThrownBy(() -> parse("\n\n", TestCsvMapping.simple()))
                 .hasMessage("the file has no header row");
+    }
+
+    @Test
+    void aFileWithoutRowsIsAnEmptyStatementForTheRequestPeriod() {
+        ParsedStatement parsed = parser.parse(file(SIMPLE_HEADER), new ParseContext(AccountType.SAVINGS,
+                TestCsvMapping.simple().build(), LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30)));
+
+        assertThat(parsed.txns()).isEmpty();
+        assertThat(parsed.periodStart()).isEqualTo(LocalDate.of(2026, 4, 1));
+        assertThat(parsed.periodEnd()).isEqualTo(LocalDate.of(2026, 4, 30));
     }
 
     // ------------------------------------------------------------------ dates
@@ -452,6 +508,10 @@ class CsvStatementParserTest {
     }
 
     private static ImportFile file(String text) {
-        return ImportFile.of("statement.csv", text.getBytes(StandardCharsets.UTF_8));
+        return ImportFile.of("statement.csv", bytes(text));
+    }
+
+    private static byte[] bytes(String text) {
+        return text.getBytes(StandardCharsets.UTF_8);
     }
 }

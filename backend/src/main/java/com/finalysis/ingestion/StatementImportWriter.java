@@ -2,6 +2,8 @@ package com.finalysis.ingestion;
 
 import com.finalysis.account.Account;
 import com.finalysis.api.NotFoundException;
+import com.finalysis.ingestion.csv.CsvMappingRepository;
+import com.finalysis.ingestion.csv.CsvMappingSpec;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.util.ArrayList;
@@ -31,6 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
  * that overlaps an earlier statement when the import inserted new rows. An overlapping re-import
  * that inserted nothing is IMPORTED with an informational warning. Balance reconciliation comes
  * later (ING-06).
+ *
+ * <p><b>CSV mapping.</b> A CSV file is parsed, outside any transaction, with a snapshot of the
+ * account's mapping. Under the lock, the snapshot's version must still be the saved mapping's
+ * ({@code updated_at}); otherwise the mapping changed in between, the rows may carry fingerprints
+ * from the old one, and the import is refused (409 {@code mapping-changed}, retry). A mapping
+ * {@code PUT} takes the same lock, so it can't slip in between this check and the commit. The
+ * first import that uses a mapping sets its {@code used_at}, which locks its fingerprint fields.
  */
 @Component
 class StatementImportWriter {
@@ -43,15 +52,23 @@ class StatementImportWriter {
     private final EntityManager entityManager;
     private final StatementRepository statements;
     private final TxnRepository txns;
+    private final CsvMappingRepository csvMappings;
 
-    StatementImportWriter(EntityManager entityManager, StatementRepository statements, TxnRepository txns) {
+    StatementImportWriter(EntityManager entityManager, StatementRepository statements, TxnRepository txns,
+                          CsvMappingRepository csvMappings) {
         this.entityManager = entityManager;
         this.statements = statements;
         this.txns = txns;
+        this.csvMappings = csvMappings;
     }
 
+    /**
+     * @param csvMapping the mapping snapshot the file was parsed with, or null for formats that
+     *                   don't use one
+     */
     @Transactional
-    public ImportSummary write(long accountId, ImportFile file, String parser, ParsedStatement parsed) {
+    public ImportSummary write(long accountId, ImportFile file, String parser, ParsedStatement parsed,
+                               CsvMappingSpec csvMapping) {
         Account account = entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE);
         if (account == null) {
             throw new NotFoundException("Account", accountId);
@@ -60,6 +77,10 @@ class StatementImportWriter {
         statements.findByFileHash(file.sha256()).ifPresent(existing -> {
             throw ImportRejectedException.alreadyImported(existing.getId());
         });
+        if (csvMapping != null && !csvMappings.findUpdatedAt(accountId)
+                .map(current -> current.isEqual(csvMapping.updatedAt())).orElse(false)) {
+            throw ImportRejectedException.mappingChanged();
+        }
 
         List<ParsedTxn> rows = parsed.txns();
         List<String> fingerprints = TransactionFingerprint.forStatement(
@@ -116,6 +137,9 @@ class StatementImportWriter {
             inserted.add(toTxn(account, statement, rows.get(i), fingerprints.get(i)));
         }
         txns.saveAll(inserted);
+        if (csvMapping != null) {
+            csvMappings.markUsed(accountId);
+        }
 
         return new ImportSummary(statement.getId(), parser, parsed.periodStart(), parsed.periodEnd(), rows.size(),
                 inserted.size(), rows.size() - inserted.size(), statement.getStatus(), warnings);

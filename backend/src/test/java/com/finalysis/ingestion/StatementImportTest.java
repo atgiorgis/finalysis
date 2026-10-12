@@ -436,8 +436,8 @@ class StatementImportTest {
                 Arguments.of("statement.txt", "%PDF-1.7\n1 0 obj".getBytes(StandardCharsets.US_ASCII), "PDF statements"),
                 Arguments.of("statement.csv", random, "not a text file"),
                 Arguments.of("statement.csv", new byte[] {'P', 'K', 3, 4, 20, 0}, "ZIP and spreadsheet"),
-                Arguments.of("statement.csv", "Date,Description,Amount\n04/01/2026,CAFE,-4.50\n".getBytes(StandardCharsets.US_ASCII),
-                        "not in a supported statement format"),
+                Arguments.of("statement.txt", "one column\nof text\n".getBytes(StandardCharsets.US_ASCII),
+                        "not in a supported statement format (OFX, QFX, CSV)"),
                 Arguments.of("statement.exe", "OFXHEADER:100\n".getBytes(StandardCharsets.US_ASCII), "must end in"),
                 Arguments.of("statement", "OFXHEADER:100\n".getBytes(StandardCharsets.US_ASCII), "must end in"),
                 Arguments.of("statement.ofx", new byte[0], "empty"),
@@ -453,6 +453,16 @@ class StatementImportTest {
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.type").value(PROBLEM + "unsupported-format"))
                 .andExpect(jsonPath("$.detail", containsString(detail)));
+    }
+
+    @Test
+    void csvWithoutAMappingIsMappingRequiredNotUnsupported() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+
+        support.upload(checking, "statement.csv", "Date,Description,Amount\n04/01/2026,CAFE,-4.50\n".getBytes(StandardCharsets.US_ASCII))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.type").value(PROBLEM + "mapping-required"))
+                .andExpect(jsonPath("$.detail", containsString("/api/accounts/" + checking + "/imports/preview")));
     }
 
     @Test

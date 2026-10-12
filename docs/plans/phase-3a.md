@@ -1,7 +1,7 @@
 # Phase 3a plan: standard-format ingestion (OFX/QFX + CSV)
 
-Status: steps 1–6 done; step 7 next. Branch `v1`. Read this before starting a step, then the
-requirements it cites in `docs/requirements.md` (currently v1.16).
+Status: steps 1–7 done; step 8 next. Branch `v1`. Read this before starting a step, then the
+requirements it cites in `docs/requirements.md` (currently v1.17).
 
 Scope: ING-01 to ING-07, ING-10, SEC-10, SEC-11 for OFX/QFX and CSV. Out of scope for 3a: PDF
 parsers (3b), transfer detection and the review-queue API (3c), categorization and merchant
@@ -149,13 +149,12 @@ These are approved and override anything older in the conversation history.
 ### CSV parser (step 6)
 - `CsvStatementParser` (id `csv`, Apache Commons CSV): cells never trimmed, no
   `ignoreSurroundingSpaces`, no escape character (quotes are doubled), no comment marker; empty
-  and whitespace-only lines are skipped. **Not a Spring bean yet:** registering it now would turn
-  CSV uploads from 415 into unhandled mapping exceptions; step 7 adds `@Component` together with the
-  `mapping-required` / `mapping-mismatch` responses.
-- Detection (FALLBACK): text (UTF-8, else windows-1252; NUL = binary = NONE) that splits into the
-  same column count (at least 2) across the first 20 non-blank records with one of `, ; TAB |`.
-  OFX stays DEFINITE and wins.
-- `ParseContext` carries the account's `CsvMapping` (nullable). No mapping →
+  and whitespace-only lines are skipped. A Spring bean since step 7.
+- Detection (FALLBACK): text (UTF-8, else windows-1252; NUL = binary = NONE) with one of
+  `, ; TAB |`. OFX stays DEFINITE and wins. *(Step 7 replaced the "first 20 records" rule with
+  the preamble-tolerant one below.)*
+- `ParseContext` carries the account's mapping (nullable; an immutable `CsvMappingSpec` since
+  step 7). No mapping →
   `CsvMappingRequiredException`; header signature (or `columns:<n>`) differs →
   `CsvMappingMismatchException` with both signatures (hashes or counts, never header text).
 - `skip_rows` skips physical lines before CSV parsing (so quotes in a preamble can't break it);
@@ -165,7 +164,7 @@ These are approved and override anything older in the conversation history.
   side (some banks print debits with a minus). Whitespace-only description cells count as empty.
   A blank balance cell means no running balance on that row. A check-number cell is stripped.
 - Period = earliest to latest printed date (not first and last row, so newest-first files work).
-  A file with no rows is a parse error until step 7's request period can supply one.
+  A file with no rows is a parse error unless the request gives both period ends (step 7).
 - Errors: `line N: column C (role) …` with 1-based column positions; never cell values or header
   names. Every row must have the header's column count.
 - `ParsedTxn.runningBalance` (nullable, NUMERIC(12,2)) carries the balance column for step 8; not
@@ -197,6 +196,50 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 - Confidence per field: MATCHED, GUESSED, MISSING, plus notes.
 - Record in requirements (ING-01 or a new ING ID) with a change-log entry in the step 7 commit.
 
+### CSV import (step 7)
+- **Detection tolerates a preamble** (review change A). Candidate starts are the non-blank lines
+  among the first 100; a start qualifies when 5 records from it (or all remaining, if fewer, but
+  at least 2 unless the whole file is one record) share one column count >= 2. The earliest start
+  wins across `, ; TAB |` (earlier delimiter on a tie); its line number is the suggested
+  `skip_rows`. Detection reads at most 1 MB. Rows after the run are the parser's to check. Edge
+  case `csv-preamble.csv`: the April checking statement below 4 summary lines (3 with a comma, so
+  they form a short 2-column run that must not win) and a blank line; resolves to `skip_rows` 5.
+- **Mapping snapshot** (review change B). `CsvMappingSpec(CsvMappingValues values, updatedAt)` is
+  built by `CsvMappingService.snapshot` in a read-only transaction; `ParseContext` carries it and
+  the parser never touches JPA. `CsvMappingValues` became public for this.
+- `StatementParser.usesCsvMapping()` (default false, CSV true) tells the import to take the
+  snapshot and the writer to check it; OFX imports never see a CSV mapping.
+- **Version check:** under the account lock, the writer compares the saved `updated_at` with the
+  snapshot's; any difference is 409 `mapping-changed` (retry), nothing written. A `PUT` takes the
+  same lock, so nothing can change between the check and the commit. `updated_at` instead of a
+  version column: no migration, and two mapping saves would have to start in the same
+  microsecond to collide; a V7 `version` column would make it exact if that ever matters.
+- **`used_at`** is set by the first successful import in the writer's transaction with a native
+  `UPDATE ... WHERE used_at IS NULL`, so `updated_at` doesn't move: marking a mapping used doesn't
+  change how it reads files and must not make concurrent imports look stale.
+- Problems: 422 `mapping-required` (detail names the preview and PUT endpoints), 422
+  `mapping-mismatch` with `preview` (the one problem response that carries file contents; it goes
+  to the uploader only and is never logged), 409 `mapping-changed`.
+- **Preview** (`POST /api/accounts/{id}/imports/preview`): same upload checks, detection and
+  parsing as an import, writes nothing. CSV: `format`, `delimiter`, `encoding`, `skipRows`,
+  `headers` (stripped), first 10 `rows`, `mappingStatus` (NONE / MATCHES / MISMATCH, where
+  MATCHES means the saved mapping's own settings read this file's signature), `suggestedMapping`
+  unless MATCHES. Other formats: `format`, `periodStart`, `periodEnd`, `transactionCount` (after
+  the currency and account checks). Logged: format and account id only.
+- **Suggestions** read every data row, not just the 10 shown (more evidence for the date format
+  and sign). One description column (earliest synonym), with a note naming other description-like
+  columns. A single amount column wins over debit/credit. Duplicate header names are never
+  suggested. Sign confidence: MATCHED for debit/credit, GUESSED otherwise; MISSING only for a
+  card with no amount column. Optional columns that aren't found are left out of `confidence`.
+  `mapping` is a complete `PUT` body.
+- Request values: an inverted period with both ends given is a 400 before parsing (a parser may
+  use it for an empty CSV), with all other request errors; everything else is still checked
+  after parsing.
+- Tests: `CsvImportTest` (whole sample set with unedited suggestions + OFX into separate
+  accounts, overlap file, preamble, mapping lifecycle, mapping changed between snapshot and lock
+  via a spy that updates the row from another thread, preview writes nothing and logs no
+  contents), `CsvMappingSuggesterTest`, detection tests in `CsvStatementParserTest`.
+
 ### Other decisions
 - Merchant cleaning moves to Phase 4; `txn.merchant` stays null in Phase 3 (ING-02).
 - Non-USD statements are rejected with 422.
@@ -218,10 +261,10 @@ automatically (the user confirms with `PUT /api/accounts/{id}/csv-mapping`).
 | 4 | Import endpoint, OFX end to end (V5, dedup, statuses, SEC-10 checks, docs) | Done: `3ef1196`; follow-ups `c1dd137` (stored warnings, out-of-period rows), `89b3d3b` (FITID out of fingerprint, overlap status rule, money as JSON strings) |
 | 5 | CSV mapping: V6 `csv_mapping` (with `used_at`), entity, `GET`/`PUT /api/accounts/{id}/csv-mapping`, locked fields with 409 `mapping-locked` and the `?confirmFingerprintChange=true` override | Done: `11a4473` |
 | 6 | CSV parser (Apache Commons CSV) for the three sample layouts + generated CSV edge cases (quoted commas, embedded newline, non-ASCII, `=SUM(` description, identical rows, refund, newest-first, windows-1252, overlapping 04-15..05-14 export); SEC-11 stored-unchanged test; full "every sample file is claimed by exactly one parser" registry test | Done: `56ae04c` |
-| 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings | To do |
+| 7 | CSV import: register `CsvStatementParser` as a bean; preview endpoint with `suggestedMapping`, `mapping-required` / `mapping-mismatch`, full sample-data CSV import against the answer key; requirements entry for suggested mappings; preamble-tolerant detection; mapping snapshot with version check | Done |
 | 8 | Reconciliation (ING-06, ING-07, ING-10): OFX LEDGERBAL continuity with the previous statement, CSV balance column and request balances, section totals when present; `GET /api/accounts/{id}/statements` list with status filter | To do |
 | 9 | Cross-cutting SEC-10 tests: log capture during successful and failing imports, sniffing matrix, XXE end to end | To do |
 | 10 | Docs: README ingestion and API, Postman, requirement statuses (ING-01, ING-03, SEC-10 to Done when complete), change log | To do |
 
-Requirement statuses now: ING-04 Done; ING-01, ING-03, SEC-10 Planned until CSV (and step 9 for
-SEC-10) land.
+Requirement statuses now: ING-01, ING-03, ING-04 Done; SEC-10 and SEC-11 Planned until step 9
+(and the first CSV export for SEC-11's escaping).

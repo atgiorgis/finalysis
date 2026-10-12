@@ -11,6 +11,7 @@ import com.finalysis.ingestion.SourceSection;
 import com.finalysis.ingestion.StatementParseException;
 import com.finalysis.ingestion.StatementParser;
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -27,17 +28,20 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Component;
 
 /**
- * Reads delimited-text exports with the account's saved {@link CsvMapping} (ING-01, ING-02). One
- * parser for every institution: everything bank-specific is in the mapping.
+ * Reads delimited-text exports with a snapshot of the account's saved mapping
+ * ({@link CsvMappingSpec}) (ING-01, ING-02). One parser for every institution: everything
+ * bank-specific is in the mapping. The parser never touches JPA.
  *
- * <p><b>Detection.</b> Any text that splits into a consistent table is a {@link FormatMatch#FALLBACK}
- * match: at least two columns and the same column count across the first 20 non-blank records,
- * with one of the delimiters {@code , ; TAB |}. Formats with a definite signature (OFX) win.
+ * <p><b>Detection.</b> Any text that contains a consistent table is a {@link FormatMatch#FALLBACK}
+ * match; formats with a definite signature (OFX) win. A table may start below a preamble (summary
+ * lines, blank lines): see {@link #detectTable}.
  *
  * <p><b>Reading.</b> Apache Commons CSV handles quoting, doubled quotes and line breaks inside
  * quoted cells; cells are never trimmed. The mapping's encoding is decoded strictly (a UTF-8 BOM is
@@ -57,65 +61,126 @@ import org.apache.commons.csv.CSVRecord;
  *       fingerprint.</li>
  *   <li>The balance column, when mapped, becomes {@link ParsedTxn#runningBalance()} (blank = none).</li>
  * </ul>
- * The period is the earliest to the latest printed date. CSV exports carry no account hints and no
- * statement balances.
+ * The period is the earliest to the latest printed date; a file without rows takes the request's
+ * period ({@link ParseContext}). CSV exports carry no account hints and no statement balances.
  *
  * <p><b>Errors.</b> Any row that can't be read fails the whole file. Messages give the line and the
  * 1-based column position with its role, never cell values or header names (SEC-10). Limits:
  * {@value #MAX_ROWS} data rows and {@value #MAX_RECORD_CHARS} characters per record.
  *
- * <p>Not a Spring bean yet: it joins the registry in step 7, together with the
- * {@code mapping-required} and {@code mapping-mismatch} responses for its exceptions.
+ * <p>Without a mapping, {@link #parse} throws {@link CsvMappingRequiredException}; with a mapping
+ * saved for other headers, {@link CsvMappingMismatchException}. The import turns both into 422
+ * responses that lead the client to the preview.
  */
+@Component
 public class CsvStatementParser implements StatementParser {
+
+    public static final String ID = "csv";
 
     static final int MAX_ROWS = 50_000;
     static final int MAX_RECORD_CHARS = 64 * 1024;
-    static final int DETECTION_RECORDS = 20;
+    /** A table start is searched for in this many lines (mapping skipRows allows up to 100). */
+    static final int DETECTION_LINES = 100;
+    /** Consistent records that make a table, or all remaining records when there are fewer. */
+    static final int DETECTION_RUN = 5;
+    /** Detection reads at most this much text. */
+    static final int DETECTION_CHARS = 1024 * 1024;
     static final List<Character> DETECTION_DELIMITERS = List.of(',', ';', '\t', '|');
 
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+    private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
     private static final char QUOTE = '"';
 
     @Override
     public String id() {
-        return "csv";
+        return ID;
+    }
+
+    @Override
+    public boolean usesCsvMapping() {
+        return true;
     }
 
     // ------------------------------------------------------------------ detection
 
     @Override
     public FormatMatch detect(ImportFile file) {
-        String text = detectionText(file.bytes());
-        if (text == null) {
-            return FormatMatch.NONE;
-        }
-        for (char delimiter : DETECTION_DELIMITERS) {
-            if (isConsistentTable(text, delimiter)) {
-                return FormatMatch.FALLBACK;
-            }
-        }
-        return FormatMatch.NONE;
+        return detectTable(file.bytes()).isPresent() ? FormatMatch.FALLBACK : FormatMatch.NONE;
     }
 
-    /** UTF-8 when the bytes are valid UTF-8, else windows-1252; null for binary content. */
-    private static String detectionText(byte[] bytes) {
+    /**
+     * Finds the table in a delimited-text file, tolerating a preamble (summary lines, blank lines).
+     * The text is UTF-8 when valid, else windows-1252; a NUL byte means binary, never a table.
+     *
+     * <p>Each non-blank line among the first {@value #DETECTION_LINES} is a candidate start. A start
+     * qualifies when the records from it share one column count of at least two for
+     * {@value #DETECTION_RUN} records, or for all remaining records when fewer are left (at least
+     * two, so a lone last line doesn't count, unless the whole file is that one record). The
+     * earliest qualifying start wins across the delimiters {@code , ; TAB |}, earlier delimiters
+     * first on a tie. Rows after the run are the parser's to check: each must have the header's
+     * column count.
+     */
+    public static Optional<CsvTable> detectTable(byte[] bytes) {
         for (byte b : bytes) {
             if (b == 0) {
-                return null;
+                return Optional.empty();
             }
         }
+        String text;
+        String encoding;
         try {
-            return decodeStrictly(bytes, StandardCharsets.UTF_8);
+            text = decodeStrictly(bytes, StandardCharsets.UTF_8);
+            encoding = StandardCharsets.UTF_8.name();
         } catch (CharacterCodingException e) {
-            return new String(bytes, Charset.forName("windows-1252"));
+            text = new String(bytes, WINDOWS_1252);
+            encoding = WINDOWS_1252.name();
         }
+        String window = text.length() > DETECTION_CHARS ? text.substring(0, DETECTION_CHARS) : text;
+        List<Line> candidates = nonBlankLines(window);
+        CsvTable found = null;
+        for (char delimiter : DETECTION_DELIMITERS) {
+            for (Line line : candidates) {
+                if (found != null && line.number() >= found.skipRows()) {
+                    break;
+                }
+                if (startsTable(window, line.start(), delimiter, line == candidates.getFirst())) {
+                    found = new CsvTable(delimiter, encoding, line.number());
+                    break;
+                }
+            }
+        }
+        return Optional.ofNullable(found);
     }
 
-    private static boolean isConsistentTable(String text, char delimiter) {
-        try (CSVParser parser = format(delimiter).parse(new StringReader(text))) {
+    /** A physical line: its zero-based number and where it starts. */
+    private record Line(int number, int start) {
+    }
+
+    /** The non-blank lines among the first {@value #DETECTION_LINES} (CRLF, LF and CR each end a line). */
+    private static List<Line> nonBlankLines(String text) {
+        List<Line> lines = new ArrayList<>();
+        int start = 0;
+        for (int number = 0; number < DETECTION_LINES && start < text.length(); number++) {
+            int end = start;
+            while (end < text.length() && text.charAt(end) != '\r' && text.charAt(end) != '\n') {
+                end++;
+            }
+            if (!text.substring(start, end).isBlank()) {
+                lines.add(new Line(number, start));
+            }
+            start = afterLineBreak(text, end);
+        }
+        return lines;
+    }
+
+    /**
+     * Whether the records from {@code start} form a table: {@value #DETECTION_RUN} records, or all
+     * that remain (at least two unless {@code wholeFile}), with one column count of two or more.
+     */
+    private static boolean startsTable(String text, int start, char delimiter, boolean wholeFile) {
+        try (CSVParser parser = format(delimiter).parse(readerFrom(text, start))) {
             int columns = -1;
-            int seen = 0;
+            int run = 0;
             for (CSVRecord record : parser) {
                 if (isBlank(record)) {
                     continue;
@@ -125,40 +190,55 @@ public class CsvStatementParser implements StatementParser {
                 } else if (record.size() != columns) {
                     return false;
                 }
-                if (++seen == DETECTION_RECORDS) {
+                if (++run == DETECTION_RUN) {
                     break;
                 }
             }
-            return columns >= 2;
+            return columns >= 2 && (run >= 2 || wholeFile);
         } catch (IOException | UncheckedIOException | IllegalStateException e) {
             return false;
         }
     }
 
+    /** Reads {@code text} from {@code start} without copying it. */
+    private static Reader readerFrom(String text, int start) throws IOException {
+        StringReader reader = new StringReader(text);
+        reader.skip(start);
+        return reader;
+    }
+
     // ------------------------------------------------------------------ parsing
 
     /**
+     * A file without rows is a statement without transactions when the context carries the
+     * request's period, and a parse error otherwise.
+     *
      * @throws CsvMappingRequiredException if the context has no mapping
      * @throws CsvMappingMismatchException if the file's header or column count doesn't match the mapping
      * @throws StatementParseException     if the file or any row can't be read
      */
     @Override
     public ParsedStatement parse(ImportFile file, ParseContext context) {
-        CsvMapping mapping = context.csvMapping();
-        if (mapping == null) {
+        if (context.csvMapping() == null) {
             throw new CsvMappingRequiredException();
         }
-        String text = decode(file.bytes(), mapping.getEncoding());
-        char delimiter = mapping.getDelimiter().charAt(0);
-        int maxRecords = MAX_ROWS + (mapping.isHeaderRow() ? 1 : 0);
-        List<RawRecord> records = records(text, afterLines(text, mapping.getSkipRows()), delimiter, maxRecords);
+        CsvMappingValues mapping = context.csvMapping().values();
+        String text = decode(file.bytes(), mapping.encoding());
+        char delimiter = mapping.delimiter().charAt(0);
+        int maxRecords = MAX_ROWS + (mapping.headerRow() ? 1 : 0);
+        List<RawRecord> records = records(text, afterLines(text, mapping.skipRows()), delimiter, maxRecords);
         Layout layout = layout(mapping, records);
-        DateTimeFormatter dates = CsvDateFormat.formatter(mapping.getDateFormat())
+        DateTimeFormatter dates = CsvDateFormat.formatter(mapping.dateFormat())
                 .orElseThrow(() -> new StatementParseException(null, "the CSV mapping's date format is invalid"));
 
-        List<RawRecord> rows = records.subList(mapping.isHeaderRow() ? 1 : 0, records.size());
+        List<RawRecord> rows = records.subList(mapping.headerRow() ? 1 : 0, records.size());
         if (rows.isEmpty()) {
-            throw new StatementParseException(null, "the file has no transactions");
+            if (context.periodStart() == null || context.periodEnd() == null) {
+                throw new StatementParseException(null,
+                        "the file has no transactions; send periodStart and periodEnd to import it as an empty statement");
+            }
+            return new ParsedStatement(AccountHints.none(), context.periodStart(), context.periodEnd(), null, null,
+                    Map.of(), List.of(), List.of());
         }
         List<ParsedTxn> txns = new ArrayList<>(rows.size());
         for (RawRecord row : rows) {
@@ -184,7 +264,7 @@ public class CsvStatementParser implements StatementParser {
         return moneyIn ? SourceSection.DEPOSIT : SourceSection.WITHDRAWAL;
     }
 
-    private static ParsedTxn txn(RawRecord row, Layout layout, CsvMapping mapping, DateTimeFormatter dates,
+    private static ParsedTxn txn(RawRecord row, Layout layout, CsvMappingValues mapping, DateTimeFormatter dates,
                                  AccountType accountType) {
         if (row.values().size() != layout.columns()) {
             throw new StatementParseException(row.line(),
@@ -193,10 +273,10 @@ public class CsvStatementParser implements StatementParser {
         LocalDate date = date(row, layout.date(), "date", dates);
         LocalDate postDate = layout.postDate() == null ? null : date(row, layout.postDate(), "post date", dates);
 
-        Amount amount = mapping.getAmountMode() == CsvAmountMode.SINGLE
+        Amount amount = mapping.amountMode() == CsvAmountMode.SINGLE
                 ? single(row, layout.amount())
                 : debitCredit(row, layout.debit(), layout.credit());
-        BigDecimal signed = mapping.getSign() == CsvSign.INVERTED ? amount.value().negate() : amount.value();
+        BigDecimal signed = mapping.sign() == CsvSign.INVERTED ? amount.value().negate() : amount.value();
 
         String checkNumber = null;
         if (layout.checkNumber() != null && !cell(row, layout.checkNumber()).isBlank()) {
@@ -300,34 +380,55 @@ public class CsvStatementParser implements StatementParser {
     }
 
     /** Checks the header (or column count) against the mapping and resolves its columns. */
-    private static Layout layout(CsvMapping mapping, List<RawRecord> records) {
+    private static Layout layout(CsvMappingValues mapping, List<RawRecord> records) {
         if (records.isEmpty()) {
-            throw new StatementParseException(null, mapping.isHeaderRow()
+            throw new StatementParseException(null, mapping.headerRow()
                     ? "the file has no header row" : "the file has no transactions");
         }
         RawRecord first = records.getFirst();
-        List<String> headers = null;
-        String signature;
-        if (mapping.isHeaderRow()) {
-            headers = first.values().stream().map(String::strip).toList();
-            signature = CsvHeaderSignature.ofHeaders(first.values());
-        } else {
-            signature = CsvHeaderSignature.ofColumnCount(first.values().size());
-        }
-        if (!signature.equals(mapping.getHeaderSignature())) {
-            throw new CsvMappingMismatchException(mapping.getHeaderSignature(), signature);
+        String signature = signatureOf(first, mapping.headerRow());
+        if (!signature.equals(mapping.headerSignature())) {
+            throw new CsvMappingMismatchException(mapping.headerSignature(), signature);
         }
 
-        Resolver resolve = new Resolver(headers);
+        Resolver resolve = new Resolver(mapping.headerRow() ? first.values().stream().map(String::strip).toList() : null);
         return new Layout(first.values().size(),
-                resolve.column(mapping.getDateColumn()),
-                resolve.optional(mapping.getPostDateColumn()),
-                mapping.getDescriptionColumns().stream().map(resolve::column).toList(),
-                resolve.optional(mapping.getAmountColumn()),
-                resolve.optional(mapping.getDebitColumn()),
-                resolve.optional(mapping.getCreditColumn()),
-                resolve.optional(mapping.getBalanceColumn()),
-                resolve.optional(mapping.getCheckNumberColumn()));
+                resolve.column(mapping.dateColumn()),
+                resolve.optional(mapping.postDateColumn()),
+                mapping.descriptionColumns().stream().map(resolve::column).toList(),
+                resolve.optional(mapping.amountColumn()),
+                resolve.optional(mapping.debitColumn()),
+                resolve.optional(mapping.creditColumn()),
+                resolve.optional(mapping.balanceColumn()),
+                resolve.optional(mapping.checkNumberColumn()));
+    }
+
+    private static String signatureOf(RawRecord first, boolean headerRow) {
+        return headerRow
+                ? CsvHeaderSignature.ofHeaders(first.values())
+                : CsvHeaderSignature.ofColumnCount(first.values().size());
+    }
+
+    /**
+     * The file's header signature when read with the mapping's encoding, delimiter, skipped lines
+     * and header setting, or null when it can't be read that way. Equal to the mapping's own
+     * signature exactly when {@link #parse} won't report a mismatch.
+     */
+    static String headerSignature(byte[] bytes, CsvMappingValues mapping) {
+        try {
+            String text = decode(bytes, mapping.encoding());
+            List<RawRecord> records = records(text, afterLines(text, mapping.skipRows()),
+                    mapping.delimiter().charAt(0), MAX_ROWS + 1);
+            return records.isEmpty() ? null : signatureOf(records.getFirst(), mapping.headerRow());
+        } catch (StatementParseException e) {
+            return null;
+        }
+    }
+
+    /** Every non-blank record of a detected table, header included. */
+    static List<RawRecord> tableRecords(byte[] bytes, CsvTable table) {
+        String text = decode(bytes, table.encoding());
+        return records(text, afterLines(text, table.skipRows()), table.delimiter(), MAX_ROWS + 1);
     }
 
     /** Header names (matched exactly after stripping), or zero-based indexes without a header row. */
@@ -488,12 +589,18 @@ public class CsvStatementParser implements StatementParser {
             while (position < text.length() && text.charAt(position) != '\r' && text.charAt(position) != '\n') {
                 position++;
             }
-            if (position < text.length() && text.charAt(position) == '\r') {
-                position++;
-            }
-            if (position < text.length() && text.charAt(position) == '\n') {
-                position++;
-            }
+            position = afterLineBreak(text, position);
+        }
+        return position;
+    }
+
+    /** The position after the line break (CRLF, LF or CR) at {@code position}, if there is one. */
+    private static int afterLineBreak(String text, int position) {
+        if (position < text.length() && text.charAt(position) == '\r') {
+            position++;
+        }
+        if (position < text.length() && text.charAt(position) == '\n') {
+            position++;
         }
         return position;
     }

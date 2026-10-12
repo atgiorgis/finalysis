@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-/** Statement import (ING-01, ING-03, ING-04) and statement detail. */
+/** Statement import (ING-01, ING-03, ING-04), import preview and statement detail. */
 @RestController
 public class StatementController {
 
@@ -41,6 +41,14 @@ public class StatementController {
         URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/api/statements/{id}").buildAndExpand(summary.statementId()).toUri();
         return ResponseEntity.created(location).body(summary);
+    }
+
+    /** Reads the file as an import would and writes nothing; see {@link ImportPreview}. */
+    @PostMapping(path = "/api/accounts/{accountId}/imports/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ImportPreview preview(@PathVariable long accountId, @RequestPart("file") MultipartFile file)
+            throws IOException {
+        UploadCheck.checkSize(file.getSize());
+        return imports.preview(accountId, file.getOriginalFilename(), file.getBytes());
     }
 
     @GetMapping("/api/statements/{id}")

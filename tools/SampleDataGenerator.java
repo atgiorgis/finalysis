@@ -560,7 +560,7 @@ public class SampleDataGenerator {
 
     // ---------------------------------------------------------------- CSV edge cases
 
-    static final int CSV_EDGE_CASES = 7;
+    static final int CSV_EDGE_CASES = 8;
 
     /**
      * Hand-built CSV files for parser and import edge cases; not part of the answer key. Written
@@ -617,6 +617,17 @@ public class SampleDataGenerator {
         List<Txn> overlap = aprilAndMay.stream()
                 .filter(t -> !t.postDate().isBefore(from) && !t.postDate().isAfter(to)).toList();
         write("edge-cases/csv-northfield-checking_2026-04-15_2026-05-14.csv", render(Account.CHECKING, opening, overlap));
+
+        // The April checking statement below a summary block, as some banks export it: four
+        // preamble lines (three with a comma, so they look like a short two-column table) and a
+        // blank line before the header.
+        Statement aprilChecking = checking.get(0);
+        write("edge-cases/csv-preamble.csv", String.join("\n",
+                "Northfield Bank Account Activity",
+                "Account number,XXXXXX1001",
+                "Statement period,04/01/2026 to 04/30/2026",
+                "Opening balance," + format(aprilChecking.opening()),
+                "") + "\n" + render(Account.CHECKING, aprilChecking.opening(), aprilChecking.rows()));
     }
 
     static String csvLines(String lineBreak, String header, String... rows) {

@@ -54,6 +54,9 @@ database. `DevDatabaseGuard` fails any test context whose datasource points at t
 4. Run the rest of the collection. **Statements → Import checking April (OFX)** uploads
    `sample-data/ofx/northfield-checking_2026-04.ofx`: set Postman's working directory
    (Settings → General) to the repo root, or reselect the file in the request's Body tab.
+   **CSV import** runs after **CSV mapping**: it previews and imports the April Apex CSV, then
+   shows `mapping-required` (Summit has no mapping), `mapping-mismatch` (a Summit file sent to
+   Apex) and the `mapping-locked` 409 for a locked field changed after use.
 
 Setup creates duplicate accounts if you run it twice, because accounts have no uniqueness rule.
 To start clean, reset the dev database (below).
@@ -238,6 +241,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `PATCH` | `/api/accounts/{id}` | Rename an account | 200 |
 | `GET` | `/api/categories` | List the seeded categories (DAT-02) | 200 |
 | `POST` | `/api/accounts/{id}/imports` | Import a statement file (multipart); see [Importing statements](#importing-statements) | 201, `Location` header |
+| `POST` | `/api/accounts/{id}/imports/preview` | Read a file as an import would, write nothing; CSV gets a suggested mapping | 200 |
 | `GET` | `/api/statements/{id}` | Get one imported statement | 200 |
 | `GET` | `/api/accounts/{id}/csv-mapping` | Get the account's CSV mapping; 404 when it has none | 200 |
 | `PUT` | `/api/accounts/{id}/csv-mapping` | Create or replace the CSV mapping; see [CSV mappings](#csv-mappings) | 201 created, 200 replaced |
@@ -272,7 +276,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | 404 | Unknown id, e.g. `Account 42 not found` | `detail` |
 | 409 | A database constraint was violated | generic `detail` |
 | 409 | A used CSV mapping's fingerprint fields would change (`urn:finalysis:problem:mapping-locked`) | `fields[]`, see [CSV mappings](#csv-mappings) |
-| 413, 415, 409, 422 | A statement import was refused | typed `type`, see [Importing statements](#importing-statements) |
+| 413, 415, 409, 422 | A statement import or preview was refused | typed `type`, see [Importing statements](#importing-statements) |
 | 500 | Unexpected error | generic `detail` |
 
 Constraint names, SQL, and stack traces are logged on the server and never returned. Spring's own
@@ -288,8 +292,24 @@ Upload one statement file per request to the account it belongs to. Optional for
 `periodStart` and `periodEnd` (ISO dates) replace the file's period; `openingBalance` and
 `closingBalance` fill in balances the file doesn't print (if the file does print one and the
 request disagrees, the file's value is kept with a warning). Balances are plain decimal text such
-as `1234.56`: at most two decimals, no exponent or thousands separator. Supported today: OFX 1.x/2.x and QFX.
-CSV follows in the next steps; PDF in Phase 3b.
+as `1234.56`: at most two decimals, no exponent or thousands separator. Balances are stored but
+not reconciled yet. Supported today: OFX 1.x/2.x, QFX and CSV; PDF follows in Phase 3b.
+
+**CSV files** need the account's column mapping first. The first time, preview the file, check
+the suggested mapping, and save it:
+
+```sh
+curl -F file=@sample-data/statements/apex-visa_2026-04.csv http://localhost:8080/api/accounts/3/imports/preview
+# edit suggestedMapping.mapping if needed, then:
+curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping -H 'Content-Type: application/json' -d @mapping.json
+curl -F file=@sample-data/statements/apex-visa_2026-04.csv http://localhost:8080/api/accounts/3/imports
+```
+
+Later CSV imports of the account reuse the mapping. Without one, an import is
+`422 mapping-required` (pointing to the preview); a file whose columns differ from the ones the
+mapping was saved for is `422 mapping-mismatch`, with the file's preview in `preview`. A CSV file
+without rows imports as an empty statement when the request gives both `periodStart` and
+`periodEnd`.
 
 1. **Checks.** At most 10 MB; the file name must end in `.ofx`, `.qfx`, `.csv` or `.txt`; the
    bytes must be UTF-8 or windows-1252 text (PDFs, ZIP/XLSX and binary data are refused). The
@@ -297,13 +317,16 @@ CSV follows in the next steps; PDF in Phase 3b.
    a SHA-256 hash and the file name are kept.
 2. **Same file again** (same hash): `409 already-imported` with the existing `statementId`.
 3. **Detect and parse** by content, outside any database transaction. Any unreadable row fails
-   the whole file (`422 parse-error`, with the line number); nothing is written.
+   the whole file (`422 parse-error`, with the line number); nothing is written. A CSV file is
+   read with a snapshot of the account's mapping, taken just before parsing.
 4. **Account check.** The file's last four digits, account type and currency must match the
    account when the file carries them.
 5. **Save** in one transaction, with the account row locked so imports to one account run one
-   at a time. Each row is fingerprinted from its raw values; rows already imported for this
-   account are skipped as duplicates, so re-importing a period or an overlapping export adds only
-   rows that are new.
+   at a time. A CSV import first checks that the mapping is still the one it parsed with (a
+   mapping saved in the meantime is `409 mapping-changed`; retry), and the first import that
+   uses a mapping sets its `usedAt`. Each row is fingerprinted from its raw values; rows already
+   imported for this account are skipped as duplicates, so re-importing a period or an
+   overlapping export adds only rows that are new.
 
 The response is an import summary:
 
@@ -352,12 +375,56 @@ warning `account mixes import formats (...)`.
 | `parse-error` | 422 | A row or the file structure can't be read; `line` when known |
 | `account-mismatch` | 422 | The file's account type or last four digits differ from the account's |
 | `unsupported-currency` | 422 | Not USD |
+| `mapping-required` | 422 | A CSV file for an account without a CSV mapping; `detail` points to the preview |
+| `mapping-mismatch` | 422 | The CSV file's columns differ from the mapping's; `preview` holds the file's preview |
+| `mapping-changed` | 409 | The CSV mapping was saved while the file was being read; nothing was written, retry |
 | `ambiguous-format` | 422 | More than one parser claims the file (a bug; reported, not guessed) |
+
+### Preview
+
+`POST /api/accounts/{id}/imports/preview` takes the same multipart `file` and runs the same upload
+checks, detection and parsing as an import, but writes nothing. An OFX/QFX file returns
+`format`, `periodStart`, `periodEnd` and `transactionCount`. A CSV file returns how it will be
+read, with a suggested mapping unless the saved one already matches:
+
+```json
+{
+  "format": "csv", "delimiter": ",", "encoding": "UTF-8", "skipRows": 0,
+  "headers": ["Transaction Date", "Post Date", "Description", "Category", "Amount"],
+  "rows": [["2026-04-03", "2026-04-04", "AMZN MKTP US*7ETP43", "Merchandise", "66.43"], "…"],
+  "mappingStatus": "NONE",
+  "suggestedMapping": {
+    "mapping": { "headers": ["…"], "dateColumn": "Transaction Date", "postDateColumn": "Post Date",
+                 "dateFormat": "yyyy-MM-dd", "descriptionColumns": ["Description"],
+                 "amountMode": "SINGLE", "amountColumn": "Amount", "sign": "INVERTED", "…": "…" },
+    "confidence": { "dateColumn": "MATCHED", "dateFormat": "MATCHED", "postDateColumn": "MATCHED",
+                    "descriptionColumns": "MATCHED", "amountColumn": "MATCHED", "sign": "GUESSED" },
+    "notes": ["sign: 6 of 7 amounts are positive, so purchases look positive (INVERTED)"]
+  }
+}
+```
+
+- `rows` are the first 10 data rows. `mappingStatus` is `NONE` (no mapping), `MATCHES` (the saved
+  mapping reads this file) or `MISMATCH`.
+- **Detection** finds the table even below a preamble (summary lines, blank lines): the first of
+  the first 100 lines where at least 5 records in a row (or all remaining ones, if fewer) share
+  one column count of 2 or more, with `,` `;` tab or `|`. Its line becomes `skipRows`. The
+  encoding is UTF-8 when the bytes are valid UTF-8, else windows-1252.
+- **Suggestions** are plain Java, no AI. Headers match known names ignoring case, spaces and
+  punctuation (`Trans. Date`, `Posting Date`, `Merchant Name`, `Debit`/`Credit`, `Money Out`,
+  `Running Balance`, `Check No`, …). With both a transaction and a post date, the post date is
+  the printed date. The date format is the first of `MM/dd/yyyy`, `M/d/yyyy`, `yyyy-MM-dd`,
+  `dd-MMM-yyyy`, `MM/dd/yy`, `dd/MM/yyyy` that reads every date in the file; if another one also
+  does but gives different dates (04/05 as April 5 or May 4), the US format is picked with an
+  "ambiguous date format" note. A card account with one amount column gets `INVERTED` when most
+  amounts are positive. Each field is `MATCHED`, `GUESSED` or `MISSING`; `mapping` is a ready
+  `PUT` body, and nothing is saved until you send it.
+- The preview contains file contents, so it is returned to the uploader only and never logged.
 
 ### CSV mappings
 
 CSV exports differ by bank, so each account saves one column mapping, which every CSV import of
-that account uses. (CSV import itself lands in the next steps.)
+that account uses. The [preview](#preview) suggests one; this is what the Apex Visa export needs:
 
 ```sh
 curl -X PUT http://localhost:8080/api/accounts/3/csv-mapping -H 'Content-Type: application/json' -d '{
@@ -427,9 +494,13 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
 - `ofx/` — the same Northfield checking statements as OFX 1.x SGML (`CHARSET:1252`, CRLF, empty
   `MEMO`s) and the same Apex statements as QFX (OFX 2.x XML). Descriptions longer than 32
   characters are split at a space into `NAME` and `MEMO`, so `NAME MEMO` equals the CSV description.
-- `edge-cases/` — hand-built files for parser and import tests: a `TRNTYPE` that contradicts the
-  sign, a `LEDGERBAL` that doesn't match the rows, an XXE payload, and a transfer with a
-  `BANKACCTTO` account number. Not in the answer key.
+- `edge-cases/` — hand-built files for parser and import tests. OFX: a `TRNTYPE` that
+  contradicts the sign, a `LEDGERBAL` that doesn't match the rows, an XXE payload, and a transfer
+  with a `BANKACCTTO` account number. CSV: quoted cells (commas, line breaks, doubled quotes, BOM,
+  non-ASCII), formula-leading descriptions, identical same-day rows, a card refund, a newest-first
+  file, windows-1252, a Northfield export for 04-15 to 05-14 overlapping two statements, and the
+  April checking statement below a four-line summary and a blank line (`csv-preamble.csv`). Not in
+  the answer key.
 
 **Planted anomalies**
 

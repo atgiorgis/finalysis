@@ -42,8 +42,8 @@ class SampleDataParserSelectionTest {
                 .anyMatch(name -> name.startsWith("edge-cases/csv-"))
                 .anyMatch(name -> name.startsWith("edge-cases/ofx-"))
                 .anyMatch(name -> name.endsWith(".qfx"))
-                // 25 CSV statements, 1 broken, 13 OFX/QFX, 4 OFX and 7 CSV edge cases, manifest, answer key
-                .hasSize(52);
+                // 25 CSV statements, 1 broken, 13 OFX/QFX, 4 OFX and 8 CSV edge cases, manifest, answer key
+                .hasSize(53);
     }
 
     @ParameterizedTest(name = "{0}")

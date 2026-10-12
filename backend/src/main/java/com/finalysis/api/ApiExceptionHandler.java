@@ -71,7 +71,10 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return invalidRequest(ex.getErrors());
     }
 
-    /** Import refusals carry their own type and title; details never quote file contents (SEC-10). */
+    /**
+     * Import refusals carry their own type and title; details never quote file contents (SEC-10).
+     * A mapping mismatch adds the file's preview, which only the uploader receives.
+     */
     @ExceptionHandler(ImportRejectedException.class)
     ProblemDetail handleImportRejected(ImportRejectedException ex) {
         ProblemDetail problem = importProblem(ex.getProblem(), ex.getMessage());
@@ -80,6 +83,9 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         }
         if (ex.getLineNumber() != null) {
             problem.setProperty("line", ex.getLineNumber());
+        }
+        if (ex.getPreview() != null) {
+            problem.setProperty("preview", ex.getPreview());
         }
         return problem;
     }

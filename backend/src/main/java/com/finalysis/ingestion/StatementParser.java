@@ -19,6 +19,15 @@ public interface StatementParser {
     FormatMatch detect(ImportFile file);
 
     /**
+     * Whether {@link #parse} reads the account's CSV mapping from the {@link ParseContext}. The
+     * import then snapshots the mapping before parsing and checks, while saving, that it hasn't
+     * changed since.
+     */
+    default boolean usesCsvMapping() {
+        return false;
+    }
+
+    /**
      * Reads the whole file. Descriptions are passed out exactly as extracted (see
      * {@link ParsedTxn#rawDescription()}).
      *

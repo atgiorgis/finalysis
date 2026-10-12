@@ -5,9 +5,9 @@ import java.util.List;
 /**
  * A complete, validated mapping as {@link CsvMappingService} builds it from a request: defaults
  * applied, names stripped, every column checked against the file's headers or column count, and
- * the header signature computed. Nullable fields are optional columns.
+ * the header signature computed. Nullable fields are optional columns. Immutable.
  */
-record CsvMappingValues(
+public record CsvMappingValues(
         String delimiter,
         String encoding,
         boolean headerRow,
@@ -25,12 +25,12 @@ record CsvMappingValues(
         String balanceColumn,
         String checkNumberColumn) {
 
-    CsvMappingValues {
+    public CsvMappingValues {
         descriptionColumns = List.copyOf(descriptionColumns);
     }
 
     /** The column whose value is the printed date in fingerprints: the post date when mapped. */
-    String printedDateColumn() {
+    public String printedDateColumn() {
         return postDateColumn != null ? postDateColumn : dateColumn;
     }
 }

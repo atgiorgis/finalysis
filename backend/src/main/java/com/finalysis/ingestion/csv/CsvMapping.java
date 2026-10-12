@@ -95,7 +95,10 @@ public class CsvMapping {
 
     private String checkNumberColumn;
 
-    /** Set by the first successful import (step 7); null means the mapping is not locked yet. */
+    /**
+     * Set by the first successful import ({@link CsvMappingRepository#markUsed}); null means the
+     * mapping is not locked yet.
+     */
     private OffsetDateTime usedAt;
 
     @Generated
@@ -152,6 +155,13 @@ public class CsvMapping {
             changed.add("sign");
         }
         return changed.stream().sorted().toList();
+    }
+
+    /** An immutable copy for parsing, versioned by {@code updatedAt}; see {@link CsvMappingSpec}. */
+    CsvMappingSpec toSpec() {
+        return new CsvMappingSpec(new CsvMappingValues(delimiter, encoding, headerRow, skipRows, headerSignature,
+                dateColumn, dateFormat, postDateColumn, getDescriptionColumns(), amountMode, amountColumn,
+                debitColumn, creditColumn, sign, balanceColumn, checkNumberColumn), updatedAt);
     }
 
     /** The column whose value is the printed date in fingerprints: the post date when mapped. */

@@ -923,6 +923,248 @@
       ]
     },
     {
+      "name": "CSV import",
+      "item": [
+        {
+          "name": "Preview Apex Visa CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/apex-visa_2026-04.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{apexId}}",
+                "imports",
+                "preview"
+              ]
+            },
+            "description": "Reads the file as an import would and writes nothing. Runs after 'Put Apex Visa CSV mapping', so the saved mapping matches and no suggestion is returned. On an account without a mapping, mappingStatus is NONE and suggestedMapping.mapping is a ready PUT body."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('read as CSV', () => pm.expect(body.format).to.eql('csv'));",
+                  "pm.test('detected layout', () => { pm.expect(body.delimiter).to.eql(','); pm.expect(body.skipRows).to.eql(0); pm.expect(body.headers[0]).to.eql('Transaction Date'); });",
+                  "pm.test('saved mapping matches', () => pm.expect(body.mappingStatus).to.eql('MATCHES'));",
+                  "pm.test('no suggestion needed', () => pm.expect(body).to.not.have.property('suggestedMapping'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import Apex Visa April (CSV)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/apex-visa_2026-04.csv"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{apexId}}",
+                "imports"
+              ]
+            },
+            "description": "Imports the April Apex CSV with the saved mapping and sets the mapping's usedAt, which locks its fingerprint fields. A second run returns 409 already-imported."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created, or 409 if already imported', () => pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 201) {",
+                  "  pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                  "  pm.test('7 rows parsed', () => pm.expect(body.parsed).to.eql(7));",
+                  "} else {",
+                  "  pm.test('already imported', () => pm.expect(body.type).to.eql('urn:finalysis:problem:already-imported'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Error cases",
+          "item": [
+            {
+              "name": "CSV import without a mapping \u2192 422 mapping-required",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-04.csv"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{summitId}}",
+                    "imports"
+                  ]
+                },
+                "description": "The Summit account has no CSV mapping in this collection, so the import points to the preview."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('mapping-required', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-required'));",
+                      "pm.test('points to the preview', () => pm.expect(body.detail).to.include('/imports/preview'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "CSV with other columns \u2192 422 mapping-mismatch",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-04.csv"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{apexId}}",
+                    "imports"
+                  ]
+                },
+                "description": "A Summit-layout file sent to the Apex account: the columns differ from the saved mapping, so the response carries the file's preview with a suggestion for its columns."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('mapping-mismatch', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-mismatch'));",
+                      "pm.test('preview included', () => { pm.expect(body.preview.mappingStatus).to.eql('MISMATCH'); pm.expect(body.preview.headers[0]).to.eql('Trans. Date'); });",
+                      "pm.test('suggestion for the new columns', () => pm.expect(body.preview.suggestedMapping.mapping.dateFormat).to.eql('dd-MMM-yyyy'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "PUT locked field after use \u2192 409 mapping-locked",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/accounts/{{apexId}}/csv-mapping",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "accounts",
+                    "{{apexId}}",
+                    "csv-mapping"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"headers\": [\n    \"Transaction Date\",\n    \"Post Date\",\n    \"Description\",\n    \"Category\",\n    \"Amount\"\n  ],\n  \"dateColumn\": \"Transaction Date\",\n  \"dateFormat\": \"yyyy-MM-dd\",\n  \"postDateColumn\": \"Post Date\",\n  \"descriptionColumns\": [\n    \"Description\"\n  ],\n  \"amountMode\": \"SINGLE\",\n  \"amountColumn\": \"Amount\",\n  \"sign\": \"AS_IS\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Changes sign to AS_IS after the import above used the mapping. Without ?confirmFingerprintChange=true this is refused."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('mapping-locked', () => pm.expect(body.type).to.eql('urn:finalysis:problem:mapping-locked'));",
+                      "pm.test('names sign', () => pm.expect(body.fields).to.eql(['sign']));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Categories",
       "item": [
         {

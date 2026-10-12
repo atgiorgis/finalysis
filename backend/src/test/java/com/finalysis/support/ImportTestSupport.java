@@ -1,6 +1,7 @@
 package com.finalysis.support;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.finalysis.account.Account;
 import com.finalysis.account.AccountRepository;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
@@ -64,6 +66,16 @@ public class ImportTestSupport {
                 .file(new MockMultipartFile("file", fileName, "application/octet-stream", bytes));
         params.forEach(request::param);
         return mockMvc.perform(request);
+    }
+
+    public ResultActions preview(long accountId, String fileName, byte[] bytes) throws Exception {
+        return mockMvc.perform(multipart("/api/accounts/{id}/imports/preview", accountId)
+                .file(new MockMultipartFile("file", fileName, "application/octet-stream", bytes)));
+    }
+
+    public ResultActions putMapping(long accountId, String json) throws Exception {
+        return mockMvc.perform(put("/api/accounts/{id}/csv-mapping", accountId)
+                .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     public static byte[] sample(String relativePath) {

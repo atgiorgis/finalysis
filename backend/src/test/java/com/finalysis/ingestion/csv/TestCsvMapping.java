@@ -1,10 +1,12 @@
 package com.finalysis.ingestion.csv;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Builds {@link CsvMapping}s for parser tests, with the sample institutions' layouts as starting
- * points. Fields are set directly; {@link #build()} computes the header signature like the API.
+ * Builds mapping snapshots ({@link CsvMappingSpec}) for parser tests, with the sample institutions'
+ * layouts as starting points. Fields are set directly; {@link #build()} computes the header
+ * signature like the API.
  */
 final class TestCsvMapping {
 
@@ -75,12 +77,12 @@ final class TestCsvMapping {
         return m;
     }
 
-    CsvMapping build() {
+    CsvMappingSpec build() {
         String signature = headerRow
                 ? CsvHeaderSignature.ofHeaders(headers)
                 : CsvHeaderSignature.ofColumnCount(columnCount);
-        return new CsvMapping(1L, new CsvMappingValues(delimiter, encoding, headerRow, skipRows, signature,
+        return new CsvMappingSpec(new CsvMappingValues(delimiter, encoding, headerRow, skipRows, signature,
                 dateColumn, dateFormat, postDateColumn, descriptionColumns, amountMode, amountColumn, debitColumn,
-                creditColumn, sign, balanceColumn, checkNumberColumn));
+                creditColumn, sign, balanceColumn, checkNumberColumn), OffsetDateTime.parse("2026-04-01T00:00:00Z"));
     }
 }
