@@ -25,6 +25,7 @@
         <!-- Fingerprint-relevant: extracted PDF text feeds transaction fingerprints. Upgrade manually,
              never automatically (docs/plans/phase-3b.md §1.3). -->
         <pdfbox.version>3.0.8</pdfbox.version>
+        <archunit.version>1.5.1</archunit.version>
     </properties>
 
     <dependencyManagement>
@@ -118,6 +119,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -6,7 +6,7 @@ Paused on 2026-10-13 to finish the proof of concept first (Phase 3c next, then P
 parsing resumes after Phase 7. Requirements ING-08, ING-11, ING-12 and the PDF part of SEC-10 are
 deferred until then (`docs/requirements.md` v1.23).
 
-**Done (steps 0–5):**
+**Done (steps 0–5, and step 8 out of order):**
 
 | # | Step | Commit |
 |---|---|---|
@@ -16,13 +16,15 @@ deferred until then (`docs/requirements.md` v1.23).
 | 3 | PDF routing and unparsed uploads | `d93f5f3` |
 | 4 | BoA line classifier and detection | `cab80ba` |
 | 5 | Masked skeleton debug CLI | `7568134` |
+| 8 | Cross-cutting PDF security tests, done early because PDFs are accepted today | "Phase 3b step 8: PDF security tests" |
 
 **Not yet run:** the step 5 checkpoint. No masked skeleton of a real statement has been shared, so
 the layout guesses in §3 (date formats, section headings, subtotals, `- continued`, amount format)
 are still unconfirmed. Run it first when the phase resumes.
 
-**Remaining:** steps 6 (parser), 7 (import end to end), 8 (cross-cutting PDF security tests) and
-9 (docs). The plan below is unchanged and still approved.
+**Remaining:** steps 6 (parser), 7 (import end to end) and 9 (docs). When step 7 lands, extend
+the step 8 leak test with the successful-import path (it covers every path reachable today). The plan
+below is unchanged and still approved.
 
 **Current behaviour while paused:**
 - A PDF recognized as the BoA checking layout is refused with 422 `parse-error` ("…recognized
@@ -32,8 +34,9 @@ are still unconfirmed. Run it first when the phase resumes.
   `NO_TEXT_LAYER`), which the 3c review queue lists.
 - Password-protected PDFs (422 `pdf-encrypted`), PDFs over the limits (422 `pdf-too-complex`) and
   unreadable PDFs (422 `parse-error`) are refused as in step 3. The extraction limits and encryption
-  handling are tested (step 1); the cross-cutting PDF leak, no-temp-file and no-AI tests of step 8
-  are not written yet.
+  handling are tested (step 1), and so are the cross-cutting checks of step 8: no PDF text in logs
+  or responses on any of these paths, no upload, scratch file or font cache on disk, no AI
+  dependency in ingestion, PDFBox logging off.
 - Nothing else is affected: OFX/QFX and CSV imports, reconciliation and every other endpoint behave
   as at the end of Phase 3a.
 
@@ -775,7 +778,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 | 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Done: "Phase 3b step 5: masked skeleton debug CLI"; checkpoint open |
 | 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
 | 7 | Import end to end | Registered bean; open unparsed upload resolved once recognized; reconciliation on printed balances and totals; the six Northfield PDFs imported against the answer key; Postman PDF requests (synthetic fixtures, plus the real-file folder pointing at `private-data/` through your local environment, nothing committed, run by you) | `PdfImportTest`, selection test | Planned |
-| 8 | Cross-cutting security | Leak test PDF cases, no-temp and no-font-cache on a real server, ArchUnit no-AI rule, exposure checks | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Planned |
+| 8 | Cross-cutting security | Leak test PDF cases, no-temp and no-font-cache on a real server, ArchUnit no-AI rule, exposure checks | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Done (early, while paused): "Phase 3b step 8: PDF security tests" |
 | 9 | Docs | README (PDF import, limits, unparsed uploads, debug tool, PDFBox upgrade rule, limitations, **note that the project is not affiliated with any bank**), requirement statuses (ING-02, ING-08, ING-11, ING-12, ING-13, SEC-09 → Done), change log, `TransactionFingerprint` Javadoc, phase summary in this file | Postman run against a reset database | Planned |
 
 ### Step 1 notes (decisions beyond the plan)
@@ -1044,6 +1047,44 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
   and guess order, the ambiguous case, metadata never shown, and the CLI's usage, failure and
   flag-order cases. A mutation that let capitals through failed 41 of them. Backend tests
   1231 → 1297; frontend 1.
+
+### Step 8 notes (done early, while the phase is paused)
+
+Run as a standalone task before Phase 3c step 1, because PDF uploads are accepted today. It covers
+every PDF path that exists while parsing is paused; the successful-import path is added with step 7.
+
+- **`SensitiveDataLeakTest.noPdfMarkerReachesTheLogOrAResponse`:** PDFs built in memory with markers
+  in the page text (customer line, account number, row descriptions, summary lines), the file name,
+  the metadata (`/Title`, `/Author`, `/Subject`), a form field value, a JavaScript open action, an
+  embedded file and a link annotation. Paths: recognized layout (422 "not implemented") for import
+  and preview, unrecognized layout (202, then the re-upload's 202, then preview), no text layer
+  (202), password required, 51 pages, unreadable, truncated (read or refused, whichever PDFBox
+  does), `.pdf` and kind disagreeing both ways, unknown account. No marker in any log line or
+  response body, with the app at DEBUG. The 202 body is checked without its `fileName`, which is
+  the cleaned name shown back to the user (path removed; the rest is their own data, as in 3a).
+  A mutation that kept `fileName` in the check failed the test, as it should.
+- **`MultipartDiskTest.pdfUploadsWriteNoScratchFileAndNoFontCache`:** through a real Tomcat, the
+  April synthetic statement (recognized, 422) and the unrecognized-layout fixture (202), import and
+  preview: no multipart file while the service runs, no new file named like a PDFBox scratch file
+  in `java.io.tmpdir`, the font cache (`${pdfbox.fontcache:user.home}/.pdfbox.cache`) neither
+  created nor changed, and PDFBox's font mapper is the app's `NoSystemFontsMapper`.
+  `MultipartUploadProbe` gained a file-name parameter and deletes unparsed uploads on cleanup.
+- **`NoAiInIngestionTest` (ArchUnit 1.5.1, test scope, approved in the 3b plan):**
+  `com.finalysis.ingestion..` may not depend on `org.springframework.ai..`,
+  `software.amazon.awssdk..` (Bedrock), `com.finalysis.chat..` or `com.finalysis.categorize..`,
+  except the `Category` entity and `CategorySource` enum that `Txn` maps (table columns, not
+  behaviour). Two self-checks prove the rule fails on a dependency on `CategoryService` and allows
+  the two mapped types; the import is checked to contain the ingestion classes, so the rule can't
+  pass on nothing.
+- **`ExposureTest`:** the PDFBox and FontBox loggers are checked at every level (was: error only, two
+  classes) for the package roots and the classes that see page text, fonts, encryption or file
+  structure.
+- **Found while checking:** a PDFBox font cache already exists in the home directory, last changed on
+  2026-10-12 during the 3b work; what wrote it is unknown. The current code and test suite leave it
+  unchanged (checked after a full run), and the new real-server test would catch a change. It holds system font names
+  and paths, no statement data; deleting it is safe.
+- Tests: `SensitiveDataLeakTest` +1, `MultipartDiskTest` +1, `NoAiInIngestionTest` 3,
+  `ExposureTest` changed. Backend tests 1297 → 1302; frontend 1.
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.

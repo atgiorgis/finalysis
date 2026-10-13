@@ -81,6 +81,7 @@ abstract class MultipartUploadProbe {
     @AfterEach
     void deleteAccounts() {
         for (long id : created) {
+            jdbc.update("DELETE FROM unparsed_upload WHERE account_id = ?", id);
             jdbc.update("DELETE FROM txn WHERE account_id = ?", id);
             jdbc.update("DELETE FROM statement WHERE account_id = ?", id);
             jdbc.update("DELETE FROM account WHERE id = ?", id);
@@ -96,8 +97,12 @@ abstract class MultipartUploadProbe {
     }
 
     protected HttpResponse<String> post(String path, byte[] file) throws IOException, InterruptedException {
+        return post(path, "statement.csv", file);
+    }
+
+    protected HttpResponse<String> post(String path, String fileName, byte[] file) throws IOException, InterruptedException {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
-        body.writeBytes(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"statement.csv\"\r\n"
+        body.writeBytes(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n"
                 + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
         body.writeBytes(file);
         body.writeBytes(("\r\n--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.US_ASCII));

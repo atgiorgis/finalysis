@@ -1,7 +1,7 @@
 # Phase 3c plan: transfer detection and review queue
 
-Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); next: the
-standalone Phase 3b step 8 task (PDF security tests), then step 1. Branch `v1`. Requirements as of
+Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
+standalone Phase 3b step 8 task (PDF security tests) is done; next: step 1. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.24.
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
@@ -453,7 +453,7 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | # | Step | Commit content | Main tests | Status |
 |---|---|---|---|---|
 | 0 | Plan | This file; requirements v1.24 (ING-05, ING-07, ING-13 text; CAT-08 Phase 4 hook; ING-02 and SEC-09 PDF parts deferred). Commit "Phase 3c plan" | — | Done: "Phase 3c plan" |
-| — | Phase 3b step 8 (standalone) | PDF security tests, before step 1 because PDFs are accepted today; recorded in `phase-3b.md` | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Planned |
+| — | Phase 3b step 8 (standalone) | PDF security tests, before step 1 because PDFs are accepted today; recorded in `phase-3b.md` | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Done: "Phase 3b step 8: PDF security tests" |
 | 1 | Schema | V9; move transfer entities to `transfer`; `TransferRejection`; `Txn` mapping changes | `TransferSchemaTest`, repository and migration tests | Planned |
 | 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Planned |
 | 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Planned |

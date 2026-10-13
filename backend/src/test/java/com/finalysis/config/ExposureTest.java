@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -99,10 +100,17 @@ class ExposureTest {
                 "org.hibernate.type.descriptor.sql")) {
             assertThat(LoggerFactory.getLogger(logger).isTraceEnabled()).as(logger).isFalse();
         }
-        // PDFBox's warnings quote glyphs and font names. It logs through Commons Logging, so the
-        // check goes through that path rather than SLF4J's.
-        for (String logger : List.of("org.apache.pdfbox.pdmodel.font.PDType1Font", "org.apache.fontbox.ttf.TTFParser")) {
-            assertThat(LogFactory.getLog(logger).isErrorEnabled()).as(logger).isFalse();
+        // PDFBox's warnings quote glyphs, font names and broken objects. It logs through Commons
+        // Logging, so the check goes through that path rather than SLF4J's: the package roots and
+        // the classes that see page text, fonts or file structure stay silent at every level.
+        for (String logger : List.of("org.apache.pdfbox", "org.apache.fontbox",
+                "org.apache.pdfbox.pdmodel.font.PDType1Font", "org.apache.pdfbox.pdmodel.font.PDFont",
+                "org.apache.pdfbox.text.PDFTextStripper", "org.apache.pdfbox.contentstream.PDFStreamEngine",
+                "org.apache.pdfbox.pdfparser.COSParser", "org.apache.pdfbox.pdmodel.encryption.StandardSecurityHandler",
+                "org.apache.fontbox.ttf.TTFParser")) {
+            Log log = LogFactory.getLog(logger);
+            assertThat(log.isFatalEnabled() || log.isErrorEnabled() || log.isWarnEnabled() || log.isInfoEnabled()
+                    || log.isDebugEnabled() || log.isTraceEnabled()).as(logger).isFalse();
         }
     }
 
