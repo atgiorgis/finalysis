@@ -456,8 +456,8 @@ class StatementImportTest {
         byte[] random = new byte[4096];
         new Random(7).nextBytes(random);
         return Stream.of(
-                Arguments.of("statement.pdf", "%PDF-1.7\n1 0 obj".getBytes(StandardCharsets.US_ASCII), "must end in"),
-                Arguments.of("statement.txt", "%PDF-1.7\n1 0 obj".getBytes(StandardCharsets.US_ASCII), "PDF statements"),
+                Arguments.of("statement.pdf", "OFXHEADER:100\n".getBytes(StandardCharsets.US_ASCII), "not a PDF"),
+                Arguments.of("statement.txt", "%PDF-1.7\n1 0 obj".getBytes(StandardCharsets.US_ASCII), "PDF statements must end in .pdf"),
                 Arguments.of("statement.csv", random, "not a text file"),
                 Arguments.of("statement.csv", new byte[] {'P', 'K', 3, 4, 20, 0}, "ZIP and spreadsheet"),
                 Arguments.of("statement.txt", "one column\nof text\n".getBytes(StandardCharsets.US_ASCII),

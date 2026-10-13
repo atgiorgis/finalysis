@@ -48,6 +48,12 @@ import org.springframework.transaction.annotation.Transactional;
  * from the old one, and the import is refused (409 {@code mapping-changed}, retry). A mapping
  * {@code PUT} takes the same lock, so it can't slip in between this check and the commit. The
  * first import that uses a mapping sets its {@code used_at}, which locks its fingerprint fields.
+ *
+ * <p><b>Unparsed uploads</b> (ING-13). A PDF no layout parser recognizes is recorded by
+ * {@link #recordUnparsed} under the same account lock: at most one open upload per account and
+ * file, so a re-upload that is still unrecognized returns the existing one. When a later upload of
+ * the same file is imported, {@link #write} resolves the open upload with the new statement in the
+ * import's transaction.
  */
 @Component
 class StatementImportWriter {
@@ -61,13 +67,15 @@ class StatementImportWriter {
     private final StatementRepository statements;
     private final TxnRepository txns;
     private final CsvMappingRepository csvMappings;
+    private final UnparsedUploadRepository unparsedUploads;
 
     StatementImportWriter(EntityManager entityManager, StatementRepository statements, TxnRepository txns,
-                          CsvMappingRepository csvMappings) {
+                          CsvMappingRepository csvMappings, UnparsedUploadRepository unparsedUploads) {
         this.entityManager = entityManager;
         this.statements = statements;
         this.txns = txns;
         this.csvMappings = csvMappings;
+        this.unparsedUploads = unparsedUploads;
     }
 
     /**
@@ -77,14 +85,7 @@ class StatementImportWriter {
     @Transactional
     public ImportSummary write(long accountId, ImportFile file, String parser, ParsedStatement parsed,
                                RequestBalances requestBalances, CsvMappingSpec csvMapping) {
-        Account account = entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE);
-        if (account == null) {
-            throw new NotFoundException("Account", accountId);
-        }
-        // Checked again under the lock: the same file may have been imported since the first check.
-        statements.findByFileHash(file.sha256()).ifPresent(existing -> {
-            throw ImportRejectedException.alreadyImported(existing.getId());
-        });
+        Account account = lockedAccount(accountId, file);
         if (csvMapping != null && !csvMappings.findUpdatedAt(accountId)
                 .map(current -> current.isEqual(csvMapping.updatedAt())).orElse(false)) {
             throw ImportRejectedException.mappingChanged();
@@ -136,6 +137,7 @@ class StatementImportWriter {
         statement.setSectionTotals(parsed.sectionTotals());
         statement.setParsedRows(rows.size(), Reconciliation.total(rows));
         statements.save(statement);
+        unparsedUploads.resolveOpen(accountId, file.sha256(), statement.getId());
 
         Reconciliation.Result balances = Reconciliation.reconcile(parsed, requestBalances, previous(statement));
         warnings.addAll(balances.warnings());
@@ -158,6 +160,34 @@ class StatementImportWriter {
         return new ImportSummary(statement.getId(), parser, parsed.periodStart(), parsed.periodEnd(),
                 statement.getOpeningBalance(), statement.getClosingBalance(), rows.size(), inserted.size(),
                 rows.size() - inserted.size(), statement.getStatus(), statement.getBalanceCheck(), warnings);
+    }
+
+    /**
+     * Records a PDF that no layout parser recognized (ING-13), or returns the account's open upload
+     * of the same file unchanged (same id and {@code created_at}).
+     */
+    @Transactional
+    public UnparsedUploadResponse recordUnparsed(long accountId, ImportFile file, UnparsedReason reason) {
+        Account account = lockedAccount(accountId, file);
+        UnparsedUpload upload = unparsedUploads.findOpen(accountId, file.sha256())
+                .orElseGet(() -> unparsedUploads.saveAndFlush(
+                        new UnparsedUpload(account, file.sha256(), file.fileName(), reason)));
+        return UnparsedUploadResponse.from(upload);
+    }
+
+    /**
+     * Locks the account row, then checks again under the lock that the file hasn't been imported
+     * as a statement since the import's first check.
+     */
+    private Account lockedAccount(long accountId, ImportFile file) {
+        Account account = entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE);
+        if (account == null) {
+            throw new NotFoundException("Account", accountId);
+        }
+        statements.findByFileHash(file.sha256()).ifPresent(existing -> {
+            throw ImportRejectedException.alreadyImported(existing.getId());
+        });
+        return account;
     }
 
     /** Any review reason or a failed check wins; then passed checks reconcile; else unverified. */

@@ -11,12 +11,18 @@ import com.finalysis.ingestion.csv.CsvStatementParser;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
+import org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,8 +38,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * SEC-10 and SEC-11 through the HTTP endpoints: content sniffing, XXE, file names and the size,
- * row and record limits at their boundaries. Every rejected file is sent to both the import and
+ * SEC-10 and SEC-11 through the HTTP endpoints: content sniffing, XXE, file names, the size, row
+ * and record limits at their boundaries, and PDFs that are refused before any layout parser runs. Every rejected file is sent to both the import and
  * the preview endpoint, and none may write anything.
  */
 @IntegrationTest
@@ -63,8 +69,11 @@ class UploadHardeningTest {
     static Stream<Arguments> sniffingMatrix() {
         byte[] csvText = "Date,Description,Amount\n2026-04-01,CAFE,-4.50\n".repeat(3).getBytes(StandardCharsets.US_ASCII);
         return Stream.of(
-                Arguments.of("PDF named .pdf", "statement.pdf", ascii("%PDF-1.7\n1 0 obj"), "must end in"),
-                Arguments.of("PDF named .csv", "statement.csv", ascii("%PDF-1.7\n1 0 obj"), "PDF statements"),
+                // A renamed file can't steer which parsers see it (docs/plans/phase-3b.md §1.6).
+                Arguments.of("PDF named .csv", "statement.csv", ascii("%PDF-1.7\n1 0 obj"), "must end in .pdf"),
+                Arguments.of("PDF named .ofx", "statement.ofx", ascii("%PDF-1.7\n1 0 obj"), "must end in .pdf"),
+                Arguments.of("CSV named .pdf", "statement.pdf", csvText, "not a PDF"),
+                Arguments.of("XLSX named .pdf", "statement.pdf", zip(), "ZIP and spreadsheet"),
                 Arguments.of("XLSX named .xlsx", "statement.xlsx", zip(), "must end in"),
                 Arguments.of("XLSX named .csv", "statement.csv", zip(), "ZIP and spreadsheet"),
                 Arguments.of("renamed .exe", "statement.csv", exe(), "not a text file"),
@@ -93,6 +102,83 @@ class UploadHardeningTest {
                     .andExpect(jsonPath("$.detail", containsString(detail)));
         }
         assertThat(rowCounts()).isEqualTo(before);
+    }
+
+    /** A PDF header with nothing readable behind it: refused as unreadable, never recorded as an unparsed upload. */
+    @Test
+    void unreadablePdfIsAParseErrorAndWritesNothing() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        int[] before = rowCounts();
+
+        for (ResultActions result : List.of(support.upload(checking, "statement.pdf", ascii("%PDF-1.7\n1 0 obj")),
+                support.preview(checking, "statement.pdf", ascii("%PDF-1.7\n1 0 obj")))) {
+            result.andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.type").value(PROBLEM + "parse-error"))
+                    .andExpect(jsonPath("$.detail").value("The file is not a readable PDF"))
+                    .andExpect(jsonPath("$.line").doesNotExist());
+        }
+        assertThat(rowCounts()).isEqualTo(before);
+    }
+
+    // ------------------------------------------------------------------ PDFs refused before layout parsing
+
+    static Stream<Arguments> refusedPdfs() throws IOException {
+        return Stream.of(
+                Arguments.of("password required", encrypted("user-secret"), "pdf-encrypted",
+                        "This PDF is password-protected. Download an unprotected copy from your bank, or open it and "
+                                + "save it without a password."),
+                Arguments.of("51 pages", blankPages(51), "pdf-too-complex",
+                        "The PDF exceeds the processing limits: it has more than 50 pages"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("refusedPdfs")
+    void refusedPdfsAre422AndWriteNothing(String label, byte[] pdf, String problem, String detail) throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        int[] before = rowCounts();
+
+        for (ResultActions result : List.of(support.upload(checking, "statement.pdf", pdf),
+                support.preview(checking, "statement.pdf", pdf))) {
+            result.andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.type").value(PROBLEM + problem))
+                    .andExpect(jsonPath("$.detail").value(detail));
+        }
+        assertThat(rowCounts()).isEqualTo(before);
+    }
+
+    /** Restrictions without a user password (common on bank statements) don't stop the PDF being read. */
+    @Test
+    void aPdfWithOnlyAnOwnerPasswordIsRead() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+
+        support.upload(checking, "statement.pdf", encrypted("")).andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.reason").value("NO_TEXT_LAYER"));
+    }
+
+    private static byte[] encrypted(String userPassword) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            document.addPage(new PDPage(PDRectangle.LETTER));
+            StandardProtectionPolicy policy = new StandardProtectionPolicy("owner-secret", userPassword,
+                    new AccessPermission());
+            policy.setEncryptionKeyLength(256);
+            document.protect(policy);
+            return save(document);
+        }
+    }
+
+    private static byte[] blankPages(int count) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            for (int i = 0; i < count; i++) {
+                document.addPage(new PDPage(PDRectangle.LETTER));
+            }
+            return save(document);
+        }
+    }
+
+    private static byte[] save(PDDocument document) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        document.save(bytes);
+        return bytes.toByteArray();
     }
 
     /** The HTML check would otherwise let this through: five lines with one comma each pass for a table. */
@@ -266,7 +352,8 @@ class UploadHardeningTest {
         return new int[] {
                 support.count("SELECT count(*) FROM statement"),
                 support.count("SELECT count(*) FROM txn"),
-                support.count("SELECT count(*) FROM csv_mapping")};
+                support.count("SELECT count(*) FROM csv_mapping"),
+                support.count("SELECT count(*) FROM unparsed_upload")};
     }
 
     private static byte[] ascii(String text) {

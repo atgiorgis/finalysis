@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -42,13 +43,13 @@ class UploadCheckTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"april.ofx", "APRIL.QFX", "export.csv", "export.Txt", "a.b.ofx"})
+    @ValueSource(strings = {"april.ofx", "APRIL.QFX", "export.csv", "export.Txt", "a.b.ofx", "april.pdf", "April.PDF"})
     void allowedExtensions(String name) {
         assertThatCode(() -> UploadCheck.checkFileName(name)).doesNotThrowAnyException();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"april.pdf", "april.xlsx", "april", "april.ofx.exe", ".", ""})
+    @ValueSource(strings = {"april.xlsx", "april", "april.ofx.exe", "april.pdf.exe", ".", ""})
     void otherExtensionsAreUnsupported(String name) {
         assertThatThrownBy(() -> UploadCheck.checkFileName(name))
                 .isInstanceOfSatisfying(ImportRejectedException.class,
@@ -69,9 +70,35 @@ class UploadCheckTest {
         assertRejected(new byte[] {'a', 0x1B, 'b'}, "not a text file");
         // 0x81 is neither valid UTF-8 on its own nor defined in windows-1252.
         assertRejected(new byte[] {'a', (byte) 0x81, 'b'}, "not valid UTF-8 or windows-1252");
-        assertRejected("%PDF-1.4".getBytes(StandardCharsets.US_ASCII), "PDF");
         assertRejected(new byte[] {'P', 'K', 3, 4}, "ZIP");
         assertRejected(new byte[0], "empty");
+    }
+
+    @Test
+    void pdfsAreJudgedByTheirFirstBytesOnly() {
+        assertThat(UploadCheck.checkContent("%PDF-1.4\n%\u00e2\u00e3".getBytes(StandardCharsets.ISO_8859_1)))
+                .isEqualTo(FileKind.PDF);
+        // Binary after the header is the PDF extractor's concern, not the text checks'.
+        assertThat(UploadCheck.checkContent(new byte[] {'%', 'P', 'D', 'F', '-', 0, 1, 2})).isEqualTo(FileKind.PDF);
+        assertThat(UploadCheck.checkContent(" %PDF-1.4".getBytes(StandardCharsets.US_ASCII))).isEqualTo(FileKind.TEXT);
+        assertThat(UploadCheck.checkContent("Date,Desc\n".getBytes(StandardCharsets.US_ASCII))).isEqualTo(FileKind.TEXT);
+    }
+
+    @Test
+    void theExtensionMustAgreeWithTheKind() {
+        assertThatCode(() -> UploadCheck.checkKindMatchesName("april.pdf", FileKind.PDF)).doesNotThrowAnyException();
+        assertThatCode(() -> UploadCheck.checkKindMatchesName("APRIL.PDF", FileKind.PDF)).doesNotThrowAnyException();
+        assertThatCode(() -> UploadCheck.checkKindMatchesName("april.csv", FileKind.TEXT)).doesNotThrowAnyException();
+        for (String name : List.of("april.csv", "april.ofx", "april.txt")) {
+            assertThatThrownBy(() -> UploadCheck.checkKindMatchesName(name, FileKind.PDF))
+                    .isInstanceOfSatisfying(ImportRejectedException.class,
+                            e -> assertThat(e.getProblem()).isEqualTo(ImportProblem.UNSUPPORTED_FORMAT))
+                    .hasMessage("The file is a PDF; PDF statements must end in .pdf");
+        }
+        assertThatThrownBy(() -> UploadCheck.checkKindMatchesName("april.pdf", FileKind.TEXT))
+                .isInstanceOfSatisfying(ImportRejectedException.class,
+                        e -> assertThat(e.getProblem()).isEqualTo(ImportProblem.UNSUPPORTED_FORMAT))
+                .hasMessage("The file ends in .pdf but is not a PDF");
     }
 
     @Test

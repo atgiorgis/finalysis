@@ -1,6 +1,6 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved**; steps 0–2 done, next: step 3. Branch `v1`. Requirements as of
+Status: **approved**; steps 0–3 done, next: step 4. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
@@ -698,7 +698,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 | 0 | Plan and scope | This file; requirements v1.22 recording the approved decisions; CLAUDE.md current phase. Commit "Phase 3b plan and scope" | — | Done: `1dee291` |
 | 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory | Done: "Phase 3b step 1: PDF text extraction layer" |
 | 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Done: "Phase 3b step 2: synthetic PDF generator" |
-| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions; `SampleDataParserSelectionTest` without the `pdf/` skip (see step 3 requirements) | Planned |
+| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions; `SampleDataParserSelectionTest` without the `pdf/` skip (see step 3 requirements) | Done: "Phase 3b step 3: PDF routing and unparsed uploads" |
 | 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Planned |
 | 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
 | 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
@@ -811,6 +811,65 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
   `NO_TEXT_LAYER`). Non-PDF sample files keep their current OFX/CSV expectations, and no PDF is
   ever offered to the CSV or OFX parser.
 - **Step 3 isn't done until that skip is gone.**
+- **Ordering (decided at step 2 review, option (a)):** step 3 has no layout parser yet, so:
+  - **Step 3:** every PDF is routed only to PDF parsers, never CSV or OFX. Files marked `none`
+    become unparsed uploads with the manifest's reason. Files marked `boa-checking` also become
+    unparsed uploads (`UNRECOGNIZED_LAYOUT`) for now, with a comment pointing to step 4.
+  - **Step 4:** the test is tightened so files marked `boa-checking` are claimed DEFINITE by
+    `boa-checking` (detection only; `parse` still throws "not implemented" until step 6).
+
+### Step 3 notes (decisions beyond the plan)
+
+- **The `pdf/` skip is gone** from `SampleDataParserSelectionTest`, as required. Every PDF is
+  checked against `pdf-manifest.csv` through the real sniffing, extraction, registry and
+  `UnparsedReason` code, with the CSV and OFX parsers wrapped so the test fails if either is asked
+  about a PDF. Files marked `boa-checking` are asserted unparsed (`UNRECOGNIZED_LAYOUT`) with a
+  comment pointing to step 4. The generator's expectation files under `pdf/` (`pdf-manifest.csv`,
+  `*.expected.csv`, `*.lines.txt`) are not statements and are left out of the text-file check;
+  `SyntheticPdfTest` owns them.
+- **`ImportOutcome`** (sealed: `Imported(ImportSummary)` or `Unparsed(UnparsedUploadResponse)`) is
+  what the service returns; the controller answers 201 with `Location` or 202 without.
+  `ImportSummary` itself is unchanged.
+- **Extraction failures** map to fixed details: password required → 422 `pdf-encrypted`, a limit →
+  422 `pdf-too-complex` ("…it has more than 50 pages"), unreadable → 422 `parse-error` "The file is
+  not a readable PDF" with no `line`. An unreadable PDF is never recorded as an unparsed upload.
+- **Sniffing:** only `%PDF-` at offset 0 makes a PDF, and a PDF skips the text checks (its binary
+  content is the extractor's concern). The order is size → name → extension allow-list → content →
+  extension/kind agreement. Mismatch details: "The file is a PDF; PDF statements must end in .pdf"
+  and "The file ends in .pdf but is not a PDF".
+- **Registry:** `select(ImportFile)` asks only non-PDF parsers; `selectPdf(PdfDocumentText)` returns
+  an `Optional` (empty → unparsed upload) and asks only `PdfStatementParser`s. A PDF parser
+  answering FALLBACK counts as NONE. Both kinds share one id space.
+- **`PdfStatementParser`'s default `detect(ImportFile)`** extracts with default limits and returns
+  NONE if extraction fails; the default `parse(ImportFile, …)` throws `PdfExtractionException` on
+  failure. The import uses neither: it extracts once.
+- **Unparsed path details:**
+  - The request's balance parameters are still validated (a malformed one is 400 and records
+    nothing); an inverted period was already refused before detection. Otherwise the request's
+    period and balances are unused, since nothing is imported.
+  - `recordUnparsed` takes the account lock and re-checks the statement hash under it, so a file
+    imported concurrently is 409, not a new unparsed row.
+  - A still-unrecognized re-upload returns the existing row unchanged, including its original file
+    name.
+  - Resolution is generic: every successful import resolves an open upload for the same account
+    and hash, in the writer's transaction, with the database clock (`now()`), like `created_at`.
+- **V8 additions to the sketch in §4.1:** `ck_unparsed_upload_file_name_length` (1 to 255, as the
+  cleaned name), a partial index on `resolved_statement_id` for `ON DELETE SET NULL`, and a column
+  comment on `reason`.
+- **Preview:** `ImportPreview` gains two nullable fields, `recognized` and `reason`, present only
+  for an unrecognized PDF (`{format: "pdf", recognized: false, reason}`); other previews' JSON is
+  unchanged.
+- **`PdfTextExtractor` is a bean** (`PdfExtractionConfig`, default limits).
+- **Existing tests updated for the new behaviour:** `UploadCheckTest` (`.pdf` allowed, PDF kind,
+  agreement), `UploadHardeningTest` (sniffing matrix; unreadable, encrypted, owner-password-only and
+  51-page PDFs through both endpoints), `StatementImportTest` (its 415 list), and
+  `ImportTestSupport` (cleanup deletes unparsed uploads).
+- **`UnparsedUploadImportTest` uses a switchable test-only `PdfStatementParser`** for "a parser
+  claims it now" and for failed imports (account mismatch, parse error). It ignores the text, so it
+  carries no bank-specific knowledge, and it runs in its own Spring context.
+- Tests: `UnparsedUploadImportTest` (30), `UnparsedUploadRepositoryTest` (9), registry (+7), upload
+  checks (+4), hardening (+6), selection (55 → 74: the 18 PDFs and a manifest check). Backend tests 1080 →
+  1155; frontend 1. README and the problem-type table are updated in step 9.
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.

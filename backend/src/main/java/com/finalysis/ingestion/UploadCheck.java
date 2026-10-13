@@ -17,7 +17,8 @@ final class UploadCheck {
 
     /** Kept in step with spring.servlet.multipart.max-file-size, which rejects larger uploads first. */
     static final long MAX_BYTES = 10L * 1024 * 1024;
-    static final Set<String> EXTENSIONS = Set.of("ofx", "qfx", "csv", "txt");
+    static final Set<String> EXTENSIONS = Set.of("ofx", "qfx", "csv", "txt", "pdf");
+    private static final String PDF_EXTENSION = "pdf";
     static final int MAX_FILE_NAME = 255;
 
     private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
@@ -58,20 +59,22 @@ final class UploadCheck {
     }
 
     static void checkFileName(String fileName) {
-        int dot = fileName.lastIndexOf('.');
-        String extension = dot < 0 ? "" : fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
-        if (!EXTENSIONS.contains(extension)) {
-            throw unsupported("Statement files must end in .ofx, .qfx, .csv or .txt");
+        if (!EXTENSIONS.contains(extension(fileName))) {
+            throw unsupported("Statement files must end in .ofx, .qfx, .csv, .txt or .pdf");
         }
     }
 
-    /** Rejects empty files, PDFs, ZIP containers (including XLSX), web pages, binary data and invalid text. */
-    static void checkContent(byte[] bytes) {
+    /**
+     * Judges the bytes: {@link FileKind#PDF} when they start with {@code %PDF-}, otherwise text,
+     * which must pass the text checks. Rejects empty files, ZIP containers (including XLSX), web
+     * pages, binary data and invalid text. A PDF's own checks run when it is extracted.
+     */
+    static FileKind checkContent(byte[] bytes) {
         if (bytes.length == 0) {
             throw unsupported("The file is empty");
         }
         if (startsWith(bytes, "%PDF-".getBytes(StandardCharsets.US_ASCII))) {
-            throw unsupported("PDF statements are not supported yet");
+            return FileKind.PDF;
         }
         if (startsWith(bytes, new byte[] {'P', 'K', 3, 4})) {
             throw unsupported("ZIP and spreadsheet files are not supported; export the statement as OFX or CSV");
@@ -88,6 +91,26 @@ final class UploadCheck {
         if (!decodes(bytes, StandardCharsets.UTF_8) && !decodes(bytes, WINDOWS_1252)) {
             throw unsupported("The file is not valid UTF-8 or windows-1252 text");
         }
+        return FileKind.TEXT;
+    }
+
+    /**
+     * A file ends in {@code .pdf} if and only if it is a PDF, so a renamed file can't steer which
+     * parsers see it.
+     */
+    static void checkKindMatchesName(String fileName, FileKind kind) {
+        boolean pdfName = extension(fileName).equals(PDF_EXTENSION);
+        if (kind == FileKind.PDF && !pdfName) {
+            throw unsupported("The file is a PDF; PDF statements must end in .pdf");
+        }
+        if (kind != FileKind.PDF && pdfName) {
+            throw unsupported("The file ends in .pdf but is not a PDF");
+        }
+    }
+
+    private static String extension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        return dot < 0 ? "" : fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     /**

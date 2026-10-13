@@ -14,12 +14,18 @@ import com.finalysis.ingestion.csv.CsvMappingRequiredException;
 import com.finalysis.ingestion.csv.CsvMappingService;
 import com.finalysis.ingestion.csv.CsvMappingSpec;
 import com.finalysis.ingestion.csv.CsvPreview;
+import com.finalysis.ingestion.pdf.PdfDocumentText;
+import com.finalysis.ingestion.pdf.PdfExtractionException;
+import com.finalysis.ingestion.pdf.PdfStatementParser;
+import com.finalysis.ingestion.pdf.PdfTextExtractor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,6 +38,12 @@ import org.springframework.transaction.annotation.Transactional;
  * a snapshot of it, read in its own transaction before parsing; the writer checks under the account
  * lock that it is still current. Logs carry ids, counts and statuses only, never file contents,
  * names or account numbers (SEC-10).
+ *
+ * <p>Files are routed by {@linkplain FileKind kind} (docs/plans/phase-3b.md §1.6). A PDF is
+ * extracted once, so its encryption check and limits run before any layout code, and only PDF
+ * layout parsers see it. A PDF none of them recognizes is not a statement: it is recorded as an
+ * {@link UnparsedUpload} (ING-13) and the import answers 202 Accepted. A re-upload of it runs
+ * detection again, and a successful import resolves it.
  */
 @Service
 public class StatementImportService {
@@ -46,30 +58,49 @@ public class StatementImportService {
     private final StatementParserRegistry parsers;
     private final StatementImportWriter writer;
     private final CsvMappingService csvMappings;
+    private final PdfTextExtractor pdfExtractor;
 
     public StatementImportService(AccountRepository accounts, StatementRepository statements, TxnRepository txns,
                                   StatementParserRegistry parsers, StatementImportWriter writer,
-                                  CsvMappingService csvMappings) {
+                                  CsvMappingService csvMappings, PdfTextExtractor pdfExtractor) {
         this.accounts = accounts;
         this.statements = statements;
         this.txns = txns;
         this.parsers = parsers;
         this.writer = writer;
         this.csvMappings = csvMappings;
+        this.pdfExtractor = pdfExtractor;
     }
 
-    public ImportSummary importStatement(ImportRequest request) {
+    public ImportOutcome importStatement(ImportRequest request) {
         Account account = account(request.accountId());
-        ImportFile file = checkedFile(request.fileName(), request.bytes());
+        CheckedFile checked = checkedFile(request.fileName(), request.bytes());
+        ImportFile file = checked.file();
         statements.findByFileHash(file.sha256()).ifPresent(existing -> {
             throw ImportRejectedException.alreadyImported(existing.getId());
         });
         checkRequestPeriod(request);
 
-        StatementParser parser = select(file);
-        CsvMappingSpec csvMapping = parser.usesCsvMapping() ? csvMappings.snapshot(account.getId()) : null;
-        ParsedStatement parsed = parse(parser, file,
-                new ParseContext(account.getType(), csvMapping, request.periodStart(), request.periodEnd()), account);
+        StatementParser parser;
+        CsvMappingSpec csvMapping = null;
+        ParsedStatement parsed;
+        if (checked.kind() == FileKind.PDF) {
+            PdfDocumentText text = extract(file);
+            Optional<PdfStatementParser> pdfParser = selectPdf(text);
+            if (pdfParser.isEmpty()) {
+                return new ImportOutcome.Unparsed(recordUnparsed(account, file, text, request));
+            }
+            parser = pdfParser.get();
+            ParseContext context = new ParseContext(account.getType(), null, request.periodStart(), request.periodEnd());
+            parsed = parse(() -> pdfParser.get().parse(text, context), file, context, account);
+        } else {
+            parser = select(file);
+            csvMapping = parser.usesCsvMapping() ? csvMappings.snapshot(account.getId()) : null;
+            ParseContext context = new ParseContext(account.getType(), csvMapping, request.periodStart(),
+                    request.periodEnd());
+            StatementParser textParser = parser;
+            parsed = parse(() -> textParser.parse(file, context), file, context, account);
+        }
         checkHints(parsed.hints(), account);
 
         RequestBalances balances = checkRequestValues(parsed, request);
@@ -78,26 +109,60 @@ public class StatementImportService {
         log.info("Imported statement {} for account {} with parser {}: {} parsed, {} inserted, {} duplicates, {}",
                 summary.statementId(), account.getId(), summary.parser(), summary.parsed(), summary.inserted(),
                 summary.duplicates(), summary.status());
-        return summary;
+        return new ImportOutcome.Imported(summary);
+    }
+
+    /**
+     * Records (or finds) the unparsed upload. The request's balances are still validated, so a
+     * malformed request is refused the same way whatever the file holds; its period and balances
+     * are otherwise unused, since nothing is imported.
+     */
+    private UnparsedUploadResponse recordUnparsed(Account account, ImportFile file, PdfDocumentText text,
+                                                  ImportRequest request) {
+        List<InvalidField> errors = new ArrayList<>();
+        validMoney(request.openingBalance(), "openingBalance", errors);
+        validMoney(request.closingBalance(), "closingBalance", errors);
+        if (!errors.isEmpty()) {
+            throw new InvalidRequestException(errors);
+        }
+        UnparsedUploadResponse upload = writer.recordUnparsed(account.getId(), file, UnparsedReason.of(text));
+        log.info("No PDF layout recognized for account {}: unparsed upload {} ({})", account.getId(), upload.id(),
+                upload.reason());
+        return upload;
     }
 
     /**
      * Reads a file as an import would, with the same upload checks, and writes nothing. CSV files
      * get their layout, first rows, mapping status and, unless the saved mapping matches, a
-     * suggested mapping; other formats get their period and transaction count. The preview holds
-     * file contents, so only its format is logged.
+     * suggested mapping; other formats get their period and transaction count. A PDF no layout
+     * parser recognizes gets {@code recognized: false} and the reason, and no unparsed upload is
+     * recorded. The preview holds file contents, so only its format is logged.
      */
     public ImportPreview preview(long accountId, String fileName, byte[] bytes) {
         Account account = account(accountId);
-        ImportFile file = checkedFile(fileName, bytes);
-        StatementParser parser = select(file);
+        CheckedFile checked = checkedFile(fileName, bytes);
+        ImportFile file = checked.file();
+        ParseContext context = new ParseContext(account.getType());
         ImportPreview preview;
-        if (parser.usesCsvMapping()) {
-            preview = csvPreview(file, account, csvMappings.snapshot(accountId));
+        if (checked.kind() == FileKind.PDF) {
+            PdfDocumentText text = extract(file);
+            Optional<PdfStatementParser> parser = selectPdf(text);
+            if (parser.isEmpty()) {
+                preview = ImportPreview.unrecognizedPdf(UnparsedReason.of(text));
+            } else {
+                ParsedStatement parsed = parse(() -> parser.get().parse(text, context), file, context, account);
+                checkHints(parsed.hints(), account);
+                preview = ImportPreview.statement(parser.get().id(), parsed);
+            }
         } else {
-            ParsedStatement parsed = parse(parser, file, new ParseContext(account.getType()), account);
-            checkHints(parsed.hints(), account);
-            preview = ImportPreview.statement(parser.id(), parsed);
+            StatementParser parser = select(file);
+            if (parser.usesCsvMapping()) {
+                preview = csvPreview(file, account, csvMappings.snapshot(accountId));
+            } else {
+                ParsedStatement parsed = parse(() -> parser.parse(file, context), file, context, account);
+                checkHints(parsed.hints(), account);
+                preview = ImportPreview.statement(parser.id(), parsed);
+            }
         }
         log.info("Previewed a {} file for account {}", preview.format(), accountId);
         return preview;
@@ -128,18 +193,41 @@ public class StatementImportService {
         return accounts.findById(accountId).orElseThrow(() -> new NotFoundException("Account", accountId));
     }
 
-    /** Upload checks (SEC-10), in order: size, name, content. */
-    private static ImportFile checkedFile(String originalFileName, byte[] bytes) {
+    /** An upload that passed {@link #checkedFile}, with the kind its bytes were judged to be. */
+    private record CheckedFile(ImportFile file, FileKind kind) {
+    }
+
+    /** Upload checks (SEC-10), in order: size, name, content, and that the name's extension agrees with the content. */
+    private static CheckedFile checkedFile(String originalFileName, byte[] bytes) {
         UploadCheck.checkSize(bytes.length);
         String fileName = UploadCheck.cleanFileName(originalFileName);
         UploadCheck.checkFileName(fileName);
-        UploadCheck.checkContent(bytes);
-        return ImportFile.of(fileName, bytes);
+        FileKind kind = UploadCheck.checkContent(bytes);
+        UploadCheck.checkKindMatchesName(fileName, kind);
+        return new CheckedFile(ImportFile.of(fileName, bytes), kind);
     }
 
-    private ParsedStatement parse(StatementParser parser, ImportFile file, ParseContext context, Account account) {
+    /**
+     * Extracts a PDF's text with the limits of SEC-10. Each refusal maps to a fixed problem detail;
+     * PDFBox's own messages are never passed on.
+     */
+    private PdfDocumentText extract(ImportFile file) {
         try {
-            return parser.parse(file, context);
+            return pdfExtractor.extract(file);
+        } catch (PdfExtractionException e) {
+            ImportProblem problem = switch (e.reason()) {
+                case PASSWORD_REQUIRED -> ImportProblem.PDF_ENCRYPTED;
+                case TOO_COMPLEX -> ImportProblem.PDF_TOO_COMPLEX;
+                case UNREADABLE -> ImportProblem.PARSE_ERROR;
+            };
+            throw new ImportRejectedException(problem, e.getMessage());
+        }
+    }
+
+    private ParsedStatement parse(Supplier<ParsedStatement> parsing, ImportFile file, ParseContext context,
+                                  Account account) {
+        try {
+            return parsing.get();
         } catch (StatementParseException e) {
             throw ImportRejectedException.parseError(e);
         } catch (CsvMappingRequiredException e) {
@@ -158,6 +246,14 @@ public class StatementImportService {
         }
     }
 
+    private Optional<PdfStatementParser> selectPdf(PdfDocumentText text) {
+        try {
+            return parsers.selectPdf(text);
+        } catch (AmbiguousFormatException e) {
+            throw ambiguous(e);
+        }
+    }
+
     private StatementParser select(ImportFile file) {
         try {
             return parsers.select(file);
@@ -165,10 +261,14 @@ public class StatementImportService {
             throw new ImportRejectedException(ImportProblem.UNSUPPORTED_FORMAT,
                     "The file is not in a supported statement format (OFX, QFX, CSV)");
         } catch (AmbiguousFormatException e) {
-            log.error("Statement parsers {} all claim the same file", e.getParserIds());
-            throw new ImportRejectedException(ImportProblem.AMBIGUOUS_FORMAT,
-                    "More than one statement format matches this file");
+            throw ambiguous(e);
         }
+    }
+
+    private static ImportRejectedException ambiguous(AmbiguousFormatException e) {
+        log.error("Statement parsers {} all claim the same file", e.getParserIds());
+        return new ImportRejectedException(ImportProblem.AMBIGUOUS_FORMAT,
+                "More than one statement format matches this file");
     }
 
     /** Currency first, then the account. Hints a format doesn't carry are not checked. */
