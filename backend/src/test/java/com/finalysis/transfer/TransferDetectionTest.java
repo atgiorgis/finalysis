@@ -9,10 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
-import com.finalysis.ingestion.Txn;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
-import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -20,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -42,6 +39,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -71,11 +69,9 @@ class TransferDetectionTest {
     private final JdbcTemplate jdbc;
     private final ImportTestSupport support;
     private final TransferLock lock;
-    private final TransferLinkRepository links;
     private final TransferCandidateQuery candidates;
     private final TransferResolver resolver;
     private final TransferProperties properties;
-    private final EntityManager entityManager;
     private final TransactionTemplate transaction;
 
     /** Calls the real detector unless a test says otherwise; reset after each test. */
@@ -90,19 +86,17 @@ class TransferDetectionTest {
     private final Map<Long, String> statementFiles = new HashMap<>();
 
     TransferDetectionTest(MockMvc mockMvc, JsonMapper jsonMapper, AccountRepository accounts, JdbcTemplate jdbc,
-                          TransferLock lock, TransferLinkRepository links, TransferCandidateQuery candidates,
-                          TransferResolver resolver, TransferProperties properties, EntityManager entityManager,
+                          TransferLock lock, TransferCandidateQuery candidates,
+                          TransferResolver resolver, TransferProperties properties,
                           TransactionTemplate transaction) {
         this.mockMvc = mockMvc;
         this.jsonMapper = jsonMapper;
         this.jdbc = jdbc;
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
         this.lock = lock;
-        this.links = links;
         this.candidates = candidates;
         this.resolver = resolver;
         this.properties = properties;
-        this.entityManager = entityManager;
         this.transaction = transaction;
     }
 
@@ -306,11 +300,12 @@ class TransferDetectionTest {
         assertThat(groups.getFirst().pairs()).hasSize(2);
         assertThat(detectNow()).isEqualTo(new DetectionResult(0, 0, 1));
 
-        // A payment with no counterpart, marked one-sided (the API comes in step 4), stays UNMATCHED.
+        // A payment with no counterpart, marked one-sided through the API, stays UNMATCHED.
         long oneSided = txnAt.get(expected.stream().filter(e -> e.expected().equals("ONE_SIDED"))
                 .map(e -> e.file() + ":" + e.line()).findFirst().orElseThrow());
-        transaction.executeWithoutResult(status -> links.save(TransferLink.oneSided(
-                entityManager.getReference(Txn.class, oneSided), null, OffsetDateTime.now())));
+        mockMvc.perform(post("/api/transfers").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"outTxnId\": " + oneSided + "}"))
+                .andExpect(status().isCreated());
         assertThat(detectNow()).isEqualTo(new DetectionResult(0, 0, 1));
         assertThat(isTransfer(oneSided)).isTrue();
         assertThat(jdbc.queryForObject("SELECT status FROM transfer_link WHERE out_txn_id = ?", String.class, oneSided))
@@ -321,7 +316,7 @@ class TransferDetectionTest {
      * Detection runs per import and never changes an existing link (§2.5), so an ambiguous group only
      * forms when its txns meet in one run. Here the −200.00 and the savings +200.00 arrive first and
      * are linked; the card's +200.00, imported later, finds the out side taken and stays unlinked.
-     * Known limitation (plan step 3 notes): the link is AUTO and unconfirmed, so the user sees it.
+     * The link is AUTO and unconfirmed; the step 6 review queue lists it as a competing candidate (§4.6).
      */
     @Test
     void aCounterpartArrivingAfterALinkDoesNotReopenIt() throws Exception {

@@ -1,8 +1,9 @@
 # Phase 3c plan: transfer detection and review queue
 
 Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and steps 1–3 are done; next: step 4. Branch `v1`.
-Requirements as of `docs/requirements.md` v1.27 (possible matches added to ING-07 and step 6).
+standalone Phase 3b step 8 task (PDF security tests) and steps 1–4 are done; next: step 5. Branch `v1`.
+Requirements as of `docs/requirements.md` v1.28 (competing candidates and possible-match dismissal added
+to ING-07, step 6).
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
 spending or income, enforced through `txn.is_transfer`), plus the review actions on ING-13 unparsed
@@ -239,7 +240,8 @@ All writes take the transfer advisory lock (§2.5).
 
 `GET /api/review-queue?kind=&accountId=` → `{counts, items}`
 
-- `counts`: `{statements, unparsedUploads, transferCandidates, possibleMatches}`, for a UI badge later.
+- `counts`: `{statements, unparsedUploads, transferCandidates, competingCandidates, possibleMatches}`, for
+  a UI badge later.
 - `items`: newest first by `since`, each with a `kind`:
 
 | kind | Included when | Fields |
@@ -247,14 +249,15 @@ All writes take the transfer advisory lock (§2.5).
 | `STATEMENT` | `status = NEEDS_REVIEW` and `reviewed_at IS NULL` | `statementId`, `accountId`, `accountName`, `fileName`, `periodStart`, `periodEnd`, `balanceCheck`, `warnings`, `since` = `importedAt` |
 | `UNPARSED_UPLOAD` | `resolved_at IS NULL` | `uploadId`, `accountId`, `accountName`, `fileName`, `reason`, `since` = `createdAt` |
 | `TRANSFER_CANDIDATES` | a candidate group that §2.3 left unresolved (rule 3) | `key` (`txn-<smallest txn id>`), `txns` (`TxnSummary`), `pairs` (`{outTxnId, inTxnId, daysApart}`), `since` = newest `created_at` of its txns |
+| `COMPETING_CANDIDATE` | an unconfirmed AUTO link (MATCHED, `confirmed_at` null) with a txn that forms a candidate pair with a txn outside the link, judged as if the link didn't exist (§4.6) | `key` (`link-<linkId>`), `linkId`, `out` and `in` (`TxnSummary`), `competitors` (`TxnSummary`), `pairs` (`{outTxnId, inTxnId, daysApart}`, the link's own pair included), `since` = newest `created_at` of the competitors |
 | `POSSIBLE_MATCH` | two UNMATCHED links, one with only an out side and one with only an in side, whose txns would otherwise match (§4.5) | `key` (`links-<outLinkId>-<inLinkId>`), `outLinkId`, `inLinkId`, `out` and `in` (`TxnSummary`), `daysApart`, `since` = newer link's `created_at` |
 
 - Candidate groups are computed by the same query and resolver as detection, read-only, at request
   time (§2.3). The user resolves a group with the transfer actions (§3): link the right pair, mark a
   txn not-a-transfer, or mark one side one-sided. The group then disappears or shrinks on the next
   read.
-- **Unconfirmed AUTO links are not queue items** (decided at approval). They are listed with
-  `GET /api/transfers?confirmed=false` (or `confirmed=true`).
+- **Unconfirmed AUTO links are not queue items** (decided at approval), except as competing candidates
+  (§4.6). They are listed with `GET /api/transfers?confirmed=false` (or `confirmed=true`).
 - **Phase 4 adds a fourth kind**, `SUGGESTED_ONE_SIDED_TRANSFER` (§2.6, CAT-08). Not built in 3c.
 
 ### 4.2 Mark a statement reviewed
@@ -313,16 +316,39 @@ two user decisions with one AUTO link).
   section rule: the user has already said both are transfers.
 - **One txn, several possible matches** (e.g. two one-sided ins of the same amount): each pair is its own
   item; joining one removes the others on the next read, since the joined txns are no longer UNMATCHED.
-- **Join** (proposed, to confirm when step 6 starts): `POST /api/transfers/join {outLinkId, inLinkId}`
+- **Join** (confirmed 2026-10-13): `POST /api/transfers/join {outLinkId, inLinkId}`
   replaces the two UNMATCHED links with one MATCHED, USER, confirmed link, in one transaction under the
   transfer lock. 201 + `Location`; 404 if either link is missing; 409 `transfer-conflict` if either is no
   longer an UNMATCHED link with that side; 422 `transfer-invalid` if the amounts aren't equal and opposite
   or the accounts are the same (the manual-link rules of §3; no window, as for any manual link).
-- **Dismiss** (proposed): `POST /api/transfers/join/dismiss {outLinkId, inLinkId}` records the txn pair in
+- **Dismiss** (confirmed 2026-10-13): `POST /api/transfers/join/dismiss {outLinkId, inLinkId}` records the txn pair in
   `transfer_rejection`, so the item disappears and both one-sided links stay. A later manual link of the
   pair still wins (§3).
+- **Only these conditions apply** (confirmed): equal and opposite amounts, different accounts, within the
+  window, and the pair not already rejected.
 - Computed at request time like candidate groups, with a read-only query beside `TransferCandidateQuery`;
   it selects ids, account ids and dates only, never a text column.
+
+### 4.6 Competing candidates for an early link (decided 2026-10-13, step 6)
+
+Answers the step 3 open question with option (c). Detection runs per import and **never changes a link**
+(§2.5, unchanged). So when one counterpart arrives first, its pair is linked (AUTO, unconfirmed), and a
+second counterpart imported later can't form a review group with it (step 3 notes).
+
+- Instead, the queue lists that link as a **competing candidate**: an unconfirmed AUTO link with a txn
+  that would form a candidate pair (§2.1) with a txn outside the link if the link didn't exist. Rule 7 is
+  waived for the link's own two txns only; the competitor must pass every rule as usual (on no link, or
+  the present side of an UNMATCHED one), and the pair must not be rejected.
+- **Resolving it** uses the §3 actions, nothing new:
+  - *Confirm* the link: it is no longer unconfirmed, so the item disappears and the link stays.
+  - *Unlink* it: the pair is recorded as rejected, and detection runs on the next import or
+    `POST /api/transfers/detect`. The freed txn then meets the competitor under the usual rules: one
+    candidate each way is linked (AUTO, unconfirmed), anything larger becomes a `TRANSFER_CANDIDATES`
+    group. Unlink doesn't run detection itself (§3, unchanged).
+  - *Mark the competitor not a transfer*, or link it elsewhere by hand: it stops being a candidate.
+- Confirmed and USER links are never listed: the user has already looked at them.
+- Computed at request time with a read-only query beside `TransferCandidateQuery` (ids, account ids and
+  dates only, never a text column).
 
 ---
 
@@ -396,7 +422,7 @@ com.finalysis.transfer/                 new feature package
   TransferService             the user actions of §3
   TransferController, TransferLinkResponse, TxnSummary, CreateTransferRequest
 com.finalysis.review/
-  ReviewQueueService, ReviewQueueController, ReviewItem (sealed: StatementItem, UnparsedUploadItem, TransferCandidatesItem, PossibleMatchItem)
+  ReviewQueueService, ReviewQueueController, ReviewItem (sealed: StatementItem, UnparsedUploadItem, TransferCandidatesItem, CompetingCandidateItem, PossibleMatchItem)
 com.finalysis.ingestion/
   StatementImported, StatementDeleted   event records (ids only)
   StatementController / StatementImportService   + review, delete
@@ -451,7 +477,7 @@ to which line, review group, or none).
 | ING-05 rules | `TransferCandidateQueryTest` (each rule of §2.1 on both sides of its boundary, window from config, effective date uses `post_date`); `TransferResolverTest` (pure: 1:1, k:k same accounts in date order, k:k with a non-candidate pairing, 1:2, 2:1, UNMATCHED completion, chains, determinism under input order) |
 | ING-05 detection | `TransferDetectionTest` (answer key: 18 links and exact `is_transfer` set across four import orders; OFX/QFX variant; idempotent second run; late arrival; edge-case fixtures against `transfers-expected.csv`; description-scramble invariance; detection failure doesn't fail the import; concurrency: two runs serialize) |
 | ING-05 actions | `TransferApiTest` (every endpoint and error in §3, Location headers, rejection prevents relinking, not-transfer removes link and blocks detection, undo + detect relinks, manual link clears exclusion and rejection, one-sided completion clears confirmation, money as strings) |
-| ING-07, ING-13 | `ReviewQueueApiTest` (four kinds across accounts; possible matches: listed within the window and not outside it, join, dismiss, a rejected pair not listed, detection never joins; counts, filters, order; review keeps warnings and removes the item; late-arrival warning re-queues; dismiss and 409; unparsed GET and 202 `Location`; duplicate-account story end to end); `StatementDeleteTest` (cascades, counts, `is_transfer` cleared on counterparts, detection re-run, file re-importable, unparsed upload keeps `resolved_at`, account lock) |
+| ING-07, ING-13 | `ReviewQueueApiTest` (five kinds across accounts; competing candidates: listed when a counterpart arrives after the link, not for confirmed or USER links, gone after confirm, unlink then detect re-resolves; possible matches: listed within the window and not outside it, join, dismiss, a rejected pair not listed, detection never joins; counts, filters, order; review keeps warnings and removes the item; late-arrival warning re-queues; dismiss and 409; unparsed GET and 202 `Location`; duplicate-account story end to end); `StatementDeleteTest` (cascades, counts, `is_transfer` cleared on counterparts, detection re-run, file re-importable, unparsed upload keeps `resolved_at`, account lock) |
 | GR-04 | covered above: `is_transfer` is exactly "on a link", on every path |
 | SEC-10 | `SensitiveDataLeakTest` (extended: new endpoints' errors and logs carry no descriptions or amounts) |
 | Architecture | `PackageDependencyTest` (ArchUnit, §6) |
@@ -481,9 +507,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | 1 | Schema | V9; move transfer entities to `transfer`; `TransferRejection`; `Txn` mapping changes. With it: SEC-09 and SEC-10 → Done (requirements v1.26) | `TransferSchemaTest`, repository and migration tests | Done: "Phase 3c step 1: transfer schema (V9)" |
 | 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Done: "Phase 3c step 2: transfer candidates and resolver" (notes below) |
 | 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Done: "Phase 3c step 3: detection wiring and validation" (notes below) |
-| 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Planned |
+| 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Done: "Phase 3c step 4: transfer actions" (notes below) |
 | 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Planned |
-| 6 | Review queue | `review` package, `GET /api/review-queue`, possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
+| 6 | Review queue | `review` package, `GET /api/review-queue`, competing candidates (§4.6), possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
 | 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Planned |
 
 ### Known limitations (expected at the end of 3c)
@@ -494,8 +520,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 - Deleting a statement doesn't re-run its successor's continuity check.
 - Deleting a statement drops confirmed links on its rows; detection re-creates them unconfirmed.
 - An ambiguous group (§2.3 rule 3) forms only when its txns meet in one detection run. If one
-  counterpart arrives first, that pair is linked (AUTO, unconfirmed), and a second counterpart imported
-  later doesn't reopen it (step 3 notes; open question).
+  counterpart arrives first, that pair is linked (AUTO, unconfirmed), and detection never reopens it.
+  A second counterpart imported later puts the link in the review queue as a competing candidate
+  (§4.6), where the user confirms it or unlinks it so it re-resolves.
 
 ### Step 2 notes
 
@@ -559,6 +586,30 @@ Built as planned. Choices and findings beyond the plan:
   (b) let detection dissolve an unconfirmed AUTO link when a new candidate shares a side, sending the
   group to review, which changes the "never changes a link" rule; (c) keep the link, but list it in the
   review queue (step 6) when another candidate shares a side. Built as (a) until you decide.
+  **Decided 2026-10-13: (c)**, see §4.6; the rule that detection never changes a link stands.
+
+### Step 4 notes
+
+Built as planned. Choices the plan left open:
+- **Check order:** 404 (a txn is missing), then 422 `transfer-invalid` (neither side, signs, equal and
+  opposite, different accounts, in that order), then 409 `transfer-conflict`. The 409 detail names the
+  txn and the link; `linkId` is also a property. No detail quotes an amount or a description.
+- **Marking one-sided also clears `transfer_excluded`**, as a manual link does: the explicit action wins,
+  and the V9 CHECK wouldn't allow an excluded txn on a link anyway.
+- **Write order under the CHECK:** Hibernate flushes inserts before updates and deletes last, so the
+  service flushes between steps: exclusions are cleared before a link is inserted, and a link is deleted
+  before an exclusion is set.
+- **List:** filtered and sorted in Java over one fetch-join query (a household has a few hundred links at
+  most). A link's effective date is the later of its sides'; ties go newest id first. An unknown
+  `accountId` gives an empty list, not a 404, since it's a filter.
+- **Idempotent:** `POST .../not-transfer` again is 200 (no link to remove), `DELETE .../not-transfer` on a
+  txn that isn't excluded is 204, and unlinking never duplicates a rejection.
+- **Paths:** link ids are digits only (`{id:\d+}`), so `GET` or `DELETE /api/transfers/detect` is a 405
+  instead of matching `{id}` and failing the conversion with a 400. `/api/transfers/abc` is a 404.
+- The `not-transfer` endpoints live in `TransferController` (no class-level path), as §6 lists one
+  controller.
+- `TransferDetectionTest`'s edge-case test now marks the one-sided payment through the API (step 3
+  notes).
 
 ---
 
@@ -584,6 +635,12 @@ conversation.
   never reads descriptions.
 - **Before step 1:** Phase 3b step 8 (the PDF security tests) runs as a standalone task, because
   PDF uploads are accepted today.
+
+Later decisions (2026-10-13, before step 4):
+- **Early links (step 3 open question):** option (c). Detection still never changes a link; the review
+  queue lists an unconfirmed AUTO link that a later txn competes for (§4.6).
+- **Possible matches (§4.5):** join and dismiss confirmed as proposed; only equal and opposite amounts,
+  different accounts, the window, and "pair not already rejected" apply.
 
 <details><summary>The open questions as asked</summary>
 

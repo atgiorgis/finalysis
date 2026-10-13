@@ -3,6 +3,8 @@ package com.finalysis.api;
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
 import com.finalysis.ingestion.csv.CsvMappingLockedException;
+import com.finalysis.transfer.TransferConflictException;
+import com.finalysis.transfer.TransferInvalidException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.Arrays;
@@ -97,6 +99,25 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(URI.create("urn:finalysis:problem:mapping-locked"));
         problem.setTitle("CSV mapping is locked");
         problem.setProperty("fields", ex.getFields());
+        return problem;
+    }
+
+    /** A transfer action that breaks a link rule; the detail names the rule, never amounts (SEC-10). */
+    @ExceptionHandler(TransferInvalidException.class)
+    ProblemDetail handleTransferInvalid(TransferInvalidException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:transfer-invalid"));
+        problem.setTitle("Invalid transfer");
+        return problem;
+    }
+
+    /** A txn already on a link; {@code linkId} names it so the user can unlink it first. */
+    @ExceptionHandler(TransferConflictException.class)
+    ProblemDetail handleTransferConflict(TransferConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:transfer-conflict"));
+        problem.setTitle("Transaction already on a transfer link");
+        problem.setProperty("linkId", ex.getLinkId());
         return problem;
     }
 
