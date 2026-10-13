@@ -1,7 +1,7 @@
 # Phase 3c plan: transfer detection and review queue
 
 Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and step 1 are done; next: step 2. Branch `v1`.
+standalone Phase 3b step 8 task (PDF security tests) and steps 1–2 are done; next: step 3. Branch `v1`.
 Requirements as of `docs/requirements.md` v1.26.
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
@@ -455,7 +455,7 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | 0 | Plan | This file; requirements v1.24 (ING-05, ING-07, ING-13 text; CAT-08 Phase 4 hook; ING-02 and SEC-09 PDF parts deferred). Commit "Phase 3c plan" | — | Done: "Phase 3c plan" |
 | — | Phase 3b step 8 (standalone) | PDF security tests, before step 1 because PDFs are accepted today; recorded in `phase-3b.md` | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Done: "Phase 3b step 8: PDF security tests" |
 | 1 | Schema | V9; move transfer entities to `transfer`; `TransferRejection`; `Txn` mapping changes. With it: SEC-09 and SEC-10 → Done (requirements v1.26) | `TransferSchemaTest`, repository and migration tests | Done: "Phase 3c step 1: transfer schema (V9)" |
-| 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Planned |
+| 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Done: "Phase 3c step 2: transfer candidates and resolver" (notes below) |
 | 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Planned |
 | 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Planned |
 | 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Planned |
@@ -469,6 +469,30 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 - Card → bank transfers (cash advances, balance transfers) are never auto-linked.
 - Deleting a statement doesn't re-run its successor's continuity check.
 - Deleting a statement drops confirmed links on its rows; detection re-creates them unconfirmed.
+
+### Step 2 notes
+
+Built as planned. Choices the plan left open:
+- **Both sides already on links:** never a candidate pair, even two UNMATCHED links (an out marked
+  one-sided and an in marked one-sided). Both are already transfers, and joining them would replace
+  two user decisions with one AUTO link. The user can link them by hand (step 4).
+- **Completion needs a one-pair group:** an UNMATCHED side is completed only when its group is that
+  single pair (§2.4). A k:k group that contains an UNMATCHED side goes to review instead of being
+  paired in date order, so a link the user made is never re-paired by a guess.
+- **Wrong-sign one-sided links:** the schema allows a negative txn as the *in* side of an UNMATCHED
+  link (the API won't, §3). Such a txn is never a candidate, since completing it would put it on the
+  wrong side.
+- `CandidatePair` sides carry the UNMATCHED link id (or null), so the resolver needs no second input.
+  `CandidateGroup` is a record now; the review queue (step 6) reuses it.
+- `TransferLock` is its own component (`pg_advisory_xact_lock`, key = "transfer" in ASCII,
+  `Propagation.MANDATORY`), so step 4's writes and step 5's delete take the same lock.
+- The window is checked in `TransferProperties`' constructor (the `PdfLimits` idiom), so an
+  out-of-range value fails startup; `@ConfigurationPropertiesScan` on the application registers it.
+- `TransferController` holds only `/detect` for now; step 4 adds the rest.
+- The description-scramble invariant is tested now at the query level (every text column of txn and
+  account replaced); the full sample-set version stays in step 3's `TransferDetectionTest`.
+- Extra tests beyond the plan: `TransferDetectorTest` (writes, idempotence, completion, configured
+  window, lock held, endpoint) and `TransferPropertiesTest` (default, range, startup failure).
 
 ---
 

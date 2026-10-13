@@ -26,6 +26,10 @@ are still unconfirmed. Run it first when the phase resumes.
 the step 8 leak test with the successful-import path (it covers every path reachable today). The plan
 below is unchanged and still approved.
 
+**Already done for step 9:** "SEC-09 → Done" in step 9's requirement statuses happened early, with
+Phase 3c step 1 (requirements v1.26: enforced by `NoAiInIngestionTest`). Step 9 only checks that
+SEC-09's text still holds once the parser exists; the other statuses in that row are still to do.
+
 **Current behaviour while paused:**
 - A PDF recognized as the BoA checking layout is refused with 422 `parse-error` ("…recognized
   (boa-checking), but reading it is not implemented yet; nothing was imported"). Preview gives the
