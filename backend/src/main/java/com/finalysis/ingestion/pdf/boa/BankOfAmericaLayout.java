@@ -1,11 +1,15 @@
 package com.finalysis.ingestion.pdf.boa;
 
 import com.finalysis.ingestion.SourceSection;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
@@ -37,10 +41,16 @@ final class BankOfAmericaLayout {
     /** A check-number cell: digits, then the gap-in-sequence marker {@code *} if printed. */
     static final Pattern CHECK_NUMBER_WORD = Pattern.compile("\\d+\\*?");
 
-    static final Pattern PERIOD = Pattern.compile("for (" + LONG_DATE + ") to (" + LONG_DATE + ")");
-    static final Pattern ACCOUNT = Pattern.compile("Account number: (\\d+(?: \\d+)*)");
-    static final Pattern BEGINNING_BALANCE = Pattern.compile("Beginning balance on (" + LONG_DATE + ") (" + AMOUNT + ")");
-    static final Pattern ENDING_BALANCE = Pattern.compile("Ending balance on (" + LONG_DATE + ") (" + AMOUNT + ")");
+    static final String PERIOD_FROM = "for";
+    static final String PERIOD_TO = "to";
+    static final String ACCOUNT_LABEL = "Account number:";
+    static final String BEGINNING_BALANCE_LABEL = "Beginning balance on";
+    static final String ENDING_BALANCE_LABEL = "Ending balance on";
+
+    static final Pattern PERIOD = Pattern.compile(PERIOD_FROM + " (" + LONG_DATE + ") " + PERIOD_TO + " (" + LONG_DATE + ")");
+    static final Pattern ACCOUNT = Pattern.compile(ACCOUNT_LABEL + " (\\d+(?: \\d+)*)");
+    static final Pattern BEGINNING_BALANCE = Pattern.compile(BEGINNING_BALANCE_LABEL + " (" + LONG_DATE + ") (" + AMOUNT + ")");
+    static final Pattern ENDING_BALANCE = Pattern.compile(ENDING_BALANCE_LABEL + " (" + LONG_DATE + ") (" + AMOUNT + ")");
 
     /**
      * The section headings, in printed order, and their sections (§3.2, fingerprint-relevant). Each
@@ -60,8 +70,37 @@ final class BankOfAmericaLayout {
     /** One column group of the checks section's header; it repeats once per group side by side. */
     static final List<String> CHECK_COLUMN_GROUP = List.of("Date", "Check", "#", "Amount");
 
-    static final Pattern PAGE_NUMBER = Pattern.compile("Page \\d+ of \\d+");
+    static final String PAGE_LABEL = "Page";
+    static final String PAGE_OF = "of";
+    static final Pattern PAGE_NUMBER = Pattern.compile(PAGE_LABEL + " \\d+ " + PAGE_OF + " \\d+");
     static final String CONTINUED_ON_NEXT_PAGE = "continued on the next page";
+
+    /**
+     * Every word of the layout's fixed text: labels, headings in both cases, the continued suffix,
+     * column headers and page furniture. The skeleton tool shows these unmasked on request
+     * ({@code --show-layout-words}), so a renamed heading is visible without exposing descriptions.
+     * Month names are left out: dates are readable enough from their masked shape.
+     */
+    static final Set<String> LAYOUT_WORDS = layoutWords();
+
+    /**
+     * The guesses above that the masked skeleton of a real statement (step 5) has to confirm before
+     * the parser locks them in, by name. The tool prints them so you know what to look for.
+     */
+    static final List<String> OPEN_GUESSES = List.of(
+            "PERIOD line is the whole line",
+            "balance lines are whole lines",
+            "SUMMARY lines are whole lines",
+            "amount format (optional - and $, no parentheses or CR/DR)",
+            "TOTAL line wording",
+            "SECTION_CONTINUED suffix",
+            "ACCOUNT line shape",
+            "only four section headings, no subtotals",
+            "COLUMN_HEADER words",
+            "checks column groups",
+            "row date has year",
+            "embedded purchase date is MM/DD",
+            "PAGE_FOOTER wording");
 
     private BankOfAmericaLayout() {
     }
@@ -73,6 +112,22 @@ final class BankOfAmericaLayout {
         headings.put("Checks", SourceSection.CHECK);
         headings.put("Service fees", SourceSection.FEE);
         return Collections.unmodifiableMap(headings);
+    }
+
+    private static Set<String> layoutWords() {
+        List<String> texts = new ArrayList<>(List.of(PERIOD_FROM, PERIOD_TO, ACCOUNT_LABEL, BEGINNING_BALANCE_LABEL,
+                ENDING_BALANCE_LABEL, CONTINUED_SUFFIX, TOTAL_PREFIX, PAGE_LABEL, PAGE_OF, CONTINUED_ON_NEXT_PAGE));
+        for (String heading : SECTION_HEADINGS.keySet()) {
+            texts.add(heading);
+            texts.add(heading.toLowerCase(Locale.ROOT));
+        }
+        texts.addAll(COLUMN_HEADER);
+        texts.addAll(CHECK_COLUMN_GROUP);
+        Set<String> words = new TreeSet<>();
+        for (String text : texts) {
+            Arrays.stream(text.split(" ")).filter(word -> !word.isEmpty()).forEach(words::add);
+        }
+        return Collections.unmodifiableSet(words);
     }
 
     /** The heading's section when {@code text} is exactly a known heading, else null. */

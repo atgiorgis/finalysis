@@ -1,6 +1,7 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved**; steps 0–4 done, next: step 5. Branch `v1`. Requirements as of
+Status: **approved**; steps 0–5 done, next: the step 5 checkpoint (your masked skeleton of a real
+statement), then step 6. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
@@ -669,6 +670,28 @@ reconciliation: printed balances PASSED, section totals FAILED (WITHDRAWAL)   �
 - A test runs the CLI on every fixture and asserts that the output contains no letter other than
   `x` outside labels and the allow-list, and no digit other than `9`.
 
+### Running the skeleton tool
+
+From the repo root, on your own machine, with your statement anywhere (spaces in the path are
+fine):
+
+```
+./scripts/pdf-skeleton.sh /absolute/path/to/statement.pdf
+```
+
+It prints to the terminal only and writes no file of its own. Maven compiles the backend into
+`backend/target` first, as any build does.
+
+**What to send back:** the full masked output, from the first `detect` line to the last open
+guess, pasted as is. Before you paste it, check that it contains only `x`, `9`, punctuation, x
+positions and the tool's own labels. One statement is enough to start; one that has checks or
+service fees as well is a bonus.
+
+If a line you'd expect to be a heading or total comes out as `OTHER`, or every line is
+`UNCLASSIFIED`, also send a second run with `--show-layout-words` added after the path. Read it
+first: it unmasks only the layout's own words (`Deposits`, `Total`, `continued`, …), but a merchant
+name can share one.
+
 ---
 
 ## 7. Tests and requirement mapping
@@ -700,7 +723,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 | 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Done: "Phase 3b step 2: synthetic PDF generator" |
 | 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions; `SampleDataParserSelectionTest` without the `pdf/` skip (see step 3 requirements) | Done: "Phase 3b step 3: PDF routing and unparsed uploads" |
 | 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Done: "Phase 3b step 4: BoA line classifier and detection" |
-| 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
+| 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Done: "Phase 3b step 5: masked skeleton debug CLI"; checkpoint open |
 | 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
 | 7 | Import end to end | Registered bean; open unparsed upload resolved once recognized; reconciliation on printed balances and totals; the six Northfield PDFs imported against the answer key; Postman PDF requests (synthetic fixtures, plus the real-file folder pointing at `private-data/` through your local environment, nothing committed, run by you) | `PdfImportTest`, selection test | Planned |
 | 8 | Cross-cutting security | Leak test PDF cases, no-temp and no-font-cache on a real server, ArchUnit no-AI rule, exposure checks | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Planned |
@@ -928,6 +951,50 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
   each marker removed or missing its amount, markers out of order or on page 2 only, no-activity
   statement, institution line removed or renamed, institution name alone, parse not implemented),
   `UnparsedUploadImportTest` (+3). Backend tests 1155 → 1231; frontend 1.
+
+### Step 5 notes (decisions beyond the plan)
+
+- **The tool stays bank-agnostic.** `PdfSkeleton` and `PdfSkeletonCli` in `pdf/` work through a
+  `PdfSkeletonLayout` interface: markers by name, kinds, classification, layout words, open
+  guesses and parse status. `BankOfAmericaSkeletonLayout` in `boa/` implements it by calling the
+  classifier the parser uses. The CLI's list of layouts is its only reference to `boa/`, like a
+  Spring config would be.
+- **Vocabulary and guesses live in `BankOfAmericaLayout`.** The fixed label words are now
+  constants (`Beginning balance on`, `Account number:`, `Page`/`of`, …), and both the patterns and
+  `LAYOUT_WORDS` are built from them, so the two can't drift apart. `LAYOUT_WORDS` holds every word
+  of those labels, the headings in both cases (for `Total …` lines), the continued suffix, the
+  column headers and the page furniture. Month names are left out because a masked date's shape is
+  enough. `OPEN_GUESSES` names the 13 guesses the summary prints.
+- **Masking:** letters → `x`, digits → `9` (any script), spaces and `$ , . - / * # : ( ) & + '`
+  kept. Parentheses were added for the amount-format guess and `&` and `+` for heading variants.
+  Any other character becomes `~`. x positions are rounded to whole points.
+- **Summary block:** pages with lines per page, line count, dropped glyphs (rotated and unmapped
+  counts), lines per kind (every kind, zeros included), the detect line(s) again, `parse: not
+  implemented` (from `BankOfAmericaSkeletonLayout`; step 6 replaces it with the parser's
+  pass/fail and line number, never message text), `reconciliation: not run`, then the open guesses.
+  With no layout detected, the guesses of every layout are listed and `--show-layout-words` uses
+  every layout's words. With more than one layout detected, every line is `UNCLASSIFIED` and the
+  parse status is `not run (N layouts recognized)`.
+- **Logging is forced off in the CLI.** Outside Spring, logback's default configuration would log
+  PDFBox at DEBUG to stdout (the tests' own output shows PDFBox warnings). `main` points Commons
+  Logging at its `NoOpLog` before any PDFBox class loads.
+- **Failures are fixed text and exit codes:** 2 for usage; 1 for `read: FAILED (not a file | larger
+  than 10 MB, the upload limit | not a PDF: no %PDF- header | cannot read the file)` and `extract:
+  FAILED (password required | too complex: <LIMIT> | unreadable)`. The file name and exception
+  messages are never printed. Everything goes to stdout.
+- **Script:** `scripts/pdf-skeleton.sh` takes one path and the optional flag in either order. It
+  resolves a relative path against your current directory, and runs `./mvnw -q compile exec:java`
+  in `backend/`. `exec:java` splits `exec.args` like a shell, so the path is quoted for it. A path
+  containing a line break, or both `'` and `"`, is refused with a request to rename it.
+  `exec-maven-plugin` 3.6.4 is pinned and not bound to any phase.
+- Tests: `PdfSkeletonTest` (66). Kinds per line equal the golden `.labels.txt` for the 16 layout
+  fixtures, and the two unrecognized fixtures are all `UNCLASSIFIED` with each marker shown. The
+  masking guarantee runs on all 18 fixtures with and without `--show-layout-words`: every row word
+  is masked or allow-listed, every other line matches a fixed template, and every listed guess and
+  kind is known. Also covered: renamed-heading visibility, mask and column-gap units, summary counts
+  and guess order, the ambiguous case, metadata never shown, and the CLI's usage, failure and
+  flag-order cases. A mutation that let capitals through failed 41 of them. Backend tests
+  1231 → 1297; frontend 1.
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.
