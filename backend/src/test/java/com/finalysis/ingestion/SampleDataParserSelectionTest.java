@@ -28,6 +28,8 @@ class SampleDataParserSelectionTest {
         try (Stream<Path> files = Files.walk(ImportTestSupport.SAMPLE_DATA)) {
             return files.filter(Files::isRegularFile)
                     .map(ImportTestSupport.SAMPLE_DATA::relativize)
+                    // pdf/ is routed to PDF parsers only (docs/plans/phase-3b.md §1.6); step 3 covers it here.
+                    .filter(path -> !path.startsWith("pdf"))
                     .sorted()
                     .toList()
                     .stream();

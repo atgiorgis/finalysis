@@ -1,0 +1,16 @@
+record,line,section,printed_date,txn_date,printed_amount,amount,check_number,raw_description,warning
+period_start,7,,2026-04-01,,,,,,
+period_end,7,,2026-04-30,,,,,,
+opening_balance,10,,,,"$1,000.00",1000.00,,,
+closing_balance,15,,,,"$3,371.09",3371.09,,,
+summary,11,DEPOSIT,,,"2,461.08",2461.08,,,
+summary,12,WITHDRAWAL,,,-79.99,-79.99,,,
+summary,13,CHECK,,,0.00,0.00,,,
+summary,14,FEE,,,0.00,0.00,,,
+section_total,20,DEPOSIT,,,"$2,451.08",2451.08,,,
+section_total,24,WITHDRAWAL,,,-$79.99,-79.99,,,
+section_total,,CHECK,,,,0.00,,,
+section_total,,FEE,,,,0.00,,,
+row,18,DEPOSIT,2026-04-03,2026-04-03,"2,451.08",2451.08,,BRIGHTWAY LOGISTICS PAYROLL PPD\nID: 4419920113,
+row,23,WITHDRAWAL,2026-04-12,2026-04-12,-79.99,-79.99,,SKYWAVE INTERNET AUTOPAY,
+warning,11,DEPOSIT,,,,,,,SUMMARY_DISAGREES_WITH_TOTAL

@@ -1,0 +1,17 @@
+p1 L0001 SYNTHETIC TEST DATA
+p1 L0002 NORTHFIELD
+p1 L0003 SAMPLE CUSTOMER
+p1 L0004 100 EXAMPLE WAY
+p1 L0005 SAMPLETOWN, XX 00000
+p1 L0006 Your checking account statement
+p1 L0007 for April 1, 2026 to April 30, 2026
+p1 L0008 Account number: 0047 3910 01
+p1 L0009 Account summary
+p1 L0010 Beginning balance on April 1, 2026 $1,500.00
+p1 L0011 Deposits and other additions 0.00
+p1 L0012 Withdrawals and other subtractions 0.00
+p1 L0013 Checks 0.00
+p1 L0014 Service fees 0.00
+p1 L0015 Ending balance on April 30, 2026 $1,500.00
+p1 L0016 Page 1 of 1
+p1 L0017 SYNTHETIC TEST DATA

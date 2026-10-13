@@ -1,0 +1,26 @@
+p1 L0001 SYNTHETIC TEST DATA
+p1 L0002 NORTHFIELD
+p1 L0003 SAMPLE CUSTOMER
+p1 L0004 100 EXAMPLE WAY
+p1 L0005 SAMPLETOWN, XX 00000
+p1 L0006 Your checking account statement
+p1 L0007 for April 1, 2026 to April 30, 2026
+p1 L0008 Account number: 0047 3910 01
+p1 L0009 Account summary
+p1 L0010 Beginning balance on April 1, 2026 $1,000.00
+p1 L0011 Deposits and other additions 2,461.08
+p1 L0012 Withdrawals and other subtractions -79.99
+p1 L0013 Checks 0.00
+p1 L0014 Service fees 0.00
+p1 L0015 Ending balance on April 30, 2026 $3,371.09
+p1 L0016 Deposits and other additions
+p1 L0017 Date Description Amount
+p1 L0018 04/03/26 BRIGHTWAY LOGISTICS PAYROLL PPD 2,451.08
+p1 L0019 ID: 4419920113
+p1 L0020 Total deposits and other additions $2,451.08
+p1 L0021 Withdrawals and other subtractions
+p1 L0022 Date Description Amount
+p1 L0023 04/12/26 SKYWAVE INTERNET AUTOPAY -79.99
+p1 L0024 Total withdrawals and other subtractions -$79.99
+p1 L0025 Page 1 of 1
+p1 L0026 SYNTHETIC TEST DATA

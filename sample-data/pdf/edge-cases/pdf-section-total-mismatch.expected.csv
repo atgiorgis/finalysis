@@ -1,0 +1,18 @@
+record,line,section,printed_date,txn_date,printed_amount,amount,check_number,raw_description,warning
+period_start,7,,2026-04-01,,,,,,
+period_end,7,,2026-04-30,,,,,,
+opening_balance,10,,,,"$1,000.00",1000.00,,,
+closing_balance,15,,,,"$3,169.32",3169.32,,,
+summary,11,DEPOSIT,,,"2,451.08",2451.08,,,
+summary,12,WITHDRAWAL,,,-291.76,-291.76,,,
+summary,13,CHECK,,,0.00,0.00,,,
+summary,14,FEE,,,0.00,0.00,,,
+section_total,20,DEPOSIT,,,"$2,451.08",2451.08,,,
+section_total,26,WITHDRAWAL,,,-$291.76,-291.76,,,
+section_total,,CHECK,,,,0.00,,,
+section_total,,FEE,,,,0.00,,,
+row,18,DEPOSIT,2026-04-03,2026-04-03,"2,451.08",2451.08,,BRIGHTWAY LOGISTICS PAYROLL PPD\nID: 4419920113,
+row,23,WITHDRAWAL,2026-04-12,2026-04-12,-79.99,-79.99,,SKYWAVE INTERNET AUTOPAY,
+row,24,WITHDRAWAL,2026-04-15,2026-04-15,-67.84,-67.84,,CLEARLINE WIRELESS AUTOPAY,
+row,25,WITHDRAWAL,2026-04-18,2026-04-18,-133.93,-133.93,,METRO POWER CO ONLINE PMT,
+warning,26,WITHDRAWAL,,,,,,,SECTION_TOTAL_MISMATCH

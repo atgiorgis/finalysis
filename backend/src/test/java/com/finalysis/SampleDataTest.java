@@ -143,6 +143,8 @@ class SampleDataTest {
 
         Map<Path, byte[]> generated = filesUnder(output);
         Map<Path, byte[]> committed = filesUnder(SAMPLE_DATA);
+        // pdf/ belongs to tools/SyntheticPdfGenerator.java and is checked by SyntheticPdfTest.
+        committed.keySet().removeIf(file -> file.startsWith("pdf"));
         assertThat(generated.keySet()).containsExactlyInAnyOrderElementsOf(committed.keySet());
         generated.forEach((file, bytes) -> assertThat(bytes).as(file.toString()).isEqualTo(committed.get(file)));
     }

@@ -1,6 +1,6 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved**; steps 0–1 done, next: step 2. Branch `v1`. Requirements as of
+Status: **approved**; steps 0–2 done, next: step 3. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
@@ -697,7 +697,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 |---|---|---|---|---|
 | 0 | Plan and scope | This file; requirements v1.22 recording the approved decisions; CLAUDE.md current phase. Commit "Phase 3b plan and scope" | — | Done: `1dee291` |
 | 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory | Done: "Phase 3b step 1: PDF text extraction layer" |
-| 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Planned |
+| 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Done: "Phase 3b step 2: synthetic PDF generator" |
 | 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions | Planned |
 | 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Planned |
 | 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
@@ -746,6 +746,61 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 - Tests: `PdfTextExtractorTest` (20) and `PdfSecurityTest` (27), all PDFs built in memory. Backend
   tests 956 → 1003; frontend 1.
 
+### Step 2 notes (decisions beyond the plan)
+
+- **Golden line texts come from the generator.** Next to every fixture it writes `<name>.lines.txt`:
+  the lines it drew, grouped by baseline, left to right, joined by one space (`p1 L0018 …`). This
+  is an oracle independent of the extractor; `SyntheticPdfTest` compares the extraction with it.
+  The generator refuses to draw two strings on a line less than 6 pt apart or two lines less than
+  6 pt apart, so its model can't silently disagree with the extractor's word and line rules.
+- **`.expected.csv` format.** One CSV per recognized edge case, with a `record` column:
+  `period_start`, `period_end`, `opening_balance`, `closing_balance`, `summary` (one per section),
+  `section_total` (one per section; no line and no printed amount when the section isn't in the
+  body, amount = the summary amount, §3.2), `row`, and `warning`. Columns: `line`, `section`,
+  `printed_date`, `txn_date`, `printed_amount`, `amount`, `check_number`, `raw_description`
+  (`\n` escaped), `warning`. `line` is the extracted line number (DAT-07): the TXN line for a row,
+  the check line for a check group. Fields with commas (`"2,451.08"`) are quoted (RFC 4180).
+  Expected `txn_date`s are written by hand in the generator, not computed with §3.6's rule.
+- **Warning kinds are names, not messages:** `DESCRIPTION_SPANS_LINES`,
+  `SUMMARY_DISAGREES_WITH_TOTAL`, `SECTION_TOTAL_MISMATCH` (the last comes from reconciliation,
+  not the parser). Step 6 decides the message text and maps the kinds onto it.
+- **`pdf-manifest.csv` columns:** `file, parser (boa-checking | none), unparsed_reason,
+  answer_key_file, period_start, period_end, opening_balance, closing_balance, status`. The
+  glyph-by-glyph fixture points at April's answer-key file. Only recognized edge cases have an
+  `.expected.csv`; the six monthly files are checked against the answer key instead.
+- **"4-line wrap (warning)" was ambiguous** with §3.3 (warn on more than 3 continuation lines).
+  The wrapped fixture has descriptions of 2, 3, 4 and 5 lines. Only the 5-line one (4 continuation
+  lines) expects the warning, so both sides of the boundary are covered and §3.3 stands.
+- **Layout guesses, all fictional and to be checked against the step 5 skeleton:**
+  - row amounts `-1,850.00` / `2,451.08`; summary section amounts the same, with `0.00` for an
+    empty section; balances and section totals `$3,200.00` / `-$5,583.14`;
+  - `Account number: 0047 3910 01` on page 1; later pages have a header line
+    (`SAMPLE CUSTOMER  Account # 0047 3910 01  April 1, 2026 to April 30, 2026`) under the mark;
+  - `continued on the next page` above `Page N of M` when a section carries on;
+  - `<heading> - continued` and a repeated column header at the top of the next page;
+  - the checks column header is `Date Check # Amount` twice, and check groups are laid out by row.
+- **Institution text is `NORTHFIELD` alone**, never "Northfield Bank", because a real bank uses
+  that name. The customer, address (`100 EXAMPLE WAY`, `SAMPLETOWN, XX 00000`) and account number
+  are fictional; no routing number is printed.
+- **Wrapping:** a 175 pt description column wraps the three longest answer-key descriptions
+  (payroll after `PPD`, rent, savings transfer) at a word boundary. With 9 rows per page, April to
+  August continue withdrawals on page 2 and September fits on one page.
+- **Drawing realism:** every bold string (mark, headings, column headers, totals) is drawn twice
+  at the same spot; odd months draw descriptions as `TJ` arrays with kerning; page 2 of each monthly
+  statement draws amounts first; the multi-page fixture draws page 2 bottom to top and page 3
+  amounts first; the glyph-by-glyph fixture draws space glyphs too, since a 0.278 em space is
+  below the 0.3 em word gap and leaving it out would merge words.
+- **`pdf-no-text.pdf` carries the mark once,** in the header: 17 characters, under the 20 that
+  make a document count as having text (§4.1). A footer mark would push it over.
+- **The unrecognized layout** is a statement for the fictional APEX VISA card from `sample-data`.
+- **`SampleDataParserSelectionTest` also skips `pdf/`** (approved during step 2): it asserts every
+  sample file resolves to the OFX or CSV parser. Step 3 extends it for PDFs as planned.
+- Tests: `SyntheticPdfTest` (77: byte-identical regeneration, manifest completeness, and per
+  fixture golden lines, Flate-compressed variant, mark on the first and last line of every page,
+  no real bank name in bytes, text or expectations; answer-key rows and balances for the six
+  monthly PDFs and the glyph copy; edge-case expectations consistent and pointing at their printed
+  lines). Backend tests 1003 → 1080; frontend 1.
+
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.
 
@@ -756,6 +811,8 @@ way to correct the guesses in §3 before they are locked into fingerprints.
 - Descriptions wrapping across a page boundary fail the import, by design, until a real skeleton
   shows the pattern.
 - The extraction deadline is cooperative. The memory and decode caps bound the worst case.
+- A decompression bomb in the cross-reference stream is decoded by PDFBox while loading, before
+  the decoded-size checks can run (step 1 notes).
 - Unparsed uploads can only be resolved by re-uploading the file (no stored bytes until SEC-04);
   dismissing them comes with the 3c review queue.
 - PDFBox upgrades can change extracted text and so fingerprints. They are manual, with a real-file

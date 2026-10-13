@@ -1,0 +1,30 @@
+p1 L0001 SYNTHETIC TEST DATA
+p1 L0002 NORTHFIELD
+p1 L0003 SAMPLE CUSTOMER
+p1 L0004 100 EXAMPLE WAY
+p1 L0005 SAMPLETOWN, XX 00000
+p1 L0006 Your checking account statement
+p1 L0007 for December 10, 2026 to January 9, 2027
+p1 L0008 Account number: 0047 3910 01
+p1 L0009 Account summary
+p1 L0010 Beginning balance on December 10, 2026 $1,000.00
+p1 L0011 Deposits and other additions 2,450.00
+p1 L0012 Withdrawals and other subtractions -158.10
+p1 L0013 Checks 0.00
+p1 L0014 Service fees 0.00
+p1 L0015 Ending balance on January 9, 2027 $3,291.90
+p1 L0016 Deposits and other additions
+p1 L0017 Date Description Amount
+p1 L0018 12/31/26 BRIGHTWAY LOGISTICS PAYROLL PPD 2,450.00
+p1 L0019 ID: 4419920113
+p1 L0020 Total deposits and other additions $2,450.00
+p1 L0021 Withdrawals and other subtractions
+p1 L0022 Date Description Amount
+p1 L0023 12/14/26 PURCHASE 12/12 HOLLY MARKET ARLINGTON VA -45.10
+p1 L0024 01/02/27 PURCHASE 12/30 PARTY SUPPLY ARLINGTON VA -62.75
+p1 L0025 01/05/27 PURCHASE 02/29 LEAP STORE ARLINGTON VA -12.00
+p1 L0026 01/06/27 PURCHASE 01/07 PREPAID SAMPLE TRANSIT -30.00
+p1 L0027 01/08/27 PURCHASE 01/08 BLUE BEAN CAFE ARLINGTON VA -8.25
+p1 L0028 Total withdrawals and other subtractions -$158.10
+p1 L0029 Page 1 of 1
+p1 L0030 SYNTHETIC TEST DATA

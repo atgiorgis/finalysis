@@ -1,0 +1,13 @@
+record,line,section,printed_date,txn_date,printed_amount,amount,check_number,raw_description,warning
+period_start,7,,2026-04-01,,,,,,
+period_end,7,,2026-04-30,,,,,,
+opening_balance,10,,,,"$1,500.00",1500.00,,,
+closing_balance,15,,,,"$1,500.00",1500.00,,,
+summary,11,DEPOSIT,,,0.00,0.00,,,
+summary,12,WITHDRAWAL,,,0.00,0.00,,,
+summary,13,CHECK,,,0.00,0.00,,,
+summary,14,FEE,,,0.00,0.00,,,
+section_total,,DEPOSIT,,,,0.00,,,
+section_total,,WITHDRAWAL,,,,0.00,,,
+section_total,,CHECK,,,,0.00,,,
+section_total,,FEE,,,,0.00,,,
