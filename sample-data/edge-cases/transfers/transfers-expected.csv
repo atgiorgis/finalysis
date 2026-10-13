@@ -1,0 +1,26 @@
+file,line,date,amount,expected,counterpart,scenario
+transfers-northfield-checking_2026-05.csv,2,2026-05-01,2310.55,NONE,,income; no counterpart
+transfers-northfield-checking_2026-05.csv,3,2026-05-04,-300.00,LINKED,transfers-northfield-savings_2026-05.csv:2,"checking to savings, same day"
+transfers-northfield-checking_2026-05.csv,4,2026-05-06,-410.25,LINKED,transfers-summit-card_2026-05.csv:3,"card payment, card posts 3 days later"
+transfers-northfield-checking_2026-05.csv,5,2026-05-08,-133.10,LINKED,transfers-summit-card_2026-05.csv:5,card payment 5 days later: inside the window
+transfers-northfield-checking_2026-05.csv,6,2026-05-08,-144.20,NONE,,card payment 6 days later: outside the window
+transfers-northfield-checking_2026-05.csv,7,2026-05-12,-95.60,LINKED,transfers-summit-card_2026-05.csv:4,card credits the day before checking
+transfers-northfield-checking_2026-05.csv,8,2026-05-15,-250.00,LINKED,transfers-northfield-savings_2026-05.csv:3,two equal transfers: date order
+transfers-northfield-checking_2026-05.csv,9,2026-05-17,-250.00,LINKED,transfers-northfield-savings_2026-05.csv:4,two equal transfers: date order
+transfers-northfield-checking_2026-05.csv,10,2026-05-20,-200.00,REVIEW,G1,"one out, two possible ins"
+transfers-northfield-checking_2026-05.csv,11,2026-05-22,-42.00,LINKED,transfers-summit-card_2026-05.csv:8,documented false positive: purchase and unrelated card refund
+transfers-northfield-checking_2026-05.csv,12,2026-05-25,75.00,NONE,,card to checking: never auto-linked
+transfers-northfield-checking_2026-05.csv,13,2026-05-27,-160.00,ONE_SIDED,,payment to an account not in the app
+transfers-northfield-savings_2026-05.csv,2,2026-05-04,300.00,LINKED,transfers-northfield-checking_2026-05.csv:3,"checking to savings, same day"
+transfers-northfield-savings_2026-05.csv,3,2026-05-15,250.00,LINKED,transfers-northfield-checking_2026-05.csv:8,two equal transfers: date order
+transfers-northfield-savings_2026-05.csv,4,2026-05-17,250.00,LINKED,transfers-northfield-checking_2026-05.csv:9,two equal transfers: date order
+transfers-northfield-savings_2026-05.csv,5,2026-05-20,200.00,REVIEW,G1,"one out, two possible ins"
+transfers-northfield-savings_2026-05.csv,6,2026-05-31,0.42,NONE,,interest; no counterpart
+transfers-summit-card_2026-05.csv,2,2026-05-03,-4.50,NONE,,purchase
+transfers-summit-card_2026-05.csv,3,2026-05-09,410.25,LINKED,transfers-northfield-checking_2026-05.csv:4,"card payment, card posts 3 days later"
+transfers-summit-card_2026-05.csv,4,2026-05-11,95.60,LINKED,transfers-northfield-checking_2026-05.csv:7,card credits the day before checking
+transfers-summit-card_2026-05.csv,5,2026-05-13,133.10,LINKED,transfers-northfield-checking_2026-05.csv:5,card payment 5 days later: inside the window
+transfers-summit-card_2026-05.csv,6,2026-05-14,144.20,NONE,,card payment 6 days later: outside the window
+transfers-summit-card_2026-05.csv,7,2026-05-21,200.00,REVIEW,G1,"one out, two possible ins"
+transfers-summit-card_2026-05.csv,8,2026-05-24,42.00,LINKED,transfers-northfield-checking_2026-05.csv:11,documented false positive: purchase and unrelated card refund
+transfers-summit-card_2026-05.csv,9,2026-05-25,-75.00,NONE,,card to checking: never auto-linked

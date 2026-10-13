@@ -1,8 +1,8 @@
 # Phase 3c plan: transfer detection and review queue
 
 Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and steps 1–2 are done; next: step 3. Branch `v1`.
-Requirements as of `docs/requirements.md` v1.26.
+standalone Phase 3b step 8 task (PDF security tests) and steps 1–3 are done; next: step 4. Branch `v1`.
+Requirements as of `docs/requirements.md` v1.27 (possible matches added to ING-07 and step 6).
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
 spending or income, enforced through `txn.is_transfer`), plus the review actions on ING-13 unparsed
@@ -239,7 +239,7 @@ All writes take the transfer advisory lock (§2.5).
 
 `GET /api/review-queue?kind=&accountId=` → `{counts, items}`
 
-- `counts`: `{statements, unparsedUploads, transferCandidates}`, for a UI badge later.
+- `counts`: `{statements, unparsedUploads, transferCandidates, possibleMatches}`, for a UI badge later.
 - `items`: newest first by `since`, each with a `kind`:
 
 | kind | Included when | Fields |
@@ -247,6 +247,7 @@ All writes take the transfer advisory lock (§2.5).
 | `STATEMENT` | `status = NEEDS_REVIEW` and `reviewed_at IS NULL` | `statementId`, `accountId`, `accountName`, `fileName`, `periodStart`, `periodEnd`, `balanceCheck`, `warnings`, `since` = `importedAt` |
 | `UNPARSED_UPLOAD` | `resolved_at IS NULL` | `uploadId`, `accountId`, `accountName`, `fileName`, `reason`, `since` = `createdAt` |
 | `TRANSFER_CANDIDATES` | a candidate group that §2.3 left unresolved (rule 3) | `key` (`txn-<smallest txn id>`), `txns` (`TxnSummary`), `pairs` (`{outTxnId, inTxnId, daysApart}`), `since` = newest `created_at` of its txns |
+| `POSSIBLE_MATCH` | two UNMATCHED links, one with only an out side and one with only an in side, whose txns would otherwise match (§4.5) | `key` (`links-<outLinkId>-<inLinkId>`), `outLinkId`, `inLinkId`, `out` and `in` (`TxnSummary`), `daysApart`, `since` = newer link's `created_at` |
 
 - Candidate groups are computed by the same query and resolver as detection, read-only, at request
   time (§2.3). The user resolves a group with the transfer actions (§3): link the right pair, mark a
@@ -299,6 +300,29 @@ All writes take the transfer advisory lock (§2.5).
   predecessor, keeps its stored result. Documented limitation; re-importing the deleted statement
   re-checks only an UNVERIFIED successor, as today.
 - The CSV mapping's `used_at` stays set.
+
+### 4.5 Possible matches between one-sided links (added 2026-10-13, step 6)
+
+Two one-sided user links whose txns would otherwise match appear in the queue as a **possible match**
+the user can join. Detection still never joins them automatically (step 2 notes: joining would replace
+two user decisions with one AUTO link).
+
+- **Would otherwise match:** the out link's txn is negative, the in link's txn is the equal and opposite
+  amount, the accounts differ, and the effective dates are within the detection window
+  (`finalysis.transfers.window-days`). The pair isn't in `transfer_rejection`. No account-type or
+  section rule: the user has already said both are transfers.
+- **One txn, several possible matches** (e.g. two one-sided ins of the same amount): each pair is its own
+  item; joining one removes the others on the next read, since the joined txns are no longer UNMATCHED.
+- **Join** (proposed, to confirm when step 6 starts): `POST /api/transfers/join {outLinkId, inLinkId}`
+  replaces the two UNMATCHED links with one MATCHED, USER, confirmed link, in one transaction under the
+  transfer lock. 201 + `Location`; 404 if either link is missing; 409 `transfer-conflict` if either is no
+  longer an UNMATCHED link with that side; 422 `transfer-invalid` if the amounts aren't equal and opposite
+  or the accounts are the same (the manual-link rules of §3; no window, as for any manual link).
+- **Dismiss** (proposed): `POST /api/transfers/join/dismiss {outLinkId, inLinkId}` records the txn pair in
+  `transfer_rejection`, so the item disappears and both one-sided links stay. A later manual link of the
+  pair still wins (§3).
+- Computed at request time like candidate groups, with a read-only query beside `TransferCandidateQuery`;
+  it selects ids, account ids and dates only, never a text column.
 
 ---
 
@@ -372,7 +396,7 @@ com.finalysis.transfer/                 new feature package
   TransferService             the user actions of §3
   TransferController, TransferLinkResponse, TxnSummary, CreateTransferRequest
 com.finalysis.review/
-  ReviewQueueService, ReviewQueueController, ReviewItem (sealed: StatementItem, UnparsedUploadItem, TransferCandidatesItem)
+  ReviewQueueService, ReviewQueueController, ReviewItem (sealed: StatementItem, UnparsedUploadItem, TransferCandidatesItem, PossibleMatchItem)
 com.finalysis.ingestion/
   StatementImported, StatementDeleted   event records (ids only)
   StatementController / StatementImportService   + review, delete
@@ -427,7 +451,7 @@ to which line, review group, or none).
 | ING-05 rules | `TransferCandidateQueryTest` (each rule of §2.1 on both sides of its boundary, window from config, effective date uses `post_date`); `TransferResolverTest` (pure: 1:1, k:k same accounts in date order, k:k with a non-candidate pairing, 1:2, 2:1, UNMATCHED completion, chains, determinism under input order) |
 | ING-05 detection | `TransferDetectionTest` (answer key: 18 links and exact `is_transfer` set across four import orders; OFX/QFX variant; idempotent second run; late arrival; edge-case fixtures against `transfers-expected.csv`; description-scramble invariance; detection failure doesn't fail the import; concurrency: two runs serialize) |
 | ING-05 actions | `TransferApiTest` (every endpoint and error in §3, Location headers, rejection prevents relinking, not-transfer removes link and blocks detection, undo + detect relinks, manual link clears exclusion and rejection, one-sided completion clears confirmation, money as strings) |
-| ING-07, ING-13 | `ReviewQueueApiTest` (three kinds across accounts, counts, filters, order; review keeps warnings and removes the item; late-arrival warning re-queues; dismiss and 409; unparsed GET and 202 `Location`; duplicate-account story end to end); `StatementDeleteTest` (cascades, counts, `is_transfer` cleared on counterparts, detection re-run, file re-importable, unparsed upload keeps `resolved_at`, account lock) |
+| ING-07, ING-13 | `ReviewQueueApiTest` (four kinds across accounts; possible matches: listed within the window and not outside it, join, dismiss, a rejected pair not listed, detection never joins; counts, filters, order; review keeps warnings and removes the item; late-arrival warning re-queues; dismiss and 409; unparsed GET and 202 `Location`; duplicate-account story end to end); `StatementDeleteTest` (cascades, counts, `is_transfer` cleared on counterparts, detection re-run, file re-importable, unparsed upload keeps `resolved_at`, account lock) |
 | GR-04 | covered above: `is_transfer` is exactly "on a link", on every path |
 | SEC-10 | `SensitiveDataLeakTest` (extended: new endpoints' errors and logs carry no descriptions or amounts) |
 | Architecture | `PackageDependencyTest` (ArchUnit, §6) |
@@ -456,10 +480,10 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | — | Phase 3b step 8 (standalone) | PDF security tests, before step 1 because PDFs are accepted today; recorded in `phase-3b.md` | `SensitiveDataLeakTest`, `MultipartDiskTest`, `NoAiInIngestionTest`, `ExposureTest` | Done: "Phase 3b step 8: PDF security tests" |
 | 1 | Schema | V9; move transfer entities to `transfer`; `TransferRejection`; `Txn` mapping changes. With it: SEC-09 and SEC-10 → Done (requirements v1.26) | `TransferSchemaTest`, repository and migration tests | Done: "Phase 3c step 1: transfer schema (V9)" |
 | 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Done: "Phase 3c step 2: transfer candidates and resolver" (notes below) |
-| 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Planned |
+| 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Done: "Phase 3c step 3: detection wiring and validation" (notes below) |
 | 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Planned |
 | 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Planned |
-| 6 | Review queue | `review` package, `GET /api/review-queue` | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
+| 6 | Review queue | `review` package, `GET /api/review-queue`, possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
 | 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Planned |
 
 ### Known limitations (expected at the end of 3c)
@@ -469,6 +493,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 - Card → bank transfers (cash advances, balance transfers) are never auto-linked.
 - Deleting a statement doesn't re-run its successor's continuity check.
 - Deleting a statement drops confirmed links on its rows; detection re-creates them unconfirmed.
+- An ambiguous group (§2.3 rule 3) forms only when its txns meet in one detection run. If one
+  counterpart arrives first, that pair is linked (AUTO, unconfirmed), and a second counterpart imported
+  later doesn't reopen it (step 3 notes; open question).
 
 ### Step 2 notes
 
@@ -493,6 +520,45 @@ Built as planned. Choices the plan left open:
   account replaced); the full sample-set version stays in step 3's `TransferDetectionTest`.
 - Extra tests beyond the plan: `TransferDetectorTest` (writes, idempotence, completion, configured
   window, lock held, endpoint) and `TransferPropertiesTest` (default, range, startup failure).
+
+### Step 3 notes
+
+Built as planned. Choices and findings beyond the plan:
+- **Event and listener.** `StatementImportWriter.write` publishes `StatementImported(statementId,
+  accountId)` inside the import's transaction. `TransferDetectionListener` handles it after commit and
+  runs detection in a new transaction (`REQUIRES_NEW` through a `TransactionTemplate`: after commit the
+  finished transaction is still bound to the thread, and joining it would never commit). The listener is
+  synchronous, so links exist by the time the 201 is returned; the cost is one detection query per
+  import.
+- **Failure log:** the statement id and the exception's class name only, never its message, which could
+  quote row values (SEC-10). The test throws an exception whose message holds a description and an
+  amount and checks neither reaches the log.
+- **Fixtures** (`sample-data/edge-cases/transfers/`): three May 2026 statements and
+  `transfers-expected.csv` (`file,line,date,amount,expected,counterpart,scenario`; `expected` is LINKED
+  with the counterpart's `file:line`, REVIEW with a group name, ONE_SIDED or NONE). The generator writes
+  them last without the random generator; every existing file is byte-identical.
+- **One-sided in the fixture test** is marked through `TransferLinkRepository`, since the API is step 4.
+  Detection then keeps it UNMATCHED. Step 4's `TransferApiTest` covers the API path.
+- **FEE/INTEREST and zero amounts:** no OFX fixture. Step 2's `TransferCandidateQueryTest` already
+  covers both sides of rules 1 and 5 with inserted rows, which §7 allowed.
+- **Scramble test, full version:** the whole CSV sample set imported twice, the second time with every
+  description cell (and Apex's category), the file names and the account names and institutions
+  replaced by random text, the CSV mapping reused. Links and `is_transfer` rows, compared by sample file
+  and line, are identical.
+- **Answer key:** four import orders, the OFX/QFX variant and late savings statements all give the 18
+  links; the expected pairs are derived in the test from the answer key (each out transfer row with the
+  one opposite in row within the window), not from the app's code.
+- **Isolation:** detection covers every account, so `TransferDetectionTest` asserts at the start of each
+  test that the database holds no txns.
+- **Finding, open question: ambiguity depends on arrival order.** Detection runs per import and never
+  changes an existing link (§2.5). The −200.00 fixture is a review group only when its out side meets
+  both ins in one run; the fixture test imports checking last for that reason. If checking and savings
+  arrive first, they are linked, and the card's +200.00 imported later stays unlinked
+  (`aCounterpartArrivingAfterALinkDoesNotReopenIt` pins this). The answer key is unaffected (no
+  ambiguous groups). Options: (a) keep it and document it (the link is AUTO and unconfirmed, like §2.7);
+  (b) let detection dissolve an unconfirmed AUTO link when a new candidate shares a side, sending the
+  group to review, which changes the "never changes a link" rule; (c) keep the link, but list it in the
+  review queue (step 6) when another candidate shares a side. Built as (a) until you decide.
 
 ---
 

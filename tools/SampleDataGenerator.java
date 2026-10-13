@@ -20,8 +20,10 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -126,10 +128,11 @@ public class SampleDataGenerator {
         }
         writeOfxEdgeCases(checking);
         writeCsvEdgeCases(checking, summit);
+        writeTransferEdgeCases();
 
         System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
-                + "%d transactions to %s/%n", statements.size(), ofxFiles, OFX_EDGE_CASES + CSV_EDGE_CASES, txns.size(),
-                out);
+                + "%d transfer edge-case statements, %d transactions to %s/%n", statements.size(), ofxFiles,
+                OFX_EDGE_CASES + CSV_EDGE_CASES, TRANSFER_EDGE_CASE_STATEMENTS, txns.size(), out);
     }
 
     // ---------------------------------------------------------------- transactions
@@ -632,6 +635,94 @@ public class SampleDataGenerator {
         write("edge-cases/csv-summary-preamble-balance-row.csv", summaryPreambleBalanceRow());
     }
 
+    // ---------------------------------------------------------------- transfer edge cases
+
+    static final int TRANSFER_EDGE_CASE_STATEMENTS = 3;
+    static final String TRANSFERS_DIR = "edge-cases/transfers/";
+
+    /**
+     * One row of the transfer fixtures. {@code key} names the row; {@code expected} is LINKED (with
+     * the counterpart's key), REVIEW (with the review group's name), ONE_SIDED (detection leaves it
+     * alone; a test marks it one-sided) or NONE.
+     */
+    record TransferEdgeRow(String key, Account account, LocalDate date, String description, String amount,
+                           String expected, String counterpart, String scenario) {}
+
+    /**
+     * May 2026 statements for Northfield checking, Northfield savings and Summit in their usual
+     * layouts, one transfer scenario per amount (docs/plans/phase-3c.md §7), plus
+     * {@code transfers-expected.csv}: each row's file, line (the header is line 1), date, amount
+     * and expected detection outcome. Written last and without the random generator, so the other
+     * files are unchanged.
+     */
+    void writeTransferEdgeCases() throws IOException {
+        List<TransferEdgeRow> rows = List.of(
+                tr("c-payroll", Account.CHECKING, 1, "HARBORLINE FREIGHT PAYROLL DIRECT DEP", "2310.55", "NONE", "", "income; no counterpart"),
+                tr("c-savings-same-day", Account.CHECKING, 4, "ONLINE TRANSFER TO SAVINGS", "-300.00", "LINKED", "s-savings-same-day", "checking to savings, same day"),
+                tr("c-card-3", Account.CHECKING, 6, "SUMMIT CARD ONLINE PMT", "-410.25", "LINKED", "k-card-3", "card payment, card posts 3 days later"),
+                tr("c-card-5", Account.CHECKING, 8, "SUMMIT CARD ONLINE PMT", "-133.10", "LINKED", "k-card-5", "card payment 5 days later: inside the window"),
+                tr("c-card-6", Account.CHECKING, 8, "SUMMIT CARD ONLINE PMT", "-144.20", "NONE", "", "card payment 6 days later: outside the window"),
+                tr("c-card-before", Account.CHECKING, 12, "SUMMIT CARD ONLINE PMT", "-95.60", "LINKED", "k-card-before", "card credits the day before checking"),
+                tr("c-250-first", Account.CHECKING, 15, "ONLINE TRANSFER TO SAVINGS", "-250.00", "LINKED", "s-250-first", "two equal transfers: date order"),
+                tr("c-250-second", Account.CHECKING, 17, "ONLINE TRANSFER TO SAVINGS", "-250.00", "LINKED", "s-250-second", "two equal transfers: date order"),
+                tr("c-200", Account.CHECKING, 20, "ONLINE TRANSFER", "-200.00", "REVIEW", "G1", "one out, two possible ins"),
+                tr("c-hardware", Account.CHECKING, 22, "CORNER HARDWARE DEBIT CARD PURCHASE", "-42.00", "LINKED", "k-refund", "documented false positive: purchase and unrelated card refund"),
+                tr("c-cash-advance", Account.CHECKING, 25, "SUMMIT CASH ADVANCE DEPOSIT", "75.00", "NONE", "", "card to checking: never auto-linked"),
+                tr("c-one-sided", Account.CHECKING, 27, "ONLINE PMT TO BRIGHTSTAR CARD", "-160.00", "ONE_SIDED", "", "payment to an account not in the app"),
+                tr("s-savings-same-day", Account.SAVINGS, 4, "ONLINE TRANSFER FROM CHECKING", "300.00", "LINKED", "c-savings-same-day", "checking to savings, same day"),
+                tr("s-250-first", Account.SAVINGS, 15, "ONLINE TRANSFER FROM CHECKING", "250.00", "LINKED", "c-250-first", "two equal transfers: date order"),
+                tr("s-250-second", Account.SAVINGS, 17, "ONLINE TRANSFER FROM CHECKING", "250.00", "LINKED", "c-250-second", "two equal transfers: date order"),
+                tr("s-200", Account.SAVINGS, 20, "ONLINE TRANSFER FROM CHECKING", "200.00", "REVIEW", "G1", "one out, two possible ins"),
+                tr("s-interest", Account.SAVINGS, 31, "INTEREST EARNED", "0.42", "NONE", "", "interest; no counterpart"),
+                tr("k-coffee", Account.SUMMIT, 3, "SQ *CORNER BEAN CAFE", "-4.50", "NONE", "", "purchase"),
+                tr("k-card-3", Account.SUMMIT, 9, "ONLINE PAYMENT - THANK YOU", "410.25", "LINKED", "c-card-3", "card payment, card posts 3 days later"),
+                tr("k-card-before", Account.SUMMIT, 11, "ONLINE PAYMENT - THANK YOU", "95.60", "LINKED", "c-card-before", "card credits the day before checking"),
+                tr("k-card-5", Account.SUMMIT, 13, "ONLINE PAYMENT - THANK YOU", "133.10", "LINKED", "c-card-5", "card payment 5 days later: inside the window"),
+                tr("k-card-6", Account.SUMMIT, 14, "ONLINE PAYMENT - THANK YOU", "144.20", "NONE", "", "card payment 6 days later: outside the window"),
+                tr("k-200", Account.SUMMIT, 21, "ONLINE PAYMENT - THANK YOU", "200.00", "REVIEW", "G1", "one out, two possible ins"),
+                tr("k-refund", Account.SUMMIT, 24, "CORNER HARDWARE REFUND", "42.00", "LINKED", "c-hardware", "documented false positive: purchase and unrelated card refund"),
+                tr("k-cash-advance", Account.SUMMIT, 25, "CASH ADVANCE", "-75.00", "NONE", "", "card to checking: never auto-linked"));
+
+        record Located(String file, int line) {}
+        Map<String, Located> located = new HashMap<>();
+        List<String> expected = new ArrayList<>(List.of("file,line,date,amount,expected,counterpart,scenario"));
+        Map<Account, BigDecimal> openings = Map.of(
+                Account.CHECKING, money("5000.00"), Account.SAVINGS, money("6000.00"), Account.SUMMIT, money("-120.00"));
+        for (Account account : List.of(Account.CHECKING, Account.SAVINGS, Account.SUMMIT)) {
+            String file = TRANSFERS_DIR + "transfers-" + account.slug + "_2026-05.csv";
+            List<TransferEdgeRow> mine = rows.stream().filter(r -> r.account() == account).toList();
+            List<Txn> txnRows = new ArrayList<>();
+            for (TransferEdgeRow r : mine) {
+                require(txnRows.isEmpty() || !r.date().isBefore(txnRows.getLast().date()), "transfer rows out of date order");
+                located.put(r.key(), new Located(file, txnRows.size() + 2));
+                txnRows.add(new Txn(account, r.date(), r.date(), r.description(), null, money(r.amount()), "", false, "", 0));
+            }
+            write(file, render(account, openings.get(account), txnRows));
+        }
+        for (TransferEdgeRow r : rows) {
+            Located at = located.get(r.key());
+            String counterpart = switch (r.expected()) {
+                case "LINKED" -> {
+                    TransferEdgeRow other = rows.stream().filter(o -> o.key().equals(r.counterpart())).findFirst().orElseThrow();
+                    require(other.counterpart().equals(r.key()) && money(other.amount()).equals(money(r.amount()).negate()),
+                            "linked transfer rows must name each other and be equal and opposite: " + r.key());
+                    Located o = located.get(other.key());
+                    yield o.file().substring(TRANSFERS_DIR.length()) + ":" + o.line();
+                }
+                default -> r.counterpart();
+            };
+            expected.add(csvRow(at.file().substring(TRANSFERS_DIR.length()), String.valueOf(at.line()),
+                    r.date().toString(), r.amount(), r.expected(), counterpart, r.scenario()));
+        }
+        write(TRANSFERS_DIR + "transfers-expected.csv", String.join("\n", expected) + "\n");
+    }
+
+    static TransferEdgeRow tr(String key, Account account, int mayDay, String description, String amount,
+                              String expected, String counterpart, String scenario) {
+        return new TransferEdgeRow(key, account, LocalDate.of(2026, 5, mayDay), description, amount, expected,
+                counterpart, scenario);
+    }
+
     /**
      * A checking export in the layout of a fictional Larkspur Credit Union: a 3-column summary block
      * (empty middle header, four balance and total rows) and a blank line above the 4-column table,
@@ -707,7 +798,7 @@ public class SampleDataGenerator {
     // ---------------------------------------------------------------- output
 
     static void clearOutput() throws IOException {
-        for (String dir : List.of("statements", "broken", "ofx", "edge-cases")) {
+        for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers")) {
             Path path = out.resolve(dir);
             if (Files.isDirectory(path)) {
                 try (Stream<Path> files = Files.list(path)) {

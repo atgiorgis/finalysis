@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,10 @@ import org.springframework.transaction.annotation.Transactional;
  * file, so a re-upload that is still unrecognized returns the existing one. When a later upload of
  * the same file is imported, {@link #write} resolves the open upload with the new statement in the
  * import's transaction.
+ *
+ * <p><b>Events.</b> {@link #write} publishes {@link StatementImported} in its transaction, so
+ * after-commit listeners (transfer detection) run only once the rows are committed, and never for
+ * an import that rolled back.
  */
 @Component
 class StatementImportWriter {
@@ -68,14 +73,17 @@ class StatementImportWriter {
     private final TxnRepository txns;
     private final CsvMappingRepository csvMappings;
     private final UnparsedUploadRepository unparsedUploads;
+    private final ApplicationEventPublisher events;
 
     StatementImportWriter(EntityManager entityManager, StatementRepository statements, TxnRepository txns,
-                          CsvMappingRepository csvMappings, UnparsedUploadRepository unparsedUploads) {
+                          CsvMappingRepository csvMappings, UnparsedUploadRepository unparsedUploads,
+                          ApplicationEventPublisher events) {
         this.entityManager = entityManager;
         this.statements = statements;
         this.txns = txns;
         this.csvMappings = csvMappings;
         this.unparsedUploads = unparsedUploads;
+        this.events = events;
     }
 
     /**
@@ -156,6 +164,7 @@ class StatementImportWriter {
             csvMappings.markUsed(accountId);
         }
         reconcileNext(statement);
+        events.publishEvent(new StatementImported(statement.getId(), accountId));
 
         return new ImportSummary(statement.getId(), parser, parsed.periodStart(), parsed.periodEnd(),
                 statement.getOpeningBalance(), statement.getClosingBalance(), rows.size(), inserted.size(),

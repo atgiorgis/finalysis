@@ -25,7 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Detection end to end over the database (phase-3c.md §2.3 to §2.5) and {@code POST
  * /api/transfers/detect}. The rules are in TransferCandidateQueryTest and the choices in
- * TransferResolverTest; the sample-data answer key comes with step 3.
+ * TransferResolverTest; the sample-data answer key is in TransferDetectionTest.
  */
 @IntegrationTest
 @AutoConfigureMockMvc

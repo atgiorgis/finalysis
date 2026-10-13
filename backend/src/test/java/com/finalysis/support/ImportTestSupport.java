@@ -42,7 +42,11 @@ public class ImportTestSupport {
     }
 
     public long account(AccountType type, String lastFour) {
-        long id = accounts.save(new Account("Test " + lastFour, "Test Bank", type, lastFour)).getId();
+        return account(type, lastFour, "Test " + lastFour, "Test Bank");
+    }
+
+    public long account(AccountType type, String lastFour, String name, String institution) {
+        long id = accounts.save(new Account(name, institution, type, lastFour)).getId();
         created.add(id);
         return id;
     }
