@@ -1,9 +1,8 @@
 # Phase 3c plan: transfer detection and review queue
 
 Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and steps 1–5 are done; next: step 6. Branch `v1`.
-Requirements as of `docs/requirements.md` v1.28 (competing candidates and possible-match dismissal added
-to ING-07, step 6).
+standalone Phase 3b step 8 task (PDF security tests) and steps 1–6 are done; next: step 7. Branch `v1`.
+Requirements as of `docs/requirements.md` v1.29 (ING-13 resolution column, V11, step 6).
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
 spending or income, enforced through `txn.is_transfer`), plus the review actions on ING-13 unparsed
@@ -275,7 +274,8 @@ All writes take the transfer advisory lock (§2.5).
 
 `POST /api/unparsed-uploads/{id}/dismiss` → 200 `UnparsedUploadResponse`
 
-- Sets `resolved_at = now()` with no statement; V8 already defines that as "dismissed".
+- Sets `resolved_at = now()` with no statement and `resolution = DISMISSED` (V11, step 6; V8 alone told
+  "dismissed" by the missing statement).
 - Already resolved or dismissed: 409 `already-resolved`. Re-uploading a dismissed file still gives a
   new open row (V8 rule, unchanged).
 - New `GET /api/unparsed-uploads/{id}`. The import's 202 gains `Location: /api/unparsed-uploads/{id}`,
@@ -296,7 +296,7 @@ All writes take the transfer advisory lock (§2.5).
     on the surviving counterparts. A confirmed or USER link is lost too; the response counts it;
   - rejections (`ON DELETE CASCADE`, V9);
   - an unparsed upload this statement resolved keeps `resolved_at` and loses `resolved_statement_id`
-    (V8 `ON DELETE SET NULL`).
+    (V8 `ON DELETE SET NULL`); it stays RESOLVED, since its state comes from `resolution` (V11).
 - Then `StatementDeleted` triggers detection, so the counterparts can match again.
 - The file hash is gone, so the same file can be imported again (to the right account).
 - **Not re-run:** the continuity check of the next statement, which may have used this one as its
@@ -406,6 +406,24 @@ ALTER TABLE statement
 
 Two migrations rather than one, so each step's commit carries its own schema.
 
+### V11 `V11__unparsed_upload_resolution.sql` (step 6)
+
+```sql
+ALTER TABLE unparsed_upload ADD COLUMN resolution TEXT;
+UPDATE unparsed_upload                                  -- backfill from V8's rule
+SET resolution = CASE WHEN resolved_statement_id IS NOT NULL THEN 'RESOLVED' ELSE 'DISMISSED' END
+WHERE resolved_at IS NOT NULL;
+ALTER TABLE unparsed_upload
+    ADD CONSTRAINT ck_unparsed_upload_resolution_kind CHECK (resolution IN ('RESOLVED', 'DISMISSED')),
+    ADD CONSTRAINT ck_unparsed_upload_resolution_resolved_at CHECK ((resolution IS NULL) = (resolved_at IS NULL)),
+    ADD CONSTRAINT ck_unparsed_upload_resolution_statement
+        CHECK (resolved_statement_id IS NULL OR resolution = 'RESOLVED');
+```
+
+Fixes step 5's known limitation: `state` is derived from `resolution`, so deleting the resolving
+statement keeps the upload RESOLVED (with `resolvedStatementId` null). An upload whose statement was
+deleted *before* V11 can't be told from a dismissed one and is backfilled as DISMISSED, as it already read.
+
 ---
 
 ## 6. Code layout
@@ -509,7 +527,7 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Done: "Phase 3c step 3: detection wiring and validation" (notes below) |
 | 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Done: "Phase 3c step 4: transfer actions" (notes below) |
 | 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Done: "Phase 3c step 5: review actions" (notes below) |
-| 6 | Review queue | `review` package, `GET /api/review-queue`, competing candidates (§4.6), possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
+| 6 | Review queue | V11 (upload resolution, fixing step 5's limitation); `review` package, `GET /api/review-queue`, competing candidates (§4.6), possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Done: "Phase 3c step 6: review queue" (notes below) |
 | 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Planned |
 
 ### Known limitations (expected at the end of 3c)
@@ -519,8 +537,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 - Card → bank transfers (cash advances, balance transfers) are never auto-linked.
 - Deleting a statement doesn't re-run its successor's continuity check.
 - Deleting a statement drops confirmed links on its rows; detection re-creates them unconfirmed.
-- Deleting the statement that resolved an unparsed upload leaves the upload reading as DISMISSED: V8
-  stores both as `resolved_at` without a statement (step 5 notes).
+- ~~Deleting the statement that resolved an unparsed upload leaves the upload reading as DISMISSED~~
+  Fixed in step 6 (V11 `resolution`). Only uploads whose statement was deleted before V11 still read as
+  DISMISSED (the backfill can't tell them apart).
 - An ambiguous group (§2.3 rule 3) forms only when its txns meet in one detection run. If one
   counterpart arrives first, that pair is linked (AUTO, unconfirmed), and detection never reopens it.
   A second counterpart imported later puts the link in the review queue as a competing candidate
@@ -644,6 +663,49 @@ Built as planned. Choices the plan left open:
 - Tests beyond the two named classes: V10's constraint in `SchemaMigrationTest`; the resolved upload
   whose statement is deleted in `UnparsedUploadImportTest`, which has the test parser that can resolve
   one; its 202 test now expects `Location` and the new fields.
+
+### Step 6 notes
+
+Built as planned, starting with V11 (above), which fixes step 5's DISMISSED limitation. Choices the plan
+left open:
+- **One SQL fragment for rules 1–6.** `TransferCandidateQuery.RULES_1_TO_6` is shared by the candidate
+  query and the new `CompetingCandidateQuery`, which differ only in rule 7, so the two can't drift.
+  `PossibleMatchQuery` has its own short SQL: §4.5 drops the account-type and section rules. All three
+  select ids, account ids, dates (and, for possible matches, link times); each has a text-scramble test.
+- **`counts` ignore `kind`** but respect `accountId`, so a badge can show every kind while one is listed.
+  `accountId` matches an item touching that account on any side; an unknown id gives an empty queue
+  (as `GET /api/transfers` does). A bad `kind` is a 400.
+- **Order:** newest `since` first, then by kind (the `counts` order), then by the item's own ids. Links
+  and txns written in one transaction share `created_at`, so ties are real.
+- **One snapshot:** the queue reads in one `REPEATABLE READ`, read-only transaction, so a detection run
+  committing between its queries can't make it inconsistent. It takes no lock and writes nothing.
+- **JSON:** `ReviewItem` is a sealed interface with Jackson's type id as `kind` (`@JsonTypeInfo`), so
+  Phase 4's `SUGGESTED_ONE_SIDED_TRANSFER` is one more record. Transfer items carry `TxnSummary`
+  (descriptions included, as in §3); `TxnSummary.from` and `effectiveDate()` are public now (the
+  latter not in the JSON).
+- **Competing candidates:** a competitor that is the present side of an UNMATCHED link counts (it passes
+  rule 7). `pairs` holds the link's own pair and each competing pair, sorted by out then in txn id.
+- **Join** checks 404 (either link), then 409 (`transfer-conflict`, detail "Transfer link N is not a
+  one-sided link with an out/in side", `linkId` property), then 422 (signs, equal and opposite, different
+  accounts). It deletes the two links and any rejection of the pair, flushes, then inserts the USER
+  link, all under the transfer lock. The 409 keeps step 4's title.
+- **Dismiss** runs the same checks (a stale or invalid pair is refused rather than recorded), then
+  records the rejection; 204, idempotent. A later join or manual link of the pair deletes the rejection.
+- **Request body** `{outLinkId, inLinkId}`: both `@NotNull`, so a missing one is the usual 400
+  `Invalid request` with field errors.
+- **Tests beyond the named classes:** `CompetingCandidateQueryTest` and `PossibleMatchQueryTest`
+  (query rules, both sides of each boundary, scramble), `UnparsedUploadResolutionMigrationTest` (V11's
+  backfill, run on a scratch database migrated to V10), V11's checks in `UnparsedUploadRepositoryTest`
+  and `SchemaMigrationTest`, and `TransferDetectionTest`'s late-arrival story now finds its competing
+  candidate in the queue through real imports. `TransferRows` (test helper) is public, with `autoLink`.
+- **ArchUnit:** `PackageDependencyTest` checks ingestion ↛ transfer, review; transfer ↛ review; transfer
+  and review ↛ categorize, chat, Spring AI, AWS SDK. `ApiExceptionHandler` (package `api`) maps both
+  features' exceptions and is not constrained.
+- **Test container:** `max_connections=200`. The suite's ten cached contexts each keep a pool of 10, which
+  was exactly Postgres's default of 100, so the migration test's own connections failed with "too many
+  clients". App configuration is unchanged.
+- **Leak test:** every transfer, review and queue error path (and detect, list, queue) runs on rows whose
+  description carries markers; no problem carries a marker or either txn's amount.
 
 ---
 

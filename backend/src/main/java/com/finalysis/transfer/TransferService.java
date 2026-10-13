@@ -15,8 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The user's transfer actions (ING-05, docs/plans/phase-3c.md §3): list, confirm, unlink, link by
- * hand, mark one-sided, and mark a txn not a transfer. User actions over the API only; chatbot tools
+ * The user's transfer actions (ING-05, docs/plans/phase-3c.md §3, §4.5): list, confirm, unlink, link
+ * by hand, mark one-sided, mark a txn not a transfer, and join or dismiss a possible match. User actions over the API only; chatbot tools
  * never call these (SEC-03). Every write takes the transfer lock first, so it can't interleave with
  * detection (§2.5).
  *
@@ -86,12 +86,7 @@ public class TransferService {
         Txn in = request.inTxnId() == null ? null : txn(request.inTxnId());
         checkSigns(out, in);
         if (out != null && in != null) {
-            if (out.getAmount().negate().compareTo(in.getAmount()) != 0) {
-                throw new TransferInvalidException("The two amounts must be equal and opposite");
-            }
-            if (out.getAccount().getId().equals(in.getAccount().getId())) {
-                throw new TransferInvalidException("The two transactions must be in different accounts");
-            }
+            checkPair(out, in);
         }
         Stream.of(out, in).filter(Objects::nonNull).forEach(this::checkNotLinked);
 
@@ -106,6 +101,43 @@ public class TransferService {
                 ? TransferLink.linkedByUser(out, in, now)
                 : TransferLink.oneSided(out, in, now);
         return TransferLinkResponse.from(links.saveAndFlush(link));
+    }
+
+    /**
+     * Joins a possible match (§4.5): replaces two one-sided links, one with only an out side and one
+     * with only an in side, with one link of the two txns (MATCHED, USER, confirmed). The manual-link
+     * rules apply (equal and opposite, different accounts, no window), and the pair's rejection, if any,
+     * is deleted, as for any manual link.
+     *
+     * @throws TransferConflictException if either link is no longer one-sided with that side
+     */
+    @Transactional
+    public TransferLinkResponse join(long outLinkId, long inLinkId) {
+        lock.acquire();
+        OneSidedPair pair = oneSidedPair(outLinkId, inLinkId);
+        Txn out = pair.outLink().getOutTxn();
+        Txn in = pair.inLink().getInTxn();
+        links.delete(pair.outLink());
+        links.delete(pair.inLink());
+        rejections.deleteById(new TransferRejection.Pair(out.getId(), in.getId()));
+        entityManager.flush(); // the old links go before the new one (V3: one link per txn)
+
+        return TransferLinkResponse.from(links.saveAndFlush(TransferLink.linkedByUser(out, in, Timestamps.now())));
+    }
+
+    /**
+     * Dismisses a possible match (§4.5): records the two txns as a rejected pair, so it isn't listed
+     * again; both one-sided links stay. Idempotent. A later manual link of the pair still wins (§3).
+     */
+    @Transactional
+    public void dismissJoin(long outLinkId, long inLinkId) {
+        lock.acquire();
+        OneSidedPair pair = oneSidedPair(outLinkId, inLinkId);
+        TransferRejection.Pair rejected = new TransferRejection.Pair(pair.outLink().getOutTxn().getId(),
+                pair.inLink().getInTxn().getId());
+        if (!rejections.existsById(rejected)) {
+            rejections.saveAndFlush(new TransferRejection(rejected.outTxnId(), rejected.inTxnId()));
+        }
     }
 
     /** Records that the user looked at the link; idempotent, the first time is kept. */
@@ -159,6 +191,36 @@ public class TransferService {
             }
         }
         links.delete(link);
+    }
+
+    private record OneSidedPair(TransferLink outLink, TransferLink inLink) {
+    }
+
+    /** 404 if a link is missing, then 409 if either isn't one-sided with its side, then the pair rules (422). */
+    private OneSidedPair oneSidedPair(long outLinkId, long inLinkId) {
+        TransferLink outLink = link(outLinkId);
+        TransferLink inLink = link(inLinkId);
+        if (outLink.getStatus() != TransferStatus.UNMATCHED || outLink.getOutTxn() == null) {
+            throw new TransferConflictException(
+                    "Transfer link " + outLinkId + " is not a one-sided link with an out side", outLinkId);
+        }
+        if (inLink.getStatus() != TransferStatus.UNMATCHED || inLink.getInTxn() == null) {
+            throw new TransferConflictException(
+                    "Transfer link " + inLinkId + " is not a one-sided link with an in side", inLinkId);
+        }
+        checkSigns(outLink.getOutTxn(), inLink.getInTxn());
+        checkPair(outLink.getOutTxn(), inLink.getInTxn());
+        return new OneSidedPair(outLink, inLink);
+    }
+
+    /** The manual-link rules for two sides (§3): equal and opposite, different accounts. */
+    private static void checkPair(Txn out, Txn in) {
+        if (out.getAmount().negate().compareTo(in.getAmount()) != 0) {
+            throw new TransferInvalidException("The two amounts must be equal and opposite");
+        }
+        if (out.getAccount().getId().equals(in.getAccount().getId())) {
+            throw new TransferInvalidException("The two transactions must be in different accounts");
+        }
     }
 
     private static void checkSigns(Txn out, Txn in) {

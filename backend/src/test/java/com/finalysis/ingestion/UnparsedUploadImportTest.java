@@ -2,6 +2,7 @@ package com.finalysis.ingestion;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -257,9 +258,9 @@ class UnparsedUploadImportTest {
     }
 
     /**
-     * Deleting the statement that resolved an upload keeps {@code resolved_at} and drops the statement
-     * id (V8 {@code ON DELETE SET NULL}), so the upload reads as DISMISSED, can't be dismissed again, and
-     * stays out of the review queue; the file can be imported again.
+     * Deleting the statement that resolved an upload keeps {@code resolved_at} and its resolution and
+     * drops the statement id (V8 {@code ON DELETE SET NULL}), so the upload still reads as RESOLVED (V11),
+     * can't be dismissed, and stays out of the review queue; the file can be imported again.
      */
     @Test
     void deletingTheResolvingStatementKeepsTheUploadResolved() throws Exception {
@@ -282,10 +283,17 @@ class UnparsedUploadImportTest {
 
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM unparsed_upload WHERE id = ?", uploadId);
         assertThat(row.get("resolved_at")).isNotNull();
+        assertThat(row.get("resolution")).isEqualTo("RESOLVED");
         assertThat(row.get("resolved_statement_id")).isNull();
         mockMvc.perform(get("/api/unparsed-uploads/{id}", uploadId))
-                .andExpect(jsonPath("$.state").value("DISMISSED"))
-                .andExpect(jsonPath("$.resolvedAt").isNotEmpty());
+                .andExpect(jsonPath("$.state").value("RESOLVED"))
+                .andExpect(jsonPath("$.resolvedAt").isNotEmpty())
+                .andExpect(jsonPath("$.resolvedStatementId").value(nullValue()))
+                .andExpect(jsonPath("$.detail").value(
+                        "The file was uploaded again and imported; that statement has since been deleted."));
+        mockMvc.perform(post("/api/unparsed-uploads/{id}/dismiss", uploadId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Unparsed upload " + uploadId + " is already RESOLVED"));
         assertThat(openUploads(checking)).isZero();
         support.upload(checking, "card.pdf", pdf).andExpect(status().isCreated());
     }
@@ -340,6 +348,7 @@ class UnparsedUploadImportTest {
         assertThat(secondId).isNotEqualTo(firstId);
         Map<String, Object> first = jdbc.queryForMap("SELECT * FROM unparsed_upload WHERE id = ?", firstId);
         assertThat(first.get("resolved_at")).isNotNull();
+        assertThat(first.get("resolution")).isEqualTo("RESOLVED");
         assertThat(first.get("resolved_statement_id")).isNull();
         assertThat(openUploads(checking)).isEqualTo(1);
     }

@@ -101,6 +101,10 @@ class SchemaMigrationTest {
             "csv_mapping,         ck_csv_mapping_description_columns,  c",
             "csv_mapping,         ck_csv_mapping_column_length,        c",
             "csv_mapping,         ck_csv_mapping_column_indexes,       c",
+            "unparsed_upload,     ck_unparsed_upload_resolution,       c",
+            "unparsed_upload,     ck_unparsed_upload_resolution_kind,  c",
+            "unparsed_upload,     ck_unparsed_upload_resolution_resolved_at, c",
+            "unparsed_upload,     ck_unparsed_upload_resolution_statement,   c",
     })
     void constraintExists(String table, String constraint, String type) {
         Integer count = jdbc.queryForObject("""

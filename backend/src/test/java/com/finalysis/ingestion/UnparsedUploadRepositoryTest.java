@@ -14,8 +14,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * V8 {@code unparsed_upload} (ING-13): its checks, at most one open upload per account and file,
- * and a resolving statement's deletion. A failed statement aborts the transaction, so each
+ * V8 and V11 {@code unparsed_upload} (ING-13): its checks, at most one open upload per account and
+ * file, the resolution, and a resolving statement's deletion. A failed statement aborts the transaction, so each
  * violation is the last statement of its test.
  */
 @IntegrationTest
@@ -87,7 +87,8 @@ class UnparsedUploadRepositoryTest {
     void aResolvedUploadAndANewOpenOneForTheSameFileCoexist() {
         Account account = accounts.save(EntityFixtures.account("1001"));
         jdbc.update(INSERT, account.getId(), SHA, "a.pdf", "UNRECOGNIZED_LAYOUT");
-        jdbc.update("UPDATE unparsed_upload SET resolved_at = now() WHERE account_id = ?", account.getId());
+        jdbc.update("UPDATE unparsed_upload SET resolved_at = now(), resolution = 'DISMISSED' WHERE account_id = ?",
+                account.getId());
 
         jdbc.update(INSERT, account.getId(), SHA, "a.pdf", "UNRECOGNIZED_LAYOUT");
 
@@ -114,8 +115,65 @@ class UnparsedUploadRepositoryTest {
 
         jdbc.update("DELETE FROM statement WHERE id = ?", statement.getId());
 
-        assertThat(jdbc.queryForMap("SELECT resolved_at, resolved_statement_id FROM unparsed_upload WHERE account_id = ?",
-                account.getId())).containsEntry("resolved_statement_id", null).extractingByKey("resolved_at").isNotNull();
+        assertThat(jdbc.queryForMap("SELECT resolved_at, resolution, resolved_statement_id FROM unparsed_upload "
+                + "WHERE account_id = ?", account.getId()))
+                .containsEntry("resolved_statement_id", null)
+                .containsEntry("resolution", "RESOLVED") // V11: still resolved, not dismissed
+                .extractingByKey("resolved_at").isNotNull();
+        long id = jdbc.queryForObject("SELECT id FROM unparsed_upload WHERE account_id = ?", Long.class, account.getId());
+        entityManager.clear();
+        assertThat(UnparsedUploadState.of(uploads.findById(id).orElseThrow())).isEqualTo(UnparsedUploadState.RESOLVED);
+    }
+
+    @Test
+    void dismissOpenRecordsTheResolution() {
+        Account account = accounts.save(EntityFixtures.account("1001"));
+        UnparsedUpload open = uploads.saveAndFlush(new UnparsedUpload(account, SHA, "a.pdf",
+                UnparsedReason.UNRECOGNIZED_LAYOUT));
+
+        assertThat(uploads.dismissOpen(open.getId())).isEqualTo(1);
+        assertThat(uploads.dismissOpen(open.getId())).isZero();
+
+        UnparsedUpload dismissed = uploads.findById(open.getId()).orElseThrow();
+        assertThat(dismissed.getResolution()).isEqualTo(UnparsedUploadResolution.DISMISSED);
+        assertThat(dismissed.getResolvedAt()).isNotNull();
+        assertThat(UnparsedUploadState.of(dismissed)).isEqualTo(UnparsedUploadState.DISMISSED);
+    }
+
+    /** V11: the resolution is null exactly while open, and only a RESOLVED upload has a statement. */
+    @Test
+    void aResolutionNeedsResolvedAt() {
+        long account = accounts.save(EntityFixtures.account("1001")).getId();
+        jdbc.update(INSERT, account, SHA, "a.pdf", "UNRECOGNIZED_LAYOUT");
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE unparsed_upload SET resolution = 'DISMISSED' WHERE account_id = ?",
+                account))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_unparsed_upload_resolution_resolved_at");
+    }
+
+    @Test
+    void resolvedAtNeedsAResolution() {
+        long account = accounts.save(EntityFixtures.account("1001")).getId();
+        jdbc.update(INSERT, account, SHA, "a.pdf", "UNRECOGNIZED_LAYOUT");
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE unparsed_upload SET resolved_at = now() WHERE account_id = ?",
+                account))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_unparsed_upload_resolution_resolved_at");
+    }
+
+    @Test
+    void aDismissedUploadHasNoStatement() {
+        Account account = accounts.save(EntityFixtures.account("1001"));
+        Statement statement = statements.saveAndFlush(EntityFixtures.statement(account));
+        jdbc.update(INSERT, account.getId(), SHA, "a.pdf", "UNRECOGNIZED_LAYOUT");
+
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE unparsed_upload SET resolved_at = now(), resolution = 'DISMISSED', resolved_statement_id = ?
+                WHERE account_id = ?""", statement.getId(), account.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_unparsed_upload_resolution_statement");
     }
 
     @Test

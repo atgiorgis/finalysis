@@ -1,5 +1,6 @@
 package com.finalysis.transfer;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.finalysis.account.AccountType;
 import com.finalysis.api.ApiMoney;
 import com.finalysis.ingestion.SourceSection;
@@ -16,8 +17,8 @@ public record TxnSummary(long id, long accountId, String accountName, AccountTyp
                          LocalDate txnDate, LocalDate postDate, @ApiMoney BigDecimal amount,
                          SourceSection sourceSection, String rawDescription) {
 
-    /** Null for the absent side of a one-sided link. */
-    static TxnSummary from(Txn txn) {
+    /** Null for the absent side of a one-sided link. Needs the txn's account loaded. */
+    public static TxnSummary from(Txn txn) {
         if (txn == null) {
             return null;
         }
@@ -26,8 +27,9 @@ public record TxnSummary(long id, long accountId, String accountName, AccountTyp
                 txn.getAmount(), txn.getSourceSection(), txn.getRawDescription());
     }
 
-    /** {@code coalesce(post_date, txn_date)}, the date detection compares (§2.1 rule 3). */
-    LocalDate effectiveDate() {
+    /** {@code coalesce(post_date, txn_date)}, the date detection compares (§2.1 rule 3). Not in the JSON. */
+    @JsonIgnore
+    public LocalDate effectiveDate() {
         return postDate != null ? postDate : txnDate;
     }
 }

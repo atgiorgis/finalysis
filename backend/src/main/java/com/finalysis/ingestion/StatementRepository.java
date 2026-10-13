@@ -45,4 +45,10 @@ public interface StatementRepository extends JpaRepository<Statement, Long> {
             where s.account.id = :accountId and (:status is null or s.status = :status)
             order by s.periodStart desc, s.periodEnd desc, s.id desc""")
     List<Statement> findForAccount(@Param("accountId") long accountId, @Param("status") StatementStatus status);
+
+    /** NEEDS_REVIEW statements the user hasn't reviewed yet, across accounts, for the review queue (ING-07). */
+    @Query("""
+            select s from Statement s join fetch s.account
+            where s.status = com.finalysis.ingestion.StatementStatus.NEEDS_REVIEW and s.reviewedAt is null""")
+    List<Statement> findAwaitingReview();
 }

@@ -1,5 +1,6 @@
 package com.finalysis.transfer;
 
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
- * Transfer actions over the API (ING-05, docs/plans/phase-3c.md §3). User actions only: chatbot tools
+ * Transfer actions over the API (ING-05, docs/plans/phase-3c.md §3, §4.5). User actions only: chatbot tools
  * never call these (SEC-03).
  *
  * <p>Link ids are digits only in the paths, so {@code /api/transfers/detect} never matches
@@ -50,6 +51,22 @@ public class TransferController {
         URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path("/api/transfers/{id}").buildAndExpand(created.id()).toUri();
         return ResponseEntity.created(location).body(created);
+    }
+
+    /** Joins a possible match: two one-sided links become one confirmed link (§4.5). */
+    @PostMapping("/api/transfers/join")
+    public ResponseEntity<TransferLinkResponse> join(@Valid @RequestBody JoinTransferRequest request) {
+        TransferLinkResponse joined = transfers.join(request.outLinkId(), request.inLinkId());
+        URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/transfers/{id}").buildAndExpand(joined.id()).toUri();
+        return ResponseEntity.created(location).body(joined);
+    }
+
+    /** Dismisses a possible match: the pair is remembered as rejected; both one-sided links stay. */
+    @PostMapping("/api/transfers/join/dismiss")
+    public ResponseEntity<Void> dismissJoin(@Valid @RequestBody JoinTransferRequest request) {
+        transfers.dismissJoin(request.outLinkId(), request.inLinkId());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/api/transfers/{id:\\d+}/confirm")

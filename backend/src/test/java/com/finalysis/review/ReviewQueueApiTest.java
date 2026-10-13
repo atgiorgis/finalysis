@@ -3,6 +3,7 @@ package com.finalysis.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -13,22 +14,34 @@ import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
+import com.finalysis.transfer.TransferRows;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The review actions (ING-07, ING-13; docs/plans/phase-3c.md §4.2, §4.3): mark a NEEDS_REVIEW
- * statement reviewed, the late-arrival re-queue, and reading and dismissing unparsed uploads. Step 6
- * adds the queue itself ({@code GET /api/review-queue}). Imports commit for real; accounts created
- * here are deleted after each test.
+ * The review queue and its actions (ING-07, ING-13; docs/plans/phase-3c.md §4): mark a NEEDS_REVIEW
+ * statement reviewed, the late-arrival re-queue, reading and dismissing unparsed uploads, and
+ * {@code GET /api/review-queue} with its five kinds, competing candidates (§4.6) and possible matches
+ * with join and dismiss (§4.5). Tests that import commit for real, and the accounts they create are
+ * deleted after each test; tests built from plain SQL rows are {@code @Transactional} and roll back.
+ * Queue assertions filter by the test's own accounts, since the queue spans every account.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -39,17 +52,23 @@ class ReviewQueueApiTest {
     private static final String OFX_MAY = "ofx/northfield-checking_2026-05.ofx";
     private static final String LEDGERBAL_MISMATCH = "edge-cases/ofx-ledgerbal-mismatch.ofx"; // a May statement
     private static final String UNRECOGNIZED = "pdf/edge-cases/pdf-unrecognized-layout.pdf";
+    private static final String CHECKING_CSV = "statements/northfield-checking_2026-04.csv";
+    private static final String APEX_QFX = "ofx/apex-visa_2026-04.qfx";
+    private static final LocalDate DAY = LocalDate.of(2026, 4, 10);
+    private static final String DESCRIPTION = "NORTHFIELD ONLINE TRANSFER"; // every TransferRows txn has it
 
     private final MockMvc mockMvc;
     private final JsonMapper jsonMapper;
     private final JdbcTemplate jdbc;
     private final ImportTestSupport support;
+    private final TransferRows rows;
 
     ReviewQueueApiTest(MockMvc mockMvc, JsonMapper jsonMapper, AccountRepository accounts, JdbcTemplate jdbc) {
         this.mockMvc = mockMvc;
         this.jsonMapper = jsonMapper;
         this.jdbc = jdbc;
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
+        this.rows = new TransferRows(jdbc);
     }
 
     @AfterEach
@@ -221,7 +240,472 @@ class ReviewQueueApiTest {
         mockMvc.perform(get("/api/unparsed-uploads/{id}", first)).andExpect(jsonPath("$.state").value("DISMISSED"));
     }
 
+    // ------------------------------------------------------------------ the queue (§4.1)
+
+    /** One item of every kind, all touching the checking account. */
+    @Test
+    @Transactional
+    void listsEveryKindAcrossAccounts() throws Exception {
+        Accounts a = sqlAccounts();
+        long statement = rows.statement(a.checking(), "NEEDS_REVIEW");
+        long upload = sqlUpload(a.checking());
+        long groupOut = rows.txn(a.checking(), "-200.00", DAY);
+        rows.txn(a.savings(), "200.00", DAY);
+        rows.txn(a.card(), "200.00", DAY.plusDays(1), "PAYMENT");
+        long linkOut = rows.txn(a.checking(), "-300.00", DAY);
+        long link = rows.autoLink(linkOut, rows.txn(a.savings(), "300.00", DAY));
+        rows.txn(a.card(), "300.00", DAY.plusDays(2), "PAYMENT");
+        long outLink = rows.userLink(rows.txn(a.checking(), "-160.00", DAY), null, "UNMATCHED");
+        long inLink = rows.userLink(null, rows.txn(a.savings(), "160.00", DAY), "UNMATCHED");
+
+        JsonNode queue = queue(Map.of("accountId", a.checking()));
+
+        assertThat(queue.get("counts")).isEqualTo(counts(1, 1, 1, 1, 1));
+        assertThat(kinds(queue)).containsExactlyInAnyOrder(
+                "STATEMENT", "UNPARSED_UPLOAD", "TRANSFER_CANDIDATES", "COMPETING_CANDIDATE", "POSSIBLE_MATCH");
+        JsonNode statementItem = item(queue, "STATEMENT");
+        assertThat(statementItem.get("statementId").asLong()).isEqualTo(statement);
+        assertThat(statementItem.get("accountName").asString()).isEqualTo("Test");
+        assertThat(statementItem.get("fileName").asString()).isEqualTo("test.csv");
+        assertThat(statementItem.get("balanceCheck").asString()).isEqualTo("UNVERIFIED");
+        assertThat(statementItem.get("warnings").isArray()).isTrue();
+        assertThat(statementItem.get("since").isNull()).isFalse();
+        assertThat(item(queue, "UNPARSED_UPLOAD").get("uploadId").asLong()).isEqualTo(upload);
+        assertThat(item(queue, "UNPARSED_UPLOAD").get("reason").asString()).isEqualTo("UNRECOGNIZED_LAYOUT");
+        assertThat(item(queue, "TRANSFER_CANDIDATES").get("key").asString()).isEqualTo("txn-" + groupOut);
+        assertThat(item(queue, "COMPETING_CANDIDATE").get("key").asString()).isEqualTo("link-" + link);
+        assertThat(item(queue, "POSSIBLE_MATCH").get("key").asString())
+                .isEqualTo("links-" + outLink + "-" + inLink);
+
+        // The card touches only the group and the competing candidate.
+        assertThat(queue(Map.of("accountId", a.card())).get("counts")).isEqualTo(counts(0, 0, 1, 1, 0));
+        assertThat(kinds(queue(Map.of()))).contains("STATEMENT", "POSSIBLE_MATCH"); // no filter: every account
+    }
+
+    @Test
+    @Transactional
+    void listsNewestFirstAndTheKindFilterKeepsTheCounts() throws Exception {
+        Accounts a = sqlAccounts();
+        long statement = rows.statement(a.checking(), "NEEDS_REVIEW");
+        long upload = sqlUpload(a.checking());
+        long outLink = rows.userLink(rows.txn(a.checking(), "-160.00", DAY), null, "UNMATCHED");
+        long inLink = rows.userLink(null, rows.txn(a.savings(), "160.00", DAY), "UNMATCHED");
+        jdbc.update("UPDATE statement SET imported_at = now() - interval '2 days' WHERE id = ?", statement);
+        jdbc.update("UPDATE unparsed_upload SET created_at = now() - interval '3 days' WHERE id = ?", upload);
+        jdbc.update("UPDATE transfer_link SET created_at = now() - interval '1 day' WHERE id IN (?, ?)", outLink, inLink);
+
+        JsonNode queue = queue(Map.of("accountId", a.checking()));
+        assertThat(kinds(queue)).containsExactly("POSSIBLE_MATCH", "STATEMENT", "UNPARSED_UPLOAD");
+
+        JsonNode statements = queue(Map.of("accountId", a.checking(), "kind", "STATEMENT"));
+        assertThat(kinds(statements)).containsExactly("STATEMENT");
+        assertThat(statements.get("counts")).isEqualTo(counts(1, 1, 0, 0, 1));
+    }
+
+    @Test
+    void rejectsAnUnknownKindAndGivesAnEmptyQueueForAnUnknownAccount() throws Exception {
+        mockMvc.perform(get("/api/review-queue").param("kind", "EVERYTHING")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/review-queue").param("accountId", "abc")).andExpect(status().isBadRequest());
+
+        JsonNode queue = queue(Map.of("accountId", Long.MAX_VALUE));
+        assertThat(queue.get("items").size()).isZero();
+        assertThat(queue.get("counts")).isEqualTo(counts(0, 0, 0, 0, 0));
+    }
+
+    /** A reviewed statement and a dismissed upload leave the queue; a late warning brings the statement back. */
+    @Test
+    void reviewAndDismissRemoveTheirItems() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        long may = importOk(checking, LEDGERBAL_MISMATCH, Map.of("periodEnd", "2026-05-20")).get("statementId").asLong();
+        long upload = upload(checking);
+        assertThat(kinds(queue(Map.of("accountId", checking)))).containsExactlyInAnyOrder("STATEMENT", "UNPARSED_UPLOAD");
+
+        review(may);
+        mockMvc.perform(post("/api/unparsed-uploads/{id}/dismiss", upload)).andExpect(status().isOk());
+        assertThat(queue(Map.of("accountId", checking)).get("items").size()).isZero();
+
+        importOk(checking, OFX_APRIL, Map.of()); // the re-check fails: May needs review again
+        JsonNode queue = queue(Map.of("accountId", checking));
+        assertThat(kinds(queue)).containsExactly("STATEMENT");
+        assertThat(item(queue, "STATEMENT").get("statementId").asLong()).isEqualTo(may);
+        assertThat(item(queue, "STATEMENT").get("balanceCheck").asString()).isEqualTo("FAILED");
+    }
+
+    // ------------------------------------------------------------------ transfer candidate groups (§2.3)
+
+    @Test
+    @Transactional
+    void aCandidateGroupShowsItsTxnsAndPairsAndLeavesOnceLinked() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-200.00", DAY);
+        long savingsIn = rows.txn(a.savings(), "200.00", DAY.plusDays(1));
+        long cardIn = rows.txn(a.card(), "200.00", DAY.plusDays(3), "PAYMENT");
+        jdbc.update("UPDATE txn SET created_at = now() - interval '1 day' WHERE id IN (?, ?)", out, savingsIn);
+        detect();
+
+        JsonNode group = item(queue(Map.of("accountId", a.checking())), "TRANSFER_CANDIDATES");
+        assertThat(ids(group.get("txns"))).containsExactly(out, savingsIn, cardIn);
+        assertThat(group.get("txns").get(0).get("amount").asString()).isEqualTo("-200.00");
+        assertThat(group.get("txns").get(0).get("rawDescription").asString()).isEqualTo(DESCRIPTION);
+        assertThat(group.get("pairs").toString()).isEqualTo(pairs(out, savingsIn, 1, out, cardIn, 3));
+        assertThat(instant(group.get("since"))).isEqualTo(createdAt(cardIn));
+        assertThat(rows.isTransfer(out)).isFalse();
+
+        createTransfer("{\"outTxnId\": " + out + ", \"inTxnId\": " + savingsIn + "}");
+
+        assertThat(queue(Map.of("accountId", a.checking())).get("counts").get("transferCandidates").asInt()).isZero();
+    }
+
+    // ------------------------------------------------------------------ competing candidates (§4.6)
+
+    @Test
+    @Transactional
+    void aCounterpartArrivingAfterALinkListsItAsACompetingCandidate() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-300.00", DAY);
+        long savingsIn = rows.txn(a.savings(), "300.00", DAY.plusDays(1));
+        detect();
+        long link = linkOf(out);
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+
+        long cardIn = rows.txn(a.card(), "300.00", DAY.plusDays(2), "PAYMENT");
+        detect(); // never changes the link
+
+        JsonNode item = item(queue(Map.of("accountId", a.checking())), "COMPETING_CANDIDATE");
+        assertThat(item.get("linkId").asLong()).isEqualTo(link);
+        assertThat(item.get("out").get("id").asLong()).isEqualTo(out);
+        assertThat(item.get("in").get("id").asLong()).isEqualTo(savingsIn);
+        assertThat(ids(item.get("competitors"))).containsExactly(cardIn);
+        assertThat(item.get("competitors").get(0).get("accountType").asString()).isEqualTo("CREDIT_CARD");
+        assertThat(item.get("pairs").toString()).isEqualTo(pairs(out, savingsIn, 1, out, cardIn, 2));
+        assertThat(instant(item.get("since"))).isEqualTo(createdAt(cardIn));
+        assertThat(rows.isTransfer(cardIn)).isFalse();
+
+        mockMvc.perform(post("/api/transfers/{id}/confirm", link)).andExpect(status().isOk());
+
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).as("confirmed: gone").isZero();
+    }
+
+    @Test
+    @Transactional
+    void userLinksAreNeverCompetingCandidates() throws Exception {
+        Accounts a = sqlAccounts();
+        createTransfer("{\"outTxnId\": " + rows.txn(a.checking(), "-300.00", DAY)
+                + ", \"inTxnId\": " + rows.txn(a.savings(), "300.00", DAY) + "}");
+        rows.txn(a.card(), "300.00", DAY.plusDays(1), "PAYMENT");
+
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+    }
+
+    /** Unlinking records the rejection; the next detection pairs the freed txn with the competitor. */
+    @Test
+    @Transactional
+    void unlinkingThenDetectingReResolvesIt() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-300.00", DAY);
+        rows.txn(a.savings(), "300.00", DAY);
+        detect();
+        long cardIn = rows.txn(a.card(), "300.00", DAY.plusDays(1), "PAYMENT");
+
+        mockMvc.perform(delete("/api/transfers/{id}", linkOf(out))).andExpect(status().isNoContent());
+        detect();
+
+        assertThat(jdbc.queryForObject("SELECT in_txn_id FROM transfer_link WHERE out_txn_id = ?", Long.class, out))
+                .isEqualTo(cardIn);
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+    }
+
+    @Test
+    @Transactional
+    void markingTheCompetitorNotATransferRemovesTheItem() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-300.00", DAY);
+        rows.txn(a.savings(), "300.00", DAY);
+        detect();
+        long cardIn = rows.txn(a.card(), "300.00", DAY.plusDays(1), "PAYMENT");
+        assertThat(kinds(queue(Map.of("accountId", a.card())))).containsExactly("COMPETING_CANDIDATE");
+
+        mockMvc.perform(post("/api/transactions/{id}/not-transfer", cardIn)).andExpect(status().isOk());
+
+        assertThat(queue(Map.of("accountId", a.card())).get("items").size()).isZero();
+        assertThat(rows.isTransfer(out)).isTrue();
+    }
+
+    // ------------------------------------------------------------------ possible matches (§4.5)
+
+    @Test
+    @Transactional
+    void possibleMatchesAreListedWithinTheWindowOnly() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-160.00", DAY);
+        long in = rows.txn(a.savings(), "160.00", DAY.plusDays(5));
+        long outLink = rows.userLink(out, null, "UNMATCHED");
+        long inLink = rows.userLink(null, in, "UNMATCHED");
+        long farOut = rows.userLink(rows.txn(a.checking(), "-90.00", DAY), null, "UNMATCHED");
+        rows.userLink(null, rows.txn(a.savings(), "90.00", DAY.plusDays(6)), "UNMATCHED");
+
+        JsonNode queue = queue(Map.of("accountId", a.checking(), "kind", "POSSIBLE_MATCH"));
+
+        assertThat(queue.get("items").size()).isEqualTo(1);
+        JsonNode item = queue.get("items").get(0);
+        assertThat(item.get("outLinkId").asLong()).isEqualTo(outLink);
+        assertThat(item.get("inLinkId").asLong()).isEqualTo(inLink);
+        assertThat(item.get("out").get("id").asLong()).isEqualTo(out);
+        assertThat(item.get("in").get("id").asLong()).isEqualTo(in);
+        assertThat(item.get("in").get("amount").asString()).isEqualTo("160.00");
+        assertThat(item.get("daysApart").asLong()).isEqualTo(5);
+        assertThat(item.get("outLinkId").asLong()).isNotEqualTo(farOut);
+    }
+
+    @Test
+    @Transactional
+    void detectionNeverJoinsOneSidedLinks() throws Exception {
+        Accounts a = sqlAccounts();
+        long outLink = rows.userLink(rows.txn(a.checking(), "-160.00", DAY), null, "UNMATCHED");
+        long inLink = rows.userLink(null, rows.txn(a.savings(), "160.00", DAY), "UNMATCHED");
+
+        detect();
+
+        assertThat(jdbc.queryForList("SELECT status FROM transfer_link WHERE id IN (?, ?)", String.class, outLink, inLink))
+                .containsExactly("UNMATCHED", "UNMATCHED");
+        assertThat(queue(Map.of("accountId", a.checking())).get("counts").get("possibleMatches").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional
+    void joiningReplacesTheTwoOneSidedLinksWithOneConfirmedLink() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-160.00", DAY);
+        long in = rows.txn(a.savings(), "160.00", DAY.plusDays(2));
+        long outLink = rows.userLink(out, null, "UNMATCHED");
+        long inLink = rows.userLink(null, in, "UNMATCHED");
+
+        ResultActions joined = join("/api/transfers/join", outLink, inLink)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("MATCHED"))
+                .andExpect(jsonPath("$.method").value("USER"))
+                .andExpect(jsonPath("$.confirmedAt").isNotEmpty())
+                .andExpect(jsonPath("$.daysApart").value(2))
+                .andExpect(jsonPath("$.out.id").value(out))
+                .andExpect(jsonPath("$.in.id").value(in));
+        long id = json(joined).get("id").asLong();
+        joined.andExpect(header().string("Location", endsWith("/api/transfers/" + id)));
+
+        assertThat(support.count("SELECT count(*) FROM transfer_link WHERE id IN (?, ?)", outLink, inLink)).isZero();
+        assertThat(rows.isTransfer(out)).isTrue();
+        assertThat(rows.isTransfer(in)).isTrue();
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+        mockMvc.perform(get("/api/transfers/{id}", id)).andExpect(status().isOk());
+    }
+
+    @Test
+    @Transactional
+    void joiningOneOfSeveralPossibleMatchesRemovesTheOthers() throws Exception {
+        Accounts a = sqlAccounts();
+        long outLink = rows.userLink(rows.txn(a.checking(), "-160.00", DAY), null, "UNMATCHED");
+        long savingsLink = rows.userLink(null, rows.txn(a.savings(), "160.00", DAY), "UNMATCHED");
+        long cardLink = rows.userLink(null, rows.txn(a.card(), "160.00", DAY, "PAYMENT"), "UNMATCHED");
+        assertThat(queue(Map.of("accountId", a.checking())).get("counts").get("possibleMatches").asInt()).isEqualTo(2);
+
+        join("/api/transfers/join", outLink, cardLink).andExpect(status().isCreated());
+
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM transfer_link WHERE id = ?", String.class, savingsLink))
+                .isEqualTo("UNMATCHED");
+    }
+
+    @Test
+    @Transactional
+    void joinChecksTheLinksThenThePairRules() throws Exception {
+        Accounts a = sqlAccounts();
+        long outLink = rows.userLink(rows.txn(a.checking(), "-160.00", DAY), null, "UNMATCHED");
+        long inLink = rows.userLink(null, rows.txn(a.savings(), "160.00", DAY), "UNMATCHED");
+        long unequalIn = rows.userLink(null, rows.txn(a.savings(), "160.01", DAY), "UNMATCHED");
+        long sameAccountIn = rows.userLink(null, rows.txn(a.checking(), "160.00", DAY), "UNMATCHED");
+        long matched = rows.userLink(rows.txn(a.checking(), "-90.00", DAY), rows.txn(a.savings(), "90.00", DAY),
+                "MATCHED");
+
+        for (String path : List.of("/api/transfers/join", "/api/transfers/join/dismiss")) {
+            join(path, Long.MAX_VALUE, inLink).andExpect(status().isNotFound());
+            join(path, outLink, Long.MAX_VALUE).andExpect(status().isNotFound());
+            conflict(join(path, inLink, inLink), inLink, "Transfer link " + inLink
+                    + " is not a one-sided link with an out side");
+            conflict(join(path, outLink, outLink), outLink, "Transfer link " + outLink
+                    + " is not a one-sided link with an in side");
+            conflict(join(path, matched, inLink), matched, "Transfer link " + matched
+                    + " is not a one-sided link with an out side");
+            invalid(join(path, outLink, unequalIn), "The two amounts must be equal and opposite");
+            invalid(join(path, outLink, sameAccountIn), "The two transactions must be in different accounts");
+            mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{\"outLinkId\": " + outLink + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.title").value("Invalid request"))
+                    .andExpect(jsonPath("$.errors[0].field").value("inLinkId"));
+        }
+        assertThat(support.count("SELECT count(*) FROM transfer_link WHERE id IN (?, ?, ?, ?, ?)",
+                outLink, inLink, unequalIn, sameAccountIn, matched)).isEqualTo(5);
+        assertThat(support.count("SELECT count(*) FROM transfer_rejection r JOIN txn t ON t.id = r.out_txn_id "
+                + "WHERE t.account_id = ?", a.checking())).isZero();
+    }
+
+    /** Dismissing records the rejected pair; both links stay, and a later manual link still wins (§3). */
+    @Test
+    @Transactional
+    void dismissingAPossibleMatchRecordsTheRejection() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-160.00", DAY);
+        long in = rows.txn(a.savings(), "160.00", DAY);
+        long outLink = rows.userLink(out, null, "UNMATCHED");
+        long inLink = rows.userLink(null, in, "UNMATCHED");
+
+        join("/api/transfers/join/dismiss", outLink, inLink).andExpect(status().isNoContent());
+        join("/api/transfers/join/dismiss", outLink, inLink).andExpect(status().isNoContent()); // idempotent
+
+        assertThat(support.count("SELECT count(*) FROM transfer_rejection WHERE out_txn_id = ? AND in_txn_id = ?",
+                out, in)).isOne();
+        assertThat(support.count("SELECT count(*) FROM transfer_link WHERE id IN (?, ?)", outLink, inLink)).isEqualTo(2);
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+
+        join("/api/transfers/join", outLink, inLink).andExpect(status().isCreated()); // the explicit join still wins
+        assertThat(support.count("SELECT count(*) FROM transfer_rejection WHERE out_txn_id = ?", out)).isZero();
+    }
+
+    // ------------------------------------------------------------------ the duplicate-account story (§7)
+
+    /**
+     * The checking statement imported into a second account by mistake: the card payment has two out
+     * candidates, so it is a review group. Deleting the wrong copy removes the group and links the payment.
+     */
+    @Test
+    void deletingTheWrongCopyResolvesTheGroup() throws Exception {
+        long right = support.account(AccountType.CHECKING, "1001");
+        long wrong = support.account(AccountType.CHECKING, "1001");
+        long card = support.account(AccountType.CREDIT_CARD, "2001");
+        saveSuggestedMapping(right, CHECKING_CSV);
+        importOk(right, CHECKING_CSV, Map.of("periodStart", "2026-04-01", "periodEnd", "2026-04-30"));
+        long wrongStatement = importOk(wrong, OFX_APRIL, Map.of()).get("statementId").asLong();
+        importOk(card, APEX_QFX, Map.of());
+
+        JsonNode queue = queue(Map.of("accountId", card, "kind", "TRANSFER_CANDIDATES"));
+        assertThat(queue.get("items").size()).as("each card payment has two out candidates").isPositive();
+        for (JsonNode group : queue.get("items")) {
+            assertThat(group.get("pairs").size()).isEqualTo(2);
+            Set<Long> accounts = new HashSet<>();
+            group.get("txns").forEach(txn -> accounts.add(txn.get("accountId").asLong()));
+            assertThat(accounts).containsExactlyInAnyOrder(right, wrong, card);
+        }
+
+        mockMvc.perform(delete("/api/statements/{id}", wrongStatement)).andExpect(status().isOk());
+
+        assertThat(queue(Map.of("accountId", card)).get("counts")).isEqualTo(counts(0, 0, 0, 0, 0));
+        assertThat(support.count("SELECT count(*) FROM transfer_link l JOIN txn t ON t.id = l.in_txn_id "
+                + "WHERE t.account_id = ?", card)).isPositive();
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    private record Accounts(long checking, long savings, long card) {
+    }
+
+    /** Three accounts in plain SQL, for tests that roll back. */
+    private Accounts sqlAccounts() {
+        return new Accounts(rows.account("CHECKING", "2001"), rows.account("SAVINGS", "2002"),
+                rows.account("CREDIT_CARD", "2003"));
+    }
+
+    private long sqlUpload(long accountId) {
+        return jdbc.queryForObject("INSERT INTO unparsed_upload (account_id, file_sha256, file_name, reason) "
+                + "VALUES (?, ?, 'card.pdf', 'UNRECOGNIZED_LAYOUT') RETURNING id", Long.class, accountId, "c".repeat(64));
+    }
+
+    private JsonNode queue(Map<String, Object> params) throws Exception {
+        MockHttpServletRequestBuilder request = get("/api/review-queue");
+        params.forEach((name, value) -> request.param(name, String.valueOf(value)));
+        return json(mockMvc.perform(request).andExpect(status().isOk()));
+    }
+
+    private static List<String> kinds(JsonNode queue) {
+        List<String> kinds = new ArrayList<>();
+        queue.get("items").forEach(item -> kinds.add(item.get("kind").asString()));
+        return kinds;
+    }
+
+    private static JsonNode item(JsonNode queue, String kind) {
+        for (JsonNode item : queue.get("items")) {
+            if (item.get("kind").asString().equals(kind)) {
+                return item;
+            }
+        }
+        throw new AssertionError("no " + kind + " item in " + queue);
+    }
+
+    private JsonNode counts(int statements, int uploads, int groups, int competing, int possibleMatches) {
+        return jsonMapper.valueToTree(Map.of("statements", statements, "unparsedUploads", uploads,
+                "transferCandidates", groups, "competingCandidates", competing, "possibleMatches", possibleMatches));
+    }
+
+    private static List<Long> ids(JsonNode txns) {
+        List<Long> ids = new ArrayList<>();
+        txns.forEach(txn -> ids.add(txn.get("id").asLong()));
+        return ids;
+    }
+
+    /** The JSON of {@code pairs}, from {@code outTxnId, inTxnId, daysApart} triples. */
+    private static String pairs(long... triples) {
+        List<String> pairs = new ArrayList<>();
+        for (int i = 0; i < triples.length; i += 3) {
+            pairs.add("{\"outTxnId\":" + triples[i] + ",\"inTxnId\":" + triples[i + 1] + ",\"daysApart\":"
+                    + triples[i + 2] + "}");
+        }
+        return "[" + String.join(",", pairs) + "]";
+    }
+
+    private Instant createdAt(long txnId) {
+        return jdbc.queryForObject("SELECT created_at FROM txn WHERE id = ?", OffsetDateTime.class, txnId).toInstant();
+    }
+
+    private static Instant instant(JsonNode timestamp) {
+        return OffsetDateTime.parse(timestamp.asString()).toInstant();
+    }
+
+    private void detect() throws Exception {
+        mockMvc.perform(post("/api/transfers/detect")).andExpect(status().isOk());
+    }
+
+    private long linkOf(long txnId) {
+        return jdbc.queryForObject("SELECT id FROM transfer_link WHERE out_txn_id = ? OR in_txn_id = ?", Long.class,
+                txnId, txnId);
+    }
+
+    private void createTransfer(String body) throws Exception {
+        mockMvc.perform(post("/api/transfers").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+    }
+
+    private ResultActions join(String path, long outLinkId, long inLinkId) throws Exception {
+        return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"outLinkId\": " + outLinkId + ", \"inLinkId\": " + inLinkId + "}"));
+    }
+
+    private static void conflict(ResultActions result, long linkId, String detail) throws Exception {
+        result.andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value(PROBLEM + "transfer-conflict"))
+                .andExpect(jsonPath("$.linkId").value(linkId))
+                .andExpect(jsonPath("$.detail").value(detail));
+    }
+
+    private static void invalid(ResultActions result, String detail) throws Exception {
+        result.andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.type").value(PROBLEM + "transfer-invalid"))
+                .andExpect(jsonPath("$.detail").value(detail));
+    }
+
+    private void saveSuggestedMapping(long accountId, String sampleFile) throws Exception {
+        String fileName = sampleFile.substring(sampleFile.lastIndexOf('/') + 1);
+        JsonNode preview = json(support.preview(accountId, fileName, ImportTestSupport.sample(sampleFile))
+                .andExpect(status().isOk()));
+        support.putMapping(accountId, preview.get("suggestedMapping").get("mapping").toString())
+                .andExpect(status().isCreated());
+    }
 
     private long upload(long accountId) throws Exception {
         return json(support.upload(accountId, "card.pdf", ImportTestSupport.sample(UNRECOGNIZED))

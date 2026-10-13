@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -316,7 +317,7 @@ class TransferDetectionTest {
      * Detection runs per import and never changes an existing link (§2.5), so an ambiguous group only
      * forms when its txns meet in one run. Here the −200.00 and the savings +200.00 arrive first and
      * are linked; the card's +200.00, imported later, finds the out side taken and stays unlinked.
-     * The link is AUTO and unconfirmed; the step 6 review queue lists it as a competing candidate (§4.6).
+     * The link is AUTO and unconfirmed, and the review queue lists it as a competing candidate (§4.6).
      */
     @Test
     void aCounterpartArrivingAfterALinkDoesNotReopenIt() throws Exception {
@@ -339,6 +340,15 @@ class TransferDetectionTest {
                 .isEqualTo(savingsIn);
         assertThat(isTransfer(cardIn)).isFalse();
         assertThat(detectNow()).isEqualTo(new DetectionResult(0, 0, 0));
+
+        // The review queue lists the link as a competing candidate, with the card's +200.00 (§4.6).
+        long link = jdbc.queryForObject("SELECT id FROM transfer_link WHERE out_txn_id = ?", Long.class, out);
+        JsonNode queue = json(mockMvc.perform(get("/api/review-queue").param("kind", "COMPETING_CANDIDATE")
+                .param("accountId", String.valueOf(byFile.get("transfers-summit-card_2026-05.csv"))))
+                .andExpect(status().isOk()).andReturn());
+        assertThat(queue.get("items").size()).isOne();
+        assertThat(queue.get("items").get(0).get("linkId").asLong()).isEqualTo(link);
+        assertThat(queue.get("items").get(0).get("competitors").get(0).get("id").asLong()).isEqualTo(cardIn);
     }
 
     // ------------------------------------------------------------------ failure and concurrency (§2.5)

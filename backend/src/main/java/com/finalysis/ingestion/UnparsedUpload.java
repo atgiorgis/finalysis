@@ -50,6 +50,10 @@ public class UnparsedUpload {
     /** Set when the upload is resolved (re-uploaded and imported) or dismissed. */
     private OffsetDateTime resolvedAt;
 
+    /** Null while open; set with {@code resolved_at} (V11). */
+    @Enumerated(EnumType.STRING)
+    private UnparsedUploadResolution resolution;
+
     /** The statement that resolved it; null when open, dismissed, or after that statement is deleted. */
     private Long resolvedStatementId;
 
@@ -89,6 +93,10 @@ public class UnparsedUpload {
 
     public OffsetDateTime getResolvedAt() {
         return resolvedAt;
+    }
+
+    public UnparsedUploadResolution getResolution() {
+        return resolution;
     }
 
     public Long getResolvedStatementId() {

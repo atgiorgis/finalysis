@@ -10,6 +10,7 @@ import com.finalysis.categorize.RuleSource;
 import com.finalysis.ingestion.BalanceCheck;
 import com.finalysis.ingestion.SourceSection;
 import com.finalysis.ingestion.StatementStatus;
+import com.finalysis.ingestion.UnparsedUploadResolution;
 import com.finalysis.ingestion.csv.CsvAmountMode;
 import com.finalysis.ingestion.csv.CsvSign;
 import com.finalysis.support.IntegrationTest;
@@ -49,7 +50,8 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_transfer_link_method", TransferMethod.class),
                 Arguments.of("ck_transfer_link_status", TransferStatus.class),
                 Arguments.of("ck_csv_mapping_amount_mode", CsvAmountMode.class),
-                Arguments.of("ck_csv_mapping_sign", CsvSign.class));
+                Arguments.of("ck_csv_mapping_sign", CsvSign.class),
+                Arguments.of("ck_unparsed_upload_resolution_kind", UnparsedUploadResolution.class));
     }
 
     @ParameterizedTest

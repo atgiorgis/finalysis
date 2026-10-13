@@ -1,5 +1,6 @@
 package com.finalysis.transfer;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,4 +20,13 @@ public interface TransferLinkRepository extends JpaRepository<TransferLink, Long
             left join fetch l.inTxn i left join fetch i.account
             """)
     List<TransferLink> findAllWithSides();
+
+    /** These links with both sides and their accounts loaded, in no particular order. */
+    @Query("""
+            select l from TransferLink l
+            left join fetch l.outTxn o left join fetch o.account
+            left join fetch l.inTxn i left join fetch i.account
+            where l.id in :ids
+            """)
+    List<TransferLink> findWithSidesByIdIn(@Param("ids") Collection<Long> ids);
 }

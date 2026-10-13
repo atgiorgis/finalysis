@@ -1,5 +1,7 @@
 package com.finalysis.transfer;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -19,12 +21,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class TransferCandidateQuery {
 
+    /**
+     * Rules 1–6 of §2.1 over every out txn {@code o} and in txn {@code i}, with each one's link (if any)
+     * as {@code ol} and {@code il}; rule 7 is left to the caller. Shared with {@link CompetingCandidateQuery},
+     * which waives rule 7 for one link's own txns, so the two can't drift apart. Takes {@code :windowDays}.
+     */
     // A txn is on at most one link (V3), so each LEFT JOIN adds at most one row.
-    static final String CANDIDATES_SQL = """
-            SELECT o.id AS out_id, o.account_id AS out_account_id,
-                   coalesce(o.post_date, o.txn_date) AS out_date, ol.id AS out_link_id,
-                   i.id AS in_id, i.account_id AS in_account_id,
-                   coalesce(i.post_date, i.txn_date) AS in_date, il.id AS in_link_id
+    static final String RULES_1_TO_6 = """
             FROM txn o
             JOIN account oa ON oa.id = o.account_id
             JOIN txn i ON i.amount = -o.amount                                    -- rule 1
@@ -42,6 +45,17 @@ public class TransferCandidateQuery {
               AND NOT o.transfer_excluded AND NOT i.transfer_excluded             -- rule 6
               AND NOT EXISTS (SELECT 1 FROM transfer_rejection r
                               WHERE r.out_txn_id = o.id AND r.in_txn_id = i.id)
+            """;
+
+    /** The two sides of a pair, as {@link #side} reads them; a link id only for an UNMATCHED link. */
+    static final String PAIR_COLUMNS = """
+            o.id AS out_id, o.account_id AS out_account_id, coalesce(o.post_date, o.txn_date) AS out_date,
+            CASE WHEN ol.status = 'UNMATCHED' THEN ol.id END AS out_link_id,
+            i.id AS in_id, i.account_id AS in_account_id, coalesce(i.post_date, i.txn_date) AS in_date,
+            CASE WHEN il.status = 'UNMATCHED' THEN il.id END AS in_link_id
+            """;
+
+    static final String CANDIDATES_SQL = "SELECT " + PAIR_COLUMNS + RULES_1_TO_6 + """
               AND (ol.id IS NULL OR (ol.status = 'UNMATCHED' AND ol.out_txn_id = o.id)) -- rule 7
               AND (il.id IS NULL OR (il.status = 'UNMATCHED' AND il.in_txn_id = i.id))
               AND (ol.id IS NULL OR il.id IS NULL)
@@ -61,13 +75,18 @@ public class TransferCandidateQuery {
         }
         return jdbc.sql(CANDIDATES_SQL)
                 .param("windowDays", windowDays)
-                .query((rs, row) -> new CandidatePair(
-                        new CandidatePair.Side(rs.getLong("out_id"), rs.getLong("out_account_id"),
-                                rs.getObject("out_date", LocalDate.class),
-                                rs.getObject("out_link_id", Long.class)),
-                        new CandidatePair.Side(rs.getLong("in_id"), rs.getLong("in_account_id"),
-                                rs.getObject("in_date", LocalDate.class),
-                                rs.getObject("in_link_id", Long.class))))
+                .query((rs, row) -> pair(rs))
                 .list();
+    }
+
+    /** The pair in {@link #PAIR_COLUMNS}' columns. */
+    static CandidatePair pair(ResultSet rs) throws SQLException {
+        return new CandidatePair(side(rs, "out"), side(rs, "in"));
+    }
+
+    /** One side, from the {@code <prefix>_id}, {@code _account_id}, {@code _date} and {@code _link_id} columns. */
+    static CandidatePair.Side side(ResultSet rs, String prefix) throws SQLException {
+        return new CandidatePair.Side(rs.getLong(prefix + "_id"), rs.getLong(prefix + "_account_id"),
+                rs.getObject(prefix + "_date", LocalDate.class), rs.getObject(prefix + "_link_id", Long.class));
     }
 }

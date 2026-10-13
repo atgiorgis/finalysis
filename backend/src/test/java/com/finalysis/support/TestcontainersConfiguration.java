@@ -14,8 +14,12 @@ public class TestcontainersConfiguration {
 
     // Same image as compose.yaml, so tests run against the extension set we ship with.
     // Static so every Spring context in the JVM shares one container instead of starting its own.
+    // max_connections: each cached test context keeps a pool of 10, and the suite already holds ten
+    // contexts, which is Postgres's default of 100. Tests that open their own connections (a scratch
+    // database for a migration test) need headroom beyond that.
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
-            DockerImageName.parse("pgvector/pgvector:pg17").asCompatibleSubstituteFor("postgres"));
+            DockerImageName.parse("pgvector/pgvector:pg17").asCompatibleSubstituteFor("postgres"))
+            .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=200");
 
     // destroyMethod = "": one context closing must not stop the container other contexts still use.
     // Testcontainers' Ryuk removes it when the JVM exits.

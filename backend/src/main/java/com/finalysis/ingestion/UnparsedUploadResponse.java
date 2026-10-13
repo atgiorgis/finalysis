@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
  * @param state               OPEN, RESOLVED or DISMISSED (see {@link UnparsedUploadState})
  * @param resolvedAt          when it was resolved or dismissed; null while open
  * @param resolvedStatementId the statement that resolved it; null while open, when dismissed, or once
- *                            that statement is deleted
+ *                            that statement is deleted (the state stays RESOLVED)
  * @param detail              fixed text for the state, never file contents
  */
 public record UnparsedUploadResponse(long id, long accountId, UnparsedReason reason, String fileName,
@@ -19,13 +19,15 @@ public record UnparsedUploadResponse(long id, long accountId, UnparsedReason rea
     static final String DETAIL = "No supported statement layout was recognized; nothing was imported. "
             + "The file is held for review.";
     static final String RESOLVED_DETAIL = "The file was uploaded again and imported.";
+    static final String RESOLVED_DELETED_DETAIL = "The file was uploaded again and imported; that statement "
+            + "has since been deleted.";
     static final String DISMISSED_DETAIL = "Dismissed; nothing was imported.";
 
     static UnparsedUploadResponse from(UnparsedUpload upload) {
         UnparsedUploadState state = UnparsedUploadState.of(upload);
         String detail = switch (state) {
             case OPEN -> DETAIL;
-            case RESOLVED -> RESOLVED_DETAIL;
+            case RESOLVED -> upload.getResolvedStatementId() != null ? RESOLVED_DETAIL : RESOLVED_DELETED_DETAIL;
             case DISMISSED -> DISMISSED_DETAIL;
         };
         return new UnparsedUploadResponse(upload.getId(), upload.getAccount().getId(), upload.getReason(),

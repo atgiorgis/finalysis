@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.Map;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -64,6 +65,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -153,6 +155,7 @@ class SensitiveDataLeakTest {
         long checking = exerciseOfxEndpoints();
         long card = exerciseCsvEndpoints();
         exerciseStatementEndpoints(checking, card);
+        exerciseTransferAndReviewEndpoints(checking, card);
         databaseErrorsCarryNoRowValues();
 
         assertThat(problems).hasSizeGreaterThanOrEqualTo(20);
@@ -404,6 +407,89 @@ class SensitiveDataLeakTest {
         }
         problem(mockMvc.perform(get("/api/statements/{id}", 999_999_999)), 404, null);
         problem(mockMvc.perform(get("/api/accounts/{id}/statements", 999_999_999)), 404, null);
+    }
+
+    // ------------------------------------------------------------------ transfers and the review queue (3c)
+
+    /**
+     * Every error of the transfer actions (step 4), the review actions (step 5), the queue and join and
+     * dismiss (step 6), on txns whose descriptions carry markers. Their problems also carry no amount.
+     */
+    private void exerciseTransferAndReviewEndpoints(long checking, long card) throws Exception {
+        long out = markedTxn(checking, "-417.23", "WITHDRAWAL");
+        long in = markedTxn(card, "388.61", "PAYMENT"); // not equal and opposite: linking them is a 422
+        List<String> amounts = jdbc.queryForList("SELECT abs(amount)::text FROM txn WHERE id IN (?, ?)", String.class,
+                out, in);
+        int before = problems.size();
+
+        problem(transfer("{\"outTxnId\": " + out + ", \"inTxnId\": " + in + "}"), 422, "transfer-invalid");
+        problem(transfer("{}"), 422, "transfer-invalid");
+        problem(transfer("{\"outTxnId\": " + in + "}"), 422, "transfer-invalid");
+        problem(transfer("{\"outTxnId\": 999999999}"), 404, null);
+        long outLink = json(transfer("{\"outTxnId\": " + out + "}").andExpect(status().isCreated())).get("id").asLong();
+        long inLink = json(transfer("{\"inTxnId\": " + in + "}").andExpect(status().isCreated())).get("id").asLong();
+        problem(transfer("{\"outTxnId\": " + out + "}"), 409, "transfer-conflict");
+        for (String path : List.of("/api/transfers/join", "/api/transfers/join/dismiss")) {
+            problem(post(path, "{\"outLinkId\": " + outLink + ", \"inLinkId\": " + inLink + "}"), 422,
+                    "transfer-invalid");
+            problem(post(path, "{\"outLinkId\": " + inLink + ", \"inLinkId\": " + outLink + "}"), 409,
+                    "transfer-conflict");
+            problem(post(path, "{\"outLinkId\": 999999999, \"inLinkId\": " + inLink + "}"), 404, null);
+            problem(post(path, "{\"outLinkId\": " + outLink + "}"), 400, null);
+        }
+        problem(mockMvc.perform(get("/api/transfers/{id}", 999_999_999)), 404, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.post("/api/transfers/{id}/confirm", 999_999_999)), 404, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.delete("/api/transfers/{id}", 999_999_999)), 404, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.post("/api/transactions/{id}/not-transfer", 999_999_999)), 404,
+                null);
+        problem(mockMvc.perform(get("/api/transfers").param("status", "PENDING")), 400, null);
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/transfers/detect")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/transfers").param("accountId", String.valueOf(checking))).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/review-queue")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/review-queue").param("accountId", String.valueOf(checking))).andExpect(status().isOk());
+        problem(mockMvc.perform(get("/api/review-queue").param("kind", "EVERYTHING")), 400, null);
+        long statement = jdbc.queryForObject("SELECT statement_id FROM txn WHERE id = ?", Long.class, out);
+        if (!"NEEDS_REVIEW".equals(jdbc.queryForObject("SELECT status FROM statement WHERE id = ?", String.class,
+                statement))) {
+            problem(mockMvc.perform(MockMvcRequestBuilders.post("/api/statements/{id}/review", statement)), 409,
+                    "not-reviewable");
+        }
+        problem(mockMvc.perform(MockMvcRequestBuilders.post("/api/statements/{id}/review", 999_999_999)), 404, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.delete("/api/statements/{id}", 999_999_999)), 404, null);
+        problem(mockMvc.perform(get("/api/unparsed-uploads/{id}", 999_999_999)), 404, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.post("/api/unparsed-uploads/{id}/dismiss", 999_999_999)), 404,
+                null);
+
+        assertThat(problems.size() - before).isGreaterThanOrEqualTo(20);
+        for (String problem : problems.subList(before, problems.size())) {
+            assertThat(problem).as("SEC-10: no amount in a problem").doesNotContain(amounts);
+        }
+    }
+
+    /** A txn in a statement of its own, with a marker in its description. */
+    private long markedTxn(long accountId, String amount, String section) {
+        long statement = jdbc.queryForObject("""
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser)
+                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', ?, ?, 'fixture') RETURNING id
+                """, Long.class, accountId, FILE_NAME + ".csv", "hash-" + UUID.randomUUID());
+        return jdbc.queryForObject("""
+                INSERT INTO txn (account_id, statement_id, txn_date, raw_description, amount, source_section, fingerprint)
+                VALUES (?, ?, DATE '2026-04-10', ?, ?::numeric, ?, ?) RETURNING id
+                """, Long.class, accountId, statement, DESCRIPTION + " TRANSFER " + ACCOUNT_NUMBER + "9", amount, section,
+                "fp-" + UUID.randomUUID());
+    }
+
+    private JsonNode json(ResultActions result) throws Exception {
+        return jsonMapper.readTree(result.andReturn().getResponse().getContentAsString());
+    }
+
+    private ResultActions transfer(String body) throws Exception {
+        return post("/api/transfers", body);
+    }
+
+    private ResultActions post(String path, String body) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.post(path).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     // ------------------------------------------------------------------ database errors
