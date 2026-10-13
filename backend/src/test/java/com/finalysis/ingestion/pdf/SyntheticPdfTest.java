@@ -110,7 +110,9 @@ class SyntheticPdfTest {
         for (ManifestEntry entry : manifest) {
             Path expected = PDF.resolve(base(entry.file()) + ".expected.csv");
             Path lines = PDF.resolve(base(entry.file()) + ".lines.txt");
+            Path labels = PDF.resolve(base(entry.file()) + ".labels.txt");
             assertThat(lines).as(entry.file()).isRegularFile();
+            assertThat(Files.exists(labels)).as(entry.file()).isEqualTo(entry.recognized());
             if (entry.recognized()) {
                 assertThat(entry.unparsedReason()).isEmpty();
                 assertThat(Files.exists(expected)).as(entry.file()).isEqualTo(entry.edgeCase());

@@ -8,7 +8,9 @@
 // sample-data/answer-key.csv and sample-data/statements-manifest.csv and never re-derived here.
 // Edge cases are hand-built Northfield statements; each gets a <name>.expected.csv next to it.
 // Every fixture also gets a <name>.lines.txt: the text lines this generator drew, in the order and
-// form PdfTextExtractor must read them back (top to bottom, words joined by one space).
+// form PdfTextExtractor must read them back (top to bottom, words joined by one space). Every
+// fixture in the checking layout also gets a <name>.labels.txt: the kind of each line as drawn
+// (PERIOD, TXN, CONTINUATION, PAGE_FOOTER ...), which the layout's line classifier must reproduce.
 //
 // The PDF writer is dependency-free: standard-14 Helvetica and Helvetica-Bold, uncompressed content
 // streams, no /Info, no /ID, fixed object order and locale-independent numbers, so the bytes are
@@ -434,6 +436,8 @@ public class SyntheticPdfGenerator {
     static final class Page {
         final int number;
         final List<Item> items = new ArrayList<>();
+        /** Line kind by baseline, as drawn; an unlabelled line is OTHER. */
+        final Map<Float, String> kinds = new TreeMap<>();
         String vectorContent = "";
 
         Page(int number) {
@@ -496,7 +500,9 @@ public class SyntheticPdfGenerator {
             add(LEFT, 128, HEADING, true, Role.HEADING, "Your checking account statement");
             add(LEFT, 142, BODY, false, Role.TEXT, "for " + longDate(s.start) + " to " + longDate(s.end));
             anchor("period", 142);
+            label(142, "PERIOD");
             add(LEFT, 154, BODY, false, Role.TEXT, "Account number: " + ACCOUNT_NUMBER);
+            label(154, "ACCOUNT");
             add(LEFT, 180, HEADING, true, Role.HEADING, "Account summary");
             y = 196;
             summaryLine("opening", "Beginning balance on " + longDate(s.start), balance(s.opening));
@@ -511,6 +517,7 @@ public class SyntheticPdfGenerator {
             add(LEFT, y, BODY, false, Role.TEXT, label);
             addRight(RIGHT, y, BODY, false, amount);
             anchor(key, y);
+            label(y, "SUMMARY");
             y += PITCH;
         }
 
@@ -521,6 +528,7 @@ public class SyntheticPdfGenerator {
                 nextPage(null, null);
             }
             add(LEFT, y, HEADING, true, Role.HEADING, section.heading);
+            label(y, "SECTION_START");
             y += 14;
             columnHeader(section);
             for (int u = 0; u < units.size(); u++) {
@@ -539,10 +547,12 @@ public class SyntheticPdfGenerator {
             add(LEFT, y + 4, BODY, true, Role.HEADING, section.totalLabel());
             addRight(RIGHT, y + 4, BODY, true, total(s.total(section)));
             anchor("total:" + section, y + 4);
+            label(y + 4, "TOTAL");
             y += 4 + PITCH + 14;
         }
 
         void columnHeader(Section section) {
+            label(y, "COLUMN_HEADER");
             if (section == Section.CHECK) {
                 for (float group : new float[] {LEFT, CHECK_GROUP_2}) {
                     add(group, y, SMALL, true, Role.HEADING, "Date");
@@ -572,15 +582,21 @@ public class SyntheticPdfGenerator {
                     addRight(g == 0 ? CHECK_AMOUNT_RIGHT : RIGHT, y, BODY, false, row.printedAmount());
                     anchor("row:" + unit.get(g), y);
                 }
+                label(y, "CHECK_ROW");
                 y += PITCH;
             } else {
                 Row row = body.get(unit.getFirst());
                 add(LEFT, y, BODY, false, Role.TEXT, ROW_DATE.format(row.date()));
                 addRight(RIGHT, y, BODY, false, row.printedAmount());
                 anchor("row:" + unit.getFirst(), y);
-                for (String line : row.lines()) {
+                label(y, "TXN");
+                for (int i = 0; i < row.lines().size(); i++) {
+                    String line = row.lines().get(i);
                     require(width(line, false, BODY) <= 300, "description line too wide: " + line);
                     add(DESCRIPTION_X, y, BODY, false, Role.DESCRIPTION, line);
+                    if (i > 0) {
+                        label(y, "CONTINUATION");
+                    }
                     y += PITCH;
                 }
             }
@@ -595,17 +611,21 @@ public class SyntheticPdfGenerator {
                 float noteY = y - PITCH + 2 * PITCH;
                 require(noteY <= BODY_BOTTOM, "no room for the footer note");
                 add(DESCRIPTION_X, noteY, SMALL, false, Role.TEXT, note);
+                label(noteY, "PAGE_FOOTER");
             }
             if (open != null) {
                 add(LEFT, CONTINUED_Y, SMALL, false, Role.TEXT, "continued on the next page");
+                label(CONTINUED_Y, "PAGE_FOOTER");
             }
             newPage();
             add(LEFT, 46, SMALL, false, Role.TEXT, CUSTOMER);
             add(200, 46, SMALL, false, Role.TEXT, "Account # " + ACCOUNT_NUMBER);
             addRight(RIGHT, 46, SMALL, false, longDate(s.start) + " to " + longDate(s.end));
+            label(46, "PAGE_HEADER");
             y = 72;
             if (open != null) {
                 add(LEFT, y, HEADING, true, Role.HEADING, open.heading + " - continued");
+                label(y, "SECTION_CONTINUED");
                 y += 14;
                 columnHeader(open);
             }
@@ -615,6 +635,10 @@ public class SyntheticPdfGenerator {
             page = new Page(pages.size() + 1);
             pages.add(page);
             addCentered(MARK_HEADER_Y, SMALL, true, MARK);
+            // Page 1 has no page header: its top lines are the statement's own (OTHER).
+            if (page.number > 1) {
+                label(MARK_HEADER_Y, "PAGE_HEADER");
+            }
             unitsOnPage = 0;
         }
 
@@ -623,11 +647,19 @@ public class SyntheticPdfGenerator {
                 page = p;
                 addCentered(PAGE_NUMBER_Y, SMALL, false, "Page " + p.number + " of " + pages.size());
                 addCentered(MARK_FOOTER_Y, SMALL, true, MARK);
+                label(PAGE_NUMBER_Y, "PAGE_FOOTER");
+                label(MARK_FOOTER_Y, "PAGE_FOOTER");
             }
         }
 
         void anchor(String key, float atY) {
             require(anchors.put(key, new Position(page.number, atY)) == null, "duplicate anchor " + key);
+        }
+
+        /** Records the kind of the line drawn at {@code atY} on the current page. */
+        void label(float atY, String kind) {
+            String previous = page.kinds.put(atY, kind);
+            require(previous == null || previous.equals(kind), "line labelled " + previous + " and " + kind);
         }
 
         void add(float x, float atY, float size, boolean bold, Role role, String text) {
@@ -683,6 +715,7 @@ public class SyntheticPdfGenerator {
         List<Line> lines = lines(pages);
         write(s.file, pdf(pages, s));
         write(base(s.file) + ".lines.txt", linesFile(lines));
+        write(base(s.file) + ".labels.txt", labelsFile(pages, lines));
         if (edgeCase) {
             write(base(s.file) + ".expected.csv", expected(s, layout, lines));
         }
@@ -734,6 +767,20 @@ public class SyntheticPdfGenerator {
         for (Line line : lines) {
             text.append(String.format(Locale.ROOT, "p%d L%04d %s%n", line.page(), line.number(), line.text()));
         }
+        return text.toString().replace("\r\n", "\n");
+    }
+
+    /** One label per drawn line, in the same order as the lines file. Every label must name a drawn line. */
+    static String labelsFile(List<Page> pages, List<Line> lines) {
+        StringBuilder text = new StringBuilder();
+        int labelled = 0;
+        for (Line line : lines) {
+            Map<Float, String> kinds = pages.get(line.page() - 1).kinds;
+            labelled += kinds.containsKey(line.y()) ? 1 : 0;
+            text.append(String.format(Locale.ROOT, "p%d L%04d %s%n", line.page(), line.number(),
+                    kinds.getOrDefault(line.y(), "OTHER")));
+        }
+        require(labelled == pages.stream().mapToInt(p -> p.kinds.size()).sum(), "a label names no drawn line");
         return text.toString().replace("\r\n", "\n");
     }
 
@@ -978,7 +1025,8 @@ public class SyntheticPdfGenerator {
 
     static boolean isGenerated(Path file) {
         String name = file.getFileName().toString();
-        return name.endsWith(".pdf") || name.endsWith(".csv") || name.endsWith(".lines.txt");
+        return name.endsWith(".pdf") || name.endsWith(".csv") || name.endsWith(".lines.txt")
+                || name.endsWith(".labels.txt");
     }
 
     static void write(String relativePath, String content) throws IOException {

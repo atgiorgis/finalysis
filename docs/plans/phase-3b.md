@@ -1,6 +1,6 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved**; steps 0–3 done, next: step 4. Branch `v1`. Requirements as of
+Status: **approved**; steps 0–4 done, next: step 5. Branch `v1`. Requirements as of
 `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
@@ -699,7 +699,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 | 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory | Done: "Phase 3b step 1: PDF text extraction layer" |
 | 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Done: "Phase 3b step 2: synthetic PDF generator" |
 | 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions; `SampleDataParserSelectionTest` without the `pdf/` skip (see step 3 requirements) | Done: "Phase 3b step 3: PDF routing and unparsed uploads" |
-| 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Planned |
+| 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Done: "Phase 3b step 4: BoA line classifier and detection" |
 | 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
 | 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
 | 7 | Import end to end | Registered bean; open unparsed upload resolved once recognized; reconciliation on printed balances and totals; the six Northfield PDFs imported against the answer key; Postman PDF requests (synthetic fixtures, plus the real-file folder pointing at `private-data/` through your local environment, nothing committed, run by you) | `PdfImportTest`, selection test | Planned |
@@ -870,6 +870,64 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 - Tests: `UnparsedUploadImportTest` (30), `UnparsedUploadRepositoryTest` (9), registry (+7), upload
   checks (+4), hardening (+6), selection (55 → 74: the 18 PDFs and a manifest check). Backend tests 1080 →
   1155; frontend 1. README and the problem-type table are updated in step 9.
+
+### Step 4 notes (decisions beyond the plan)
+
+- **Golden labels come from the generator.** Next to every fixture in the layout it writes
+  `<name>.labels.txt`: the kind of each line it drew (`p1 L0018 TXN`), from what it drew there, not
+  from the classifier's rules. `BankOfAmericaLineClassifierTest` compares the classification of every
+  line with it, and checks that the fixtures between them exercise every kind. The two `none`
+  fixtures get no labels file. The PDFs, `.lines.txt` and `.expected.csv` files are unchanged.
+- **The classifier labels by shape and never fails.** Validity (a row outside a section, a total for
+  a section that isn't open, an unknown heading) is the step 6 state machine's job. So:
+  - a row aligned to the most recent column header is a `TXN` (or `CHECK_ROW`) even under an unknown
+    heading, with no section, and the parser can name its line. The unknown heading itself is
+    `OTHER`. No extra `LineKind` was added;
+  - a column header sets the columns until the next heading, total or page; `TXN` versus `CHECK_ROW`
+    follows the header's shape (`Date Description Amount`, or `Date Check # Amount` repeated), not
+    the section;
+  - each classified line carries the section its heading, total or summary line names, or the open
+    section it sits in (null for the balance lines and rows outside a section).
+- **Column alignment:** a date's left edge, a description's or check number's left edge, and an
+  amount's right edge must be within 3 pt of the header word's (the ±3 pt of §3.3 rule 3, used for
+  every column).
+- **Row dates** match `MM/DD/YY` or `MM/DD` for classification, so a skeleton of a statement without
+  years still shows its rows; the parser decides which it accepts.
+- **"Median row pitch" made precise:** per section, the median distance from each `TXN` line to the
+  line directly above it on the same page (the column header, the previous row, or its last
+  continuation). It is measured at row starts, so wraps don't skew it, and every section with a row
+  has at least one sample.
+- **Page headers and footers:** "structural" means every kind except `PAGE_HEADER`, `PAGE_FOOTER` and
+  `OTHER`. `Page N of M` and `continued on the next page` are footers wherever they are, and are
+  checked before continuations, so neither is glued onto a row. A page with no structural line
+  keeps its lines as `OTHER`. Page 1 has no page header; its top lines are `OTHER`.
+- **The summary block** runs from the beginning-balance line to the ending-balance line on page 1. A
+  known section label plus an amount inside it is `SUMMARY`; anything else in it is `OTHER`.
+- **Detection markers** come from the same code (`BankOfAmericaLineClassifier.markers`), reported one
+  by one for the step 5 tool. Each is present only in its place: the deposits and withdrawals lines
+  below the beginning balance, the ending balance below both. Lines match whole, after the
+  extractor's one-space join.
+- **The parser is a Spring bean from this step** (the plan registers it in step 7). The 422 for a
+  recognized file needs it. `parse` throws a `StatementParseException` without a line:
+  422 `parse-error`, "The statement layout was recognized (boa-checking), but reading it is not
+  implemented yet; nothing was imported". No new problem type for a temporary state. Preview gives
+  the same 422.
+- **A recognized file is never held.** No `unparsed_upload` row is written, and an open one from
+  before (held in step 3) stays open until the import succeeds (§4.3).
+- **Pattern guesses in `BankOfAmericaLayout`** for the step 5 skeleton to confirm: whole-line period,
+  balance and summary lines; amounts with an optional `-` and `$`, no parentheses or CR/DR; total
+  lines `Total <heading in lower case> <amount>`; `- continued`; `Account number:` and digit groups.
+- **Existing tests updated:** `SampleDataParserSelectionTest` (files marked `boa-checking` are claimed
+  DEFINITE by `boa-checking`; labels files are expectations, not statements); `SyntheticPdfTest`
+  (a labels file exists exactly for the recognized fixtures); `UnparsedUploadImportTest` (every
+  sample PDF ends as the manifest says: held with its reason, or 422 with nothing held; plus a clear
+  422 with no PDF text or file name in the body or logs, an open upload left open, and preview).
+- Tests: `BankOfAmericaLineClassifierTest` (35: golden labels for 16 fixtures, every kind exercised,
+  sections across pages, check rows, footer note, continuation boundaries for pitch, column and
+  shape, unknown heading, check leftovers), `BankOfAmericaCheckingParserTest` (38: every manifest PDF,
+  each marker removed or missing its amount, markers out of order or on page 2 only, no-activity
+  statement, institution line removed or renamed, institution name alone, parse not implemented),
+  `UnparsedUploadImportTest` (+3). Backend tests 1155 → 1231; frontend 1.
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.

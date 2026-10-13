@@ -32,14 +32,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Unparsed uploads through the HTTP endpoint (ING-13, docs/plans/phase-3b.md §4): a PDF no layout
  * parser recognizes is answered 202 Accepted and recorded, never as a statement. Re-uploads follow
- * the §4.3 table. Step 3 has no layout parser, so a test-only one, switched per test, stands in
- * for "a parser claims it now".
+ * the §4.3 table. A test-only layout parser, switched per test, stands in for "a parser claims it
+ * now", since no real layout parser can read a statement yet (step 6).
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -51,6 +52,9 @@ class UnparsedUploadImportTest {
     private static final String NO_TEXT = "pdf/edge-cases/pdf-no-text.pdf";
     private static final String DETAIL = "No supported statement layout was recognized; nothing was imported. "
             + "The file is held for review.";
+    private static final String APRIL = "pdf/northfield-checking_2026-04.pdf";
+    private static final String NOT_IMPLEMENTED = "The statement layout was recognized (boa-checking), but reading "
+            + "it is not implemented yet; nothing was imported";
 
     private final JsonMapper jsonMapper;
     private final JdbcTemplate jdbc;
@@ -114,17 +118,71 @@ class UnparsedUploadImportTest {
                 .map(c -> Arguments.of(c[0], c[1], c[2]));
     }
 
-    /** With no layout parser yet, every sample PDF is held; the manifest's own reason where it names one. */
+    /**
+     * Every sample PDF ends as the manifest says: held with the manifest's reason, or recognized by
+     * its layout parser. A recognized file is never held; until the parser can read it (step 6) the
+     * import fails with a parse error and writes nothing.
+     */
     @ParameterizedTest(name = "{0}")
     @MethodSource("samplePdfs")
-    void everySamplePdfIsHeldUntilALayoutParserExists(String file, String parser, String reason) throws Exception {
+    void everySamplePdfEndsAsTheManifestSays(String file, String parser, String reason) throws Exception {
         long checking = support.account(AccountType.CHECKING, "1001");
 
-        JsonNode body = accepted(support.upload(checking, Path.of(file).getFileName().toString(),
-                ImportTestSupport.sample("pdf/" + file)));
+        ResultActions result = support.upload(checking, Path.of(file).getFileName().toString(),
+                ImportTestSupport.sample("pdf/" + file));
 
-        // Files marked boa-checking are recognized from step 4 and imported from step 7.
-        assertThat(body.get("reason").asString()).isEqualTo(parser.equals("none") ? reason : "UNRECOGNIZED_LAYOUT");
+        if (parser.equals("none")) {
+            assertThat(accepted(result).get("reason").asString()).isEqualTo(reason);
+        } else {
+            assertThat(parser).isEqualTo("boa-checking");
+            notImplemented(result);
+            assertThat(support.count("SELECT count(*) FROM unparsed_upload WHERE account_id = ?", checking)).isZero();
+            assertThat(support.count("SELECT count(*) FROM statement WHERE account_id = ?", checking)).isZero();
+        }
+    }
+
+    // ------------------------------------------------------------------ recognized, not yet readable (step 4)
+
+    @Test
+    void aRecognizedPdfIsAClear422AndNeverHeld(CapturedOutput output) throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        int uploadsBefore = support.count("SELECT count(*) FROM unparsed_upload");
+
+        String body = notImplemented(support.upload(checking, "QZNAMEMARKER april.pdf", ImportTestSupport.sample(APRIL)))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(support.count("SELECT count(*) FROM unparsed_upload")).isEqualTo(uploadsBefore);
+        assertThat(support.count("SELECT count(*) FROM statement WHERE account_id = ?", checking)).isZero();
+        assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isZero();
+        for (String text : List.of("QZNAMEMARKER", "SYNTHETIC", "NORTHFIELD", "SAMPLE CUSTOMER", "0047 3910",
+                "BRIGHTWAY", "4419920113", "2,451.08")) {
+            assertThat(body).doesNotContain(text);
+            assertThat(output.getAll()).doesNotContain(text);
+        }
+    }
+
+    @Test
+    void aRecognizedPdfLeavesAnOpenUploadForItOpen() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        byte[] pdf = ImportTestSupport.sample(APRIL);
+        // Held before its layout was recognized, as in step 3.
+        jdbc.update("INSERT INTO unparsed_upload (account_id, file_sha256, file_name, reason) VALUES (?, ?, ?, ?)",
+                checking, ImportFile.of("april.pdf", pdf).sha256(), "april.pdf", "UNRECOGNIZED_LAYOUT");
+
+        notImplemented(support.upload(checking, "april.pdf", pdf));
+
+        assertThat(openUploads(checking)).isEqualTo(1);
+        assertThat(support.count("SELECT count(*) FROM unparsed_upload WHERE account_id = ?", checking)).isEqualTo(1);
+    }
+
+    @Test
+    void previewOfARecognizedPdfIsTheSame422AndWritesNothing() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+
+        notImplemented(support.preview(checking, "april.pdf", ImportTestSupport.sample(APRIL)));
+
+        assertThat(support.count("SELECT count(*) FROM unparsed_upload WHERE account_id = ?", checking)).isZero();
+        assertThat(support.count("SELECT count(*) FROM statement WHERE account_id = ?", checking)).isZero();
     }
 
     @Test
@@ -298,11 +356,18 @@ class UnparsedUploadImportTest {
                 accountId);
     }
 
-    private JsonNode accepted(org.springframework.test.web.servlet.ResultActions result) throws Exception {
+    private static ResultActions notImplemented(ResultActions result) throws Exception {
+        return result.andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.type").value(PROBLEM + "parse-error"))
+                .andExpect(jsonPath("$.detail").value(NOT_IMPLEMENTED))
+                .andExpect(jsonPath("$.line").doesNotExist());
+    }
+
+    private JsonNode accepted(ResultActions result) throws Exception {
         return json(result.andExpect(status().isAccepted()));
     }
 
-    private JsonNode json(org.springframework.test.web.servlet.ResultActions result) throws Exception {
+    private JsonNode json(ResultActions result) throws Exception {
         return jsonMapper.readTree(result.andReturn().getResponse().getContentAsString());
     }
 

@@ -8,6 +8,7 @@ import com.finalysis.ingestion.ofx.OfxStatementParser;
 import com.finalysis.ingestion.pdf.PdfDocumentText;
 import com.finalysis.ingestion.pdf.PdfStatementParser;
 import com.finalysis.ingestion.pdf.PdfTextExtractor;
+import com.finalysis.ingestion.pdf.boa.BankOfAmericaCheckingParser;
 import com.finalysis.support.ImportTestSupport;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,7 +39,7 @@ class SampleDataParserSelectionTest {
 
     private final AtomicInteger textParserCalls = new AtomicInteger();
     private final StatementParserRegistry registry = new StatementParserRegistry(List.of(
-            counted(new OfxStatementParser()), counted(new CsvStatementParser())));
+            counted(new OfxStatementParser()), counted(new CsvStatementParser()), new BankOfAmericaCheckingParser()));
 
     record PdfExpectation(String file, String parser, String unparsedReason) {
         @Override
@@ -120,12 +121,10 @@ class SampleDataParserSelectionTest {
                 assertThat(parser).isEmpty();
                 assertThat(UnparsedReason.of(text).name()).isEqualTo(expected.unparsedReason());
             }
-            case "boa-checking" -> {
-                // Step 3 has no layout parser, so these are unparsed uploads for now. Step 4 tightens
-                // this: claimed DEFINITE by boa-checking (docs/plans/phase-3b.md, step 3 requirements).
+            case BankOfAmericaCheckingParser.ID -> {
                 assertThat(expected.unparsedReason()).isEmpty();
-                assertThat(parser).isEmpty();
-                assertThat(UnparsedReason.of(text)).isEqualTo(UnparsedReason.UNRECOGNIZED_LAYOUT);
+                assertThat(parser).map(StatementParser::id).contains(BankOfAmericaCheckingParser.ID);
+                assertThat(parser.get().detect(text)).isEqualTo(FormatMatch.DEFINITE);
             }
             default -> throw new AssertionError("unknown parser " + expected.parser());
         }
@@ -136,13 +135,13 @@ class SampleDataParserSelectionTest {
     }
 
     /**
-     * {@code tools/SyntheticPdfGenerator.java}'s manifest, expected rows and golden line texts:
+     * {@code tools/SyntheticPdfGenerator.java}'s manifest, expected rows, golden line texts and labels:
      * expectations about the PDFs, checked by {@code SyntheticPdfTest}, not statements.
      */
     private static boolean isPdfExpectation(Path relativePath) {
         String name = relativePath.getFileName().toString();
         return relativePath.startsWith("pdf") && (name.equals("pdf-manifest.csv") || name.endsWith(".expected.csv")
-                || name.endsWith(".lines.txt"));
+                || name.endsWith(".lines.txt") || name.endsWith(".labels.txt"));
     }
 
     /** The parser, counting every question asked of it. */
