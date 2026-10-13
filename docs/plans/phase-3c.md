@@ -1,7 +1,7 @@
 # Phase 3c plan: transfer detection and review queue
 
 Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and steps 1–4 are done; next: step 5. Branch `v1`.
+standalone Phase 3b step 8 task (PDF security tests) and steps 1–5 are done; next: step 6. Branch `v1`.
 Requirements as of `docs/requirements.md` v1.28 (competing candidates and possible-match dismissal added
 to ING-07, step 6).
 
@@ -508,7 +508,7 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | 2 | Candidates + resolver | `TransferProperties`, `TransferCandidateQuery`, `TransferResolver`, `TransferDetector`, `POST /api/transfers/detect` | `TransferCandidateQueryTest`, `TransferResolverTest` | Done: "Phase 3c step 2: transfer candidates and resolver" (notes below) |
 | 3 | Detection wiring + validation | `StatementImported` event and listener; transfer edge-case fixtures; answer-key validation | `TransferDetectionTest` | Done: "Phase 3c step 3: detection wiring and validation" (notes below) |
 | 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Done: "Phase 3c step 4: transfer actions" (notes below) |
-| 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Planned |
+| 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Done: "Phase 3c step 5: review actions" (notes below) |
 | 6 | Review queue | `review` package, `GET /api/review-queue`, competing candidates (§4.6), possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Planned |
 | 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Planned |
 
@@ -519,6 +519,8 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 - Card → bank transfers (cash advances, balance transfers) are never auto-linked.
 - Deleting a statement doesn't re-run its successor's continuity check.
 - Deleting a statement drops confirmed links on its rows; detection re-creates them unconfirmed.
+- Deleting the statement that resolved an unparsed upload leaves the upload reading as DISMISSED: V8
+  stores both as `resolved_at` without a statement (step 5 notes).
 - An ambiguous group (§2.3 rule 3) forms only when its txns meet in one detection run. If one
   counterpart arrives first, that pair is linked (AUTO, unconfirmed), and detection never reopens it.
   A second counterpart imported later puts the link in the review queue as a competing candidate
@@ -610,6 +612,38 @@ Built as planned. Choices the plan left open:
   controller.
 - `TransferDetectionTest`'s edge-case test now marks the one-sided payment through the API (step 3
   notes).
+
+### Step 5 notes
+
+Built as planned. Choices the plan left open:
+- **Transfer lock without a dependency on `transfer`.** Delete publishes `StatementDeleting` inside its
+  transaction, after the account lock and before any row goes; `TransferDetectionListener` handles it
+  synchronously and takes the transfer lock, held to commit. `StatementDeleted` follows for the
+  after-commit detection run. So the order is account lock, then transfer lock, and `ingestion` still
+  depends on neither `transfer` nor `review` (§6).
+- **`transferLinksRemoved`** is the number of the statement's txns with `is_transfer`: a link's two
+  sides are in different accounts, so at most one is in the statement, and ingestion never reads
+  `transfer_link`.
+- **Delete re-checks under the account lock** that the statement still exists, so two concurrent deletes
+  give one 200 and one 404. The log carries ids and counts only.
+- **Review takes the account lock** and re-reads the statement, since a late arrival's re-check rewrites
+  the same row and may clear `reviewed_at`. Reviewing again keeps the first time.
+- **Re-queue:** a passed re-check adds no warning (it only removes "balance unverified"), so only a
+  failed one clears `reviewed_at`. Tested both ways.
+- **Dismiss** is one conditional `UPDATE` on the database clock (`resolved_at IS NULL`), so it needs no
+  account lock: whichever of a dismiss and a resolving import commits second finds the row no longer
+  open. The 409 detail names the state as re-read (`RESOLVED` or `DISMISSED`). Reading and dismissing
+  live in a new `UnparsedUploadService`.
+- **`state` and `detail`:** `state` is derived (OPEN: no `resolved_at`; RESOLVED: with a statement;
+  DISMISSED: without). `detail` is fixed text per state. Known limitation: once its resolving statement
+  is deleted, an upload reads as DISMISSED, since V8 has no other way to store it; it stays out of the
+  queue either way, and widening V10 for it wasn't in the plan.
+- **Times the app sets** (`reviewed_at`, and step 4's `confirmed_at`) use `Timestamps.now()`: UTC to the
+  microsecond, as Postgres returns them. Before, the response right after a write showed the server's
+  local offset while later reads showed UTC; the review tests caught it.
+- Tests beyond the two named classes: V10's constraint in `SchemaMigrationTest`; the resolved upload
+  whose statement is deleted in `UnparsedUploadImportTest`, which has the test parser that can resolve
+  one; its 202 test now expects `Location` and the new fields.
 
 ---
 

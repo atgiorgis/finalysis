@@ -1,6 +1,10 @@
 package com.finalysis.ingestion;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.endsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +60,7 @@ class UnparsedUploadImportTest {
     private static final String NOT_IMPLEMENTED = "The statement layout was recognized (boa-checking), but reading "
             + "it is not implemented yet; nothing was imported";
 
+    private final MockMvc mockMvc;
     private final JsonMapper jsonMapper;
     private final JdbcTemplate jdbc;
     private final SwitchablePdfParser testParser;
@@ -63,6 +68,7 @@ class UnparsedUploadImportTest {
 
     UnparsedUploadImportTest(MockMvc mockMvc, JsonMapper jsonMapper, AccountRepository accounts, JdbcTemplate jdbc,
                              SwitchablePdfParser testParser) {
+        this.mockMvc = mockMvc;
         this.jsonMapper = jsonMapper;
         this.jdbc = jdbc;
         this.testParser = testParser;
@@ -82,16 +88,20 @@ class UnparsedUploadImportTest {
         long checking = support.account(AccountType.CHECKING, "1001");
         int statementsBefore = support.count("SELECT count(*) FROM statement");
 
-        JsonNode body = accepted(support.upload(checking, "april card.pdf", ImportTestSupport.sample(UNRECOGNIZED))
-                .andExpect(header().doesNotExist("Location")));
+        ResultActions result = support.upload(checking, "april card.pdf", ImportTestSupport.sample(UNRECOGNIZED));
+        JsonNode body = accepted(result);
 
         assertThat(body.get("accountId").asLong()).isEqualTo(checking);
         assertThat(body.get("reason").asString()).isEqualTo("UNRECOGNIZED_LAYOUT");
         assertThat(body.get("fileName").asString()).isEqualTo("april card.pdf");
         assertThat(body.get("detail").asString()).isEqualTo(DETAIL);
         assertThat(body.get("createdAt").asString()).isNotBlank();
+        assertThat(body.get("state").asString()).isEqualTo("OPEN");
+        assertThat(body.get("resolvedAt").isNull()).isTrue();
+        assertThat(body.get("resolvedStatementId").isNull()).isTrue();
         assertThat(body.propertyNames()).containsExactlyInAnyOrder("id", "accountId", "reason", "fileName",
-                "createdAt", "detail");
+                "createdAt", "state", "resolvedAt", "resolvedStatementId", "detail");
+        result.andExpect(header().string("Location", endsWith("/api/unparsed-uploads/" + body.get("id").asLong())));
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM unparsed_upload WHERE id = ?", body.get("id").asLong());
         assertThat(row).containsEntry("account_id", checking)
                 .containsEntry("file_sha256", ImportFile.of("x", ImportTestSupport.sample(UNRECOGNIZED)).sha256())
@@ -244,6 +254,40 @@ class UnparsedUploadImportTest {
         support.upload(checking, "card.pdf", pdf).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type").value(PROBLEM + "already-imported"))
                 .andExpect(jsonPath("$.statementId").value(statementId));
+    }
+
+    /**
+     * Deleting the statement that resolved an upload keeps {@code resolved_at} and drops the statement
+     * id (V8 {@code ON DELETE SET NULL}), so the upload reads as DISMISSED, can't be dismissed again, and
+     * stays out of the review queue; the file can be imported again.
+     */
+    @Test
+    void deletingTheResolvingStatementKeepsTheUploadResolved() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        byte[] pdf = ImportTestSupport.sample(UNRECOGNIZED);
+        long uploadId = accepted(support.upload(checking, "card.pdf", pdf)).get("id").asLong();
+        testParser.mode = Mode.CLAIM;
+        long statementId = json(support.upload(checking, "card.pdf", pdf).andExpect(status().isCreated()))
+                .get("statementId").asLong();
+        mockMvc.perform(get("/api/unparsed-uploads/{id}", uploadId))
+                .andExpect(jsonPath("$.state").value("RESOLVED"))
+                .andExpect(jsonPath("$.resolvedStatementId").value(statementId))
+                .andExpect(jsonPath("$.detail").value("The file was uploaded again and imported."));
+        mockMvc.perform(post("/api/unparsed-uploads/{id}/dismiss", uploadId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value(PROBLEM + "already-resolved"))
+                .andExpect(jsonPath("$.detail").value("Unparsed upload " + uploadId + " is already RESOLVED"));
+
+        mockMvc.perform(delete("/api/statements/{id}", statementId)).andExpect(status().isOk());
+
+        Map<String, Object> row = jdbc.queryForMap("SELECT * FROM unparsed_upload WHERE id = ?", uploadId);
+        assertThat(row.get("resolved_at")).isNotNull();
+        assertThat(row.get("resolved_statement_id")).isNull();
+        mockMvc.perform(get("/api/unparsed-uploads/{id}", uploadId))
+                .andExpect(jsonPath("$.state").value("DISMISSED"))
+                .andExpect(jsonPath("$.resolvedAt").isNotEmpty());
+        assertThat(openUploads(checking)).isZero();
+        support.upload(checking, "card.pdf", pdf).andExpect(status().isCreated());
     }
 
     @Test

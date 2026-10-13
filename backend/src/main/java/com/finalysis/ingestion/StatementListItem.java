@@ -15,12 +15,13 @@ import java.time.OffsetDateTime;
 public record StatementListItem(long id, String parser, LocalDate periodStart, LocalDate periodEnd,
                                 @ApiMoney BigDecimal openingBalance, @ApiMoney BigDecimal closingBalance,
                                 StatementStatus status, BalanceCheck balanceCheck, Integer parsedCount,
-                                long transactionCount, int warningCount, OffsetDateTime importedAt) {
+                                long transactionCount, int warningCount, OffsetDateTime importedAt,
+                                OffsetDateTime reviewedAt) {
 
     static StatementListItem from(Statement statement, long transactionCount) {
         return new StatementListItem(statement.getId(), statement.getParser(), statement.getPeriodStart(),
                 statement.getPeriodEnd(), statement.getOpeningBalance(), statement.getClosingBalance(),
                 statement.getStatus(), statement.getBalanceCheck(), statement.getParsedCount(), transactionCount,
-                statement.getImportWarnings().size(), statement.getImportedAt());
+                statement.getImportWarnings().size(), statement.getImportedAt(), statement.getReviewedAt());
     }
 }

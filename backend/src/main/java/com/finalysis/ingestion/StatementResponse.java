@@ -10,18 +10,20 @@ import java.util.List;
  * One imported statement. Balances are JSON strings with two decimals ({@link ApiMoney}).
  * {@code parsedCount} counts the file's rows (null for statements imported before reconciliation
  * existed), {@code transactionCount} the rows this statement owns; {@code warnings} explain the
- * status, including every failed balance check with its expected and actual amounts.
+ * status, including every failed balance check with its expected and actual amounts. {@code reviewedAt}
+ * is set once the user accepted a NEEDS_REVIEW statement (ING-07).
  */
 public record StatementResponse(Long id, Long accountId, String parser, LocalDate periodStart, LocalDate periodEnd,
                                 @ApiMoney BigDecimal openingBalance, @ApiMoney BigDecimal closingBalance,
                                 StatementStatus status, BalanceCheck balanceCheck,
                                 List<String> warnings, Integer parsedCount, long transactionCount,
-                                OffsetDateTime importedAt) {
+                                OffsetDateTime importedAt, OffsetDateTime reviewedAt) {
 
     static StatementResponse from(Statement statement, long transactionCount) {
         return new StatementResponse(statement.getId(), statement.getAccount().getId(), statement.getParser(),
                 statement.getPeriodStart(), statement.getPeriodEnd(), statement.getOpeningBalance(),
                 statement.getClosingBalance(), statement.getStatus(), statement.getBalanceCheck(),
-                statement.getImportWarnings(), statement.getParsedCount(), transactionCount, statement.getImportedAt());
+                statement.getImportWarnings(), statement.getParsedCount(), transactionCount, statement.getImportedAt(),
+                statement.getReviewedAt());
     }
 }

@@ -18,6 +18,10 @@ public interface TxnRepository extends JpaRepository<Txn, Long> {
 
     long countByStatementId(long statementId);
 
+    /** The statement's txns on a transfer link ({@code is_transfer}, kept by the V9 trigger). */
+    @Query("select count(t) from Txn t where t.statement.id = :statementId and t.isTransfer = true")
+    long countTransfersByStatementId(@Param("statementId") long statementId);
+
     /** Rows owned per statement of the account, as [statement id, count] pairs. */
     @Query("select t.statement.id, count(t) from Txn t where t.account.id = :accountId group by t.statement.id")
     List<Object[]> countByStatementForAccount(@Param("accountId") long accountId);

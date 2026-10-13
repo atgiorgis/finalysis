@@ -2,6 +2,8 @@ package com.finalysis.api;
 
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
+import com.finalysis.ingestion.StatementNotReviewableException;
+import com.finalysis.ingestion.UploadAlreadyResolvedException;
 import com.finalysis.ingestion.csv.CsvMappingLockedException;
 import com.finalysis.transfer.TransferConflictException;
 import com.finalysis.transfer.TransferInvalidException;
@@ -99,6 +101,22 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(URI.create("urn:finalysis:problem:mapping-locked"));
         problem.setTitle("CSV mapping is locked");
         problem.setProperty("fields", ex.getFields());
+        return problem;
+    }
+
+    @ExceptionHandler(StatementNotReviewableException.class)
+    ProblemDetail handleNotReviewable(StatementNotReviewableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:not-reviewable"));
+        problem.setTitle("Statement does not need review");
+        return problem;
+    }
+
+    @ExceptionHandler(UploadAlreadyResolvedException.class)
+    ProblemDetail handleAlreadyResolved(UploadAlreadyResolvedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:already-resolved"));
+        problem.setTitle("Unparsed upload already resolved");
         return problem;
     }
 

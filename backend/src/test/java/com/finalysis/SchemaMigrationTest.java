@@ -61,6 +61,7 @@ class SchemaMigrationTest {
             "statement,           uq_statement_file_hash,              u",
             "statement,           ck_statement_parser,                 c",
             "statement,           ck_statement_import_warnings_array,  c",
+            "statement,           ck_statement_reviewed,               c",
             "category,            uq_category_name,                    u",
             "category,            ck_category_kind,                    c",
             "category,            fk_category_parent,                  f",
@@ -234,6 +235,21 @@ class SchemaMigrationTest {
         long account = insertAccount("1001");
 
         assertThat(insertStatement(account)).isNotEqualTo(insertStatement(account));
+    }
+
+    @Test
+    void onlyANeedsReviewStatementCanBeReviewed() {
+        long accountId = insertAccount("1001");
+        String insert = """
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser,
+                                       status, reviewed_at)
+                VALUES (?, DATE '2026-04-01', DATE '2026-04-30', 'a.csv', ?, 'fixture', ?, now())
+                """;
+
+        jdbc.update(insert, accountId, "hash-reviewed-1", "NEEDS_REVIEW");
+        assertThatThrownBy(() -> jdbc.update(insert, accountId, "hash-reviewed-2", "IMPORTED"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_statement_reviewed");
     }
 
     @Test

@@ -189,6 +189,19 @@ public class StatementImportService {
         return StatementResponse.from(statement, txns.countByStatementId(id));
     }
 
+    /** Marks a NEEDS_REVIEW statement reviewed; status and warnings are kept (ING-07). */
+    public StatementResponse review(long id) {
+        return writer.review(id);
+    }
+
+    /** Deletes a statement with its rows; transfer detection re-runs after commit (ING-07). */
+    public StatementDeleteResponse delete(long id) {
+        StatementDeleteResponse deleted = writer.delete(id);
+        log.info("Deleted statement {}: {} transactions, {} transfer links", deleted.statementId(),
+                deleted.transactionsDeleted(), deleted.transferLinksRemoved());
+        return deleted;
+    }
+
     private Account account(long accountId) {
         return accounts.findById(accountId).orElseThrow(() -> new NotFoundException("Account", accountId));
     }

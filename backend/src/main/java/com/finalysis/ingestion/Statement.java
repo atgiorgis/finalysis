@@ -96,6 +96,9 @@ public class Statement {
     @Generated
     private OffsetDateTime importedAt;
 
+    /** When the user accepted this NEEDS_REVIEW statement; null when not reviewed (V10). */
+    private OffsetDateTime reviewedAt;
+
     protected Statement() {
     }
 
@@ -207,5 +210,29 @@ public class Statement {
 
     public OffsetDateTime getImportedAt() {
         return importedAt;
+    }
+
+    public OffsetDateTime getReviewedAt() {
+        return reviewedAt;
+    }
+
+    /**
+     * Records that the user accepted the statement; keeps the first time. Status and warnings are
+     * unchanged: they record what the import found.
+     *
+     * @throws IllegalStateException unless the statement is NEEDS_REVIEW (ck_statement_reviewed)
+     */
+    public void markReviewed(OffsetDateTime at) {
+        if (status != StatementStatus.NEEDS_REVIEW) {
+            throw new IllegalStateException("only a NEEDS_REVIEW statement can be reviewed");
+        }
+        if (reviewedAt == null) {
+            reviewedAt = at;
+        }
+    }
+
+    /** Something new to look at: the statement returns to the review queue. */
+    public void clearReview() {
+        reviewedAt = null;
     }
 }

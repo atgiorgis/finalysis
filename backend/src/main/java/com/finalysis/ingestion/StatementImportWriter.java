@@ -2,6 +2,7 @@ package com.finalysis.ingestion;
 
 import com.finalysis.account.Account;
 import com.finalysis.api.NotFoundException;
+import com.finalysis.api.Timestamps;
 import com.finalysis.ingestion.Reconciliation.RequestBalances;
 import com.finalysis.ingestion.csv.CsvMappingRepository;
 import com.finalysis.ingestion.csv.CsvMappingSpec;
@@ -55,6 +56,9 @@ import org.springframework.transaction.annotation.Transactional;
  * file, so a re-upload that is still unrecognized returns the existing one. When a later upload of
  * the same file is imported, {@link #write} resolves the open upload with the new statement in the
  * import's transaction.
+ *
+ * <p><b>Review and delete</b> (ING-07) run under the same account lock, since they change the
+ * statements that imports read and rewrite.
  *
  * <p><b>Events.</b> {@link #write} publishes {@link StatementImported} in its transaction, so
  * after-commit listeners (transfer detection) run only once the rows are committed, and never for
@@ -185,6 +189,57 @@ class StatementImportWriter {
     }
 
     /**
+     * Marks a NEEDS_REVIEW statement reviewed (docs/plans/phase-3c.md §4.2); already reviewed is
+     * unchanged. Under the account lock, because a late arrival's re-check ({@link #reconcileNext})
+     * rewrites the same statement and may clear {@code reviewed_at}.
+     *
+     * @throws StatementNotReviewableException for any other status
+     */
+    @Transactional
+    public StatementResponse review(long statementId) {
+        Statement statement = statements.findById(statementId)
+                .orElseThrow(() -> new NotFoundException("Statement", statementId));
+        entityManager.find(Account.class, statement.getAccount().getId(), LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(statement); // the state an import may have committed while we waited
+        if (statement.getStatus() != StatementStatus.NEEDS_REVIEW) {
+            throw new StatementNotReviewableException(statementId, statement.getStatus());
+        }
+        statement.markReviewed(Timestamps.now());
+        statements.flush();
+        return StatementResponse.from(statement, txns.countByStatementId(statementId));
+    }
+
+    /**
+     * Deletes a statement, any status (docs/plans/phase-3c.md §4.4), under the account lock as imports
+     * run. {@link StatementDeleting} is published first, inside this transaction, so listeners take
+     * their own locks before any row goes (transfer detection's lock: account lock first, then
+     * transfer lock). The database cascades the rest: its txns, the transfer links and rejections on
+     * them, and an unparsed upload it resolved loses only {@code resolved_statement_id}.
+     * {@link StatementDeleted} follows for after-commit listeners.
+     *
+     * <p>Links removed = the statement's txns on a link: a link's two sides are in different
+     * accounts, so at most one of them is in this statement.
+     */
+    @Transactional
+    public StatementDeleteResponse delete(long statementId) {
+        Statement statement = statements.findById(statementId)
+                .orElseThrow(() -> new NotFoundException("Statement", statementId));
+        long accountId = statement.getAccount().getId();
+        entityManager.find(Account.class, accountId, LockModeType.PESSIMISTIC_WRITE);
+        if (!statements.existsById(statementId)) { // deleted by a concurrent request while we waited
+            throw new NotFoundException("Statement", statementId);
+        }
+        events.publishEvent(new StatementDeleting(statementId, accountId));
+
+        long transactions = txns.countByStatementId(statementId);
+        long links = txns.countTransfersByStatementId(statementId);
+        statements.delete(statement);
+        statements.flush();
+        events.publishEvent(new StatementDeleted(statementId, accountId));
+        return new StatementDeleteResponse(statementId, transactions, links);
+    }
+
+    /**
      * Locks the account row, then checks again under the lock that the file hasn't been imported
      * as a statement since the import's first check.
      */
@@ -225,7 +280,8 @@ class StatementImportWriter {
      * A late arrival: if the statement right after this one (starting on its last day or the day
      * after) was unverified because it had a closing balance but no previous statement, re-runs its
      * continuity check now. The unverified warning is replaced by the outcome; IMPORTED becomes
-     * RECONCILED or NEEDS_REVIEW, and NEEDS_REVIEW stays NEEDS_REVIEW.
+     * RECONCILED or NEEDS_REVIEW, and NEEDS_REVIEW stays NEEDS_REVIEW. Only a failed check adds a
+     * warning, and then a reviewed statement loses its {@code reviewed_at} (ING-07).
      */
     private void reconcileNext(Statement statement) {
         Statement next = statements.findStartingFrom(statement.getAccount().getId(), statement.getId(),
@@ -249,6 +305,7 @@ class StatementImportWriter {
         next.setBalanceCheck(result.check());
         if (result.check() == BalanceCheck.FAILED) {
             next.setStatus(StatementStatus.NEEDS_REVIEW);
+            next.clearReview(); // a new warning: back in the review queue
         } else if (next.getStatus() == StatementStatus.IMPORTED) {
             next.setStatus(StatementStatus.RECONCILED);
         }

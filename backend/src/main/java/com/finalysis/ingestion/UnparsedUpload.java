@@ -17,7 +17,7 @@ import org.hibernate.annotations.Generated;
 
 /**
  * A PDF upload that no layout parser recognized (ING-13): nothing was imported, and the file waits
- * for a later decision (a new parser, OCR in Phase 8, or dismissal in 3c). Only the file's hash
+ * for a later decision (a new parser, OCR in Phase 8, or dismissal). Only the file's hash
  * and cleaned name are kept, never its bytes or text. See {@code V8__unparsed_upload.sql}.
  */
 @Entity
@@ -47,7 +47,7 @@ public class UnparsedUpload {
     @Generated
     private OffsetDateTime createdAt;
 
-    /** Set when the upload is resolved (re-uploaded and imported) or, from 3c, dismissed. */
+    /** Set when the upload is resolved (re-uploaded and imported) or dismissed. */
     private OffsetDateTime resolvedAt;
 
     /** The statement that resolved it; null when open, dismissed, or after that statement is deleted. */

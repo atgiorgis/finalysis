@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,9 +18,9 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
- * Statement import (ING-01, ING-03, ING-04), import preview and statement detail. An import answers
- * 201 Created with the {@link ImportSummary}, or 202 Accepted with an {@link UnparsedUploadResponse}
- * for a PDF no layout parser recognized (ING-13).
+ * Statement import (ING-01, ING-03, ING-04), import preview, statement detail, review and delete
+ * (ING-07). An import answers 201 Created with the {@link ImportSummary}, or 202 Accepted with an
+ * {@link UnparsedUploadResponse} and its {@code Location} for a PDF no layout parser recognized (ING-13).
  */
 @RestController
 public class StatementController {
@@ -49,8 +50,11 @@ public class StatementController {
                         .path("/api/statements/{id}").buildAndExpand(summary.statementId()).toUri();
                 yield ResponseEntity.created(location).body(summary);
             }
-            // No Location: the review-queue API that reads unparsed uploads comes in 3c.
-            case ImportOutcome.Unparsed(UnparsedUploadResponse upload) -> ResponseEntity.accepted().body(upload);
+            case ImportOutcome.Unparsed(UnparsedUploadResponse upload) -> {
+                URI location = ServletUriComponentsBuilder.fromCurrentContextPath()
+                        .path("/api/unparsed-uploads/{id}").buildAndExpand(upload.id()).toUri();
+                yield ResponseEntity.accepted().location(location).body(upload);
+            }
         };
     }
 
@@ -72,5 +76,20 @@ public class StatementController {
     @GetMapping("/api/statements/{id}")
     public StatementResponse get(@PathVariable long id) {
         return imports.get(id);
+    }
+
+    /** Accepts a NEEDS_REVIEW statement: it leaves the review queue, status and warnings unchanged (ING-07). */
+    @PostMapping("/api/statements/{id}/review")
+    public StatementResponse review(@PathVariable long id) {
+        return imports.review(id);
+    }
+
+    /**
+     * Deletes a statement of any status with its rows and their transfer links, e.g. one imported into
+     * the wrong account; the same file can then be imported again (ING-07).
+     */
+    @DeleteMapping("/api/statements/{id}")
+    public StatementDeleteResponse delete(@PathVariable long id) {
+        return imports.delete(id);
     }
 }

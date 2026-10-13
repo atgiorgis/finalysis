@@ -1,6 +1,7 @@
 package com.finalysis.transfer;
 
 import com.finalysis.api.NotFoundException;
+import com.finalysis.api.Timestamps;
 import com.finalysis.ingestion.Txn;
 import com.finalysis.ingestion.TxnRepository;
 import jakarta.persistence.EntityManager;
@@ -100,7 +101,7 @@ public class TransferService {
         }
         entityManager.flush(); // exclusions cleared before the trigger sets is_transfer
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = Timestamps.now();
         TransferLink link = out != null && in != null
                 ? TransferLink.linkedByUser(out, in, now)
                 : TransferLink.oneSided(out, in, now);
@@ -112,7 +113,7 @@ public class TransferService {
     public TransferLinkResponse confirm(long id) {
         lock.acquire();
         TransferLink link = link(id);
-        link.confirm(OffsetDateTime.now());
+        link.confirm(Timestamps.now());
         return TransferLinkResponse.from(links.saveAndFlush(link));
     }
 
