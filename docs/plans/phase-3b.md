@@ -698,7 +698,7 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
 | 0 | Plan and scope | This file; requirements v1.22 recording the approved decisions; CLAUDE.md current phase. Commit "Phase 3b plan and scope" | — | Done: `1dee291` |
 | 1 | Extraction layer | PDFBox dependency; `PdfLimits`, `PdfTextExtractor`, `PdfDocumentText` records; memory-only loading, encryption handling (empty user password accepted, password required → rejected), limits, `NoSystemFontsMapper`, PDFBox loggers off; `pdf-encrypted` and `pdf-too-complex` problem types (not yet reachable through HTTP) | `PdfTextExtractorTest`, `PdfSecurityTest` on PDFs built in memory | Done: "Phase 3b step 1: PDF text extraction layer" |
 | 2 | Synthetic generator | `tools/SyntheticPdfGenerator.java` reading the answer key; six Northfield monthly PDFs, edge cases with `.expected.csv`, `pdf-manifest.csv`; `SampleDataTest` skips `pdf/` | `SyntheticPdfTest`; golden extractor line texts per fixture; compressed variant | Done: "Phase 3b step 2: synthetic PDF generator" |
-| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions | Planned |
+| 3 | PDF routing + unparsed uploads (ING-13) | `.pdf` allowed, `FileKind` sniffing with extension agreement, `PdfStatementParser`, kind-filtered registry; **V8 `unparsed_upload`**, entity, repository; 202 response; re-upload rules; preview for PDFs. With no layout parser yet, every PDF becomes an unparsed upload, so ING-13 is testable end to end before any layout code exists | `UnparsedUploadImportTest`, `UnparsedUploadRepositoryTest`, registry and upload-hardening extensions; `SampleDataParserSelectionTest` without the `pdf/` skip (see step 3 requirements) | Planned |
 | 4 | Classifier + detection | `BankOfAmericaLayout`, `BankOfAmericaLineClassifier`, `BankOfAmericaCheckingParser.detect` (`parse` throws "not implemented" for now, so a detected file fails with a clear 422 instead of becoming an unparsed upload) | Classifier labels for every fixture line; marker-removal tests | Planned |
 | 5 | Debug CLI | `PdfSkeleton`, `PdfSkeletonCli`, exec plugin, `scripts/pdf-skeleton.sh`; run by Claude on synthetic fixtures only. **Checkpoint:** you run it on a real statement and share the masked skeleton. Section mappings (unknown headings, subtotals) and the date formats are decided from it before step 6 | `PdfSkeletonTest` | Planned |
 | 6 | Parser | Sections, totals, rows, continuations, $0.00 rows, dates, checks, summary cross-check, hints → `ParsedStatement` | `BankOfAmericaCheckingParserTest`, `BankOfAmericaDatesTest`, `BankOfAmericaAmountTest`, `BankOfAmericaFingerprintTest` | Planned |
@@ -794,12 +794,23 @@ Database tests use Testcontainers. Every fixture is synthetic, from `sample-data
   make a document count as having text (§4.1). A footer mark would push it over.
 - **The unrecognized layout** is a statement for the fictional APEX VISA card from `sample-data`.
 - **`SampleDataParserSelectionTest` also skips `pdf/`** (approved during step 2): it asserts every
-  sample file resolves to the OFX or CSV parser. Step 3 extends it for PDFs as planned.
+  sample file resolves to the OFX or CSV parser. The skip is temporary: step 3 removes it (see
+  step 3 requirements).
 - Tests: `SyntheticPdfTest` (77: byte-identical regeneration, manifest completeness, and per
   fixture golden lines, Flate-compressed variant, mark on the first and last line of every page,
   no real bank name in bytes, text or expectations; answer-key rows and balances for the six
   monthly PDFs and the glyph copy; edge-case expectations consistent and pointing at their printed
   lines). Backend tests 1003 → 1080; frontend 1.
+
+### Step 3 requirements (recorded at step 2 review)
+
+- **`SampleDataParserSelectionTest` drops the temporary `pdf/` skip** added in step 2.
+- It then checks **every PDF under `sample-data/pdf/` against `pdf-manifest.csv`**: a file whose
+  `parser` is a parser id is claimed by exactly that parser; a file whose `parser` is `none` becomes
+  an unparsed upload with the manifest's `unparsed_reason` (`UNRECOGNIZED_LAYOUT` or
+  `NO_TEXT_LAYER`). Non-PDF sample files keep their current OFX/CSV expectations, and no PDF is
+  ever offered to the CSV or OFX parser.
+- **Step 3 isn't done until that skip is gone.**
 
 Steps 4 and 5 come before the parser on purpose. The skeleton of a real statement is the cheapest
 way to correct the guesses in §3 before they are locked into fingerprints.
