@@ -1,8 +1,57 @@
 # Phase 3b plan: digital PDF statements
 
-Status: **approved**; steps 0–5 done, next: the step 5 checkpoint (your masked skeleton of a real
-statement), then step 6. Branch `v1`. Requirements as of
-`docs/requirements.md` v1.22.
+## Status: PAUSED after step 5
+
+Paused on 2026-10-13 to finish the proof of concept first (Phase 3c next, then Phases 4–7). PDF
+parsing resumes after Phase 7. Requirements ING-08, ING-11, ING-12 and the PDF part of SEC-10 are
+deferred until then (`docs/requirements.md` v1.23).
+
+**Done (steps 0–5):**
+
+| # | Step | Commit |
+|---|---|---|
+| 0 | Plan and scope | `1dee291` (plan follow-up `7b00446`) |
+| 1 | PDF text extraction layer | `3580a94` |
+| 2 | Synthetic PDF generator | `51eabb6` |
+| 3 | PDF routing and unparsed uploads | `d93f5f3` |
+| 4 | BoA line classifier and detection | `cab80ba` |
+| 5 | Masked skeleton debug CLI | `7568134` |
+
+**Not yet run:** the step 5 checkpoint. No masked skeleton of a real statement has been shared, so
+the layout guesses in §3 (date formats, section headings, subtotals, `- continued`, amount format)
+are still unconfirmed. Run it first when the phase resumes.
+
+**Remaining:** steps 6 (parser), 7 (import end to end), 8 (cross-cutting PDF security tests) and
+9 (docs). The plan below is unchanged and still approved.
+
+**Current behaviour while paused:**
+- A PDF recognized as the BoA checking layout is refused with 422 `parse-error` ("…recognized
+  (boa-checking), but reading it is not implemented yet; nothing was imported"). Preview gives the
+  same 422. Nothing is written; an open unparsed upload of the same file stays open.
+- Any other readable PDF becomes an unparsed upload (202 Accepted, `UNRECOGNIZED_LAYOUT` or
+  `NO_TEXT_LAYER`), which the 3c review queue lists.
+- Password-protected PDFs (422 `pdf-encrypted`), PDFs over the limits (422 `pdf-too-complex`) and
+  unreadable PDFs (422 `parse-error`) are refused as in step 3. The extraction limits and encryption
+  handling are tested (step 1); the cross-cutting PDF leak, no-temp-file and no-AI tests of step 8
+  are not written yet.
+- Nothing else is affected: OFX/QFX and CSV imports, reconciliation and every other endpoint behave
+  as at the end of Phase 3a.
+
+**Backlog (decide when resuming, not planned):**
+- **3d: generic PDF parser, no AI.** For layouts without a dedicated parser: find rows by pattern
+  and column position (a date at the left, a description, an amount right-aligned in a column),
+  plus the opening and closing balances. Accept the result only if opening + rows = closing;
+  otherwise the file stays an unparsed upload. Bank-agnostic, so it lives beside the dedicated
+  parsers as one more `PdfStatementParser`, below them in precedence.
+- **Phase 8 option: AI-generated layout template.** A local model (never Bedrock, SEC-09) proposes
+  a layout template (column positions, headings, balance labels) from a masked skeleton; plain Java
+  applies it, and the same reconciliation gate decides. The model never extracts amounts itself
+  (GR-01).
+
+---
+
+Original status: **approved**; steps 0–5 done, next: the step 5 checkpoint (your masked skeleton
+of a real statement), then step 6. Branch `v1`. Requirements as of `docs/requirements.md` v1.22.
 
 Scope: ING-08, ING-11, ING-12, ING-13, SEC-09, SEC-10 extended to PDFs, ING-02 for PDFs, and
 ING-10 run for the first time on printed section totals. First layout: the Bank of America

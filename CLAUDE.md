@@ -70,7 +70,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 3b: digital PDF parsers. Active plan: docs/plans/phase-3b.md — read it before starting a step.
+Phase 3c: transfer detection and review queue. Phase 3b (PDF) paused after step 5: docs/plans/phase-3b.md.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.
