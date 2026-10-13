@@ -46,7 +46,7 @@ class SchemaMigrationTest {
 
         assertThat(tables).contains(
                 "account", "statement", "category", "txn",
-                "categorization_rule", "transfer_link", "merchant_embedding", "csv_mapping");
+                "categorization_rule", "transfer_link", "transfer_rejection", "merchant_embedding", "csv_mapping");
     }
 
     @ParameterizedTest
@@ -72,6 +72,7 @@ class SchemaMigrationTest {
             "txn,                 uq_txn_fingerprint,                  u",
             "txn,                 ck_txn_external_id_length,           c",
             "txn,                 ck_txn_printed_amount_length,        c",
+            "txn,                 ck_txn_transfer_excluded,            c",
             "categorization_rule, ck_categorization_rule_match_type,   c",
             "categorization_rule, ck_categorization_rule_source,       c",
             "transfer_link,       uq_transfer_link_out,                u",
@@ -79,7 +80,13 @@ class SchemaMigrationTest {
             "transfer_link,       ck_transfer_link_distinct,           c",
             "transfer_link,       ck_transfer_link_method,             c",
             "transfer_link,       ck_transfer_link_status,             c",
-            "transfer_link,       ck_transfer_link_status_matches_in,  c",
+            "transfer_link,       ck_transfer_link_has_side,           c",
+            "transfer_link,       ck_transfer_link_status_sides,       c",
+            "transfer_link,       ck_transfer_link_user_confirmed,     c",
+            "transfer_rejection,  pk_transfer_rejection,               p",
+            "transfer_rejection,  fk_transfer_rejection_out,           f",
+            "transfer_rejection,  fk_transfer_rejection_in,            f",
+            "transfer_rejection,  ck_transfer_rejection_distinct,      c",
             "csv_mapping,         pk_csv_mapping,                      p",
             "csv_mapping,         fk_csv_mapping_account,              f",
             "csv_mapping,         ck_csv_mapping_amount_mode,          c",
@@ -171,7 +178,33 @@ class SchemaMigrationTest {
         assertThatThrownBy(() -> jdbc.update(
                 "INSERT INTO transfer_link (out_txn_id, method, status) VALUES (?, 'AUTO', 'MATCHED')", txn))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("ck_transfer_link_status_matches_in");
+                .hasMessageContaining("ck_transfer_link_status_sides");
+    }
+
+    @Test
+    void replacedTransferConstraintIsGone() {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM pg_constraint WHERE conname = 'ck_transfer_link_status_matches_in'", Integer.class);
+
+        assertThat(count).isZero();
+    }
+
+    @Test
+    void transferLinkTriggersExist() {
+        List<String> triggers = jdbc.queryForList(
+                "SELECT tgname FROM pg_trigger WHERE tgrelid = 'transfer_link'::regclass AND NOT tgisinternal",
+                String.class);
+
+        assertThat(triggers).containsExactlyInAnyOrder(
+                "trg_transfer_link_txn_once", "trg_transfer_link_sync_is_transfer");
+    }
+
+    @Test
+    void transferRejectionInSideIsIndexed() {
+        List<String> indexes = jdbc.queryForList(
+                "SELECT indexname FROM pg_indexes WHERE tablename = 'transfer_rejection'", String.class);
+
+        assertThat(indexes).contains("pk_transfer_rejection", "ix_transfer_rejection_in");
     }
 
     @Test

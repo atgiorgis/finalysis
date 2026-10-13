@@ -55,6 +55,7 @@ class TxnRepositoryTest {
         assertThat(loaded.getCategorySource()).isEqualTo(CategorySource.RULE);
         assertThat(loaded.getFingerprint()).isEqualTo("fp-groceries");
         assertThat(loaded.isTransfer()).isFalse();
+        assertThat(loaded.isTransferExcluded()).isFalse();
         assertThat(loaded.getCreatedAt()).isNotNull();
     }
 
@@ -70,7 +71,7 @@ class TxnRepositoryTest {
         txn.setCounterparty("J SAMPLE");
         txn.setSourceLineNumber(37);
         txn.setSourceLineText("04/11/26 CHECK 1042 1042 -75.00");
-        txn.setTransfer(true);
+        txn.setTransferExcluded(true);
         Long id = txns.saveAndFlush(txn).getId();
         entityManager.clear();
 
@@ -85,7 +86,7 @@ class TxnRepositoryTest {
         assertThat(loaded.getSourceLineNumber()).isEqualTo(37);
         assertThat(loaded.getSourceLineText())
                 .isEqualTo("04/11/26 CHECK 1042 1042 -75.00");
-        assertThat(loaded.isTransfer()).isTrue();
+        assertThat(loaded.isTransferExcluded()).isTrue();
     }
 
     @Test

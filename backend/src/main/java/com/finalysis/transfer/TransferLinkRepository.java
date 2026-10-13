@@ -1,4 +1,4 @@
-package com.finalysis.ingestion;
+package com.finalysis.transfer;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

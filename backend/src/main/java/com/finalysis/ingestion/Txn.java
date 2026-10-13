@@ -71,8 +71,13 @@ public class Txn {
     @Enumerated(EnumType.STRING)
     private CategorySource categorySource;
 
-    @Column(nullable = false)
+    /** True exactly when the txn is on a transfer link; kept by a database trigger (V9), never written here. */
+    @Column(nullable = false, insertable = false, updatable = false)
     private boolean isTransfer = false;
+
+    /** The user said this is not a transfer: detection never considers it (V9). */
+    @Column(nullable = false)
+    private boolean transferExcluded = false;
 
     @Column(nullable = false)
     private String fingerprint;
@@ -182,8 +187,12 @@ public class Txn {
         return isTransfer;
     }
 
-    public void setTransfer(boolean transfer) {
-        this.isTransfer = transfer;
+    public boolean isTransferExcluded() {
+        return transferExcluded;
+    }
+
+    public void setTransferExcluded(boolean transferExcluded) {
+        this.transferExcluded = transferExcluded;
     }
 
     public String getFingerprint() {
