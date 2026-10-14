@@ -1,8 +1,46 @@
 # Phase 3c plan: transfer detection and review queue
 
-Status: **approved** (2026-10-13, answers under "Decisions at approval" at the end); the
-standalone Phase 3b step 8 task (PDF security tests) and steps 1–6 are done; next: step 7. Branch `v1`.
-Requirements as of `docs/requirements.md` v1.29 (ING-13 resolution column, V11, step 6).
+Status: **complete** (2026-10-13). Approved the same day (answers under "Decisions at approval" at
+the end); every step is done, summary below. Branch `v1`, tag `phase-3c-done`. Requirements as of
+`docs/requirements.md` v1.30 (ING-05, ING-07, ING-13 Done).
+
+## Phase summary
+
+Delivered: bank-agnostic transfer detection that never reads descriptions (ING-05), with
+`txn.is_transfer` kept equal to "on a link" by a trigger (GR-04's basis); the user's transfer
+actions over the API; one-sided transfers, completion and possible matches; and one review queue
+across accounts (ING-07) with statement review, unparsed-upload read and dismissal (ING-13) and
+statement delete. Migrations V9, V10 and V11. No AI anywhere in 3c.
+
+| # | Step | Commit | Backend tests at the commit |
+|---|---|---|---|
+| 0 | Plan | `727fa4f` Phase 3c plan | 1,297 |
+| — | Phase 3b step 8 (PDF security tests, done first) | `f1980b5` | 1,302 (+5) |
+| 1 | Transfer schema (V9) | `6b847bb` | 1,348 (+46) |
+| 2 | Candidates and resolver | `f346528` | 1,428 (+80) |
+| 3 | Detection wiring and validation | `a2185c2` | 1,443 (+15) |
+| 4 | Transfer actions | `345479d` | 1,467 (+24) |
+| 5 | Review actions (V10) | `caa52f5` | 1,487 (+20) |
+| 6 | Review queue (V11) | `81a6c37` | 1,547 (+60) |
+| 7 | Docs, Postman, requirements | "Phase 3c complete: docs, Postman, requirements" | 1,548 (+1) |
+
+Counts are the backend's `./mvnw clean verify` totals, measured afterwards by checking out each
+commit; all passed with no failures or skips. The frontend suite is unchanged in 3c (1 test).
+
+**Carry-overs to Phase 4 (categorization):**
+- **CAT-08, suggested one-sided transfers.** A txn categorized into a Transfer-kind category with no
+  transfer link becomes a `SUGGESTED_ONE_SIDED_TRANSFER` item in the review queue: one more record of
+  the sealed `ReviewItem`, counted in `counts`, resolved with the existing actions (mark one-sided,
+  link by hand, not a transfer). An excluded txn is never suggested. Categorization only suggests;
+  it never creates a link or sets `is_transfer`, and core detection still never reads descriptions
+  (`PackageDependencyTest` keeps `transfer` free of `categorize`).
+- **Merchant cleaning** and description-based hints stay in categorization rules, which may be
+  bank-specific; the OFX `BANKACCTTO`/`CCACCTTO` last four (§2.6 backlog) would need a parser field.
+- **SEC-08 redaction** before any cloud call: transfer descriptions can hold masked account numbers
+  and names (README, known limitations).
+- **Phase 5** applies GR-04 in totals by excluding `is_transfer = true`; **Phase 6** chat tools stay
+  read-only and never call the transfer or review endpoints (SEC-03); **Phase 7** builds the review UI
+  on `GET /api/review-queue`.
 
 Scope: ING-05 (transfer detection and links), ING-07 (review-queue API), GR-04 (transfers are never
 spending or income, enforced through `txn.is_transfer`), plus the review actions on ING-13 unparsed
@@ -528,9 +566,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
 | 4 | Transfer actions | `TransferService`, `TransferController`, responses, problem types | `TransferApiTest` | Done: "Phase 3c step 4: transfer actions" (notes below) |
 | 5 | Review actions | V10; mark reviewed (+ re-queue on late arrival), unparsed GET/dismiss + 202 `Location`, statement delete + `StatementDeleted` | `StatementDeleteTest`, review/dismiss parts of `ReviewQueueApiTest` | Done: "Phase 3c step 5: review actions" (notes below) |
 | 6 | Review queue | V11 (upload resolution, fixing step 5's limitation); `review` package, `GET /api/review-queue`, competing candidates (§4.6), possible matches between one-sided links with join and dismiss (§4.5) | `ReviewQueueApiTest`, ArchUnit, leak test extensions | Done: "Phase 3c step 6: review queue" (notes below) |
-| 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Planned |
+| 7 | Docs | README (transfers, review queue, endpoints, errors, limitations), Postman folder, requirement statuses (ING-05, ING-07, ING-13 → Done), change log, phase summary here | Postman run against a reset database | Done: "Phase 3c complete: docs, Postman, requirements" (notes below) |
 
-### Known limitations (expected at the end of 3c)
+### Final known limitations
 
 - One-sided transfers count as spending until the user marks them (Phase 4 rules will help).
 - A coincidental equal-and-opposite pair within the window is linked (§2.7).
@@ -544,6 +582,9 @@ Existing folders get the new errors (`transfer-invalid`, `transfer-conflict`, `n
   counterpart arrives first, that pair is linked (AUTO, unconfirmed), and detection never reopens it.
   A second counterpart imported later puts the link in the review queue as a competing candidate
   (§4.6), where the user confirms it or unlinks it so it re-resolves.
+- Manual links need equal and opposite amounts: a wire with a fee deducted can't be linked until
+  split transactions (ACC-02).
+- PDF statements are still not imported (Phase 3b paused); unrecognized ones wait in the review queue.
 
 ### Step 2 notes
 
@@ -706,6 +747,32 @@ left open:
   clients". App configuration is unchanged.
 - **Leak test:** every transfer, review and queue error path (and detect, list, queue) runs on rows whose
   description carries markers; no problem carries a marker or either txn's amount.
+
+### Step 7 notes
+
+Docs and close-out only; no behaviour changes.
+- **Postman:** the plan's separate folder 8 became part of the runnable folders, so one newman run
+  covers it. **1. Setup** also imports the April checking statement into a second checking account
+  (the duplicate-account story of §7) and uploads an unrecognized PDF. **4. Statements, transfers and
+  review queue** (renamed from "4. Statements") reads the queue, then resolves every item through the
+  API: manual link, confirm, unlink and the rejection holding at detect, not-a-transfer and undo,
+  one-sided links, a possible match dismissed then joined, review, dismiss, delete with re-detection,
+  and a re-import that produces a competing candidate. **6. Errors** gains a "Transfers and review"
+  subfolder for `transfer-invalid`, `transfer-conflict`, `not-reviewable`, `already-resolved` and the
+  new 400s and 404s. The sample data stays April-only, so the plan's "18 links" check stays in
+  `TransferDetectionTest`. "7. Real-file test" also covers a second (card) account and stays out
+  of newman. Its two imports log status, counts and warnings only; the transfer and queue requests
+  log counts, account ids and dates only. ("Get real statement" and "List real statements" still log
+  the statement JSON, balances included, as before.)
+- **Newman** against a freshly reset dev database: folders 1–6, 101 requests, 260 assertions, 0 failures (2026-10-14). The dev database was left for the user to reset.
+- **Test pools:** `src/test/resources/application.properties` sets Hikari's maximum pool size to 3
+  for tests. Spring caches about ten contexts per run, each with its own pool, and ten pools of 10
+  used all of Postgres's 100 connections. Step 6's `max_connections=200` on the test container is
+  reverted: the pool size alone leaves room, and it's one setting instead of two.
+  `DatabaseConnectionTest` checks the setting is applied.
+- **README** also corrects what Phase 3a had written about PDFs (refused with 415) to the paused-3b
+  behaviour (unparsed uploads, `pdf-encrypted`, `pdf-too-complex`), since V8 and the review queue
+  depend on it.
 
 ---
 

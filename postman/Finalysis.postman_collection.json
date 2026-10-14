@@ -347,6 +347,142 @@
           ]
         },
         {
+          "name": "Create a second checking account (for the wrong-account story)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Northfield Checking (imported twice)\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Same last four as the real checking account: the April checking statement will be imported here by mistake, so every card payment gets two possible out sides (review queue), until the statement is deleted (folder 4)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('duplicateId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview checking April CSV (suggested mapping)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/northfield-checking_2026-04.csv"
+                }
+              ]
+            },
+            "description": "Writes nothing. Stores the suggestion in `duplicateMapping`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('no saved mapping yet', () => pm.expect(body.mappingStatus).to.eql('NONE'));",
+                  "pm.test('balance column found', () => pm.expect(body.suggestedMapping.mapping.balanceColumn).to.eql('Balance'));",
+                  "pm.collectionVariables.set('duplicateMapping', JSON.stringify(body.suggestedMapping.mapping));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save suggested checking CSV mapping",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{{duplicateMapping}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import checking April (CSV) into the second account",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/statements/northfield-checking_2026-04.csv"
+                },
+                {
+                  "key": "periodStart",
+                  "value": "2026-04-01",
+                  "type": "text"
+                },
+                {
+                  "key": "periodEnd",
+                  "value": "2026-04-30",
+                  "type": "text"
+                }
+              ]
+            },
+            "description": "A different file (CSV) than the checking account's OFX, so it is not `already-imported`. Imported before the cards, so their payments meet both checking copies in one detection run."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('the same 10 rows as the OFX', () => { pm.expect(body.parsed).to.eql(10); pm.expect(body.inserted).to.eql(10); });",
+                  "pm.test('the balance column reconciles it', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });",
+                  "pm.collectionVariables.set('duplicateStatementId', body.statementId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Import Apex Visa April (CSV, with balances)",
           "request": {
             "method": "POST",
@@ -422,9 +558,43 @@
               }
             }
           ]
+        },
+        {
+          "name": "Upload an unrecognized PDF → 202 unparsed upload",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/pdf/edge-cases/pdf-unrecognized-layout.pdf"
+                }
+              ]
+            },
+            "description": "No parser recognizes this layout, so nothing is imported: it is recorded for the review queue (ING-13)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const body = pm.response.json();",
+                  "pm.test('held for review', () => { pm.expect(body.state).to.eql('OPEN'); pm.expect(body.reason).to.eql('UNRECOGNIZED_LAYOUT'); });",
+                  "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/unparsed-uploads/' + body.id + '$')));",
+                  "pm.collectionVariables.set('uploadId', body.id);"
+                ]
+              }
+            }
+          ]
         }
       ],
-      "description": "Creates the four sample accounts, saves two CSV mappings (one by hand, one from the preview's suggestion) and imports four statements: one of each status. Strict: run against a freshly reset dev database."
+      "description": "Creates the four sample accounts and a second checking account, saves three CSV mappings (one by hand, two from the preview's suggestion), imports five statements (one of each status, plus the April checking statement again into the second account) and uploads a PDF no parser recognizes. Transfer detection runs after every import. Strict: run against a freshly reset dev database."
     },
     {
       "name": "2. Accounts",
@@ -444,7 +614,7 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const names = pm.response.json().map(a => a.name);",
-                  "pm.test('the four sample accounts', () => pm.expect(names.length).to.eql(4));",
+                  "pm.test('the four sample accounts and the second checking account', () => pm.expect(names.length).to.eql(5));",
                   "pm.test('Sorted by name', () => pm.expect(names).to.eql([...names].sort()));"
                 ]
               }
@@ -629,120 +799,903 @@
       ]
     },
     {
-      "name": "4. Statements",
+      "name": "4. Statements, transfers and review queue",
       "item": [
         {
-          "name": "Get statement",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/statements/{{statementId}}"
-          },
-          "event": [
+          "name": "Statements",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
-                  "pm.test('money is a string with two decimals', () => pm.expect(body.closingBalance).to.eql('4066.58'));",
-                  "pm.test('warnings stored with the statement', () => pm.expect(body.warnings.some(w => w.startsWith('balance unverified'))).to.be.true);"
-                ]
-              }
+              "name": "Get statement",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/{{statementId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                      "pm.test('money is a string with two decimals', () => pm.expect(body.closingBalance).to.eql('4066.58'));",
+                      "pm.test('warnings stored with the statement', () => pm.expect(body.warnings.some(w => w.startsWith('balance unverified'))).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get statement needing review",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/{{reviewStatementId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('NEEDS_REVIEW, FAILED', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
+                      "pm.test('no opening: it is set from April only when continuity passes', () => pm.expect(body.openingBalance).to.eql(null));",
+                      "pm.test('closing as printed', () => pm.expect(body.closingBalance).to.eql('8246.77'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List checking statements",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json();",
+                      "pm.test('April and May', () => pm.expect(items.length).to.eql(2));",
+                      "pm.test('newest period first', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i - 1].periodStart >= items[i].periodStart).to.be.true; });",
+                      "pm.test('counts and warning count, no warnings', () => { pm.expect(items[0]).to.have.property('parsedCount'); pm.expect(items[0]).to.have.property('transactionCount'); pm.expect(items[0]).to.have.property('warningCount'); pm.expect(items[0]).to.not.have.property('warnings'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List checking statements needing review",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=NEEDS_REVIEW"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json();",
+                      "pm.test('only the May statement', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].status).to.eql('NEEDS_REVIEW'); pm.expect(items[0].periodStart).to.eql('2026-05-01'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List reconciled Apex statements",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/statements?status=RECONCILED"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json();",
+                      "pm.test('the April CSV', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].parser).to.eql('csv'); pm.expect(items[0].transactionCount).to.eql(7); });"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
         {
-          "name": "Get statement needing review",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/statements/{{reviewStatementId}}"
-          },
-          "event": [
+          "name": "Review queue",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('NEEDS_REVIEW, FAILED', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
-                  "pm.test('no opening: it is set from April only when continuity passes', () => pm.expect(body.openingBalance).to.eql(null));",
-                  "pm.test('closing as printed', () => pm.expect(body.closingBalance).to.eql('8246.77'));"
-                ]
-              }
+              "name": "Review queue: everything waiting",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue",
+                "description": "Computed on every request. The two groups are the April card payments: each has an out side on both checking accounts, so detection left them for the user."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('one of each, two transfer groups', () => pm.expect(body.counts).to.eql({statements: 1, unparsedUploads: 1, transferCandidates: 2, competingCandidates: 0, possibleMatches: 0}));",
+                      "pm.test('newest first', () => { for (let i = 1; i < body.items.length; i++) pm.expect(body.items[i - 1].since >= body.items[i].since).to.be.true; });",
+                      "pm.test('kinds', () => pm.expect(body.items.map(i => i.kind)).to.eql(['UNPARSED_UPLOAD', 'TRANSFER_CANDIDATES', 'TRANSFER_CANDIDATES', 'STATEMENT']));",
+                      "const checking = Number(pm.collectionVariables.get('checkingId')), duplicate = Number(pm.collectionVariables.get('duplicateId'));",
+                      "const groups = body.items.filter(i => i.kind === 'TRANSFER_CANDIDATES');",
+                      "pm.test('each card payment has two possible out sides, one per checking copy', () => groups.forEach(g => {",
+                      "    pm.expect(g.txns.length).to.eql(3);",
+                      "    pm.expect(g.pairs.length).to.eql(2);",
+                      "    pm.expect(g.txns.filter(t => t.amount.startsWith('-')).map(t => t.accountId).sort()).to.eql([checking, duplicate].sort());",
+                      "    pm.expect(g.key).to.eql('txn-' + Math.min(...g.txns.map(t => t.id)));",
+                      "}));",
+                      "// Remember the txns of each group, by card.",
+                      "[['apex', Number(pm.collectionVariables.get('apexId'))], ['summit', Number(pm.collectionVariables.get('summitId'))]].forEach(([card, cardId]) => {",
+                      "    const g = groups.find(g => g.txns.some(t => t.accountId === cardId));",
+                      "    pm.collectionVariables.set(card + 'Out', g.txns.find(t => t.accountId === checking).id);",
+                      "    pm.collectionVariables.set(card + 'DupOut', g.txns.find(t => t.accountId === duplicate).id);",
+                      "    pm.collectionVariables.set(card + 'In', g.txns.find(t => t.accountId === cardId).id);",
+                      "});",
+                      "pm.test('the Apex payment: -842.17 out, +842.17 in, 3 days apart', () => {",
+                      "    const g = groups.find(g => g.txns.some(t => t.accountId === Number(pm.collectionVariables.get('apexId'))));",
+                      "    pm.expect(g.txns.map(t => t.amount).sort()).to.eql(['-842.17', '-842.17', '842.17']);",
+                      "    pm.expect(g.pairs.map(p => p.daysApart)).to.eql([3, 3]);",
+                      "});",
+                      "pm.test('the statement item carries its warnings', () => pm.expect(body.items[3].warnings.length).to.be.above(0));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: one kind, one account",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=TRANSFER_CANDIDATES&accountId={{apexId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('only the Apex group', () => { pm.expect(body.items.length).to.eql(1); pm.expect(body.items[0].kind).to.eql('TRANSFER_CANDIDATES'); });",
+                      "pm.test('counts follow the account, not the kind', () => pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 1, competingCandidates: 0, possibleMatches: 0}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run detection: the groups stay for review",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/detect"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('nothing guessed', () => pm.expect(pm.response.json()).to.eql({linksCreated: 0, unmatchedCompleted: 0, groupsForReview: 2}));"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
         {
-          "name": "List checking statements",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements"
-          },
-          "event": [
+          "name": "Transfers",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json();",
-                  "pm.test('April and May', () => pm.expect(items.length).to.eql(2));",
-                  "pm.test('newest period first', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i - 1].periodStart >= items[i].periodStart).to.be.true; });",
-                  "pm.test('counts and warning count, no warnings', () => { pm.expect(items[0]).to.have.property('parsedCount'); pm.expect(items[0]).to.have.property('transactionCount'); pm.expect(items[0]).to.have.property('warningCount'); pm.expect(items[0]).to.not.have.property('warnings'); });"
-                ]
-              }
+              "name": "Link the Apex payment by hand",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": {{apexOut}}, \"inTxnId\": {{apexIn}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Picks the real checking account's row for the review group."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('MATCHED, USER, confirmed', () => { pm.expect(body.status).to.eql('MATCHED'); pm.expect(body.method).to.eql('USER'); pm.expect(body.confirmedAt).to.be.a('string'); });",
+                      "pm.test('checking to the card, 3 days apart', () => { pm.expect(body.out.accountId).to.eql(Number(pm.collectionVariables.get('checkingId'))); pm.expect(body.in.accountId).to.eql(Number(pm.collectionVariables.get('apexId'))); pm.expect(body.daysApart).to.eql(3); });",
+                      "pm.test('money as strings', () => { pm.expect(body.out.amount).to.eql('-842.17'); pm.expect(body.in.amount).to.eql('842.17'); });",
+                      "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/transfers/' + body.id + '$')));",
+                      "pm.collectionVariables.set('apexLinkId', body.id);",
+                      "pm.collectionVariables.set('apexConfirmedAt', body.confirmedAt);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get the link",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/{{apexLinkId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('both sides', () => { pm.expect(body.out.id).to.eql(Number(pm.collectionVariables.get('apexOut'))); pm.expect(body.in.id).to.eql(Number(pm.collectionVariables.get('apexIn'))); });",
+                      "pm.test('side fields', () => pm.expect(Object.keys(body.out).sort()).to.eql(['accountId', 'accountName', 'accountType', 'amount', 'id', 'postDate', 'rawDescription', 'sourceSection', 'statementId', 'txnDate']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Confirm it again: idempotent",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/{{apexLinkId}}/confirm"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('first confirmation kept', () => pm.expect(pm.response.json().confirmedAt).to.eql(pm.collectionVariables.get('apexConfirmedAt')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List the Apex card's confirmed links",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers?accountId={{apexId}}&confirmed=true"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('just this link', () => pm.expect(pm.response.json().map(l => l.id)).to.eql([Number(pm.collectionVariables.get('apexLinkId'))]));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unlink it: the pair is rejected",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/{{apexLinkId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run detection: the other copy is linked, never the rejected pair",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/detect"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('one link; the Summit group still waits', () => pm.expect(pm.response.json()).to.eql({linksCreated: 1, unmatchedCompleted: 0, groupsForReview: 1}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List the Apex card's links",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers?accountId={{apexId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const links = pm.response.json();",
+                      "pm.test('one AUTO, unconfirmed link', () => { pm.expect(links.length).to.eql(1); pm.expect(links[0].method).to.eql('AUTO'); pm.expect(links[0].confirmedAt).to.eql(null); });",
+                      "pm.test('to the second account\\'s row', () => pm.expect(links[0].out.id).to.eql(Number(pm.collectionVariables.get('apexDupOut'))));",
+                      "pm.collectionVariables.set('apexAutoLinkId', links[0].id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mark that row not a transfer",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{apexDupOut}}/not-transfer"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('excluded, link removed', () => pm.expect(pm.response.json()).to.eql({txnId: Number(pm.collectionVariables.get('apexDupOut')), transferExcluded: true, removedLinkId: Number(pm.collectionVariables.get('apexAutoLinkId'))}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Undo not-a-transfer",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{apexDupOut}}/not-transfer"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run detection: both Apex pairs are rejected now",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/detect"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('nothing new', () => pm.expect(pm.response.json()).to.eql({linksCreated: 0, unmatchedCompleted: 0, groupsForReview: 1}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Link the Apex payment by hand again: the explicit action wins",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": {{apexOut}}, \"inTxnId\": {{apexIn}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created despite the rejection', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('apexLinkId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
         {
-          "name": "List checking statements needing review",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements?status=NEEDS_REVIEW"
-          },
-          "event": [
+          "name": "One-sided transfers and possible matches",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json();",
-                  "pm.test('only the May statement', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].status).to.eql('NEEDS_REVIEW'); pm.expect(items[0].periodStart).to.eql('2026-05-01'); });"
-                ]
-              }
+              "name": "Mark the second account's Summit payment one-sided",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": {{summitDupOut}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('UNMATCHED, USER, out side only', () => { pm.expect(body.status).to.eql('UNMATCHED'); pm.expect(body.method).to.eql('USER'); pm.expect(body.in).to.eql(null); pm.expect(body.daysApart).to.eql(null); });",
+                      "pm.collectionVariables.set('oneSidedOutLinkId', body.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mark the Summit card's payment one-sided",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"inTxnId\": {{summitIn}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "pm.test('in side only', () => pm.expect(pm.response.json().out).to.eql(null));",
+                      "pm.collectionVariables.set('oneSidedInLinkId', pm.response.json().id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: a possible match",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=POSSIBLE_MATCH",
+                "description": "Two user decisions that fit together: detection never joins them, the user does."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('one possible match, no groups left', () => { pm.expect(body.counts.possibleMatches).to.eql(1); pm.expect(body.counts.transferCandidates).to.eql(0); });",
+                      "const item = body.items[0];",
+                      "pm.test('the two one-sided links', () => { pm.expect(item.outLinkId).to.eql(Number(pm.collectionVariables.get('oneSidedOutLinkId'))); pm.expect(item.inLinkId).to.eql(Number(pm.collectionVariables.get('oneSidedInLinkId'))); pm.expect(item.key).to.eql(`links-${item.outLinkId}-${item.inLinkId}`); });",
+                      "pm.test('2 days apart', () => pm.expect(item.daysApart).to.eql(2));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss the possible match",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/join/dismiss",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outLinkId\": {{oneSidedOutLinkId}}, \"inLinkId\": {{oneSidedInLinkId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: dismissed",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=POSSIBLE_MATCH"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('gone; both one-sided links stay', () => pm.expect(pm.response.json().counts.possibleMatches).to.eql(0));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Join them anyway: one confirmed link",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/join",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outLinkId\": {{oneSidedOutLinkId}}, \"inLinkId\": {{oneSidedInLinkId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Replaces the two one-sided links. A join after a dismissal still works: the explicit action wins. (It joins the wrong account's row on purpose: deleting that statement below takes the link with it.)"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('MATCHED, USER, confirmed', () => { pm.expect(body.status).to.eql('MATCHED'); pm.expect(body.method).to.eql('USER'); pm.expect(body.confirmedAt).to.be.a('string'); });",
+                      "pm.test('the two txns', () => { pm.expect(body.out.id).to.eql(Number(pm.collectionVariables.get('summitDupOut'))); pm.expect(body.in.id).to.eql(Number(pm.collectionVariables.get('summitIn'))); });",
+                      "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/transfers/' + body.id + '$')));"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
         {
-          "name": "List reconciled Apex statements",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": "{{baseUrl}}/api/accounts/{{apexId}}/statements?status=RECONCILED"
-          },
-          "event": [
+          "name": "Review, dismiss and delete",
+          "item": [
             {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const items = pm.response.json();",
-                  "pm.test('the April CSV', () => { pm.expect(items.length).to.eql(1); pm.expect(items[0].parser).to.eql('csv'); pm.expect(items[0].transactionCount).to.eql(7); });"
-                ]
-              }
+              "name": "Accept the statement needing review",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/{{reviewStatementId}}/review"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('status and warnings kept', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); pm.expect(body.warnings.length).to.be.above(0); });",
+                      "pm.test('reviewedAt set', () => pm.expect(body.reviewedAt).to.be.a('string'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss the unparsed upload",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/unparsed-uploads/{{uploadId}}/dismiss"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('DISMISSED, no statement', () => { pm.expect(body.state).to.eql('DISMISSED'); pm.expect(body.resolvedAt).to.be.a('string'); pm.expect(body.resolvedStatementId).to.eql(null); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get the unparsed upload",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/unparsed-uploads/{{uploadId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('still DISMISSED', () => pm.expect(pm.response.json().state).to.eql('DISMISSED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete the statement imported into the wrong account",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/{{duplicateStatementId}}",
+                "description": "Any status can be deleted. Its rows and every transfer link on them go; detection runs again afterwards."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('its rows and the joined link go', () => pm.expect(pm.response.json()).to.eql({statementId: Number(pm.collectionVariables.get('duplicateStatementId')), transactionsDeleted: 10, transferLinksRemoved: 1}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Detection re-ran: the Summit payment links to the right account",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers?accountId={{summitId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const links = pm.response.json();",
+                      "pm.test('one AUTO, unconfirmed link', () => { pm.expect(links.length).to.eql(1); pm.expect(links[0].method).to.eql('AUTO'); pm.expect(links[0].confirmedAt).to.eql(null); });",
+                      "pm.test('from the real checking account', () => { pm.expect(links[0].out.id).to.eql(Number(pm.collectionVariables.get('summitOut'))); pm.expect(links[0].in.id).to.eql(Number(pm.collectionVariables.get('summitIn'))); });",
+                      "pm.collectionVariables.set('summitLinkId', links[0].id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: nothing left",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('empty', () => { pm.expect(body.items).to.eql([]); pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 0, possibleMatches: 0}); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import the same CSV into the second account again",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/northfield-checking_2026-04.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-04-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-04-30",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created: the file hash went with the statement', () => pm.response.to.have.status(201));",
+                      "pm.collectionVariables.set('duplicateStatementId', pm.response.json().statementId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: a competing candidate",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue",
+                "description": "Detection never changes a link: the new row competes for the unconfirmed Summit link instead. The confirmed, hand-made Apex link isn't listed."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('only a competing candidate', () => pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 1, possibleMatches: 0}));",
+                      "const item = body.items[0];",
+                      "pm.test('the unconfirmed Summit link', () => { pm.expect(item.kind).to.eql('COMPETING_CANDIDATE'); pm.expect(item.linkId).to.eql(Number(pm.collectionVariables.get('summitLinkId'))); pm.expect(item.key).to.eql('link-' + item.linkId); });",
+                      "pm.test('the second account\\'s row competes for it', () => { pm.expect(item.competitors.map(t => t.accountId)).to.eql([Number(pm.collectionVariables.get('duplicateId'))]); pm.expect(item.pairs.length).to.eql(2); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Confirm the Summit link",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/{{summitLinkId}}/confirm"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('confirmed', () => pm.expect(pm.response.json().confirmedAt).to.be.a('string'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: empty again",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('nothing waiting', () => pm.expect(pm.response.json().items).to.eql([]));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List all links",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const links = pm.response.json();",
+                      "pm.test('the two April card payments, both confirmed', () => { pm.expect(links.length).to.eql(2); links.forEach(l => { pm.expect(l.status).to.eql('MATCHED'); pm.expect(l.confirmedAt).to.be.a('string'); }); });",
+                      "pm.test('newest effective date first: Summit, then Apex', () => pm.expect(links.map(l => l.id)).to.eql([Number(pm.collectionVariables.get('summitLinkId')), Number(pm.collectionVariables.get('apexLinkId'))]));"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         }
-      ]
+      ],
+      "description": "Reads statements, then works through the review queue that Setup left: two card payments with two possible out sides each (the April checking statement was also imported into a second account), a statement needing review and an unparsed upload. Each item is resolved with the API, then the wrong statement is deleted and imported again."
     },
     {
       "name": "5. Categories",
@@ -1509,13 +2462,374 @@
               ]
             }
           ]
+        },
+        {
+          "name": "Transfers and review",
+          "item": [
+            {
+              "name": "Transfer with neither side → 422 transfer-invalid",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('type transfer-invalid', () => pm.expect(body.type).to.eql('urn:finalysis:problem:transfer-invalid'));",
+                      "pm.test('detail names the rule', () => pm.expect(body.detail).to.eql('Give outTxnId, inTxnId, or both'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Money in as the out side → 422 transfer-invalid",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": {{apexIn}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('type transfer-invalid', () => pm.expect(body.type).to.eql('urn:finalysis:problem:transfer-invalid'));",
+                      "pm.test('detail names the rule', () => pm.expect(body.detail).to.eql('The out side must be money out (a negative amount)'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Txn already on a link → 409 transfer-conflict",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": {{apexOut}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type transfer-conflict', () => pm.expect(body.type).to.eql('urn:finalysis:problem:transfer-conflict'));",
+                      "pm.test('names the link', () => pm.expect(body.linkId).to.eql(Number(pm.collectionVariables.get('apexLinkId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Transfer with an unknown txn → 404",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outTxnId\": 999999}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Join a link that isn't one-sided → 409 transfer-conflict",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/join",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outLinkId\": {{apexLinkId}}, \"inLinkId\": {{apexLinkId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type transfer-conflict', () => pm.expect(body.type).to.eql('urn:finalysis:problem:transfer-conflict'));",
+                      "pm.test('detail names the rule', () => pm.expect(body.detail).to.eql('Transfer link ' + pm.collectionVariables.get('apexLinkId') + ' is not a one-sided link with an out side'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Join without inLinkId → 400",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/join",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outLinkId\": {{apexLinkId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();",
+                      "pm.test('names the field', () => pm.expect(body.errors.map(e => e.field)).to.eql(['inLinkId']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss a join of unknown links → 404",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/join/dismiss",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"outLinkId\": 999999, \"inLinkId\": 999998}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown transfer link → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown transfer status filter → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers?status=PENDING"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown review-queue kind → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=EVERYTHING"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review a statement that doesn't need it → 409 not-reviewable",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/{{statementId}}/review"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type not-reviewable', () => pm.expect(body.type).to.eql('urn:finalysis:problem:not-reviewable'));",
+                      "pm.test('detail names the rule', () => pm.expect(body.detail).to.eql('Statement ' + pm.collectionVariables.get('statementId') + ' is IMPORTED; only NEEDS_REVIEW statements can be reviewed'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss an upload again → 409 already-resolved",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/unparsed-uploads/{{uploadId}}/dismiss"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type already-resolved', () => pm.expect(body.type).to.eql('urn:finalysis:problem:already-resolved'));",
+                      "pm.test('detail names the rule', () => pm.expect(body.detail).to.eql('Unparsed upload ' + pm.collectionVariables.get('uploadId') + ' is already DISMISSED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown unparsed upload → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/unparsed-uploads/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete an unknown statement → 404",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/statements/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));",
+                      "const body = pm.response.json();"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
         }
       ],
       "description": "Every request here is refused, and nothing is written (except the confirmed mapping change, which is restored)."
     },
     {
       "name": "7. Real-file test",
-      "description": "Manual testing with your own statement: select the file in the body of **Preview real file** and **Import real file**, then run the requests one by one, top to bottom. Nothing is asserted: results are logged to the Postman console (View → Show Postman Console). Edit the account in **Create real account** first. Not part of the newman run. Never commit real statements or paste their contents into this collection.",
+      "description": "Manual testing with your own statements: select the file in the body of **Preview real file** and **Import real file** (and, for transfers between two of your accounts, **Preview real card file** and **Import real card file**), then run the requests one by one, top to bottom. Nothing is asserted: results are logged to the Postman console (View → Show Postman Console). Edit the accounts in **Create real account** and **Create real card account** first. The transfer and review-queue requests log counts, account ids and dates only, never amounts or descriptions. Not part of the newman run. Never commit real statements or paste their contents into this collection.",
       "item": [
         {
           "name": "Create real account",
@@ -1661,10 +2975,9 @@
                   "    console.log(JSON.stringify(body, null, 2));",
                   "    return;",
                   "}",
-                  "console.log('status =', body.status, '| balanceCheck =', body.balanceCheck, '| parser =', body.parser);",
-                  "console.log('period =', body.periodStart, 'to', body.periodEnd);",
+                  "// Status, counts and warnings only: balances are amounts and stay out of the console.",
+                  "console.log('status =', body.status);",
                   "console.log('parsed =', body.parsed, '| inserted =', body.inserted, '| duplicates =', body.duplicates);",
-                  "console.log('opening =', body.openingBalance, '| closing =', body.closingBalance);",
                   "(body.warnings || []).forEach(warning => console.log('warning:', warning));",
                   "pm.collectionVariables.set('realStatementUrl', pm.response.headers.get('Location'));",
                   "console.log('realStatementUrl =', pm.collectionVariables.get('realStatementUrl'));"
@@ -1709,6 +3022,246 @@
                 "exec": [
                   "console.log('List real statements:', pm.response.code);",
                   "console.log(JSON.stringify(pm.response.json(), null, 2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create real card account",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Real Card\",\n  \"institution\": \"Card Issuer\",\n  \"type\": \"CREDIT_CARD\",\n  \"lastFour\": \"0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The second real account, for transfers between your own accounts. Edit the last four before sending."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Create real card account:', pm.response.code);",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('realCardAccountId', pm.response.json().id);",
+                  "    console.log('realCardAccountId =', pm.collectionVariables.get('realCardAccountId'));",
+                  "} else {",
+                  "    console.log(pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview real card file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realCardAccountId}}/imports/preview",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select your card file under Body → form-data → file. Writes nothing. For a CSV, stores the PUT csv-mapping body built from the suggestion in `realCardMappingBody`. Logs only the mapping status, skip rows, header names and confidences."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Preview real card file:', pm.response.code);",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const body = pm.response.json();",
+                  "console.log('mappingStatus =', body.mappingStatus);",
+                  "console.log('skipRows =', body.skipRows);",
+                  "console.log('headers =', JSON.stringify(body.headers));",
+                  "const suggestion = body.suggestedMapping;",
+                  "if (!suggestion) {",
+                  "    console.log('no suggested mapping (not a CSV, or the saved mapping matches)');",
+                  "    return;",
+                  "}",
+                  "Object.entries(suggestion.confidence).forEach(([field, confidence]) => console.log(`  ${field}: ${confidence}`));",
+                  "const mapping = Object.assign({}, suggestion.mapping, { headers: body.headers });",
+                  "pm.collectionVariables.set('realCardMappingBody', JSON.stringify(mapping));",
+                  "console.log('realCardMappingBody saved');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Save real card mapping",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realCardAccountId}}/csv-mapping",
+            "body": {
+              "mode": "raw",
+              "raw": "{{realCardMappingBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "CSV only. Sends the preview's suggestion; edit the `realCardMappingBody` collection variable first if a field is GUESSED or MISSING."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Save real card mapping:', pm.response.code);",
+                  "console.log(JSON.stringify(pm.response.json(), null, 2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import real card file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts/{{realCardAccountId}}/imports",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select the same card file under Body → form-data → file. Detection runs after the import commits."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Import real card file:', pm.response.code);",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code !== 201) {",
+                  "    console.log(JSON.stringify(body, null, 2));",
+                  "    return;",
+                  "}",
+                  "// Status, counts and warnings only: balances are amounts and stay out of the console.",
+                  "console.log('status =', body.status);",
+                  "console.log('parsed =', body.parsed, '| inserted =', body.inserted, '| duplicates =', body.duplicates);",
+                  "(body.warnings || []).forEach(warning => console.log('warning:', warning));",
+                  "pm.collectionVariables.set('realCardStatementUrl', pm.response.headers.get('Location'));",
+                  "console.log('realCardStatementUrl =', pm.collectionVariables.get('realCardStatementUrl'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run transfer detection",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/transfers/detect",
+            "description": "Runs detection across every account now. Each import already runs it; this shows the counts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Run transfer detection:', pm.response.code);",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const body = pm.response.json();",
+                  "console.log('linksCreated =', body.linksCreated, '| unmatchedCompleted =', body.unmatchedCompleted,",
+                  "    '| groupsForReview =', body.groupsForReview);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List real transfers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/transfers",
+            "description": "Every transfer link. Logs counts by status and confirmation, and per link only the two account ids and effective dates: never amounts or descriptions."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('List real transfers:', pm.response.code);",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const links = pm.response.json();",
+                  "const counts = {};",
+                  "links.forEach(link => {",
+                  "    const key = `${link.status} ${link.confirmedAt ? 'confirmed' : 'unconfirmed'}`;",
+                  "    counts[key] = (counts[key] || 0) + 1;",
+                  "});",
+                  "console.log('links =', links.length, JSON.stringify(counts));",
+                  "// Account ids and dates only: the sides also carry amounts and descriptions, which stay out of the console.",
+                  "const side = txn => txn ? `account ${txn.accountId} on ${txn.postDate || txn.txnDate}` : '(none)';",
+                  "links.forEach(link => console.log(`link ${link.id} ${link.status} ${link.method}: out ${side(link.out)} -> in ${side(link.in)}`));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Real review queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/review-queue",
+            "description": "The review queue across accounts. Logs only the counts by kind; the items carry descriptions and amounts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "console.log('Real review queue:', pm.response.code);",
+                  "if (pm.response.code !== 200) {",
+                  "    console.log(pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const counts = pm.response.json().counts;",
+                  "Object.entries(counts).forEach(([kind, count]) => console.log(`  ${kind}: ${count}`));"
                 ]
               }
             }
@@ -1760,6 +3313,82 @@
     },
     {
       "key": "realStatementUrl",
+      "value": ""
+    },
+    {
+      "key": "realCardAccountId",
+      "value": ""
+    },
+    {
+      "key": "realCardMappingBody",
+      "value": ""
+    },
+    {
+      "key": "realCardStatementUrl",
+      "value": ""
+    },
+    {
+      "key": "duplicateId",
+      "value": ""
+    },
+    {
+      "key": "duplicateMapping",
+      "value": ""
+    },
+    {
+      "key": "duplicateStatementId",
+      "value": ""
+    },
+    {
+      "key": "uploadId",
+      "value": ""
+    },
+    {
+      "key": "apexOut",
+      "value": ""
+    },
+    {
+      "key": "apexDupOut",
+      "value": ""
+    },
+    {
+      "key": "apexIn",
+      "value": ""
+    },
+    {
+      "key": "summitOut",
+      "value": ""
+    },
+    {
+      "key": "summitDupOut",
+      "value": ""
+    },
+    {
+      "key": "summitIn",
+      "value": ""
+    },
+    {
+      "key": "apexLinkId",
+      "value": ""
+    },
+    {
+      "key": "apexConfirmedAt",
+      "value": ""
+    },
+    {
+      "key": "apexAutoLinkId",
+      "value": ""
+    },
+    {
+      "key": "oneSidedOutLinkId",
+      "value": ""
+    },
+    {
+      "key": "oneSidedInLinkId",
+      "value": ""
+    },
+    {
+      "key": "summitLinkId",
       "value": ""
     }
   ]
