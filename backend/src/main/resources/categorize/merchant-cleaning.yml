@@ -13,7 +13,7 @@
 #
 # Tune these patterns against the answer key and the dev set only, never the holdout (§15).
 
-version: 1
+version: 2
 
 # Removed from the start of the description, repeatedly, until none applies.
 # Payment processors, and channel words that precede the merchant.
@@ -28,6 +28,7 @@ stripPrefixes:
 
 # Removed wherever they occur (replaced by a space), in this order.
 stripPatterns:
+  - '[A-Z0-9._%+-]+@[A-Z0-9.-]+'             # an email address, whole (later steps would split it into words)
   - '\bINDN:.*$'                            # ACH individual name: everything after it
   - '\bCO ID:\s*\S+'                        # ACH company id
   - '\bID:\s*\S+'                           # ACH and payroll ids
@@ -40,6 +41,28 @@ stripPatterns:
 locationStates: [AL, AK, AZ, AR, CA, CO, CT, DE, DC, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD,
                  MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, PR, RI, SC,
                  SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
+
+# Outbound only (Redactor, §5.2): after an outbound copy drops a trailing state code and one city token,
+# it also drops one of these if it is then the last token (SHOP SAN DIEGO CA -> SHOP). Never used by
+# cleaning, so stored merchants don't depend on it.
+locationCityPrefixes: [SAN, SANTA, LOS, LAS, NEW, FORT, ST, SAINT, EL, PALM, LAKE, MOUNT, MT, PORT, NORTH,
+                       SOUTH, EAST, WEST]
+
+# Outbound only (Redactor, SEC-08, §5.2): identifiers removed from every string headed for a model,
+# wherever they occur. Separate from stripPatterns on purpose, so a cleaning change can't weaken what
+# leaves the machine; RedactorTest and the golden file catch a change here. Each also matches after
+# cleaning has dropped its ':' or '#' (the merchant keeps only A-Z 0-9 & ' . / -). Generic identifiers
+# (masked and long numbers, last fours, emails, URLs, phones, account and institution names) are
+# removed in Java and need no entry.
+redactPatterns:
+  - '\bINDN\b.*$'                           # ACH individual name: everything after it
+  - '\bCO ID\b:?\s*\S+'                     # ACH company id
+  - '\bID:\s*\S+'                           # ACH and payroll ids
+  - '\bID\s+(?=\S*\d)\S+'                   # the same with the colon gone: only before a token with a digit
+  - '\bCONF(IRMATION)?\s*#\s*\S+'           # confirmation numbers
+  - '\bCONF(IRMATION)?\b\s*(?=\S*\d)\S+'     # the same with the # gone
+  - '\b(REF|TRACE)\s*#\s*\S+'               # reference and trace numbers
+  - '\b(REF|TRACE)\b\s*(?=\S*\d)\S+'         # the same with the # gone
 
 # Person-to-person payments. The first pattern that matches decides: the merchant becomes the
 # `service` group, and the `name` group (optional) goes to txn.counterparty, which stays local only.

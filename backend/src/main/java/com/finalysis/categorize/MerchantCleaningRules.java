@@ -29,24 +29,30 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * @param stripPatterns replaced by a space wherever they match, in order
  * @param locationStates two-letter codes that end a "store number, city, state" tail
  * @param personToPerson patterns with a {@code service} group and an optional {@code name} group
+ * @param locationCityPrefixes outbound only ({@link Redactor}): first words of multi-word city names
+ * @param redactPatterns       outbound only ({@link Redactor}): identifiers removed wherever they match
  */
 public record MerchantCleaningRules(int version, String fingerprint, List<Pattern> stripPrefixes,
                                     List<Pattern> stripPatterns, Set<String> locationStates,
-                                    List<Pattern> personToPerson) {
+                                    List<Pattern> personToPerson, Set<String> locationCityPrefixes,
+                                    List<Pattern> redactPatterns) {
 
     public static final String RESOURCE = "categorize/merchant-cleaning.yml";
 
     static final int MAX_PATTERN_LENGTH = 200;
     static final int MAX_ENTRIES = 200;
-    private static final Set<String> KEYS =
-            Set.of("version", "stripPrefixes", "stripPatterns", "locationStates", "personToPerson");
+    private static final Set<String> KEYS = Set.of("version", "stripPrefixes", "stripPatterns", "locationStates",
+            "personToPerson", "locationCityPrefixes", "redactPatterns");
     private static final Pattern STATE = Pattern.compile("[A-Z]{2}");
+    private static final Pattern CITY_PREFIX = Pattern.compile("[A-Z]{1,12}");
 
     public MerchantCleaningRules {
         stripPrefixes = List.copyOf(stripPrefixes);
         stripPatterns = List.copyOf(stripPatterns);
         locationStates = Set.copyOf(locationStates);
         personToPerson = List.copyOf(personToPerson);
+        locationCityPrefixes = Set.copyOf(locationCityPrefixes);
+        redactPatterns = List.copyOf(redactPatterns);
     }
 
     /** Loads the rules shipped with the app. */
@@ -97,8 +103,17 @@ public record MerchantCleaningRules(int version, String fingerprint, List<Patter
             }
             states.add(stateList.get(i));
         }
+        Set<String> cityPrefixes = new LinkedHashSet<>();
+        List<String> prefixList = strings(map, "locationCityPrefixes");
+        for (int i = 0; i < prefixList.size(); i++) {
+            if (!CITY_PREFIX.matcher(prefixList.get(i)).matches()) {
+                throw invalid("locationCityPrefixes[" + i + "] must be 1 to 12 upper-case letters");
+            }
+            cityPrefixes.add(prefixList.get(i));
+        }
+        List<Pattern> redactions = patterns(map, "redactPatterns");
         return new MerchantCleaningRules(version, version + ":" + sha256(yaml).substring(0, 16), prefixes, strips,
-                states, p2p);
+                states, p2p, cityPrefixes, redactions);
     }
 
     private static List<Pattern> patterns(Map<?, ?> map, String key) {

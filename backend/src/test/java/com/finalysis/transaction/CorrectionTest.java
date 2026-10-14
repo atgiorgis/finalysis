@@ -306,10 +306,14 @@ class CorrectionTest {
 
         mockMvc.perform(delete("/api/transactions/{id}/category", cafe))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(cafe))
-                .andExpect(jsonPath("$.categorySource").value("RULE"))
-                .andExpect(jsonPath("$.ruleId").value(ruleId))
-                .andExpect(jsonPath("$.category.name").value("Groceries"));
+                .andExpect(jsonPath("$.ruleAction").value("NONE")) // the same body as a full undo, no rule touched
+                .andExpect(jsonPath("$.ruleId").isEmpty())
+                .andExpect(jsonPath("$.otherTxnsUpdated").value(0))
+                .andExpect(jsonPath("$.txn.id").value(cafe))
+                .andExpect(jsonPath("$.txn.categorySource").value("RULE"))
+                .andExpect(jsonPath("$.txn.ruleId").value(ruleId))
+                .andExpect(jsonPath("$.txn.category.name").value("Groceries"));
+        assertThat(userRules()).hasSize(1);
 
         // Full undo: delete the correction rule too; both txns go back to the seed.
         mockMvc.perform(delete("/api/categorization/rules/{id}", ruleId)).andExpect(status().isNoContent());
@@ -328,13 +332,14 @@ class CorrectionTest {
         correct(unknown, "Shopping", false).andExpect(status().isOk());
 
         mockMvc.perform(delete("/api/transactions/{id}/category", cafe))
-                .andExpect(jsonPath("$.categorySource").value("RULE"))
-                .andExpect(jsonPath("$.category.name").value("Dining"));
+                .andExpect(jsonPath("$.txn.categorySource").value("RULE"))
+                .andExpect(jsonPath("$.txn.category.name").value("Dining"));
         mockMvc.perform(delete("/api/transactions/{id}/category", unknown))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.category").isEmpty())
-                .andExpect(jsonPath("$.categorySource").isEmpty())
-                .andExpect(jsonPath("$.categorizedAt").isEmpty());
+                .andExpect(jsonPath("$.ruleAction").value("NONE"))
+                .andExpect(jsonPath("$.txn.category").isEmpty())
+                .andExpect(jsonPath("$.txn.categorySource").isEmpty())
+                .andExpect(jsonPath("$.txn.categorizedAt").isEmpty());
     }
 
     @Test
@@ -346,9 +351,10 @@ class CorrectionTest {
         Object before = jdbc.queryForObject("SELECT categorized_at FROM txn WHERE id = ?", Object.class, cafe);
 
         mockMvc.perform(delete("/api/transactions/{id}/category", cafe))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.categorySource").value("RULE"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.txn.categorySource").value("RULE"));
         mockMvc.perform(delete("/api/transactions/{id}/category", ai))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.categorySource").value("AI"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.txn.categorySource").value("AI"))
+                .andExpect(jsonPath("$.ruleAction").value("NONE"));
 
         assertThat(jdbc.queryForObject("SELECT categorized_at FROM txn WHERE id = ?", Object.class, cafe))
                 .isEqualTo(before);
@@ -386,7 +392,7 @@ class CorrectionTest {
         assertThat(rows.category(refund)).isEqualTo(refundCategory);
     }
 
-    /** The default undo leaves the rule; a full undo afterwards still finds and deletes it. */
+    /** The default undo (here {@code removeRule=false}) leaves the rule; a full undo afterwards deletes it. */
     @Test
     void aFullUndoFinishesATwoCallUndo() throws Exception {
         long cafe = rows.txn("SQ *BLUE BEAN CAFE 4412", "-6.25");
@@ -394,8 +400,10 @@ class CorrectionTest {
         long ruleId = json(correct(cafe, "Groceries")).get("ruleId").asLong();
         mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "false"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(cafe)) // the default body: the txn
-                .andExpect(jsonPath("$.ruleId").value(ruleId));
+                .andExpect(jsonPath("$.ruleAction").value("NONE"))
+                .andExpect(jsonPath("$.ruleId").isEmpty())
+                .andExpect(jsonPath("$.otherTxnsUpdated").value(0))
+                .andExpect(jsonPath("$.txn.ruleId").value(ruleId));
 
         mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "true"))
                 .andExpect(status().isOk())

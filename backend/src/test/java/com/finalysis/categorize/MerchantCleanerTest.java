@@ -46,6 +46,7 @@ class MerchantCleanerTest {
             BRIGHTWAY LOGISTICS PAYROLL PPD ID: 4419920113       | BRIGHTWAY LOGISTICS PAYROLL | -
             ZELLE PAYMENT TO JANE Q SAMPLE CONF# 8XK2P1          | ZELLE                       | JANE Q SAMPLE
             ACH DEBIT ACME INS CO ID:9900112233 INDN:SAMPLE JANE | ACH DEBIT ACME INS          | -
+            PAYPAL *NOVA BOOKS JANE.SAMPLE@EXAMPLE.COM          | NOVA BOOKS                  | -
             =HYPERLINK("x")                                      | HYPERLINK X                 | -
             #12345 0099                                          | -                           | -
             """)

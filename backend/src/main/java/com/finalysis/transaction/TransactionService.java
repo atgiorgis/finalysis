@@ -40,15 +40,10 @@ public class TransactionService {
         return CorrectionResponse.of(get(id), correction);
     }
 
+    /** Clears a USER category; with {@code removeRule} also deletes the merchant's correction rule (full undo). */
     @Transactional
-    public TransactionResponse clearCorrection(long id) {
-        corrections.clear(id);
-        return get(id);
-    }
-
-    @Transactional
-    public UndoResponse undoCorrection(long id) {
-        Undo undo = corrections.undo(id);
+    public UndoResponse clearCorrection(long id, boolean removeRule) {
+        Undo undo = removeRule ? corrections.undo(id) : corrections.clear(id);
         return UndoResponse.of(get(id), undo);
     }
 }

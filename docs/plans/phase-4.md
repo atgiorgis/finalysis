@@ -617,7 +617,7 @@ No change to `merchant_embedding`; `model` already exists (DAT-06).
 | `GET /api/transactions?accountId=&categoryId=&uncategorized=&source=RULE\|AI\|USER&isTransfer=&from=&to=&merchant=&page=&size=` | List txns, newest `txn_date` first, paged (size ≤ 200) | 200 `{items, page, size, total}` | 400 bad filter |
 | `GET /api/transactions/{id}` | One txn | 200 | 404 |
 | `PUT /api/transactions/{id}/category` `{categoryId, applyToMerchant}` | Correction: USER on this txn. With `applyToMerchant` (default true) and a merchant, upserts a USER_CORRECTION rule (MERCHANT, EXACT, direction of the txn) and re-runs rules for that merchant | 200 `{txn, ruleId, otherTxnsUpdated}` | 404, 422 `category-invalid` |
-| `DELETE /api/transactions/{id}/category?removeRule=` | Clear a USER category. The txn is eligible again; rules run for it now. With `removeRule=true` (added in step 3, see its notes), also delete the merchant's correction rule and re-run the merchant's rules | 200 txn; with `removeRule=true` 200 `{txn, ruleId, ruleAction, otherTxnsUpdated}` | 404, 400 bad `removeRule` |
+| `DELETE /api/transactions/{id}/category?removeRule=` | Clear a USER category. The txn is eligible again; rules run for it now. With `removeRule=true` (added in step 3, see its notes), also delete the merchant's correction rule and re-run the merchant's rules | 200 `{txn, ruleId, ruleAction, otherTxnsUpdated}` either way; without `removeRule=true`, `NONE`, null, 0 | 404, 400 bad `removeRule` |
 | `GET /api/categorization/rules?source=&active=&categoryId=` | List rules in winning order | 200 | 400 |
 | `POST /api/categorization/rules` | Create a USER rule, applied at once | 201 + `Location`, with `matchCount`, `shadowedBy` | 422 `rule-invalid`, `category-invalid` |
 | `PATCH /api/categorization/rules/{id}` | User rules: any field. Seeds: `active` only | 200 | 404, 409 `rule-seeded`, 422 |
@@ -768,7 +768,7 @@ moves before AI wiring. Reasons:
 | 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Done: "Phase 4 step 2: rules engine" (notes below) |
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Done: "Phase 4 step 3: corrections and transaction API" (notes below) |
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Done: "Phase 4 step 4: CAT-08 suggested one-sided transfers" (notes below) |
-| 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
+| 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Done: "Phase 4 step 5: redaction and prompt safety" (notes below) |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Planned |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Planned |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
@@ -1028,18 +1028,21 @@ Choices the plan left open, or refined:
   committed with step 4).
   - `DELETE /api/transactions/{id}/category` (no param, or `removeRule=false`) is unchanged: it clears the
     USER category and runs the rules for that txn, as §9.2 says. The correction rule still exists, so the
-    txn becomes RULE with the corrected category. Body: the txn.
+    txn becomes RULE with the corrected category.
   - `DELETE …/category?removeRule=true` clears the USER category, deletes the active rule with the
     correction's key (merchant, `EXACT`, the txn's direction) **only if its source is `USER_CORRECTION`**,
     then re-runs the rules for the merchant's txns, which go back to the seeds, another rule, or
     uncategorized. A rule made through the rules API (`USER`) with the same key is kept, and seeds are never
-    user rules, so they can't be found. Body: `{txn, ruleId, ruleAction, otherTxnsUpdated}`, `ruleAction`
-    `REMOVED` (with the deleted rule's id) or `NONE` (`ruleId` null).
+    user rules, so they can't be found.
+  - **One body for both** (changed at step 4 review, committed with step 5):
+    `{txn, ruleId, ruleAction, otherTxnsUpdated}`. `ruleAction` is `REMOVED` with the deleted rule's id, or
+    `NONE` with `ruleId` null. Without `removeRule=true` it is always `NONE`, null and 0. The txn is under
+    `txn`, no longer the whole body; nothing outside the tests used the old body (Postman and the README don't
+    cover this endpoint yet, step 10).
   - `otherTxnsUpdated` counts the merchant's other txns whose category changed, in either direction (the
     pass covers the whole merchant; only the rule's direction changes in practice).
   - The rule is deleted even if the txn's category was already cleared, so a two-call undo started with the
     default can be finished with `removeRule=true`. A txn without a merchant just has its category cleared.
-  - The two bodies differ by the parameter (the handler returns `Object`), so the default stays as it was.
   - Deleting the rule is a delete, like `DELETE /api/categorization/rules/{id}`, not a deactivation.
   - Same locking as a correction: the categorization lock, the txn row `FOR UPDATE`, one transaction.
 - **Clearing a category that isn't USER** is a no-op: 200 with the txn unchanged, no rules pass. It's an
@@ -1114,8 +1117,11 @@ Choices the plan left open:
 - **Postman folder 4** asserts exact `counts` and item lists, and the sample imports now produce
   suggestions (the checking statements' online transfers to a savings account that isn't imported). Those
   checks now leave out the new kind and count (`_.omit`, a kind filter, items found by kind rather than by
-  index). Folder 8 tests CAT-08 itself in step 10. Not run with newman in this step: that needs a reset dev
-  database.
+  index). Folder 8 tests CAT-08 itself in step 10. Run with newman at the step 4 review (committed with
+  step 5): folders 1–6 against a throwaway `pgvector/pgvector:pg17` container on port 55432 and the backend
+  jar on port 18080, run from a directory without `.env`, the dev database untouched: 102 requests, 264
+  assertions, 0 failures (2026-10-14). The queue ended with 7 suggested one-sided transfers, so the new
+  filters were exercised. The container was removed afterwards.
 - **Tests:** `ReviewQueueApiTest` +5. A rule-categorized and a USER txn are listed with every field,
   newest first, by account, with counts that ignore `kind`; expense and uncategorized txns aren't. Linked,
   excluded, grouped and competing txns aren't suggested, while the group and the competing candidate are
@@ -1123,6 +1129,92 @@ Choices the plan left open:
   undoing the exclusion lists it again, and a manual link or a correction removes it.
   `reviewAndDismissRemoveTheirItems` now looks only at statement and upload items, since its imported
   statement has unlinked online transfers. The transfer scramble tests are unchanged and green.
+
+### Step 5 notes
+
+Built as planned, pure Java: no Spring AI dependency (the pom still has only the BOM in
+`dependencyManagement`; `./mvnw dependency:tree` lists no `spring-ai` artifact). New in `categorize`:
+`Redactor`, `OutboundPayloadGuard`, `RedactionContext` and `RedactionContextQuery`,
+`CategorizationRequest` and `CategorizationResponse` (§4.2's records, nested), `CategorizationPromptBuilder`,
+and the resource `categorize/categorization-system-prompt.txt` (§4.3's text, reviewed again in step 7). No
+migration. Backend tests 1,850 → 1,977 (+127, most of them parameterized rows); frontend 1. This commit also carries the step 4 review changes:
+one `DELETE …/category` body (step 3 notes, "Undo") and the newman run (step 4 notes).
+
+**Redactor (§5.2).** It runs on a copy of each merchant headed for a model, never on stored data:
+1. the YAML's `redactPatterns`;
+2. emails, URLs with a path, phones;
+3. masked numbers;
+4. registered last fours;
+5. every 4+ digit run;
+6. account and institution names as whole phrases, longest first;
+7. the location tail.
+
+It normalizes its input as descriptions are, removes and never rewrites (a word with an unexpected
+character stays, for the guard to refuse), and returns null when nothing is left. The location rule is
+the settled one, step for step. Every row of the §5.2 location table is a test, with §5.5's near misses
+(no code: unchanged; one prefix only; a prefix only after a city; a lone code kept). `NAME ST` in the plan
+means any code, and `ST` isn't one, so the test uses `NAME CO` → `NAME`.
+
+**Guard (§5.3)**, exactly the plan's allowlist for merchants and amounts. It answers yes or no, and the
+builder drops what fails. "It isn't a txn's counterparty" is applied as "contains no counterparty as a whole
+phrase", so `PAY JANE Q SAMPLE` is refused too. Stricter, and it fails closed: a merchant that merely
+contains a one-word counterparty is not sent.
+
+**Builder.** For each candidate (merchant, counterparty, amount, examples):
+- a person-to-person payment is skipped (`PERSON_TO_PERSON`): a counterparty, or a merchant matching a
+  `personToPerson` pattern;
+- the merchant is redacted and checked; it and the amount must pass, or the candidate is skipped
+  (`REDACTION_BLOCKED`);
+- examples go through the same redact-and-check call, must have an allowed category and not be
+  person-to-person; at most 3 are kept;
+- keys `i1`… are given to sent items only, and `candidateByKey` maps them back.
+
+The JSON has exactly §4.2's fields. `<` and `>` are written as unicode escapes after Jackson's escaping,
+so no string can close the tag, even one that got past the guard (tested with a guard that allows
+everything). Amounts are the stored value with scale 2 (`setScale(2, UNNECESSARY)`, formatting only).
+More than two decimals is not a stored amount, so it is not sent.
+
+Choices beyond the plan:
+- **The identifier patterns are data**, in a new YAML key `redactPatterns`, separate from cleaning's
+  `stripPatterns`. `MerchantCleanerSourceTest` forbids words such as `INDN` and `CONF` in `categorize`
+  literals, and redaction reuses no cleaning pattern, so a cleaning change still can't weaken it. The
+  generic rules (emails, URLs, phones, masked and long numbers, last fours, account phrases, location) are
+  in Java.
+- **The patterns also match after cleaning dropped their punctuation** (`INDN SAMPLE JANE`,
+  `ID 4419X`, `CONF 8XK2P1`, `REF Z9Z9`). Cleaning keeps only `A–Z 0–9 & ' . / -`, so a stored merchant
+  has no `:` or `#`. Without a digit after `ID`, `CONF`, `REF` or `TRACE` nothing goes
+  (`ACME ID CARD` is kept).
+- **Cleaning drops a whole email (DAT-04).** Found while writing the payload test: cleaning turned the
+  `@` into a space, so `PAYPAL *NOVA BOOKS JANE.SAMPLE@EXAMPLE.COM` was stored as
+  `NOVA BOOKS JANE.SAMPLE EXAMPLE.COM`. The redactor's email rule then couldn't see it, and the guard
+  allows `.`, so the name would have gone out. A new first `stripPatterns` entry removes the address
+  before anything splits it. Stored merchants change only for descriptions with an email (none in the
+  sample data). The YAML is now `version: 2`, so every txn is re-cleaned once at the next start, as the plan
+  expected for `locationCityPrefixes`.
+- **Category names are checked too** (1–64 of letters, digits, spaces, `& ' . / ( ) -`). They are seeded,
+  but nothing unchecked reaches the prompt; one that fails stops the whole request.
+- **The context** (last fours, account and institution names, counterparties) is read from the database
+  by `RedactionContextQuery` before a run; step 7 calls it.
+- **Golden file:** `src/test/resources/categorize/answer-key-redacted.txt`, every answer-key merchant and
+  its outbound form, with an empty context. Regenerate with `-Dfinalysis.updateGolden=true` and review the
+  diff. Today every answer-key merchant passes unchanged: cleaning already removed the identifiers, and no
+  answer-key merchant ends in a state code.
+- **Payload test, step 5's form:** `OutboundPayloadTest` runs synthetic marker descriptions (an ACH name
+  and company id, a masked account, a Zelle payee, an email, the account's own name, institution and last
+  four, a payroll id) through the real cleaner, redactor, guard and builder. It compares the user message,
+  parsed, with a hand-written document, then checks that no marker or raw description appears in the system
+  prompt or the user message. Step 7 repeats it on what a capturing fake model receives from the pipeline.
+- **Tests:**
+  - `RedactorTest`: every §5.2 row as a hit and a near miss, the location table, the YAML-driven lists,
+    and person-to-person.
+  - `OutboundPayloadGuardTest`: the allowlist, 1,000 random merchants with planted digit runs, emails and
+    masked numbers (none survives; more than 400 still go out, so it isn't vacuous), and the golden file.
+  - `PromptBuilderTest`: the tags, the resource, escaping, skips and keys, examples redacted like items,
+    and a bad category.
+  - `OutboundPayloadTest`: the hand-written document, the markers, and the location strip on a copy only.
+  - `RedactionStoredDataTest` (Testcontainers): the context from the database; building a prompt changes
+    no stored value (`STARBUCKS ARLINGTON VA` stays).
+  - Also: `MerchantCleaningRulesTest` (new keys) and `MerchantCleanerTest` (the email row).
 
 ### Requirement mapping
 

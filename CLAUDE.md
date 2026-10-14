@@ -70,7 +70,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 4: categorization, plan approved: docs/plans/phase-4.md (steps 1, 1b, 2, 3 and 4 done, step 5 next). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 4: categorization, plan approved: docs/plans/phase-4.md (steps 1 to 5 done, with 1b; step 6 next). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

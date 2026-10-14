@@ -4,8 +4,9 @@ import com.finalysis.categorize.CorrectionService.RuleAction;
 import com.finalysis.categorize.CorrectionService.Undo;
 
 /**
- * Body of a full undo ({@code DELETE /api/transactions/{id}/category?removeRule=true}): the txn after the rules
- * ran, the correction rule that was deleted, and how many of the merchant's other txns changed (see {@link Undo}).
+ * Body of {@code DELETE /api/transactions/{id}/category}, with or without {@code removeRule}: the txn after the
+ * rules ran, the correction rule that was deleted, and how many of the merchant's other txns changed (see
+ * {@link Undo}). Without {@code removeRule=true} no rule is touched: {@code NONE}, null, 0.
  *
  * @param ruleId     null when no rule was deleted
  * @param ruleAction {@code REMOVED} or {@code NONE}

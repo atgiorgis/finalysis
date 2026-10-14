@@ -21,6 +21,8 @@ class MerchantCleaningRulesTest {
         assertThat(rules.stripPatterns()).isNotEmpty();
         assertThat(rules.personToPerson()).isNotEmpty();
         assertThat(rules.locationStates()).hasSize(52).contains("VA", "DC", "PR");
+        assertThat(rules.locationCityPrefixes()).hasSize(18).contains("SAN", "SAINT", "MT");
+        assertThat(rules.redactPatterns()).hasSize(8);
     }
 
     @Test
@@ -58,6 +60,8 @@ class MerchantCleaningRulesTest {
             'version: 1\npersonToPerson: [''^ZELLE'']'              | personToPerson[0] needs a
             'version: 1\npersonToPerson: [''^(?<service>Z)(?<who>.*)'']' | personToPerson[0] needs a
             'version: 1\nlocationStates: [Virginia]'                | locationStates[0] must be two upper-case letters
+            'version: 1\nlocationCityPrefixes: [san]'               | locationCityPrefixes[0] must be 1 to 12 upper-case letters
+            'version: 1\nredactPatterns: [''(x'']'                  | redactPatterns[0] is not a valid regular expression
             'version: 1\nlocationStates: [va]'                      | locationStates[0] must be two upper-case letters
             """)
     void anInvalidFileIsRefusedWithTheEntryNamed(String yaml, String problem) {

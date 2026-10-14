@@ -55,12 +55,12 @@ public class TransactionController {
     }
 
     /**
-     * Clears a USER category; the rules run for the txn now. Any other category is left as it is, and the body is
-     * the txn. With {@code removeRule=true} it is a full undo: the merchant's correction rule is deleted too, and
-     * the body is an {@link UndoResponse}.
+     * Clears a USER category; the rules run for the txn now. Any other category is left as it is. With
+     * {@code removeRule=true} it is a full undo: the merchant's correction rule is deleted too. Same body either way.
      */
     @DeleteMapping("/{id:\\d+}/category")
-    public Object clearCorrection(@PathVariable long id, @RequestParam(defaultValue = "false") boolean removeRule) {
-        return removeRule ? transactions.undoCorrection(id) : transactions.clearCorrection(id);
+    public UndoResponse clearCorrection(@PathVariable long id,
+                                        @RequestParam(defaultValue = "false") boolean removeRule) {
+        return transactions.clearCorrection(id, removeRule);
     }
 }

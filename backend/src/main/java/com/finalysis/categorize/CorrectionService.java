@@ -67,7 +67,8 @@ public class CorrectionService {
                              int otherTxnsKeptUser, int otherTxnsKeptOtherRule) {}
 
     /**
-     * What a full undo changed.
+     * What clearing a category changed: {@link #clear} never touches a rule or another txn ({@code NONE}, null, 0);
+     * {@link #undo} may delete the correction rule.
      *
      * @param ruleId           the deleted correction rule, null when none was deleted ({@code ruleAction} {@code NONE})
      * @param otherTxnsUpdated the merchant's other txns whose category changed
@@ -132,10 +133,10 @@ public class CorrectionService {
     /**
      * Clears a {@code USER} category: the txn is eligible again and the rules run for it now, so a correction
      * rule for its merchant, if one remains, categorizes it as {@code RULE}. A txn the user didn't categorize is
-     * left as it is.
+     * left as it is. No rule is touched and no other txn changes.
      */
     @Transactional
-    public void clear(long txnId) {
+    public Undo clear(long txnId) {
         lock.acquire();
         txn(txnId);
         int cleared = jdbc.update("""
@@ -145,6 +146,7 @@ public class CorrectionService {
         if (cleared > 0) {
             categorization.categorizeTxn(txnId);
         }
+        return new Undo(txnId, null, RuleAction.NONE, 0);
     }
 
     /**
