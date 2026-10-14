@@ -942,6 +942,15 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
   April checking statement below a four-line summary and a blank line (`csv-preamble.csv`), and a
   checking export below a five-record summary block, whose first row is a balance-only opening
   row (`csv-summary-preamble-balance-row.csv`). Not in the answer key.
+- `categorization/` — two sets of `description,amount,expected_category,name` rows for measuring
+  categorization accuracy (CAT-05), separate from the statements: `dev.csv` (148 rows) and
+  `holdout.csv` (150 rows). Fictional businesses only, in realistic formats (processor prefixes,
+  store numbers, ACH and person-to-person lines, refunds); `name` is the distinctive merchant name,
+  and the two sets' names share no word. **The holdout is frozen and used only for reporting:**
+  seed rules, cleaning patterns and prompts are tuned against the answer key and `dev.csv` only,
+  never against the holdout. Its SHA-256 is pinned by `CategorizationSetsTest` (and recorded in
+  `docs/plans/phase-4.md`), so any edit fails the build. The same author wrote the holdout and the
+  seed rules, so this is procedural protection backed by tests, not a blind evaluation.
 
 **Planted anomalies**
 

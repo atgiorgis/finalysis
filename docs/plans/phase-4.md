@@ -406,6 +406,20 @@ fixture whose descriptions carry markers: an account number, a masked last four,
 | Email addresses, URLs with a path, phone patterns | removed |
 | Person-to-person: a txn with a `counterparty`, or matching a P2P pattern, is **never sent**; it's categorized by the seeded Zelle/Venmo rules or stays uncategorized | `ZELLE PAYMENT TO JANE Q SAMPLE` → not sent |
 | Account names and institution names, as whole phrases (they may contain a person's name) | `JOINT CHECKING - SAMPLE` → removed |
+| **Location tail (outbound only, added after step 1):** when the last token is a valid US state code and at least one token remains before the city, drop the state code and the city tokens before it | `STARBUCKS ARLINGTON VA` → `STARBUCKS` |
+
+**Location: aggressive outbound, conservative local.** The local merchant keeps step 1's conservative
+rule (a location tail is cut only when a store number anchors it, step 1 notes), so
+`STARBUCKS ARLINGTON VA` stays as it is in `txn.merchant`, rules and the UI. The outbound copy strips
+location aggressively: whenever the last token is a state code (from the cleaning YAML's
+`locationStates`) and at least one token would remain, the `Redactor` drops the state code and the
+city tokens before it. The city's length can't be known, so the rule may remove part of the merchant
+name; **over-stripping is acceptable for outbound data**, since it costs some AI accuracy, never
+privacy. Codes that are words are not special-cased (`METRO POWER CO` → `METRO`, accepted). It runs
+only on the strings headed for a model (chat and embedding), never on stored data, and before the
+guard (§5.3). *Open for step 5:* how many tokens count as the city (one, or more for multi-word cities
+such as `SAN DIEGO CA`), and what a two-token `NAME ST` gives. Both required cases above hold either
+way; the answer is settled with the step 5 review.
 
 ### 5.3 Guard (allowlist, fails closed)
 
@@ -436,6 +450,9 @@ An amount must match `-?\d{1,10}\.\d{2}`. Example merchants pass the same check,
 
 - Every row of §5.2, both as a hit and a near miss: `ID` inside a word (`IDAHO`) is kept; three
   digits are kept.
+- Outbound location: `STARBUCKS ARLINGTON VA` → `STARBUCKS`; `METRO POWER CO` → `METRO` (over-stripping
+  accepted); the rule never empties a merchant (a lone `VA` is left to the other rules and the guard);
+  the stored `txn.merchant` of the same txn stays `STARBUCKS ARLINGTON VA` (Testcontainers).
 - Property test: 1,000 random merchants with planted 4+ digit runs, emails and masked numbers. None
   survives redaction plus the guard.
 - Answer-key regression: every sample merchant's redacted form is listed in a golden file, so a change
@@ -718,11 +735,11 @@ moves before AI wiring. Reasons:
 |---|---|---|---|---|
 | 0 | Plan | This file; CLAUDE.md current phase; requirements v1.32 with the decisions (§15) | — | Done: "Phase 4 plan" |
 | 1 | Merchant cleaning | V13; `MerchantCleaner`, `merchant-cleaning.yml`, `MerchantCleaningRules`; P2P counterparty; `CategorizationListener` (stage 1, after detection); startup backfill and version re-clean; P2P/ACH edge-case fixture | `MerchantCleanerTest` (the §2.3 table, every answer-key description, idempotence, 64-char cut, NFKC/bidi), `MerchantCleanerSourceTest`, `MerchantBackfillTest` (Testcontainers: null → filled, version bump re-cleans, raw description and fingerprint untouched) | Done: "Phase 4 step 1: merchant cleaning" (notes below) |
-| 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Planned |
+| 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Done: "Phase 4 step 1b: dev and holdout sets" (notes below) |
 | 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Planned |
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Planned |
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Planned |
-| 5 | Redaction + prompt safety | `Redactor`, `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest`, `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
+| 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Planned |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Planned |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
@@ -803,6 +820,59 @@ left open, or refined:
   rules, a cleaning failure leaves the import and logs no statement data, listener order), plus 3
   constraint checks in `SchemaMigrationTest` and 2 sample-file cases in `SampleDataParserSelectionTest`
   (the fixture's two files are claimed by the CSV parser).
+
+### Step 1b notes
+
+Built before any seed rule exists (no V14/V15 yet). `tools/SampleDataGenerator.java` writes
+`sample-data/categorization/dev.csv` (148 rows) and `holdout.csv` (150 rows); every other sample file
+is byte-identical. Backend tests 1,696 → 1,706 (+10: `CategorizationSetsTest` 7, `CategorySeedTest` 1, two new parameterized cases in `SampleDataParserSelectionTest`); frontend 1.
+
+**Holdout SHA-256 (frozen):**
+`2020780ea41e1c1916247250e5eaab847ab97a523635dae9a070ab6f6cee92af`. `CategorizationSetsTest` pins
+the same value; any edit to the file fails the build. Never update the pinned value to make a change
+pass: a wrong holdout row stays wrong and is noted in the step 9 report instead.
+
+**Never tune against the holdout.** Seed rules (step 2), cleaning patterns and prompts (steps 5, 7)
+are tuned against the answer key, the merchant fixture and `dev.csv` only. Nobody reads the holdout's
+per-row results while tuning; the step 9 reports give its accuracy and coverage, per category. The
+same author wrote the holdout and will write the seeds, so this is procedural protection backed by
+tests, not a blind evaluation (also said in the file's header and the README).
+
+Choices the plan left open, or refined:
+- **A fourth column, `name`:** `description,amount,expected_category,name`. `name` is the row's
+  distinctive merchant name (`HARBOR LIGHT` in `HARBOR LIGHT DENTAL`), empty for generic lines
+  (transfers, interest, fees, cash, person-to-person, rewards). It makes "disjoint name pools"
+  checkable now and gives step 2's `SeedRulesTest` the holdout names its "no seed pattern contains
+  a holdout merchant name" check needs, without parsing descriptions.
+- **Fictional and generic only:** no national brands, unlike the answer key. A brand in both sets
+  would let a seed tuned on dev score on the holdout by name. Places are generic town names with
+  real state codes (including word-like `CO`, `IN`, `OR`); person names are placeholders
+  (`JANE Q SAMPLE`, `PAT M TESTER`).
+- **What disjoint means:** no word of 3+ letters is shared between dev and holdout names, and no
+  holdout name word appears in the answer key or the merchant fixture (rules may be tuned on both).
+  Generic words (`CAFE`, `MARKET`, `PHARMACY`) live outside `name` and may repeat across sets, as
+  real data does; generic lines are phrased differently in each set (`INTEREST PAYMENT` in dev,
+  `INTEREST PAID` and `DIVIDEND EARNED` in the holdout).
+- **Formats:** each business cycles through its channel's formats: card (`CHECKCARD MMDD`,
+  `POS DEBIT`, `PURCHASE AUTHORIZED ON MM/DD … CARD nnnn`, `DEBIT CARD PURCHASE`, store numbers with
+  and without a location tail, mixed case), dining (`SQ *`, `TST*`), online (`.COM`,
+  `NAME*REF 888-555-01nn ST`, `PAYPAL *`, `RECURRING PMT`), bills (`WEB PMT`, `ACH DEBIT … CO ID:
+  INDN:`, `ONLINE PMT CKF…POS`, `AUTOPAY`) and payroll (`PPD ID:`, `DIRECT DEP`, `DIR DEP`).
+  Some names carry no category word (`GADGETRY`, `CORVINA`), so rules alone can't cover everything.
+- **Every seeded category appears in both sets** (19, checked by `CategorySeedTest` against the
+  database rather than in `CategorizationSetsTest`, which stays a plain unit test so the frozen
+  check runs even without Docker). Refunds and rewards are `Refunds & Rebates`; Zelle, Venmo and
+  Cash App rows are Person-to-Person Out or In by sign.
+- **No randomness:** numbers come from a per-set 64-bit counter, not the generator's seeded
+  `Random`, so the existing files are untouched. Descriptions contain no comma, quote or line
+  break (no wrapped lines), so a plain split reads them.
+- **Comment header:** each file starts with `#` lines (purpose; the holdout's says FROZEN). Readers
+  skip lines starting with `#`; no description starts with one.
+- **Access guard:** `CategorizationSetsTest` also fails if `src/main` mentions the holdout outside a
+  comment, or if a test other than itself, `CategorySeedTest` and the step 9 reports
+  (`CategorizationAccuracyTest`, `CategorizationLiveEvalIT`) does.
+- **Existing tests updated:** `SampleDataParserSelectionTest` counts 62 text sample files (was 60);
+  the CSV parser claims both sets, like the answer key.
 
 ### Requirement mapping
 

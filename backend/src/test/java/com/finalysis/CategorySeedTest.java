@@ -18,6 +18,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class CategorySeedTest {
 
     private static final Path ANSWER_KEY = Path.of("..", "sample-data", "answer-key.csv");
+    private static final Path DEV_SET = Path.of("..", "sample-data", "categorization", "dev.csv");
+    private static final Path HOLDOUT_SET = Path.of("..", "sample-data", "categorization", "holdout.csv");
 
     /** General-purpose categories seeded beyond the answer key (Internal Transfer and Credit Card Payment merged into Transfer). */
     private static final Set<String> GENERAL_PURPOSE = Set.of(
@@ -41,6 +43,18 @@ class CategorySeedTest {
         extra.removeAll(answerKeyCategories());
 
         assertThat(extra).containsExactlyInAnyOrderElementsOf(GENERAL_PURPOSE);
+    }
+
+    /** The CAT-05 dev and holdout sets (step 1b) use only seeded categories, and each exercises all of them. */
+    @Test
+    void theCategorizationSetsUseEverySeededCategory() throws IOException {
+        for (Path set : List.of(DEV_SET, HOLDOUT_SET)) {
+            Set<String> categories = new TreeSet<>();
+            for (String line : Files.readAllLines(set).stream().filter(l -> !l.startsWith("#")).skip(1).toList()) {
+                categories.add(line.split(",", -1)[2]);
+            }
+            assertThat(categories).as(set.toString()).containsExactlyInAnyOrderElementsOf(seededNames());
+        }
     }
 
     @Test

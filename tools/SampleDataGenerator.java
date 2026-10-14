@@ -130,9 +130,11 @@ public class SampleDataGenerator {
         writeCsvEdgeCases(checking, summit);
         writeTransferEdgeCases();
         writeMerchantEdgeCases();
+        writeCategorizationSets();
 
         System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
-                + "%d transfer edge-case statements, 1 merchant edge-case statement, %d transactions to %s/%n",
+                + "%d transfer edge-case statements, 1 merchant edge-case statement, categorization dev and holdout sets, "
+                + "%d transactions to %s/%n",
                 statements.size(), ofxFiles, OFX_EDGE_CASES + CSV_EDGE_CASES, TRANSFER_EDGE_CASE_STATEMENTS,
                 txns.size(), out);
     }
@@ -779,6 +781,403 @@ public class SampleDataGenerator {
         write(MERCHANTS_DIR + "merchants-expected.csv", String.join("\n", expected) + "\n");
     }
 
+    // ---------------------------------------------------------------- categorization dev and holdout sets
+
+    static final String CATEGORIZATION_DIR = "categorization/";
+    static final String CATEGORIZATION_HEADER = "description,amount,expected_category,name";
+
+    /** How a business writes its descriptions; each channel has its own formats. */
+    enum Channel { CARD, DINING, ONLINE, BILL, PAYROLL }
+
+    /**
+     * A fictional business in one set's name pool. {@code name} is the distinctive part, which never
+     * shares a word with the other set's pool; {@code kind} is a generic word such as DELI or DENTAL,
+     * or empty. {@code cents} is a typical amount, always positive; the sign comes from the channel.
+     */
+    record Business(String name, String kind, String category, Channel channel, int cents, int rows) {
+        String merchant() {
+            return kind.isEmpty() ? name : name + " " + kind;
+        }
+    }
+
+    /** A refund (money in) from one of the set's own businesses. */
+    record Refund(String name, int cents) {}
+
+    /** A line with a fixed description: transfers, interest, fees, cash, person-to-person, rewards. */
+    record GenericRow(String description, String amount, String category, String name) {}
+
+    record CategorizationSet(String file, List<String> comments, long seed, String cardLastFour,
+                             List<String> places, List<Business> businesses, List<Refund> refunds,
+                             List<GenericRow> generic) {}
+
+    static final List<String> CARD_FORMATS = List.of(
+            "{M} {N4} {PLACE}",
+            "CHECKCARD {MMDD} {M} {PLACE}",
+            "{M} #{N3} {PLACE}",
+            "POS DEBIT {M} {PLACE}",
+            "{M}",
+            "PURCHASE AUTHORIZED ON {MM/DD} {M} {PLACE} S{N15} CARD {LAST4}",
+            "{TITLE}",
+            "{M} {PLACE}",
+            "DEBIT CARD PURCHASE {M} {N4}");
+    static final List<String> DINING_FORMATS = List.of(
+            "SQ *{M} {N4}",
+            "TST* {M}",
+            "{M} {N4} {PLACE}",
+            "SQ *{M} {PLACE}",
+            "CHECKCARD {MMDD} {M} {PLACE}",
+            "{TITLE}",
+            "TST*{M} {N3}");
+    static final List<String> ONLINE_FORMATS = List.of(
+            "{M}.COM",
+            "{NOSPACE}*{REF} {PHONE} {ST}",
+            "PAYPAL *{NOSPACE}",
+            "{M} {PHONE} {ST}",
+            "RECURRING PMT {M}",
+            "{TITLE}");
+    static final List<String> BILL_FORMATS = List.of(
+            "{M} WEB PMT",
+            "ACH DEBIT {M} CO ID:{N10} INDN:{PERSON}",
+            "{M} BILL PAY {MMDD}",
+            "{M} ONLINE PMT CKF{N9}POS",
+            "{M} AUTOPAY");
+    static final List<String> PAYROLL_FORMATS = List.of(
+            "{M} PAYROLL PPD ID: {N10}",
+            "DIRECT DEP {M} PPD ID: {N10}",
+            "{M} DIR DEP {MMDD}");
+    static final List<String> REFUND_FORMATS = List.of(
+            "RETURN {M} {N4} {PLACE}",
+            "{M} REFUND",
+            "CREDIT VOUCHER {M} {PLACE}",
+            "{M} {N4} {PLACE}");
+    static final List<String> ONLINE_STATES = List.of("CA", "WA", "NY", "TX");
+
+    /**
+     * Two synthetic sets of {@code description,amount,expected_category,name} rows for CAT-05
+     * (docs/plans/phase-4.md §10, step 1b): {@code dev.csv} tunes seed rules, cleaning patterns and
+     * prompts; {@code holdout.csv} is frozen and only reported on. Every business, person, number and
+     * card issuer is fictional; places are generic town names. {@code name} is the row's distinctive
+     * merchant name (empty for generic lines), and the two sets draw it from disjoint pools, so a rule
+     * written for a dev merchant can't match a holdout merchant by name. Written last, with a
+     * per-set counter instead of the random generator, so every other file is unchanged.
+     */
+    void writeCategorizationSets() throws IOException {
+        writeCategorizationSet(devSet());
+        writeCategorizationSet(holdoutSet());
+    }
+
+    static void writeCategorizationSet(CategorizationSet set) throws IOException {
+        SetWriter w = new SetWriter(set);
+        List<Business> businesses = set.businesses();
+        for (int b = 0; b < businesses.size(); b++) {
+            Business business = businesses.get(b);
+            List<String> formats = switch (business.channel()) {
+                case CARD -> CARD_FORMATS;
+                case DINING -> DINING_FORMATS;
+                case ONLINE -> ONLINE_FORMATS;
+                case BILL -> BILL_FORMATS;
+                case PAYROLL -> PAYROLL_FORMATS;
+            };
+            boolean varies = business.channel() == Channel.CARD || business.channel() == Channel.DINING
+                    || business.category().equals("Utilities");
+            for (int k = 0; k < business.rows(); k++) {
+                int cents = varies ? business.cents() * (80 + (k * 37 + b * 11) % 41) / 100 : business.cents();
+                BigDecimal amount = BigDecimal.valueOf(cents, 2);
+                w.add(w.describe(formats.get((b + k) % formats.size()), business.merchant()),
+                        business.channel() == Channel.PAYROLL ? amount : amount.negate(),
+                        business.category(), business.name());
+            }
+        }
+        for (int r = 0; r < set.refunds().size(); r++) {
+            Refund refund = set.refunds().get(r);
+            Business business = businesses.stream().filter(x -> x.name().equals(refund.name())).findFirst()
+                    .orElseThrow(() -> new IllegalStateException("refund for unknown business " + refund.name()));
+            w.add(w.describe(REFUND_FORMATS.get(r % REFUND_FORMATS.size()), business.merchant()),
+                    BigDecimal.valueOf(refund.cents(), 2), "Refunds & Rebates", business.name());
+        }
+        for (GenericRow g : set.generic()) {
+            w.add(g.description(), money(g.amount()), g.category(), g.name());
+        }
+        write(CATEGORIZATION_DIR + set.file(), w.content());
+    }
+
+    /** Builds one set's rows; numbers, dates and places come from a counter, not from {@code rng}. */
+    static final class SetWriter {
+        private final CategorizationSet set;
+        private final List<String> lines = new ArrayList<>();
+        private long state;
+        private int serial;
+
+        SetWriter(CategorizationSet set) {
+            this.set = set;
+            this.state = set.seed();
+            set.comments().forEach(c -> lines.add("# " + c));
+            lines.add(CATEGORIZATION_HEADER);
+        }
+
+        void add(String description, BigDecimal amount, String category, String name) {
+            require(!description.isEmpty() && !description.contains(",") && !description.contains("\"")
+                    && !description.startsWith("#"), "unsafe categorization description: " + description);
+            require(amount.signum() != 0, "zero amount: " + description);
+            require(name.isEmpty() || description.toUpperCase(Locale.ROOT).replace(" ", "")
+                    .contains(name.replace(" ", "")), "name not in description: " + description);
+            lines.add(csvRow(description, format(amount), category, name));
+            serial++;
+        }
+
+        String describe(String format, String merchant) {
+            String place = set.places().get(serial % set.places().size());
+            String city = place.substring(0, place.lastIndexOf(' '));
+            int month = 4 + serial % 6;
+            int day = 1 + (serial * 7) % 28;
+            String text = format
+                    .replace("{M}", merchant)
+                    .replace("{TITLE}", titleCase(merchant + " " + city))
+                    .replace("{NOSPACE}", merchant.replace(" ", ""))
+                    .replace("{PLACE}", place)
+                    .replace("{MMDD}", String.format(Locale.ROOT, "%02d%02d", month, day))
+                    .replace("{MM/DD}", String.format(Locale.ROOT, "%02d/%02d", month, day))
+                    .replace("{LAST4}", set.cardLastFour())
+                    .replace("{ST}", ONLINE_STATES.get(serial % ONLINE_STATES.size()))
+                    .replace("{PERSON}", serial % 2 == 0 ? "SAMPLE JANE" : "EXAMPLE ALEX")
+                    .replace("{PHONE}", "888-555-01" + digits(2))
+                    .replace("{REF}", reference())
+                    .replace("{N15}", digits(15))
+                    .replace("{N10}", digits(10))
+                    .replace("{N9}", digits(9))
+                    .replace("{N4}", digits(4))
+                    .replace("{N3}", digits(3));
+            require(!text.contains("{"), "unfilled placeholder: " + text);
+            return text;
+        }
+
+        String content() {
+            return String.join("\n", lines) + "\n";
+        }
+
+        /** A 64-bit linear congruential step (Knuth's MMIX constants): fixed output, no {@code rng}. */
+        private int next(int bound) {
+            state = state * 6364136223846793005L + 1442695040888963407L;
+            return (int) ((state >>> 33) % bound);
+        }
+
+        private String digits(int count) {
+            StringBuilder s = new StringBuilder();
+            for (int i = 0; i < count; i++) {
+                s.append((char) ('0' + next(10)));
+            }
+            return s.toString();
+        }
+
+        private String reference() {
+            String alphabet = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+            StringBuilder s = new StringBuilder();
+            for (int i = 0; i < 6; i++) {
+                s.append(alphabet.charAt(next(alphabet.length())));
+            }
+            return s.toString();
+        }
+
+        private static String titleCase(String text) {
+            StringBuilder s = new StringBuilder();
+            for (String word : text.split(" ")) {
+                if (!s.isEmpty()) {
+                    s.append(' ');
+                }
+                s.append(word.charAt(0)).append(word.substring(1).toLowerCase(Locale.ROOT));
+            }
+            return s.toString();
+        }
+    }
+
+    static CategorizationSet devSet() {
+        return new CategorizationSet("dev.csv",
+                List.of("Finalysis categorization DEV set (CAT-05, docs/plans/phase-4.md section 10).",
+                        "Tune seed rules, cleaning patterns and prompts against this file and the answer key only.",
+                        "Synthetic: every business, person, number and card issuer is fictional.",
+                        "Distinctive names (column name) never share a word with holdout.csv."),
+                20261014L, "9921",
+                List.of("OAKDALE VA", "RIVERTON MD", "GLENWOOD VA", "LAKEWOOD CO", "SPRING HILL TN", "FAIRMONT WV"),
+                List.of(
+                        new Business("MAPLE ST", "DELI", "Dining", Channel.DINING, 1450, 3),
+                        new Business("COPPERLEAF", "CAFE", "Dining", Channel.DINING, 680, 4),
+                        new Business("LITTLE ORCHID", "THAI KITCHEN", "Dining", Channel.DINING, 2600, 3),
+                        new Business("BRASSWORKS", "TAVERN", "Dining", Channel.DINING, 3800, 2),
+                        new Business("NONNA ROSAS", "PIZZERIA", "Dining", Channel.DINING, 2200, 3),
+                        new Business("QUILLBY", "BAGELS", "Dining", Channel.DINING, 940, 2),
+                        new Business("EMBERSIDE", "GRILL", "Dining", Channel.DINING, 3100, 2),
+                        new Business("SAFFRON ROW", "", "Dining", Channel.DINING, 2750, 2),
+                        new Business("HEARTHSTONE", "BAKERY", "Dining", Channel.DINING, 875, 3),
+                        new Business("GREENVALE", "MARKET", "Groceries", Channel.CARD, 7200, 4),
+                        new Business("FARMSTEAD", "FOODS", "Groceries", Channel.CARD, 9400, 3),
+                        new Business("HOLLIS", "FRESH MART", "Groceries", Channel.CARD, 5600, 3),
+                        new Business("PEPPERTREE", "GROCERY", "Groceries", Channel.CARD, 4300, 2),
+                        new Business("TALLGRASS", "ORGANICS", "Groceries", Channel.CARD, 6100, 2),
+                        new Business("HARBOR LIGHT", "DENTAL", "Health", Channel.CARD, 18500, 2),
+                        new Business("WILLOWBROOK", "PHARMACY", "Health", Channel.CARD, 1890, 3),
+                        new Business("CEDARPOINT", "FAMILY MEDICINE", "Health", Channel.CARD, 4000, 2),
+                        new Business("BRIGHTPATH", "OPTOMETRY", "Health", Channel.CARD, 12500, 1),
+                        new Business("LUMEN", "PHYSICAL THERAPY", "Health", Channel.CARD, 4500, 2),
+                        new Business("THREADLINE", "OUTFITTERS", "Shopping", Channel.CARD, 6400, 3),
+                        new Business("PAPER LANTERN", "BOOKS", "Shopping", Channel.CARD, 2350, 3),
+                        new Business("IRONGATE", "HARDWARE", "Shopping", Channel.CARD, 3450, 3),
+                        new Business("KESTREL", "HOME GOODS", "Shopping", Channel.CARD, 8800, 2),
+                        new Business("VOLTARA", "ELECTRONICS", "Shopping", Channel.CARD, 15900, 2),
+                        new Business("MARIGOLD & FERN", "", "Shopping", Channel.CARD, 4200, 2),
+                        new Business("PINWHEEL", "TOYS", "Shopping", Channel.CARD, 2999, 2),
+                        new Business("STREAMVALE", "", "Subscriptions", Channel.ONLINE, 1599, 3),
+                        new Business("TUNEHARBOR", "", "Subscriptions", Channel.ONLINE, 1099, 3),
+                        new Business("CLOUDNEST", "STORAGE", "Subscriptions", Channel.ONLINE, 299, 2),
+                        new Business("PIXELFORGE", "GAMES", "Subscriptions", Channel.ONLINE, 999, 2),
+                        new Business("DAILY QUILL", "NEWS", "Subscriptions", Channel.ONLINE, 1500, 2),
+                        new Business("FITLOOP", "", "Subscriptions", Channel.ONLINE, 1299, 2),
+                        new Business("RIVERBEND", "FUEL", "Transportation", Channel.CARD, 4800, 4),
+                        new Business("SWIFTLANE", "RIDES", "Transportation", Channel.CARD, 1850, 3),
+                        new Business("CITYPARK", "PARKING", "Transportation", Channel.CARD, 1200, 2),
+                        new Business("GEARWORKS", "AUTO REPAIR", "Transportation", Channel.CARD, 38500, 1),
+                        new Business("RAILSTAR", "TRANSIT", "Transportation", Channel.CARD, 275, 2),
+                        new Business("NORTHRIDGE", "ELECTRIC", "Utilities", Channel.BILL, 11240, 3),
+                        new Business("CLEARSPRING", "WATER UTIL", "Utilities", Channel.BILL, 4630, 2),
+                        new Business("WAVECREST", "WIRELESS", "Utilities", Channel.BILL, 6500, 3),
+                        new Business("FIBERLINK", "INTERNET", "Utilities", Channel.BILL, 7999, 3),
+                        new Business("ASHFORD", "PROPERTY MGMT RENT", "Housing", Channel.BILL, 185000, 3),
+                        new Business("STONEBRIDGE", "MORTGAGE", "Mortgage", Channel.BILL, 214500, 2),
+                        new Business("LAKEHAVEN", "HOA DUES", "HOA & Condo Fees", Channel.BILL, 32500, 2),
+                        new Business("BAYSHORE", "TOLL AUTHORITY", "Tolls", Channel.CARD, 650, 3),
+                        new Business("NORTHWIND", "ANALYTICS", "Income", Channel.PAYROLL, 312455, 3)),
+                List.of(new Refund("THREADLINE", 6400), new Refund("PAPER LANTERN", 1299),
+                        new Refund("VOLTARA", 15900), new Refund("GREENVALE", 845)),
+                List.of(
+                        new GenericRow("ONLINE TRANSFER TO SAVINGS XXXXXX4417", "-400.00", "Transfer", ""),
+                        new GenericRow("ONLINE TRANSFER TO SAVINGS XXXXXX4417", "-250.00", "Transfer", ""),
+                        new GenericRow("ONLINE TRANSFER FROM SAVINGS XXXXXX4417", "300.00", "Transfer", ""),
+                        new GenericRow("ONLINE TRANSFER FROM CHECKING XXXXXX3308", "400.00", "Transfer", ""),
+                        new GenericRow("QUILLMARK VISA AUTOPAY", "-612.38", "Transfer", "QUILLMARK"),
+                        new GenericRow("QUILLMARK VISA AUTOPAY", "-488.10", "Transfer", "QUILLMARK"),
+                        new GenericRow("PAYMENT THANK YOU", "612.38", "Transfer", ""),
+                        new GenericRow("AUTOMATIC PAYMENT - THANK YOU", "488.10", "Transfer", ""),
+                        new GenericRow("TRANSFER TO CHK XXXXXX3308 CONFIRMATION# 4471029", "-150.00", "Transfer", ""),
+                        new GenericRow("INTEREST PAYMENT", "4.12", "Interest", ""),
+                        new GenericRow("INTEREST EARNED", "3.87", "Interest", ""),
+                        new GenericRow("INTEREST PAYMENT", "4.31", "Interest", ""),
+                        new GenericRow("MONTHLY SERVICE FEE", "-12.00", "Bank Fees", ""),
+                        new GenericRow("OVERDRAFT FEE FOR ITEM 0412", "-35.00", "Bank Fees", ""),
+                        new GenericRow("FOREIGN TRANSACTION FEE", "-1.87", "Bank Fees", ""),
+                        new GenericRow("OUT OF NETWORK ATM FEE", "-3.00", "Bank Fees", ""),
+                        new GenericRow("ATM WITHDRAWAL #004512 OAKDALE VA", "-100.00", "Cash & ATM", ""),
+                        new GenericRow("ATM WITHDRAWAL #004512 OAKDALE VA", "-60.00", "Cash & ATM", ""),
+                        new GenericRow("NON-BANK ATM WITHDRAWAL RIVERTON MD", "-40.00", "Cash & ATM", ""),
+                        new GenericRow("CASH WITHDRAWAL BRANCH 0217", "-200.00", "Cash & ATM", ""),
+                        new GenericRow("ZELLE PAYMENT TO JANE Q SAMPLE CONF# 7RT2K9", "-75.00", "Person-to-Person Out", ""),
+                        new GenericRow("ZELLE PAYMENT TO RILEY DEMO CONF# 2PL8X4", "-40.00", "Person-to-Person Out", ""),
+                        new GenericRow("ZELLE PAYMENT FROM ALEX R EXAMPLE CONF# 9QW3M1", "120.00", "Person-to-Person In", ""),
+                        new GenericRow("VENMO PAYMENT 1029384756 WEB ID: 3264681992", "-22.50", "Person-to-Person Out", ""),
+                        new GenericRow("VENMO CASHOUT PPD ID: 5264681992", "85.00", "Person-to-Person In", ""),
+                        new GenericRow("CASH APP*SAM PLACEHOLDER", "-18.00", "Person-to-Person Out", ""),
+                        new GenericRow("CASH APP*CASH OUT", "35.00", "Person-to-Person In", ""),
+                        new GenericRow("CASHBACK REWARD REDEMPTION", "25.00", "Refunds & Rebates", ""),
+                        new GenericRow("STATEMENT CREDIT REWARDS", "15.00", "Refunds & Rebates", "")));
+    }
+
+    static CategorizationSet holdoutSet() {
+        return new CategorizationSet("holdout.csv",
+                List.of("Finalysis categorization HOLDOUT set (CAT-05, docs/plans/phase-4.md section 10).",
+                        "FROZEN: reporting only. Never tune seed rules, cleaning patterns or prompts against it; use dev.csv.",
+                        "Its SHA-256 is pinned by CategorizationSetsTest and recorded in the plan; any edit fails the build.",
+                        "The same author wrote these rows and the seed rules: procedural protection, not a blind evaluation.",
+                        "Synthetic: every business, person, number and card issuer is fictional.",
+                        "Distinctive names (column name) never share a word with dev.csv."),
+                20261015L, "6630",
+                List.of("BRIARCLIFF NY", "MILLBROOK NY", "CEDAR GROVE NJ", "WESTFIELD IN", "PORTSMOUTH NH", "ELM CREEK OR"),
+                List.of(
+                        new Business("OSPREY", "NOODLE BAR", "Dining", Channel.DINING, 1650, 3),
+                        new Business("JUNIPER HOLLOW", "BISTRO", "Dining", Channel.DINING, 4200, 2),
+                        new Business("TWO RIVERS", "TAQUERIA", "Dining", Channel.DINING, 1350, 3),
+                        new Business("LANTERNFISH", "SUSHI", "Dining", Channel.DINING, 3600, 2),
+                        new Business("HONEYCOMB", "BAKERY", "Dining", Channel.DINING, 720, 3),
+                        new Business("GRANITE PEAK", "BREWING", "Dining", Channel.DINING, 2900, 2),
+                        new Business("CORVINA", "", "Dining", Channel.DINING, 5400, 1),
+                        new Business("FIDDLEHEAD", "KITCHEN", "Dining", Channel.DINING, 2450, 2),
+                        new Business("WOODSMOKE", "BBQ", "Dining", Channel.DINING, 2100, 2),
+                        new Business("POPPYSEED", "CAFE", "Dining", Channel.DINING, 610, 3),
+                        new Business("MOONGATE", "DUMPLING HOUSE", "Dining", Channel.DINING, 1950, 2),
+                        new Business("SUNFIELD", "GROCERS", "Groceries", Channel.CARD, 8100, 3),
+                        new Business("ORCHARD LANE", "MARKET", "Groceries", Channel.CARD, 6400, 3),
+                        new Business("BRAMBLE", "FOOD CO-OP", "Groceries", Channel.CARD, 5200, 2),
+                        new Business("HIGHVIEW", "SUPERMARKET", "Groceries", Channel.CARD, 9800, 3),
+                        new Business("SALTMARSH", "FISH MARKET", "Groceries", Channel.CARD, 3400, 1),
+                        new Business("GOLDENROD", "PRODUCE", "Groceries", Channel.CARD, 2800, 2),
+                        new Business("PINECREST", "DENTAL CARE", "Health", Channel.CARD, 21000, 1),
+                        new Business("ALDERWOOD", "CHIROPRACTIC", "Health", Channel.CARD, 6500, 2),
+                        new Business("RIVERSTONE", "URGENT CARE", "Health", Channel.CARD, 7500, 1),
+                        new Business("MEADOWLARK", "PHARMACY", "Health", Channel.CARD, 2240, 3),
+                        new Business("CLEARVIEW", "EYE CARE", "Health", Channel.CARD, 9900, 1),
+                        new Business("SOLACE", "COUNSELING", "Health", Channel.CARD, 12000, 1),
+                        new Business("BIRCHWELL", "PEDIATRICS", "Health", Channel.CARD, 3500, 1),
+                        new Business("SILVERBIRCH", "BOUTIQUE", "Shopping", Channel.CARD, 5800, 2),
+                        new Business("FOXGLOVE", "GIFTS", "Shopping", Channel.CARD, 2650, 2),
+                        new Business("TALLPINE", "SPORTING GOODS", "Shopping", Channel.CARD, 7400, 2),
+                        new Business("CRANEWOOD", "FURNITURE", "Shopping", Channel.CARD, 42900, 1),
+                        new Business("WRENFIELD", "BOOKS", "Shopping", Channel.CARD, 1899, 2),
+                        new Business("OBSIDIAN & OAK", "", "Shopping", Channel.CARD, 3800, 2),
+                        new Business("TINKERBOX", "HOBBY SHOP", "Shopping", Channel.CARD, 2275, 2),
+                        new Business("GADGETRY", "", "Shopping", Channel.CARD, 12999, 1),
+                        new Business("PATCHWORK", "THRIFT", "Shopping", Channel.CARD, 1600, 2),
+                        new Business("VIDEOLARK", "", "Subscriptions", Channel.ONLINE, 1399, 3),
+                        new Business("SONGBIRD", "PLUS", "Subscriptions", Channel.ONLINE, 1199, 3),
+                        new Business("NIMBUSVAULT", "", "Subscriptions", Channel.ONLINE, 999, 2),
+                        new Business("PUZZLEBOX", "MONTHLY", "Subscriptions", Channel.ONLINE, 1800, 2),
+                        new Business("STRIDEPULSE", "APP", "Subscriptions", Channel.ONLINE, 1499, 2),
+                        new Business("TRAILHEAD", "GAS", "Transportation", Channel.CARD, 5200, 4),
+                        new Business("ZIPWAY", "RIDESHARE", "Transportation", Channel.CARD, 2150, 3),
+                        new Business("DOCKSIDE", "PARKING GARAGE", "Transportation", Channel.CARD, 1500, 2),
+                        new Business("CARRIAGE HOUSE", "AUTO SERVICE", "Transportation", Channel.CARD, 26400, 1),
+                        new Business("TIDEPOOL", "FERRY", "Transportation", Channel.CARD, 950, 2),
+                        new Business("SPOKEWISE", "BIKE SHARE", "Transportation", Channel.CARD, 350, 2),
+                        new Business("HIGHLAND", "GAS & ELECTRIC", "Utilities", Channel.BILL, 13800, 3),
+                        new Business("PRAIRIE", "WATER DEPT", "Utilities", Channel.BILL, 5100, 2),
+                        new Business("SIGNALPOINT", "MOBILE", "Utilities", Channel.BILL, 7200, 3),
+                        new Business("CABLEWAY", "BROADBAND", "Utilities", Channel.BILL, 8999, 3),
+                        new Business("GREYSTONE", "WASTE SERVICES", "Utilities", Channel.BILL, 3800, 2),
+                        new Business("WESTMERE", "APARTMENTS", "Housing", Channel.BILL, 172500, 3),
+                        new Business("GRANDVIEW", "HOME LOANS", "Mortgage", Channel.BILL, 198700, 2),
+                        new Business("FOXRUN", "CONDO ASSN", "HOA & Condo Fees", Channel.BILL, 41000, 2),
+                        new Business("COASTAL", "EXPRESSWAY TOLL", "Tolls", Channel.CARD, 525, 3),
+                        new Business("LARKHAVEN", "MEDICAL GROUP", "Income", Channel.PAYROLL, 287630, 3)),
+                List.of(new Refund("SILVERBIRCH", 5800), new Refund("TALLPINE", 7400),
+                        new Refund("SUNFIELD", 1250), new Refund("GADGETRY", 12999)),
+                List.of(
+                        new GenericRow("ONLINE BANKING TRANSFER TO SAV XXXXXX8823", "-350.00", "Transfer", ""),
+                        new GenericRow("ONLINE BANKING TRANSFER TO SAV XXXXXX8823", "-200.00", "Transfer", ""),
+                        new GenericRow("MOBILE TRANSFER FROM SAV XXXXXX8823", "500.00", "Transfer", ""),
+                        new GenericRow("ONLINE TRANSFER FROM CHECKING XXXXXX5590", "350.00", "Transfer", ""),
+                        new GenericRow("VESPERA CARD PAYMENT", "-733.20", "Transfer", "VESPERA"),
+                        new GenericRow("VESPERA CARD PAYMENT", "-402.65", "Transfer", "VESPERA"),
+                        new GenericRow("PAYMENT RECEIVED - THANK YOU", "733.20", "Transfer", ""),
+                        new GenericRow("ONLINE PAYMENT THANK YOU", "402.65", "Transfer", ""),
+                        new GenericRow("XFER TO CHECKING XXXXXX5590 REF #8814402", "-120.00", "Transfer", ""),
+                        new GenericRow("INTEREST PAID", "5.02", "Interest", ""),
+                        new GenericRow("INTEREST CREDIT", "4.66", "Interest", ""),
+                        new GenericRow("DIVIDEND EARNED", "6.10", "Interest", ""),
+                        new GenericRow("SERVICE FEE MONTHLY MAINTENANCE", "-15.00", "Bank Fees", ""),
+                        new GenericRow("NSF RETURNED ITEM FEE", "-34.00", "Bank Fees", ""),
+                        new GenericRow("WIRE TRANSFER FEE", "-25.00", "Bank Fees", ""),
+                        new GenericRow("INTL TRANSACTION FEE", "-2.14", "Bank Fees", ""),
+                        new GenericRow("ATM CASH WITHDRAWAL 7722 MILLBROOK NY", "-80.00", "Cash & ATM", ""),
+                        new GenericRow("ATM CASH WITHDRAWAL 7722 MILLBROOK NY", "-40.00", "Cash & ATM", ""),
+                        new GenericRow("WITHDRAWAL AT BRANCH CEDAR GROVE NJ", "-200.00", "Cash & ATM", ""),
+                        new GenericRow("NON-NETWORK ATM CASH BRIARCLIFF NY", "-60.00", "Cash & ATM", ""),
+                        new GenericRow("ZELLE PAYMENT TO PAT M TESTER CONF# 5HD9K2", "-50.00", "Person-to-Person Out", ""),
+                        new GenericRow("ZELLE TO CHRIS L FICTION ON 06/14 REF # PP0RDK3X2T", "-90.00", "Person-to-Person Out", ""),
+                        new GenericRow("ZELLE PAYMENT FROM DANA SPECIMEN CONF# 1ZX7B4", "65.00", "Person-to-Person In", ""),
+                        new GenericRow("ZELLE FROM MORGAN K MOCK ON 08/02 REF # PP0QWT7Y1Z", "30.00", "Person-to-Person In", ""),
+                        new GenericRow("VENMO PAYMENT 3049581726 WEB ID: 3264681993", "-27.00", "Person-to-Person Out", ""),
+                        new GenericRow("VENMO CASHOUT PPD ID: 5264681993", "110.00", "Person-to-Person In", ""),
+                        new GenericRow("CASH APP*PAT M TESTER", "-12.00", "Person-to-Person Out", ""),
+                        new GenericRow("REWARDS CREDIT CASH BACK", "30.00", "Refunds & Rebates", ""),
+                        new GenericRow("CASHBACK BONUS REDEMPTION", "20.00", "Refunds & Rebates", "")));
+    }
+
     /**
      * A checking export in the layout of a fictional Larkspur Credit Union: a 3-column summary block
      * (empty middle header, four balance and total rows) and a blank line above the 4-column table,
@@ -854,7 +1253,8 @@ public class SampleDataGenerator {
     // ---------------------------------------------------------------- output
 
     static void clearOutput() throws IOException {
-        for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers", "edge-cases/merchants")) {
+        for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers", "edge-cases/merchants",
+                "categorization")) {
             Path path = out.resolve(dir);
             if (Files.isDirectory(path)) {
                 try (Stream<Path> files = Files.list(path)) {
