@@ -77,11 +77,13 @@ class SampleDataParserSelectionTest {
                 .anyMatch(name -> name.startsWith("edge-cases/csv-"))
                 .anyMatch(name -> name.startsWith("edge-cases/ofx-"))
                 .anyMatch(name -> name.startsWith("edge-cases/transfers/"))
+                .anyMatch(name -> name.startsWith("edge-cases/merchants/"))
                 .anyMatch(name -> name.endsWith(".qfx"))
                 .anyMatch(name -> name.startsWith("pdf/edge-cases/") && name.endsWith(".pdf"));
         // 25 CSV statements, 1 broken, 13 OFX/QFX, 4 OFX and 9 CSV edge cases, 3 transfer edge-case
-        // statements and their expected outcomes, manifest, answer key
-        assertThat(textSampleFiles()).hasSize(58);
+        // statements and their expected outcomes, 1 merchant edge-case statement and its expected
+        // merchants, manifest, answer key
+        assertThat(textSampleFiles()).hasSize(60);
         // 6 monthly PDFs and 12 edge cases
         assertThat(sampleFiles().filter(SampleDataParserSelectionTest::isPdf)).hasSize(18);
     }

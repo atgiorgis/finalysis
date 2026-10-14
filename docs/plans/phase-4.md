@@ -717,7 +717,7 @@ moves before AI wiring. Reasons:
 | # | Step | Commit content | Main tests | Status |
 |---|---|---|---|---|
 | 0 | Plan | This file; CLAUDE.md current phase; requirements v1.32 with the decisions (§15) | — | Done: "Phase 4 plan" |
-| 1 | Merchant cleaning | V13; `MerchantCleaner`, `merchant-cleaning.yml`, `MerchantCleaningRules`; P2P counterparty; `CategorizationListener` (stage 1, after detection); startup backfill and version re-clean; P2P/ACH edge-case fixture | `MerchantCleanerTest` (the §2.3 table, every answer-key description, idempotence, 64-char cut, NFKC/bidi), `MerchantCleanerSourceTest`, `MerchantBackfillTest` (Testcontainers: null → filled, version bump re-cleans, raw description and fingerprint untouched) | Planned |
+| 1 | Merchant cleaning | V13; `MerchantCleaner`, `merchant-cleaning.yml`, `MerchantCleaningRules`; P2P counterparty; `CategorizationListener` (stage 1, after detection); startup backfill and version re-clean; P2P/ACH edge-case fixture | `MerchantCleanerTest` (the §2.3 table, every answer-key description, idempotence, 64-char cut, NFKC/bidi), `MerchantCleanerSourceTest`, `MerchantBackfillTest` (Testcontainers: null → filled, version bump re-cleans, raw description and fingerprint untouched) | Done: "Phase 4 step 1: merchant cleaning" (notes below) |
 | 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Planned |
 | 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Planned |
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Planned |
@@ -728,6 +728,81 @@ moves before AI wiring. Reasons:
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
 | 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Planned |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
+
+### Step 1 notes
+
+Built as planned (V13, `MerchantCleaner`, `MerchantCleaningRules`, `merchant-cleaning.yml`,
+`MerchantCleaningService`, `CategorizationListener`, `CategorizationLock`, the edge-case fixture
+`sample-data/edge-cases/merchants/`). Backend tests 1,566 → 1,696 (+130); frontend 1. Choices the plan
+left open, or refined:
+- **Re-clean trigger:** `app_setting` stores the rules' fingerprint (`<version>:<first 16 hex of the
+  file's SHA-256>`, key `merchant_cleaning.rules`), not the version alone. Any edit to the file
+  re-cleans every txn at the next start, even if nobody bumps `version`.
+- **Id tokens, refined.** "Any token with a digit and 3+ characters" would drop `7-ELEVEN` and keep
+  Amazon references without digits. A token is dropped when it has a digit and:
+  - starts with `#`;
+  - or has at least as many digits as letters (3+ characters);
+  - or follows a `*`.
+
+  Ordinals (`21ST`) are kept. `*` splits tokens before ids are removed, so `AMZN MKTP US*7ETP43`
+  keeps `US`. An Amazon reference with no digit (`*QKLLFB`) is removed by a YAML pattern (data, not
+  code).
+- **Location tail:** cut only when a store number anchors it (`SHELL OIL 57442 ARLINGTON VA` →
+  `SHELL OIL`). Without one, the city's length can't be known, so `STARBUCKS ARLINGTON VA` stays as
+  it is. Requiring the anchor also keeps codes that are words (`CO`, `IN`, `OR`) from cutting
+  `METRO POWER CO`.
+- **Normalization:** NFKD with accents removed, instead of NFKC (`CAFÉ` → `CAFE`); curly apostrophes
+  straightened. Characters outside `A–Z 0–9 & ' . / -` become a space (as `=HYPERLINK("x")` →
+  `HYPERLINK X` in §2.3 requires); punctuation-only tokens are dropped
+  (`ONLINE PAYMENT - THANK YOU` → `ONLINE PAYMENT THANK YOU`). Input is capped at 512 characters
+  before any pattern runs.
+- **Person-to-person:** each service has a catch-all after its name pattern, so a name in an
+  unexpected format never reaches the merchant (`ZELLE PAYMENT TO JANE SAMPLE 2` → `ZELLE`, no
+  counterparty). The counterparty is capped at 100 characters.
+- **Cleaning owns `counterparty`:** no parser sets it (deferred to Phase 4 by ING-08), so a re-clean
+  may also clear one the rules no longer find.
+- **The YAML is the real list** (§2.2's was illustrative). It adds `DEBIT CARD PURCHASE` and the Amazon
+  reference pattern, and drops `TEL` from the ACH codes (it matches words such as `TEL AVIV`).
+  `ACH DEBIT` is not stripped, as in §2.3's table.
+- **Startup backfill** runs on `ApplicationReadyEvent`, on the main thread once the server is
+  accepting requests, rather than on a separate thread. The categorization lock keeps it apart from
+  imports. Orphan embeddings are removed on a full re-clean only.
+- **Listener order:**
+  - without explicit orders, the two after-commit listeners on `StatementImported` would run in an
+    undefined order, so `TransferDetectionListener.onImported` gets `@Order(10)` and categorization
+    `@Order(20)`;
+  - `TransferLock`'s comment no longer says it is the only advisory lock. `CategorizationLock` uses
+    the key "category" in ASCII, and the two are never nested.
+
+  These are the only changes in the transfer package.
+- **Bank-agnostic check:** `MerchantCleanerSourceTest` takes as vocabulary the upper-case words of 3+
+  letters in the YAML's pattern entries, and fails if any string literal in the `categorize` main
+  sources contains one. Comments and SQL literals (FROM is a pattern word) are skipped. A second
+  test proves the check catches a violation.
+- **Fixture:** 14 rows in the Northfield checking layout. They cover:
+  - Zelle to and from, Venmo and Cash App;
+  - ACH with `CO ID`/`INDN`, payroll `PPD ID`;
+  - `CHECKCARD`, `POS DEBIT SQ *`;
+  - a wrapped description (a quoted cell with a line break), a masked account number, accents, a
+    formula cell, a description with nothing left after cleaning, and one over 64 characters.
+
+  `merchants-expected.csv` is written by hand in the generator, as an oracle independent of the
+  cleaner; the wrapped description keeps its real line break, quoted. Every existing sample file is
+  byte-identical.
+- **Golden file:** `src/test/resources/categorize/answer-key-merchants.txt` lists every distinct
+  answer-key description with its reviewed merchant; the test fails if the answer key gains a
+  description the file lacks. It is CSV content in a `.txt` file, since `.gitignore` ignores `*.csv`
+  outside `sample-data/` (a guard against committing statements).
+- **Existing tests updated:**
+  - `StatementImportTest` now expects the cleaned merchant (it asserted null in Phase 3);
+  - `SampleDataParserSelectionTest` counts 60 text sample files (was 58);
+  - `SchemaMigrationTest` checks `app_setting` and `ix_txn_merchant`.
+- **Tests:** `MerchantCleanerTest` (98), `MerchantCleaningRulesTest` (19), `MerchantCleanerSourceTest`
+  (2), `MerchantBackfillTest` (6: the fixture end to end, the backfill with fingerprint and raw
+  description untouched, changed rules re-clean and remove unused embeddings, startup recorded the
+  rules, a cleaning failure leaves the import and logs no statement data, listener order), plus 3
+  constraint checks in `SchemaMigrationTest` and 2 sample-file cases in `SampleDataParserSelectionTest`
+  (the fixture's two files are claimed by the CSV parser).
 
 ### Requirement mapping
 

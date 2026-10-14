@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class TransferLock {
 
-    /** "transfer" in ASCII. The app takes no other advisory lock. */
+    /** "transfer" in ASCII. The only other advisory lock, categorization's, has its own key and is never nested with this one. */
     static final long KEY = 0x7472616E73666572L;
 
     private final JdbcClient jdbc;

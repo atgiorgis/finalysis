@@ -6,6 +6,7 @@ import com.finalysis.ingestion.StatementImported;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -43,6 +44,10 @@ class TransferDetectionListener {
         this.newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
+    /** Categorization reacts to the same event after detection, since it needs to know which txns are linked. */
+    static final int ORDER = 10;
+
+    @Order(ORDER)
     @TransactionalEventListener // AFTER_COMMIT
     void onImported(StatementImported event) {
         detectAfter("import", event.statementId());

@@ -129,10 +129,12 @@ public class SampleDataGenerator {
         writeOfxEdgeCases(checking);
         writeCsvEdgeCases(checking, summit);
         writeTransferEdgeCases();
+        writeMerchantEdgeCases();
 
         System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
-                + "%d transfer edge-case statements, %d transactions to %s/%n", statements.size(), ofxFiles,
-                OFX_EDGE_CASES + CSV_EDGE_CASES, TRANSFER_EDGE_CASE_STATEMENTS, txns.size(), out);
+                + "%d transfer edge-case statements, 1 merchant edge-case statement, %d transactions to %s/%n",
+                statements.size(), ofxFiles, OFX_EDGE_CASES + CSV_EDGE_CASES, TRANSFER_EDGE_CASE_STATEMENTS,
+                txns.size(), out);
     }
 
     // ---------------------------------------------------------------- transactions
@@ -723,6 +725,60 @@ public class SampleDataGenerator {
                 counterpart, scenario);
     }
 
+    // ---------------------------------------------------------------- merchant cleaning edge cases
+
+    static final String MERCHANTS_DIR = "edge-cases/merchants/";
+
+    /** One row of the merchant fixture, with the merchant and counterparty cleaning should give. */
+    record MerchantEdgeRow(int mayDay, String description, String amount, String merchant, String counterparty) {}
+
+    /**
+     * A May 2026 Northfield checking statement whose descriptions exercise merchant cleaning
+     * (docs/plans/phase-4.md §2.3): person-to-person payments with names, ACH identifiers, processor
+     * and channel prefixes, a store number with a location, a wrapped description (a quoted cell with
+     * a line break), accents, a formula-leading cell, a description with nothing left after cleaning,
+     * and one longer than 64 characters. Every name, number and business is fictional.
+     *
+     * <p>{@code merchants-expected.csv} lists each row's description (quoted like the statement's cell,
+     * line break included), amount, and the expected merchant and counterparty (empty = none), written
+     * here by hand rather than computed, so it is an oracle independent of the cleaning code. Written
+     * last and without the random generator, so the other files are unchanged.
+     */
+    void writeMerchantEdgeCases() throws IOException {
+        List<MerchantEdgeRow> rows = List.of(
+                new MerchantEdgeRow(1, "HARBORLINE FREIGHT PAYROLL PPD ID: 7700112299", "2310.55", "HARBORLINE FREIGHT PAYROLL", ""),
+                new MerchantEdgeRow(2, "ZELLE PAYMENT TO JANE Q SAMPLE CONF# 8XK2P1", "-60.00", "ZELLE", "JANE Q SAMPLE"),
+                new MerchantEdgeRow(3, "ZELLE PAYMENT FROM ALEX R EXAMPLE CONF# 3MZ8Q0", "45.00", "ZELLE", "ALEX R EXAMPLE"),
+                new MerchantEdgeRow(4, "ACH DEBIT ACME INS CO ID:9900112233 INDN:SAMPLE JANE", "-128.40", "ACH DEBIT ACME INS", ""),
+                new MerchantEdgeRow(5, "CHECKCARD 0504 NORTHGATE FUEL #88 SAMPLETOWN VA", "-48.19", "NORTHGATE FUEL", ""),
+                new MerchantEdgeRow(6, "POS DEBIT SQ *CORNER BEAN CAFE 0412", "-6.75", "CORNER BEAN CAFE", ""),
+                new MerchantEdgeRow(7, "MAPLEWOOD GROCERY\n#214 SAMPLETOWN VA", "-86.42", "MAPLEWOOD GROCERY", ""),
+                new MerchantEdgeRow(8, "ONLINE TRANSFER TO SAVINGS XXXXXX1002", "-500.00", "ONLINE TRANSFER TO SAVINGS", ""),
+                new MerchantEdgeRow(9, "CAFÉ LUMIÈRE", "-12.30", "CAFE LUMIERE", ""),
+                new MerchantEdgeRow(11, "=HYPERLINK(\"x\")", "-1.00", "HYPERLINK X", ""),
+                new MerchantEdgeRow(12, "#12345 0099", "-3.00", "", ""),
+                new MerchantEdgeRow(14, "VENMO PAYMENT 1023456789 WEB ID: 3264681992", "-25.00", "VENMO", ""),
+                new MerchantEdgeRow(15, "CASH APP*JANE SAMPLE", "-15.00", "CASH APP", "JANE SAMPLE"),
+                new MerchantEdgeRow(18, "SUNRISE COMMUNITY HEALTH AND WELLNESS CENTER OUTPATIENT PHYSICAL THERAPY SERVICES",
+                        "-40.00", "SUNRISE COMMUNITY HEALTH AND WELLNESS CENTER OUTPATIENT PHYSICAL", ""));
+
+        BigDecimal balance = money("5000.00");
+        List<String> statement = new ArrayList<>(List.of("Date,Description,Debit,Credit,Balance"));
+        List<String> expected = new ArrayList<>(List.of("description,amount,merchant,counterparty"));
+        for (MerchantEdgeRow r : rows) {
+            BigDecimal amount = money(r.amount());
+            balance = balance.add(amount);
+            String debit = amount.signum() < 0 ? format(amount.negate()) : "";
+            String credit = amount.signum() > 0 ? format(amount) : "";
+            statement.add(csvRow(northfieldDate(LocalDate.of(2026, 5, r.mayDay())), r.description(), debit, credit,
+                    format(balance)));
+            require(r.merchant().length() <= 64, "merchant edge case: expected merchant longer than 64: " + r.merchant());
+            expected.add(csvRow(r.description(), r.amount(), r.merchant(), r.counterparty()));
+        }
+        write(MERCHANTS_DIR + "merchants-northfield-checking_2026-05.csv", String.join("\n", statement) + "\n");
+        write(MERCHANTS_DIR + "merchants-expected.csv", String.join("\n", expected) + "\n");
+    }
+
     /**
      * A checking export in the layout of a fictional Larkspur Credit Union: a 3-column summary block
      * (empty middle header, four balance and total rows) and a blank line above the 4-column table,
@@ -798,7 +854,7 @@ public class SampleDataGenerator {
     // ---------------------------------------------------------------- output
 
     static void clearOutput() throws IOException {
-        for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers")) {
+        for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers", "edge-cases/merchants")) {
             Path path = out.resolve(dir);
             if (Files.isDirectory(path)) {
                 try (Stream<Path> files = Files.list(path)) {

@@ -46,7 +46,8 @@ class SchemaMigrationTest {
 
         assertThat(tables).contains(
                 "account", "statement", "category", "txn",
-                "categorization_rule", "transfer_link", "transfer_rejection", "merchant_embedding", "csv_mapping");
+                "categorization_rule", "transfer_link", "transfer_rejection", "merchant_embedding", "csv_mapping",
+                "app_setting");
     }
 
     @ParameterizedTest
@@ -105,6 +106,9 @@ class SchemaMigrationTest {
             "unparsed_upload,     ck_unparsed_upload_resolution_kind,  c",
             "unparsed_upload,     ck_unparsed_upload_resolution_resolved_at, c",
             "unparsed_upload,     ck_unparsed_upload_resolution_statement,   c",
+            "app_setting,         pk_app_setting,                      p",
+            "app_setting,         ck_app_setting_key,                  c",
+            "app_setting,         ck_app_setting_value_length,         c",
     })
     void constraintExists(String table, String constraint, String type) {
         Integer count = jdbc.queryForObject("""
@@ -132,7 +136,7 @@ class SchemaMigrationTest {
 
         assertThat(indexes).contains(
                 "ix_txn_account_date", "ix_txn_category", "ix_txn_transfer_date", "ix_txn_statement_section",
-                "ix_txn_account_external_id");
+                "ix_txn_account_external_id", "ix_txn_merchant");
     }
 
     @Test

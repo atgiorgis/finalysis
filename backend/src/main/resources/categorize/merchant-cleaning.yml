@@ -1,0 +1,52 @@
+# Merchant cleaning rules (DAT-04; docs/plans/phase-4.md §2).
+#
+# MerchantCleaner is generic Java and contains no bank, processor or merchant strings; everything
+# specific to a payment processor, an ACH format, a bank's description style or a country lives here.
+# Supporting a new format means editing this file, never the Java (MerchantCleanerSourceTest checks).
+#
+# Patterns are Java regular expressions, applied to the description after normalization (wrapped
+# lines joined with a space, NFKD with accents removed, control and format characters removed,
+# upper case, single spaces). Write them in upper case. Single quotes keep backslashes literal.
+#
+# Any change to this file re-cleans every txn at the next startup (the file's hash is stored in
+# app_setting). Bump `version` with each change so the history reads clearly.
+#
+# Tune these patterns against the answer key and the dev set only, never the holdout (§15).
+
+version: 1
+
+# Removed from the start of the description, repeatedly, until none applies.
+# Payment processors, and channel words that precede the merchant.
+stripPrefixes:
+  - 'SQ \*'                                 # Square
+  - 'TST\* ?'                               # Toast
+  - 'PAYPAL \*'
+  - 'POS (DEBIT|PURCHASE) '
+  - 'DEBIT CARD PURCHASE '
+  - 'CHECKCARD \d{4} '                      # card purchase with an MMDD purchase date
+  - 'PURCHASE AUTHORIZED ON \d\d/\d\d '
+
+# Removed wherever they occur (replaced by a space), in this order.
+stripPatterns:
+  - '\bINDN:.*$'                            # ACH individual name: everything after it
+  - '\bCO ID:\s*\S+'                        # ACH company id
+  - '\bID:\s*\S+'                           # ACH and payroll ids
+  - '\bCONF(IRMATION)?\s*#\s*\S+'           # confirmation numbers
+  - '\b(PPD|CCD|WEB)\b'                     # ACH standard entry class codes
+  - '(?<=AMZN MKTP US|AMZN DIGITAL|AMAZON\.COM)\*[A-Z0-9]+'   # per-order reference after the merchant
+
+# A description ending in "<store number> <CITY> <ST>" loses everything from the store number on.
+# Only cut when a store number anchors it: without one, the city's length can't be known.
+locationStates: [AL, AK, AZ, AR, CA, CO, CT, DE, DC, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD,
+                 MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, PR, RI, SC,
+                 SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
+
+# Person-to-person payments. The first pattern that matches decides: the merchant becomes the
+# `service` group, and the `name` group (optional) goes to txn.counterparty, which stays local only.
+# Each service ends with a catch-all, so a name in an unexpected format never reaches the merchant.
+personToPerson:
+  - '^(?<service>ZELLE)(?: (?:PAYMENT|TRANSFER))? (?:TO|FROM) (?<name>[A-Z][A-Z .''-]*?)(?: (?:CONF|REF)\b.*)?$'
+  - '^(?<service>ZELLE)\b'
+  - '^(?<service>CASH APP)\*(?<name>[A-Z][A-Z .''-]*[A-Z])\b'
+  - '^(?<service>CASH APP)\b'
+  - '^(?<service>VENMO)\b'

@@ -136,7 +136,8 @@ class StatementImportTest {
                 .containsEntry("external_id", "NF2026040100013")
                 .containsEntry("source_section", "WITHDRAWAL")
                 .containsEntry("source_line_number", 43)
-                .containsEntry("merchant", null);
+                // Filled after the import commits by merchant cleaning (Phase 4); raw_description is unchanged.
+                .containsEntry("merchant", "PARKSIDE PROPERTY MGMT RENT PMT");
         assertThat((String) rent.get("source_line_text")).startsWith("<STMTTRN>").endsWith("</STMTTRN>");
         assertThat((String) rent.get("fingerprint")).hasSize(64);
         assertThat(statement).containsEntry("parser", "ofx").containsEntry("source_file_name", "april.ofx")
