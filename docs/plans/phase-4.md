@@ -406,20 +406,43 @@ fixture whose descriptions carry markers: an account number, a masked last four,
 | Email addresses, URLs with a path, phone patterns | removed |
 | Person-to-person: a txn with a `counterparty`, or matching a P2P pattern, is **never sent**; it's categorized by the seeded Zelle/Venmo rules or stays uncategorized | `ZELLE PAYMENT TO JANE Q SAMPLE` → not sent |
 | Account names and institution names, as whole phrases (they may contain a person's name) | `JOINT CHECKING - SAMPLE` → removed |
-| **Location tail (outbound only, added after step 1):** when the last token is a valid US state code and at least one token remains before the city, drop the state code and the city tokens before it | `STARBUCKS ARLINGTON VA` → `STARBUCKS` |
+| **Location tail (outbound only, settled before step 2):** a trailing state code, then one city token, then one multi-word city prefix, each dropped only while a token remains (rules below) | `STARBUCKS ARLINGTON VA` → `STARBUCKS`; `SHOP SAN DIEGO CA` → `SHOP` |
 
 **Location: aggressive outbound, conservative local.** The local merchant keeps step 1's conservative
 rule (a location tail is cut only when a store number anchors it, step 1 notes), so
 `STARBUCKS ARLINGTON VA` stays as it is in `txn.merchant`, rules and the UI. The outbound copy strips
-location aggressively: whenever the last token is a state code (from the cleaning YAML's
-`locationStates`) and at least one token would remain, the `Redactor` drops the state code and the
-city tokens before it. The city's length can't be known, so the rule may remove part of the merchant
-name; **over-stripping is acceptable for outbound data**, since it costs some AI accuracy, never
-privacy. Codes that are words are not special-cased (`METRO POWER CO` → `METRO`, accepted). It runs
-only on the strings headed for a model (chat and embedding), never on stored data, and before the
-guard (§5.3). *Open for step 5:* how many tokens count as the city (one, or more for multi-word cities
-such as `SAN DIEGO CA`), and what a two-token `NAME ST` gives. Both required cases above hold either
-way; the answer is settled with the step 5 review.
+location aggressively, on the space-separated tokens of the cleaned merchant:
+
+1. If the last token is a valid US state code and at least one token would remain, drop it.
+2. Only if step 1 dropped a code: drop one more token (the city) if at least one token would still
+   remain.
+3. Only if step 2 dropped a token: if the new last token is a common multi-word city prefix (`SAN`,
+   `SANTA`, `LOS`, `LAS`, `NEW`, `FORT`, `ST`, `SAINT`, `EL`, `PALM`, `LAKE`, `MOUNT`, `MT`, `PORT`,
+   `NORTH`, `SOUTH`, `EAST`, `WEST`), drop it too, still keeping at least one token. At most one
+   prefix is dropped.
+
+The state codes and the prefix list are data in `merchant-cleaning.yml` (`locationStates`, which
+already exists, and a new `locationCityPrefixes`), not Java. Adding the key changes the file's hash,
+so the next start re-cleans every txn once; no stored merchant changes, since cleaning doesn't use the
+prefixes.
+
+The city's length can't be known, so the rule may remove part of the merchant name;
+**over-stripping is acceptable for outbound data**, since it costs some AI accuracy, never privacy.
+Codes that are words are not special-cased (`METRO POWER CO` → `METRO`, accepted). A two-token
+`NAME ST` (any code) gives `NAME`; a lone code is left to the other rules and the guard. It runs only
+on the strings headed for a model, never on stored data, and before the guard (§5.3). "Headed for a
+model" means every merchant in a request: each item's merchant, **each similar-merchant example's
+merchant** (§4.2, §6), and the embedding text, all through the same `Redactor` call.
+
+| Cleaned merchant | Outbound |
+|---|---|
+| `BLUE BEAN CAFE ARLINGTON VA` | `BLUE BEAN CAFE` |
+| `SHOP SAN DIEGO CA` | `SHOP` |
+| `STARBUCKS VA` | `STARBUCKS` |
+| `STARBUCKS ARLINGTON VA` | `STARBUCKS` |
+| `METRO POWER CO` | `METRO` |
+
+Implemented in step 5 (`Redactor`).
 
 ### 5.3 Guard (allowlist, fails closed)
 
@@ -450,9 +473,15 @@ An amount must match `-?\d{1,10}\.\d{2}`. Example merchants pass the same check,
 
 - Every row of §5.2, both as a hit and a near miss: `ID` inside a word (`IDAHO`) is kept; three
   digits are kept.
-- Outbound location: `STARBUCKS ARLINGTON VA` → `STARBUCKS`; `METRO POWER CO` → `METRO` (over-stripping
-  accepted); the rule never empties a merchant (a lone `VA` is left to the other rules and the guard);
-  the stored `txn.merchant` of the same txn stays `STARBUCKS ARLINGTON VA` (Testcontainers).
+- Outbound location, every row of the §5.2 location table: `BLUE BEAN CAFE ARLINGTON VA` →
+  `BLUE BEAN CAFE`; `SHOP SAN DIEGO CA` → `SHOP` (prefix dropped); `STARBUCKS VA` → `STARBUCKS` (no
+  city step, nothing would remain); `STARBUCKS ARLINGTON VA` → `STARBUCKS`; `METRO POWER CO` → `METRO`
+  (over-stripping accepted). Near misses: a merchant not ending in a code is unchanged (`BLUE BEAN
+  CAFE`); only one prefix goes; a prefix is only dropped after a city was; the rule never empties a
+  merchant (a lone `VA` is left to the other rules and the guard). The prefixes and codes come from the
+  YAML (a test with a custom rules file proves it). A similar-merchant example gets exactly the same
+  redaction as an item with the same merchant. The stored `txn.merchant` of the same txn stays
+  `STARBUCKS ARLINGTON VA` (Testcontainers).
 - Property test: 1,000 random merchants with planted 4+ digit runs, emails and masked numbers. None
   survives redaction plus the guard.
 - Answer-key regression: every sample merchant's redacted form is listed in a golden file, so a change
@@ -736,7 +765,7 @@ moves before AI wiring. Reasons:
 | 0 | Plan | This file; CLAUDE.md current phase; requirements v1.32 with the decisions (§15) | — | Done: "Phase 4 plan" |
 | 1 | Merchant cleaning | V13; `MerchantCleaner`, `merchant-cleaning.yml`, `MerchantCleaningRules`; P2P counterparty; `CategorizationListener` (stage 1, after detection); startup backfill and version re-clean; P2P/ACH edge-case fixture | `MerchantCleanerTest` (the §2.3 table, every answer-key description, idempotence, 64-char cut, NFKC/bidi), `MerchantCleanerSourceTest`, `MerchantBackfillTest` (Testcontainers: null → filled, version bump re-cleans, raw description and fingerprint untouched) | Done: "Phase 4 step 1: merchant cleaning" (notes below) |
 | 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Done: "Phase 4 step 1b: dev and holdout sets" (notes below) |
-| 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Planned |
+| 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Done: "Phase 4 step 2: rules engine" (notes below) |
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Planned |
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Planned |
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
@@ -873,6 +902,76 @@ Choices the plan left open, or refined:
   (`CategorizationAccuracyTest`, `CategorizationLiveEvalIT`) does.
 - **Existing tests updated:** `SampleDataParserSelectionTest` counts 62 text sample files (was 60);
   the CSV parser claims both sets, like the answer key.
+
+### Step 2 notes
+
+Built as planned (V14, V15, `RuleEngine`, `CategorizationService` for stages 2–3, `RuleService` and
+`CategorizationController` for the rules API and `POST /api/categorization/run`). Rules run after
+cleaning in the after-import listener, at startup, after every rule change and on demand. Backend tests
+1,706 → 1,817 (+111); frontend 1.
+
+**Dev set, rules only: 129 of 148 correct (87%), 0 wrong, 19 uncategorized.** The answer key and the
+merchant fixture also have zero wrong answers. Holdout accuracy is not computed before step 9.
+Uncategorized dev rows are names with no category word (`SAFFRON ROW`, `MARIGOLD & FERN`, `SWIFTLANE
+RIDES`), subscriptions without `RECURRING PMT`, and a store refund with no refund word. These are left for the AI.
+
+Choices the plan left open, or refined:
+- **Whole words.** `EXACT`, `PREFIX` and `CONTAINS` match only where the pattern doesn't run into a
+  letter or digit on either side: `SHELL` matches `SHELL OIL`, not `SHELLFISH SHACK`; `ELECTRIC`
+  doesn't match `ELECTRONICS`; `NETFLIX` matches `NETFLIX.COM`. Without this, short brand seeds misfire.
+- **Regex case.** Text patterns are stored upper case (normalized like descriptions: accents removed,
+  single spaces). A regex is stored as written, since upper-casing turns `\b`, `\d`, `\s` into their
+  opposites, and is matched case-insensitively. The V14 CHECK `pattern = upper(pattern)` exempts REGEX.
+- **Regex deadline:** the clock is read every 64 characters the matcher reads. A stored regex that
+  doesn't compile (possible only through SQL) is skipped. A timed-out match counts as no match, so
+  the next rule decides. Both are logged once per pass with rule ids only.
+- **Direction policy for seeds:** an expense-category seed matches money out only, an income seed money
+  in only, a Transfer seed either way (`SeedRulesTest` enforces it). So a store refund or a card's
+  interest charge is never taken for spending or income.
+- **Priority bands:** person-to-person services 100, structural description phrases 50 (transfers,
+  card payments, payroll, interest, bank fees, cash, refunds, rent, recurring payments), national
+  brands 20 (`UBER EATS` 30), generic category words 0.
+- **The seed list (95 rules)** goes beyond §3.3's sketch: `CASH APP` beside Zelle and Venmo; more
+  cuisine and shop words (`DELI`, `BAKERY`, `GRILL`, `TAVERN`, `THAI`, `RAMEN`, `OUTFITTERS`, `HARDWARE`,
+  `FUEL`, `PARKING`, `TRANSIT`, `DENTAL`, `OPTOMETRY`...); and phrases `DIR(ECT) DEP`, `RECURRING PMT`,
+  `TRANSFER TO/FROM CHK|SAVINGS`, refunds and rewards (IN), `(ATM|CASH) WITHDRAWAL` and named bank
+  fees. `RENT` skips `RENT A CAR`. `INTEREST PAID` stays from §3.3. Nothing was added from what the
+  step 1b notes say about the holdout's wording (e.g. no `DIVIDEND`).
+- **Seed checks beyond the plan's:** no seed pattern shares a word with a dev or answer-key fictional
+  name (`THAI` is a cuisine word, outside dev's name column, so it is allowed). The holdout guard reads
+  the holdout's `name` column only, and checks two things: no seed word appears in a holdout name, and
+  no seed matches a holdout name in either field or direction. `CategorizationSetsTest` now lists
+  `SeedRulesTest` among the classes allowed to read the holdout.
+- **API details:**
+  - POST/PATCH return `{rule, matchCount, winCount, shadowedBy}`. The counts cover every txn,
+    computed as if the rule were active, so a deactivated rule shows what reactivating it would do.
+    `winCount` is new. `shadowedBy` is set only when one rule wins on every match.
+  - A duplicate active user rule is `409 rule-exists` with the existing `ruleId`, on create and on a
+    reactivating or editing PATCH. A seed's pattern can still be a user rule.
+  - `GET /api/categorization/rules/{id}` was added as the `Location` target.
+  - PATCH re-normalizes the pattern when the match type changes.
+  - Missing or out-of-range fields are 400; an unusable pattern is 422 `rule-invalid` with
+    `field: "pattern"`, never echoed.
+- **Run endpoint:** returns `{merchantsCleaned, ruleCategorized, ruleCleared, memoryApplied}` for now.
+  The AI counts and the `ai` parameter arrive with steps 7 and 8. Everything runs in one transaction
+  under the lock.
+- **Transactions:** a rule change and the full pass it triggers commit together (the pass joins the
+  API's transaction). The after-import pass runs in its own transaction (`REQUIRES_NEW`), like cleaning.
+- **Startup** runs rules over every txn, not only the re-cleaned ones. That is how V15's seeds reach
+  rows imported in Phase 3, and it writes nothing when nothing changed.
+- **Merchant memory** (stage 3, a no-op until step 7 writes AI categories) skips linked txns, as stage
+  5 does, and copies the latest AI category per merchant and sign.
+- **`Txn` gets `@DynamicUpdate`**, the only change outside `categorize` and `api`. A transfer action
+  that loads a txn and changes `transferExcluded` must not write back a category (or merchant) it read
+  before a concurrent pass under the other lock.
+- **Tests:** `RuleEngineTest` (54: every match type and boundary case, fields, direction including zero,
+  each ordering criterion and a shuffled grid against an independent key, the ReDoS deadline, invalid
+  regexes), `SeedRulesTest` (7), `CategorizationPipelineTest` (11: import against the answer key, an
+  idempotent second pass and run, a rules failure leaves the import and logs no text, startup pass,
+  deactivate and reactivate a seed, USER kept, rule replaces AI, AI kept without a rule, delete
+  re-evaluates, memory and its exclusions, on-demand run), `RulesApiTest` (22). Plus new constraint
+  checks in `SchemaMigrationTest`, the two new enums in `EnumCheckConstraintTest`, and the new columns
+  in `CategorizationRuleRepositoryTest`.
 
 ### Requirement mapping
 

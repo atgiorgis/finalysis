@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.finalysis.account.AccountType;
 import com.finalysis.categorize.CategoryKind;
 import com.finalysis.categorize.CategorySource;
+import com.finalysis.categorize.RuleDirection;
+import com.finalysis.categorize.RuleField;
 import com.finalysis.categorize.RuleMatchType;
 import com.finalysis.categorize.RuleSource;
 import com.finalysis.ingestion.BalanceCheck;
@@ -47,6 +49,8 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_txn_category_source", CategorySource.class),
                 Arguments.of("ck_categorization_rule_match_type", RuleMatchType.class),
                 Arguments.of("ck_categorization_rule_source", RuleSource.class),
+                Arguments.of("ck_categorization_rule_field", RuleField.class),
+                Arguments.of("ck_categorization_rule_direction", RuleDirection.class),
                 Arguments.of("ck_transfer_link_method", TransferMethod.class),
                 Arguments.of("ck_transfer_link_status", TransferStatus.class),
                 Arguments.of("ck_csv_mapping_amount_mode", CsvAmountMode.class),

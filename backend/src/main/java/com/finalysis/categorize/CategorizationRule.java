@@ -12,9 +12,16 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import org.hibernate.annotations.CurrentTimestamp;
 import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.SourceType;
+import org.hibernate.generator.EventType;
 
-/** A merchant pattern that maps to a category (CAT-01); user corrections become rules too (CAT-04). */
+/**
+ * A pattern on the merchant or description that maps to a category (CAT-01); user corrections become rules
+ * too (CAT-04). Which rule wins is {@link RuleEngine#ORDER}. Patterns are stored as {@link RuleService}
+ * normalizes them: text patterns upper case, regexes as written.
+ */
 @Entity
 @Table(name = "categorization_rule")
 public class CategorizationRule {
@@ -23,12 +30,20 @@ public class CategorizationRule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RuleField field = RuleField.MERCHANT;
+
     @Column(nullable = false)
     private String pattern;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RuleMatchType matchType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RuleDirection direction = RuleDirection.ANY;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
@@ -48,6 +63,9 @@ public class CategorizationRule {
     @Generated
     private OffsetDateTime createdAt;
 
+    @CurrentTimestamp(event = {EventType.INSERT, EventType.UPDATE}, source = SourceType.DB)
+    private OffsetDateTime updatedAt;
+
     protected CategorizationRule() {
     }
 
@@ -62,16 +80,44 @@ public class CategorizationRule {
         return id;
     }
 
+    public RuleField getField() {
+        return field;
+    }
+
+    public void setField(RuleField field) {
+        this.field = field;
+    }
+
     public String getPattern() {
         return pattern;
+    }
+
+    public void setPattern(String pattern) {
+        this.pattern = pattern;
     }
 
     public RuleMatchType getMatchType() {
         return matchType;
     }
 
+    public void setMatchType(RuleMatchType matchType) {
+        this.matchType = matchType;
+    }
+
+    public RuleDirection getDirection() {
+        return direction;
+    }
+
+    public void setDirection(RuleDirection direction) {
+        this.direction = direction;
+    }
+
     public Category getCategory() {
         return category;
+    }
+
+    public void setCategory(Category category) {
+        this.category = category;
     }
 
     public RuleSource getSource() {
@@ -96,5 +142,14 @@ public class CategorizationRule {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    /** What the rule engine needs; the category by id only, so a lazy category isn't loaded. */
+    RuleEngine.Rule toEngineRule() {
+        return new RuleEngine.Rule(id, field, matchType, pattern, direction, priority, source, category.getId());
     }
 }

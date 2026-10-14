@@ -58,21 +58,36 @@ public class MerchantCleaningService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public CleaningResult backfill() {
         lock.acquire();
-        String current = cleaner.rules().fingerprint();
         List<String> stored = jdbc.queryForList("SELECT value FROM app_setting WHERE key = ?", String.class, RULES_SETTING);
-        boolean full = !stored.equals(List.of(current));
-        Counts counts = full ? clean("") : clean("WHERE merchant IS NULL");
-        int orphans = 0;
-        if (full) {
-            orphans = jdbc.update("""
-                    DELETE FROM merchant_embedding e
-                    WHERE NOT EXISTS (SELECT 1 FROM txn t WHERE t.merchant = e.merchant)""");
-            jdbc.update("""
-                    INSERT INTO app_setting (key, value) VALUES (?, ?)
-                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""",
-                    RULES_SETTING, current);
-        }
-        return new CleaningResult(counts.examined, counts.updated, full, orphans);
+        return stored.equals(List.of(cleaner.rules().fingerprint())) ? missing() : full();
+    }
+
+    /**
+     * For {@code POST /api/categorization/run} (§1.2), in the caller's transaction: cleans rows without a
+     * merchant or, with {@code reclean}, re-cleans every row as a changed rules file would.
+     */
+    @Transactional
+    public CleaningResult cleanOnDemand(boolean reclean) {
+        lock.acquire();
+        return reclean ? full() : missing();
+    }
+
+    private CleaningResult missing() {
+        Counts counts = clean("WHERE merchant IS NULL");
+        return new CleaningResult(counts.examined, counts.updated, false, 0);
+    }
+
+    /** Every row, then unused embeddings removed and the current rules recorded. */
+    private CleaningResult full() {
+        Counts counts = clean("");
+        int orphans = jdbc.update("""
+                DELETE FROM merchant_embedding e
+                WHERE NOT EXISTS (SELECT 1 FROM txn t WHERE t.merchant = e.merchant)""");
+        jdbc.update("""
+                INSERT INTO app_setting (key, value) VALUES (?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""",
+                RULES_SETTING, cleaner.rules().fingerprint());
+        return new CleaningResult(counts.examined, counts.updated, true, orphans);
     }
 
     private static final class Counts {

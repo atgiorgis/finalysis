@@ -1,6 +1,10 @@
 package com.finalysis.api;
 
 import com.finalysis.account.AccountExistsException;
+import com.finalysis.categorize.CategoryInvalidException;
+import com.finalysis.categorize.RuleExistsException;
+import com.finalysis.categorize.RuleInvalidException;
+import com.finalysis.categorize.RuleSeededException;
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
 import com.finalysis.ingestion.StatementNotReviewableException;
@@ -147,6 +151,42 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(URI.create("urn:finalysis:problem:transfer-conflict"));
         problem.setTitle("Transaction already on a transfer link");
         problem.setProperty("linkId", ex.getLinkId());
+        return problem;
+    }
+
+    /** A rule pattern that can't be stored; {@code field} names it, and the pattern itself is never echoed. */
+    @ExceptionHandler(RuleInvalidException.class)
+    ProblemDetail handleRuleInvalid(RuleInvalidException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:rule-invalid"));
+        problem.setTitle("Invalid rule");
+        problem.setProperty("field", ex.getField());
+        return problem;
+    }
+
+    @ExceptionHandler(CategoryInvalidException.class)
+    ProblemDetail handleCategoryInvalid(CategoryInvalidException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:category-invalid"));
+        problem.setTitle("Invalid category");
+        return problem;
+    }
+
+    @ExceptionHandler(RuleSeededException.class)
+    ProblemDetail handleRuleSeeded(RuleSeededException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:rule-seeded"));
+        problem.setTitle("Seeded rule");
+        return problem;
+    }
+
+    /** A duplicate active user rule; {@code ruleId} names the existing one. */
+    @ExceptionHandler(RuleExistsException.class)
+    ProblemDetail handleRuleExists(RuleExistsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:rule-exists"));
+        problem.setTitle("Rule already exists");
+        problem.setProperty("ruleId", ex.getRuleId());
         return problem;
     }
 

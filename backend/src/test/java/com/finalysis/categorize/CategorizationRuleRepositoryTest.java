@@ -37,7 +37,10 @@ class CategorizationRuleRepositoryTest {
         assertThat(loaded.getSource()).isEqualTo(RuleSource.SEED);
         assertThat(loaded.getPriority()).isZero();
         assertThat(loaded.isActive()).isTrue();
+        assertThat(loaded.getField()).isEqualTo(RuleField.MERCHANT);
+        assertThat(loaded.getDirection()).isEqualTo(RuleDirection.ANY);
         assertThat(loaded.getCreatedAt()).isNotNull();
+        assertThat(loaded.getUpdatedAt()).isNotNull();
     }
 
     @Test

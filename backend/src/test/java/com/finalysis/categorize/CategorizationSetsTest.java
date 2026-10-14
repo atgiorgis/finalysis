@@ -38,9 +38,12 @@ class CategorizationSetsTest {
     private static final String HOLDOUT_SHA_256 = "2020780ea41e1c1916247250e5eaab847ab97a523635dae9a070ab6f6cee92af";
     private static final int HOLDOUT_ROWS = 150;
 
-    /** The only classes allowed to name the holdout: this test, the category check and the CAT-05 reports (step 9). */
+    /**
+     * The only classes allowed to name the holdout: this test, the category check, the seed leakage check (names
+     * only, step 2) and the CAT-05 reports (step 9).
+     */
     private static final Set<String> HOLDOUT_READERS = Set.of("CategorizationSetsTest.java", "CategorySeedTest.java",
-            "CategorizationAccuracyTest.java", "CategorizationLiveEvalIT.java");
+            "SeedRulesTest.java", "CategorizationAccuracyTest.java", "CategorizationLiveEvalIT.java");
 
     private static final Pattern WORD = Pattern.compile("[A-Z]{3,}");
     private static final Pattern MONEY = Pattern.compile("-?\\d+\\.\\d{2}");

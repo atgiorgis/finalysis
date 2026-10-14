@@ -77,6 +77,13 @@ class SchemaMigrationTest {
             "txn,                 ck_txn_transfer_excluded,            c",
             "categorization_rule, ck_categorization_rule_match_type,   c",
             "categorization_rule, ck_categorization_rule_source,       c",
+            "categorization_rule, ck_categorization_rule_field,        c",
+            "categorization_rule, ck_categorization_rule_direction,    c",
+            "categorization_rule, ck_categorization_rule_priority,     c",
+            "categorization_rule, ck_categorization_rule_pattern_length, c",
+            "categorization_rule, ck_categorization_rule_pattern_upper, c",
+            "txn,                 fk_txn_category_rule,                f",
+            "txn,                 ck_txn_category_rule_source,         c",
             "transfer_link,       uq_transfer_link_out,                u",
             "transfer_link,       uq_transfer_link_in,                 u",
             "transfer_link,       ck_transfer_link_distinct,           c",
@@ -136,7 +143,55 @@ class SchemaMigrationTest {
 
         assertThat(indexes).contains(
                 "ix_txn_account_date", "ix_txn_category", "ix_txn_transfer_date", "ix_txn_statement_section",
-                "ix_txn_account_external_id", "ix_txn_merchant");
+                "ix_txn_account_external_id", "ix_txn_merchant", "ix_txn_category_rule");
+    }
+
+    @Test
+    void activeUserRulesAreUniqueByPattern() {
+        String definition = jdbc.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_categorization_rule_user_pattern'", String.class);
+
+        assertThat(definition).startsWith("CREATE UNIQUE INDEX")
+                .contains("field", "match_type", "pattern", "direction", "WHERE (active AND (source <> 'SEED'::text))");
+    }
+
+    @Test
+    void aRuleCategoryNeedsTheRuleSource() {
+        long account = insertAccount("1001");
+        long txn = insertTxn(account, insertStatement(account), "fp-rule-source");
+        Long rule = jdbc.queryForObject("SELECT min(id) FROM categorization_rule", Long.class);
+
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries'), category_source = 'AI',
+                               category_rule_id = ?
+                WHERE id = ?""", rule, txn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_txn_category_rule_source");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+            CONTAINS | lower case     | 0    | ck_categorization_rule_pattern_upper
+            CONTAINS | ''             | 0    | ck_categorization_rule_pattern_length
+            CONTAINS | X              | 1001 | ck_categorization_rule_priority
+            CONTAINS | X              | -1   | ck_categorization_rule_priority
+            SOUNDEX  | X              | 0    | ck_categorization_rule_match_type
+            """)
+    void rejectsInvalidRules(String matchType, String pattern, int priority, String constraint) {
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO categorization_rule (pattern, match_type, category_id, source, priority)
+                VALUES (?, ?, (SELECT id FROM category WHERE name = 'Dining'), 'USER', ?)""",
+                pattern, matchType, priority))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(constraint);
+    }
+
+    /** A regex keeps its case: upper-casing \b would make it \B. */
+    @Test
+    void aRegexRuleMayHaveLowerCase() {
+        jdbc.update("""
+                INSERT INTO categorization_rule (pattern, match_type, category_id, source)
+                VALUES ('\bcafe\b', 'REGEX', (SELECT id FROM category WHERE name = 'Dining'), 'USER')""");
     }
 
     @Test

@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.Generated;
 
 /**
@@ -24,8 +25,13 @@ import org.hibernate.annotations.Generated;
  *
  * <p>{@code account} and {@code statement} are separate columns; the composite foreign key
  * fk_txn_statement_account guarantees they name the same account.
+ *
+ * <p>Updates write only the columns that changed ({@code @DynamicUpdate}). Categorization writes merchants
+ * and categories with SQL under its own lock; a transfer action that loads a txn and changes
+ * {@code transferExcluded} must not write back the category it read before such a pass.
  */
 @Entity
+@DynamicUpdate
 @Table(name = "txn")
 public class Txn {
 
