@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.30 · **Date:** 2026-10-13 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.31 · **Date:** 2026-10-14 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -34,7 +34,7 @@ analytics with Spring AI.
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| DAT-01 | Register accounts (checking, savings, credit card) with name, institution (each 1–100 characters), type, and last four digits. | 2 · POC | Done |
+| DAT-01 | Register accounts (checking, savings, credit card) with name, institution (each 1–100 characters), type, and last four digits. At most one account per institution (ignoring case and surrounding spaces), type and last four; a duplicate is refused with the existing account's id. | 2 · POC | Done |
 | DAT-02 | Seeded spending categories with kind (expense, income, transfer), matching the sample-data answer key. | 2 · POC | Done |
 | DAT-03 | Store full transaction history locally in Postgres. | 2 · POC | Done |
 | DAT-04 | Store each transaction's raw description unchanged, plus a cleaned merchant name. | 2 · POC | Done |
@@ -237,3 +237,4 @@ Ingestion coverage has three layers:
 | 1.28 | 2026-10-13 | ING-07: the Phase 3c review queue also lists competing candidates, an unconfirmed automatic link with a txn that a later-arriving txn would also match (detection still never changes a link; the user confirms or unlinks). Possible matches: join (one confirmed user link replacing the two one-sided links) and dismiss (the pair is recorded as rejected) confirmed; a rejected pair is never listed. |
 | 1.29 | 2026-10-13 | ING-13: `unparsed_upload.resolution` (V11, `RESOLVED` or `DISMISSED`, null while open, backfilled) records how an upload left the queue, so deleting the statement that resolved it keeps it RESOLVED instead of reading as DISMISSED. ING-07: the review queue (`GET /api/review-queue`) built in Phase 3c step 6, with `POST /api/transfers/join` and `POST /api/transfers/join/dismiss` for possible matches; statuses stay Planned until step 7. |
 | 1.30 | 2026-10-13 | Phase 3c complete (transfer detection and review queue). ING-05, ING-07 and ING-13 Done: bank-agnostic transfer detection that never reads descriptions, the user's transfer actions, one-sided transfers and possible matches, and one review queue across accounts with statement review, upload dismissal and statement delete. GR-04 is enforced through `txn.is_transfer` (= on a link); analytics apply it in Phase 5. README documents transfers, the review queue, the new endpoints and errors, the data model to V11 and the limitations; the Postman collection covers the new endpoints and runs against a freshly reset dev database. No behaviour changes in this version. |
+| 1.31 | 2026-10-14 | DAT-01: no duplicate accounts. Manual testing found that `POST /api/accounts` created the same account again on every call. V12 adds a unique index on (lower(btrim(institution)), type, last_four); the name is not part of the key, so renaming never conflicts. A duplicate create returns `409 account-exists` with only the existing `accountId`, decided by the index, so concurrent creates give one 201 and one 409. V12 refuses to run on a database that already holds duplicates and names their ids; nothing is merged or deleted (reset a dev database with `scripts/reset-dev-db.sh`). |

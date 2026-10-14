@@ -64,7 +64,8 @@ class ReconciliationImportTest {
     @Test
     void cardCsvWithoutBalancesIsUnverified() throws Exception {
         for (String file : List.of("statements/apex-visa_2026-05.csv", "statements/summit-card_2026-05.csv")) {
-            long card = support.account(AccountType.CREDIT_CARD, "2001");
+            // One card per file; V12 allows one CREDIT_CARD 2001 per institution.
+            long card = support.account(AccountType.CREDIT_CARD, "2001", "Test 2001", "Test Bank " + file);
             saveSuggestedMapping(card, file);
 
             JsonNode summary = importOk(card, file, Map.of());

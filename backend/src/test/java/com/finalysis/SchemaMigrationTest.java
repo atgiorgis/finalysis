@@ -116,6 +116,16 @@ class SchemaMigrationTest {
     }
 
     @Test
+    void accountIdentityIsUnique() {
+        String definition = jdbc.queryForObject(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_account_identity'", String.class);
+
+        assertThat(definition).startsWith("CREATE UNIQUE INDEX")
+                .contains("lower(btrim(institution))", "type", "last_four")
+                .doesNotContain("WHERE", "name");
+    }
+
+    @Test
     void txnIndexesExist() {
         List<String> indexes = jdbc.queryForList(
                 "SELECT indexname FROM pg_indexes WHERE tablename = 'txn'", String.class);
@@ -150,6 +160,17 @@ class SchemaMigrationTest {
         assertThatThrownBy(() -> insertAccount("12ab"))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_account_last_four");
+    }
+
+    @Test
+    void rejectsSameAccountWithInstitutionInAnotherCaseOrSpacing() {
+        insertAccount("1001");
+
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO account (name, institution, type, last_four)
+                VALUES ('Other', '  NORTHFIELD bank ', 'CHECKING', '1001')"""))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_account_identity");
     }
 
     @Test

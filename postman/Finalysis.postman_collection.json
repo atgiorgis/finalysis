@@ -354,14 +354,14 @@
             "url": "{{baseUrl}}/api/accounts",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Northfield Checking (imported twice)\",\n  \"institution\": \"Northfield Bank\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
+              "raw": "{\n  \"name\": \"Northfield Checking (imported twice)\",\n  \"institution\": \"Northfield Credit Union\",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             },
-            "description": "Same last four as the real checking account: the April checking statement will be imported here by mistake, so every card payment gets two possible out sides (review queue), until the statement is deleted (folder 4)."
+            "description": "Same type and last four as the real checking account, so the file is accepted; another institution, because there is one account per institution, type and last four (V12). The April checking statement will be imported here by mistake, so every card payment gets two possible out sides (review queue), until the statement is deleted (folder 4)."
           },
           "event": [
             {
@@ -1846,6 +1846,39 @@
               ]
             },
             {
+              "name": "POST an existing account → 409 account-exists",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Another Name\",\n  \"institution\": \" northfield BANK \",\n  \"type\": \"CHECKING\",\n  \"lastFour\": \"1001\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Same institution (ignoring case and surrounding spaces), type and last four as the Northfield checking account; the name doesn't matter."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type account-exists', () => pm.expect(body.type).to.eql('urn:finalysis:problem:account-exists'));",
+                      "pm.test('names the existing account', () => pm.expect(body.accountId).to.eql(Number(pm.collectionVariables.get('checkingId'))));",
+                      "pm.test('no other account data', () => pm.expect(Object.keys(body)).to.have.members(['type', 'title', 'status', 'detail', 'instance', 'accountId']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
               "name": "Unknown account → 404",
               "request": {
                 "method": "GET",
@@ -2846,7 +2879,7 @@
                 }
               }
             },
-            "description": "Edit the last four (and type, for a card) before sending."
+            "description": "Edit the last four (and type, for a card) before sending. If the account already exists, the 409 account-exists is accepted and its id is reused."
           },
           "event": [
             {
@@ -2855,9 +2888,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "console.log('Create real account:', pm.response.code);",
-                  "if (pm.response.code === 201) {",
-                  "    pm.collectionVariables.set('realAccountId', pm.response.json().id);",
-                  "    console.log('realAccountId =', pm.collectionVariables.get('realAccountId'));",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 201 || (pm.response.code === 409 && body.type === 'urn:finalysis:problem:account-exists')) {",
+                  "    // 409 account-exists: the account was created before; reuse it.",
+                  "    pm.collectionVariables.set('realAccountId', pm.response.code === 201 ? body.id : body.accountId);",
+                  "    console.log('realAccountId =', pm.collectionVariables.get('realAccountId'), pm.response.code === 409 ? '(existing)' : '');",
                   "} else {",
                   "    console.log(pm.response.text());",
                   "}"
@@ -3042,7 +3077,7 @@
                 }
               }
             },
-            "description": "The second real account, for transfers between your own accounts. Edit the last four before sending."
+            "description": "The second real account, for transfers between your own accounts. Edit the last four before sending. If the account already exists, the 409 account-exists is accepted and its id is reused."
           },
           "event": [
             {
@@ -3051,9 +3086,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "console.log('Create real card account:', pm.response.code);",
-                  "if (pm.response.code === 201) {",
-                  "    pm.collectionVariables.set('realCardAccountId', pm.response.json().id);",
-                  "    console.log('realCardAccountId =', pm.collectionVariables.get('realCardAccountId'));",
+                  "const body = pm.response.json();",
+                  "if (pm.response.code === 201 || (pm.response.code === 409 && body.type === 'urn:finalysis:problem:account-exists')) {",
+                  "    // 409 account-exists: the account was created before; reuse it.",
+                  "    pm.collectionVariables.set('realCardAccountId', pm.response.code === 201 ? body.id : body.accountId);",
+                  "    console.log('realCardAccountId =', pm.collectionVariables.get('realCardAccountId'), pm.response.code === 409 ? '(existing)' : '');",
                   "} else {",
                   "    console.log(pm.response.text());",
                   "}"

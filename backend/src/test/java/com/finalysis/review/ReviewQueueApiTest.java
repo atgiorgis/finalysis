@@ -578,7 +578,8 @@ class ReviewQueueApiTest {
     @Test
     void deletingTheWrongCopyResolvesTheGroup() throws Exception {
         long right = support.account(AccountType.CHECKING, "1001");
-        long wrong = support.account(AccountType.CHECKING, "1001");
+        // Same type and last four, so the file is accepted; another institution, since V12 allows one per bank.
+        long wrong = support.account(AccountType.CHECKING, "1001", "Test 1001", "Other Bank");
         long card = support.account(AccountType.CREDIT_CARD, "2001");
         saveSuggestedMapping(right, CHECKING_CSV);
         importOk(right, CHECKING_CSV, Map.of("periodStart", "2026-04-01", "periodEnd", "2026-04-30"));

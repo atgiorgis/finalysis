@@ -89,8 +89,9 @@ class CsvImportTest {
         csvAccounts.put("northfield-savings", support.account(AccountType.SAVINGS, "1002"));
         csvAccounts.put("apex-visa", support.account(AccountType.CREDIT_CARD, "2001"));
         csvAccounts.put("summit-card", support.account(AccountType.CREDIT_CARD, "3001"));
-        long ofxChecking = support.account(AccountType.CHECKING, "1001");
-        long ofxApex = support.account(AccountType.CREDIT_CARD, "2001");
+        // The same accounts again for the OFX files, at another institution: V12 allows one per bank.
+        long ofxChecking = support.account(AccountType.CHECKING, "1001", "Test 1001", "OFX Test Bank");
+        long ofxApex = support.account(AccountType.CREDIT_CARD, "2001", "Test 2001", "OFX Test Bank");
 
         List<ManifestEntry> manifest = manifest();
         assertThat(manifest).hasSize(25);

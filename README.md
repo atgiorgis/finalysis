@@ -53,7 +53,8 @@ each context's connection pool at 3; Spring caches about ten contexts per run.
 database: **1. Setup** creates the four sample accounts, saves the Apex mapping by hand and the
 Summit mapping from the preview's suggestion, imports four statements (two `IMPORTED`, one
 `RECONCILED`, one `NEEDS_REVIEW`), imports the April checking statement a second time into a
-second checking account (the "wrong account" story), and uploads a PDF no parser recognizes.
+second checking account with the same last four at another institution (the "wrong account"
+story), and uploads a PDF no parser recognizes.
 Folders 2, 3 and 5 read accounts, mappings, previews and categories. **4. Statements, transfers and
 review queue** reads statements, then resolves every item in the review queue through the API:
 links a card payment by hand, confirms, unlinks and relinks it, marks one-sided transfers and joins
@@ -79,7 +80,9 @@ or timing the sample data can't provide; the backend tests cover them.
 
 The `--folder` flags leave out **7. Real-file test**, which is for manual runs with your own
 statement: in the Postman app, select the file in **Preview real file** and **Import real file**,
-send the first six requests in order, and read the results in the Postman console. To test transfers
+send the first six requests in order, and read the results in the Postman console. **Create real
+account** and **Create real card account** accept a `409 account-exists` and reuse the existing id, so
+the folder can be sent again without a reset. To test transfers
 between two of your own accounts, also select your card file in **Preview real card file** and
 **Import real card file** and send the remaining seven requests: they create a second account
 ("Real Card"), import into it, run detection, and list the transfer links and the review queue. Those
@@ -302,6 +305,11 @@ erDiagram
   embedding models produce, so both share one schema. A cosine HNSW index serves nearest-neighbour
   search. The `model` column records which model produced each vector, so rows can be re-embedded
   when the model changes.
+- **One account per institution, type and last four** (V12). Institution is compared ignoring
+  case and surrounding spaces; the name is free, so two accounts may share one and a rename never
+  conflicts. The API inserts with `ON CONFLICT DO NOTHING` on the unique index and then looks up the
+  existing id, so the index, not a prior read, decides, and concurrent creates give one 201 and one
+  `409 account-exists`.
 - **Categories are bank-agnostic.** They describe the kind of spending, not any institution's own
   category labels, so one set applies to every account.
 
@@ -320,8 +328,15 @@ erDiagram
 | V9 `transfer_detection` | `transfer_link` sides both nullable (never both null; MATCHED means both), `confirmed_at`, USER implies confirmed; `txn.transfer_excluded`; `transfer_rejection`; the trigger that keeps `txn.is_transfer` equal to "on a link". |
 | V10 `statement_review` | `statement.reviewed_at`, allowed only on NEEDS_REVIEW statements. |
 | V11 `unparsed_upload_resolution` | `unparsed_upload.resolution` (RESOLVED, DISMISSED), tied to `resolved_at`, backfilled from V8's rule. |
+| V12 `account_unique` | Unique index `uq_account_identity` on (lower(btrim(institution)), type, last_four). Fails, naming the account ids, if duplicates already exist. |
 
 Applied migrations are never edited. Every schema change is a new migration.
+
+> **V12 on an existing dev database:** if the backend fails to start with `V12: duplicate accounts
+> (same institution, type and last four), account ids: …`, the dev database holds accounts created
+> twice before V12. V12 never merges or deletes them, since statements may hang off either copy.
+> Reset the dev database with `scripts/reset-dev-db.sh` (this deletes all local data) and start the
+> backend again.
 
 ## API
 
@@ -329,7 +344,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 |---|---|---|---|---|
 | `GET` | `/api/status` | Backend health, shown by the frontend | 200 | — |
 | `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details | 200 | — |
-| `POST` | `/api/accounts` | Register an account (DAT-01) | 201, `Location` | — |
+| `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
 | `GET` | `/api/accounts/{id}` | Get one account | 200 | — |
 | `PATCH` | `/api/accounts/{id}` | Rename an account (only `name`) | 200 | — |
@@ -396,6 +411,7 @@ returned.
 | 404 | — | Unknown id (`Account 42 not found`), or an account without a CSV mapping on `GET …/csv-mapping` | Check the id with `GET /api/accounts`; save a mapping first |
 | 405, 415 | — | Wrong HTTP method, or a JSON/multipart body sent where the other is expected (Spring's own errors, same format) | Use the method and body type from the API table |
 | 409 | — | A database constraint was violated; generic `detail` | Should not happen through the API; check the server log and report it |
+| 409 | `account-exists` | `POST /api/accounts` for an account that exists: same institution (ignoring case and surrounding spaces), type and last four. `accountId` names it; no other account data is returned | Use that account (`GET /api/accounts/{accountId}`); rename it if the name is what should differ |
 | 409 | `mapping-locked` | A used CSV mapping's fingerprint fields (sign, description columns, printed-date column) would change; `fields[]` lists them | If the change is intended, resend with `?confirmFingerprintChange=true`; overlapping re-imports will then add rows again and need review |
 | 413 | `payload-too-large` | File over 10 MB | Export a shorter date range |
 | 415 | `unsupported-format` | Disallowed extension, empty, ZIP/XLSX, saved web page, binary or invalid text, a PDF not named `.pdf` (or the reverse), or no parser recognizes the content | Download the statement as OFX, QFX or CSV |

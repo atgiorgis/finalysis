@@ -1,5 +1,6 @@
 package com.finalysis.api;
 
+import com.finalysis.account.AccountExistsException;
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
 import com.finalysis.ingestion.StatementNotReviewableException;
@@ -101,6 +102,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(URI.create("urn:finalysis:problem:mapping-locked"));
         problem.setTitle("CSV mapping is locked");
         problem.setProperty("fields", ex.getFields());
+        return problem;
+    }
+
+    /** A duplicate account; {@code accountId} names the existing one and nothing else about it. */
+    @ExceptionHandler(AccountExistsException.class)
+    ProblemDetail handleAccountExists(AccountExistsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:account-exists"));
+        problem.setTitle("Account already exists");
+        problem.setProperty("accountId", ex.getAccountId());
         return problem;
     }
 

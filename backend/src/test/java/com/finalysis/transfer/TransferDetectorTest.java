@@ -194,7 +194,12 @@ class TransferDetectorTest {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void theLockNeedsATransaction() {
-        assertThatThrownBy(lock::acquire).isInstanceOf(IllegalTransactionStateException.class);
+        try {
+            assertThatThrownBy(lock::acquire).isInstanceOf(IllegalTransactionStateException.class);
+        } finally {
+            // Without a test transaction, setUp's accounts were committed; nothing rolls them back.
+            jdbc.update("DELETE FROM account WHERE id IN (?, ?, ?)", checking, savings, card);
+        }
     }
 
     @Test

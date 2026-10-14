@@ -106,6 +106,58 @@ class AccountControllerTest {
                 .andExpect(jsonPath("$.name").value("New Name"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"Northfield Bank", "northfield bank", "NORTHFIELD BANK", "  Northfield Bank  ", "\tnorthfield BANK"})
+    void duplicateCreateReturns409WithOnlyTheExistingId(String institution) throws Exception {
+        long existing = save("Everyday Checking", AccountType.CHECKING, "1234");
+        long before = accounts.count();
+
+        String body = expectProblem(create(valid("institution", institution)), 409)
+                .andExpect(jsonPath("$.type").value("urn:finalysis:problem:account-exists"))
+                .andExpect(jsonPath("$.title").value("Account already exists"))
+                .andExpect(jsonPath("$.accountId").value(existing))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(toMap(body).keySet()).containsExactlyInAnyOrder(
+                "type", "title", "status", "detail", "instance", "accountId");
+        assertThat(body).doesNotContain("1234").doesNotContainIgnoringCase("northfield");
+        assertThat(accounts.count()).isEqualTo(before);
+    }
+
+    @Test
+    void nameIsNotPartOfTheIdentity() throws Exception {
+        long existing = save("Everyday Checking", AccountType.CHECKING, "1234");
+
+        expectProblem(create(valid("name", "Another Name")), 409)
+                .andExpect(jsonPath("$.accountId").value(existing));
+    }
+
+    static List<Arguments> distinctAccounts() {
+        return List.of(
+                Arguments.of("type", "SAVINGS"),
+                Arguments.of("lastFour", "4321"),
+                Arguments.of("institution", "Summit Card Services"),
+                Arguments.of("institution", "Northfield Bank NA"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("distinctAccounts")
+    void createDifferingInTypeLastFourOrInstitutionIsAllowed(String field, String value) throws Exception {
+        save("Everyday Checking", AccountType.CHECKING, "1234");
+
+        create(valid(field, value)).andExpect(status().isCreated());
+    }
+
+    @Test
+    void renameToAnotherAccountsNameIsAllowed() throws Exception {
+        save("Everyday Checking", AccountType.CHECKING, "1234");
+        long other = save("Second Checking", AccountType.CHECKING, "5678");
+
+        rename(other, Map.of("name", "Everyday Checking"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Everyday Checking"));
+    }
+
     static List<Arguments> invalidCreates() {
         return List.of(
                 Arguments.of("name", valid("name", "")),

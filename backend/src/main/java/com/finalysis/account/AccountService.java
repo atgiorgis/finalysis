@@ -18,11 +18,19 @@ public class AccountService {
         this.accounts = accounts;
     }
 
+    /**
+     * Registers the account, or throws {@link AccountExistsException} naming the one with the same
+     * institution, type and last four. The database decides (V12), so concurrent creates of the same
+     * account give one success and one conflict, never two rows.
+     */
     @Transactional
     public AccountResponse create(CreateAccountRequest request) {
-        Account account = accounts.saveAndFlush(
-                new Account(request.name(), request.institution(), request.type(), request.lastFour()));
-        return AccountResponse.from(account);
+        String type = request.type().name();
+        long id = accounts.insertIfAbsent(request.name(), request.institution(), type, request.lastFour())
+                .orElseThrow(() -> new AccountExistsException(
+                        accounts.findIdByIdentity(request.institution(), type, request.lastFour())
+                                .orElseThrow(() -> new IllegalStateException("Conflicting account not found"))));
+        return AccountResponse.from(find(id));
     }
 
     @Transactional(readOnly = true)
@@ -35,6 +43,7 @@ public class AccountService {
         return AccountResponse.from(find(id));
     }
 
+    /** Name is not part of an account's identity (V12), so a rename never conflicts with another account. */
     @Transactional
     public AccountResponse rename(long id, RenameAccountRequest request) {
         Account account = find(id);
