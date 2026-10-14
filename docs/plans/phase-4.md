@@ -617,7 +617,7 @@ No change to `merchant_embedding`; `model` already exists (DAT-06).
 | `GET /api/transactions?accountId=&categoryId=&uncategorized=&source=RULE\|AI\|USER&isTransfer=&from=&to=&merchant=&page=&size=` | List txns, newest `txn_date` first, paged (size ≤ 200) | 200 `{items, page, size, total}` | 400 bad filter |
 | `GET /api/transactions/{id}` | One txn | 200 | 404 |
 | `PUT /api/transactions/{id}/category` `{categoryId, applyToMerchant}` | Correction: USER on this txn. With `applyToMerchant` (default true) and a merchant, upserts a USER_CORRECTION rule (MERCHANT, EXACT, direction of the txn) and re-runs rules for that merchant | 200 `{txn, ruleId, otherTxnsUpdated}` | 404, 422 `category-invalid` |
-| `DELETE /api/transactions/{id}/category` | Clear a USER category. The txn is eligible again; rules run for it now | 200 txn | 404 |
+| `DELETE /api/transactions/{id}/category?removeRule=` | Clear a USER category. The txn is eligible again; rules run for it now. With `removeRule=true` (added in step 3, see its notes), also delete the merchant's correction rule and re-run the merchant's rules | 200 txn; with `removeRule=true` 200 `{txn, ruleId, ruleAction, otherTxnsUpdated}` | 404, 400 bad `removeRule` |
 | `GET /api/categorization/rules?source=&active=&categoryId=` | List rules in winning order | 200 | 400 |
 | `POST /api/categorization/rules` | Create a USER rule, applied at once | 201 + `Location`, with `matchCount`, `shadowedBy` | 422 `rule-invalid`, `category-invalid` |
 | `PATCH /api/categorization/rules/{id}` | User rules: any field. Seeds: `active` only | 200 | 404, 409 `rule-seeded`, 422 |
@@ -767,7 +767,7 @@ moves before AI wiring. Reasons:
 | 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Done: "Phase 4 step 1b: dev and holdout sets" (notes below) |
 | 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Done: "Phase 4 step 2: rules engine" (notes below) |
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Done: "Phase 4 step 3: corrections and transaction API" (notes below) |
-| 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Planned |
+| 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Done: "Phase 4 step 4: CAT-08 suggested one-sided transfers" (notes below) |
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Planned |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Planned |
@@ -1024,11 +1024,24 @@ Choices the plan left open, or refined:
 - **Zero amount.** The rule's direction is `ANY`, since `OUT` and `IN` never match zero.
 - **No merchant, or `applyToMerchant: false`.** Only the txn changes; `ruleId` is null, `ruleAction` is
   `NONE`.
-- **Undo is two calls.** `DELETE /api/transactions/{id}/category` clears the USER category and runs the
-  rules for that txn, as §9.2 says. The correction rule still exists, so the txn becomes RULE with the
-  corrected category. To undo fully, the user also deletes the rule
-  (`DELETE /api/categorization/rules/{ruleId}`, the id is in the correction response); the merchant's txns
-  then go back to the seeds. `CorrectionTest` covers both.
+- **Undo: the default clears the txn; `removeRule=true` undoes fully in one call** (changed at review,
+  committed with step 4).
+  - `DELETE /api/transactions/{id}/category` (no param, or `removeRule=false`) is unchanged: it clears the
+    USER category and runs the rules for that txn, as §9.2 says. The correction rule still exists, so the
+    txn becomes RULE with the corrected category. Body: the txn.
+  - `DELETE …/category?removeRule=true` clears the USER category, deletes the active rule with the
+    correction's key (merchant, `EXACT`, the txn's direction) **only if its source is `USER_CORRECTION`**,
+    then re-runs the rules for the merchant's txns, which go back to the seeds, another rule, or
+    uncategorized. A rule made through the rules API (`USER`) with the same key is kept, and seeds are never
+    user rules, so they can't be found. Body: `{txn, ruleId, ruleAction, otherTxnsUpdated}`, `ruleAction`
+    `REMOVED` (with the deleted rule's id) or `NONE` (`ruleId` null).
+  - `otherTxnsUpdated` counts the merchant's other txns whose category changed, in either direction (the
+    pass covers the whole merchant; only the rule's direction changes in practice).
+  - The rule is deleted even if the txn's category was already cleared, so a two-call undo started with the
+    default can be finished with `removeRule=true`. A txn without a merchant just has its category cleared.
+  - The two bodies differ by the parameter (the handler returns `Object`), so the default stays as it was.
+  - Deleting the rule is a delete, like `DELETE /api/categorization/rules/{id}`, not a deactivation.
+  - Same locking as a correction: the categorization lock, the txn row `FOR UPDATE`, one transaction.
 - **Clearing a category that isn't USER** is a no-op: 200 with the txn unchanged, no rules pass. It's an
   undo for corrections, not a way to re-ask the AI.
 - **Locking.** A correction or a clear takes the categorization lock and locks the txn row
@@ -1066,6 +1079,50 @@ Choices the plan left open, or refined:
   category, errors). `SensitiveDataLeakTest` covers the new error paths and a correction and undo with
   markers. `PackageDependencyTest` has the leaf rule. `CategorizeRows` is public and handles several
   accounts and dates.
+
+### Step 4 notes
+
+Built as planned (§8): `SuggestedTransferQuery` in `review` (plain SQL on `category.kind = 'TRANSFER'`,
+`NOT is_transfer`, `NOT transfer_excluded`; no `categorize` class, so the ArchUnit rules are unchanged),
+`ReviewItem.SuggestedOneSidedTransferItem` (`key` `txn-<id>`, `txn` as a `TxnSummary`, `categorySource`,
+`ruleId`, `since`), `ReviewItemKind.SUGGESTED_ONE_SIDED_TRANSFER` and `counts.suggestedOneSidedTransfers`.
+No migration and nothing new on the transfer side. Backend tests 1,841 → 1,850 (+9: 4 for the full undo,
+5 for CAT-08); frontend 1. This commit also carries the step 3 undo change (step 3 notes, "Undo").
+
+Following 3c's review-queue rules:
+- **One snapshot.** The query runs inside `ReviewQueueService.list`'s REPEATABLE READ transaction, after the
+  transfer queries, and its txns are loaded with theirs in one `findWithAccountByIdIn`.
+- **Listed once.** A txn in a candidate group or a competing pair (or a possible match, already linked) is
+  dropped from the suggestions in Java, against the same snapshot's ids, so it appears only there.
+- **Counts by kind** after the `accountId` filter, whatever `kind` asks for; `kind` and `accountId` filter
+  as for the other kinds (the item's account is the txn's). Ties on `since` break by txn id.
+- **Remembered.** Accepting stores a link (one-sided `{outTxnId}` for money out, `{inTxnId}` for money in,
+  or a manual pair), so `is_transfer` is true. Dismissing stores `transfer_excluded`. Neither is touched by
+  detection or any categorization pass (categorization never writes either column), so neither brings the
+  item back; the tests re-run both after each action. Correcting the category to a non-Transfer one removes
+  it as well.
+
+Choices the plan left open:
+- **`since`** is `categorized_at`, falling back to `created_at`. Every category write sets `categorized_at`,
+  so the fallback is only a guard against a NULL in the sort.
+- **`categorySource`** is a string (`RULE`, `AI`, `USER`), not the `CategorySource` enum, so `review` still
+  doesn't depend on `categorize`. A USER Transfer category is suggested too: the user said "transfer" but
+  gave no link.
+- **Undoing a decision lists it again.** Unlinking a one-sided link or `DELETE …/not-transfer` makes the txn
+  a suggestion again while its category is still Transfer-kind. That is the decision being withdrawn, not
+  forgotten.
+- **Postman folder 4** asserts exact `counts` and item lists, and the sample imports now produce
+  suggestions (the checking statements' online transfers to a savings account that isn't imported). Those
+  checks now leave out the new kind and count (`_.omit`, a kind filter, items found by kind rather than by
+  index). Folder 8 tests CAT-08 itself in step 10. Not run with newman in this step: that needs a reset dev
+  database.
+- **Tests:** `ReviewQueueApiTest` +5. A rule-categorized and a USER txn are listed with every field,
+  newest first, by account, with counts that ignore `kind`; expense and uncategorized txns aren't. Linked,
+  excluded, grouped and competing txns aren't suggested, while the group and the competing candidate are
+  still counted. Accepting (out and in) and dismissing are remembered through detection and a rules pass,
+  undoing the exclusion lists it again, and a manual link or a correction removes it.
+  `reviewAndDismissRemoveTheirItems` now looks only at statement and upload items, since its imported
+  statement has unlinked online transfers. The transfer scramble tests are unchanged and green.
 
 ### Requirement mapping
 

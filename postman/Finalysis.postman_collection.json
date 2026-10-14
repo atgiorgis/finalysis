@@ -936,9 +936,9 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('one of each, two transfer groups', () => pm.expect(body.counts).to.eql({statements: 1, unparsedUploads: 1, transferCandidates: 2, competingCandidates: 0, possibleMatches: 0}));",
+                      "pm.test('one of each, two transfer groups', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 1, unparsedUploads: 1, transferCandidates: 2, competingCandidates: 0, possibleMatches: 0}));",
                       "pm.test('newest first', () => { for (let i = 1; i < body.items.length; i++) pm.expect(body.items[i - 1].since >= body.items[i].since).to.be.true; });",
-                      "pm.test('kinds', () => pm.expect(body.items.map(i => i.kind)).to.eql(['UNPARSED_UPLOAD', 'TRANSFER_CANDIDATES', 'TRANSFER_CANDIDATES', 'STATEMENT']));",
+                      "pm.test('kinds, CAT-08 suggestions left out', () => pm.expect(body.items.map(i => i.kind).filter(k => k !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql(['UNPARSED_UPLOAD', 'TRANSFER_CANDIDATES', 'TRANSFER_CANDIDATES', 'STATEMENT']));",
                       "const checking = Number(pm.collectionVariables.get('checkingId')), duplicate = Number(pm.collectionVariables.get('duplicateId'));",
                       "const groups = body.items.filter(i => i.kind === 'TRANSFER_CANDIDATES');",
                       "pm.test('each card payment has two possible out sides, one per checking copy', () => groups.forEach(g => {",
@@ -959,7 +959,7 @@
                       "    pm.expect(g.txns.map(t => t.amount).sort()).to.eql(['-842.17', '-842.17', '842.17']);",
                       "    pm.expect(g.pairs.map(p => p.daysApart)).to.eql([3, 3]);",
                       "});",
-                      "pm.test('the statement item carries its warnings', () => pm.expect(body.items[3].warnings.length).to.be.above(0));"
+                      "pm.test('the statement item carries its warnings', () => pm.expect(body.items.find(i => i.kind === 'STATEMENT').warnings.length).to.be.above(0));"
                     ]
                   }
                 }
@@ -981,7 +981,7 @@
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
                       "pm.test('only the Apex group', () => { pm.expect(body.items.length).to.eql(1); pm.expect(body.items[0].kind).to.eql('TRANSFER_CANDIDATES'); });",
-                      "pm.test('counts follow the account, not the kind', () => pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 1, competingCandidates: 0, possibleMatches: 0}));"
+                      "pm.test('counts follow the account, not the kind', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 1, competingCandidates: 0, possibleMatches: 0}));"
                     ]
                   }
                 }
@@ -1559,7 +1559,7 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('empty', () => { pm.expect(body.items).to.eql([]); pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 0, possibleMatches: 0}); });"
+                      "pm.test('empty', () => { pm.expect(body.items.filter(i => i.kind !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql([]); pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 0, possibleMatches: 0}); });"
                     ]
                   }
                 }
@@ -1621,8 +1621,8 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('only a competing candidate', () => pm.expect(body.counts).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 1, possibleMatches: 0}));",
-                      "const item = body.items[0];",
+                      "pm.test('only a competing candidate', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 1, possibleMatches: 0}));",
+                      "const item = body.items.find(i => i.kind === 'COMPETING_CANDIDATE');",
                       "pm.test('the unconfirmed Summit link', () => { pm.expect(item.kind).to.eql('COMPETING_CANDIDATE'); pm.expect(item.linkId).to.eql(Number(pm.collectionVariables.get('summitLinkId'))); pm.expect(item.key).to.eql('link-' + item.linkId); });",
                       "pm.test('the second account\\'s row competes for it', () => { pm.expect(item.competitors.map(t => t.accountId)).to.eql([Number(pm.collectionVariables.get('duplicateId'))]); pm.expect(item.pairs.length).to.eql(2); });"
                     ]
@@ -1664,7 +1664,7 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                      "pm.test('nothing waiting', () => pm.expect(pm.response.json().items).to.eql([]));"
+                      "pm.test('nothing waiting', () => pm.expect(pm.response.json().items.filter(i => i.kind !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql([]));"
                     ]
                   }
                 }

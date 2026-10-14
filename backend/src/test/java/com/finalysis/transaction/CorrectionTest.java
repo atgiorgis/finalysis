@@ -354,6 +354,105 @@ class CorrectionTest {
                 .isEqualTo(before);
     }
 
+    // ------------------------------------------------------------------ full undo (?removeRule=true)
+
+    @Test
+    void aFullUndoDeletesTheCorrectionRuleAndTheMerchantGoesBackToTheSeeds() throws Exception {
+        long cafe = rows.txn("SQ *BLUE BEAN CAFE 4412", "-6.25");
+        long other = rows.txn("SQ *BLUE BEAN CAFE 4412", "-3.00");
+        long kept = rows.txn("SQ *BLUE BEAN CAFE 4412", "-4.50");
+        long refund = rows.txn("SQ *BLUE BEAN CAFE 4412", "6.25");
+        categorization.categorizeAll();
+        long seed = rows.ruleId(cafe);
+        String refundCategory = rows.category(refund);
+        rows.categorize(kept, "Shopping", "USER");
+        long ruleId = json(correct(cafe, "Groceries")).get("ruleId").asLong();
+        assertThat(rows.category(other)).isEqualTo("Groceries");
+
+        JsonNode body = json(mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "true"))
+                .andExpect(status().isOk()));
+
+        assertThat(body.get("ruleAction").asString()).isEqualTo("REMOVED");
+        assertThat(body.get("ruleId").asLong()).isEqualTo(ruleId);
+        assertThat(body.get("otherTxnsUpdated").asInt()).as("only the other OUT txn; USER and IN unchanged").isOne();
+        assertThat(body.get("txn").get("id").asLong()).isEqualTo(cafe);
+        assertThat(body.get("txn").get("categorySource").asString()).isEqualTo("RULE");
+        assertThat(body.get("txn").get("ruleId").asLong()).isEqualTo(seed);
+        assertThat(body.get("txn").get("category").get("name").asString()).isEqualTo("Dining");
+        assertThat(userRules()).isEmpty();
+        assertThat(rows.category(other)).isEqualTo("Dining");
+        assertThat(rows.ruleId(other)).isEqualTo(seed);
+        assertThat(rows.source(kept)).isEqualTo("USER");
+        assertThat(rows.category(refund)).isEqualTo(refundCategory);
+    }
+
+    /** The default undo leaves the rule; a full undo afterwards still finds and deletes it. */
+    @Test
+    void aFullUndoFinishesATwoCallUndo() throws Exception {
+        long cafe = rows.txn("SQ *BLUE BEAN CAFE 4412", "-6.25");
+        categorization.categorizeAll();
+        long ruleId = json(correct(cafe, "Groceries")).get("ruleId").asLong();
+        mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(cafe)) // the default body: the txn
+                .andExpect(jsonPath("$.ruleId").value(ruleId));
+
+        mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ruleAction").value("REMOVED"))
+                .andExpect(jsonPath("$.ruleId").value(ruleId))
+                .andExpect(jsonPath("$.txn.category.name").value("Dining"));
+        assertThat(userRules()).isEmpty();
+    }
+
+    /** A rule made through the rules API with the same key is the user's own; a full undo keeps it. */
+    @Test
+    void aFullUndoKeepsARuleMadeThroughTheRulesApi() throws Exception {
+        long cafe = rows.txn("BLUE BEAN CAFE", "-6.25");
+        long other = rows.txn("BLUE BEAN CAFE", "-3.00");
+        String created = mockMvc.perform(post("/api/categorization/rules").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"matchType": "EXACT", "pattern": "BLUE BEAN CAFE", "direction": "OUT", "categoryId": %d}"""
+                                .formatted(rows.categoryId("Dining"))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long apiRule = jsonMapper.readTree(created).get("rule").get("id").asLong();
+        correct(cafe, "Shopping").andExpect(jsonPath("$.ruleId").value(apiRule));
+
+        mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ruleAction").value("NONE"))
+                .andExpect(jsonPath("$.ruleId").isEmpty())
+                .andExpect(jsonPath("$.otherTxnsUpdated").value(0))
+                .andExpect(jsonPath("$.txn.categorySource").value("RULE"))
+                .andExpect(jsonPath("$.txn.ruleId").value(apiRule))
+                .andExpect(jsonPath("$.txn.category.name").value("Shopping"));
+        assertThat(userRules()).singleElement().satisfies(rule -> assertThat(rule)
+                .containsEntry("id", apiRule).containsEntry("source", "USER"));
+        assertThat(rows.ruleId(other)).isEqualTo(apiRule);
+    }
+
+    /** Without a correction rule a full undo is a plain clear: seeds are never deleted. */
+    @Test
+    void aFullUndoWithoutACorrectionRuleDeletesNothing() throws Exception {
+        long cafe = rows.txn("SQ *BLUE BEAN CAFE 4412", "-6.25");
+        categorization.categorizeAll();
+        long seed = rows.ruleId(cafe);
+        correct(cafe, "Groceries", false).andExpect(status().isOk());
+        int rulesBefore = support.count("SELECT count(*) FROM categorization_rule");
+
+        mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ruleAction").value("NONE"))
+                .andExpect(jsonPath("$.ruleId").isEmpty())
+                .andExpect(jsonPath("$.txn.ruleId").value(seed));
+        assertThat(support.count("SELECT count(*) FROM categorization_rule")).isEqualTo(rulesBefore);
+        mockMvc.perform(delete("/api/transactions/{id}/category", 999_999_999).param("removeRule", "true"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/transactions/{id}/category", cafe).param("removeRule", "maybe"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("removeRule"));
+    }
+
     // ------------------------------------------------------------------ errors
 
     @Test

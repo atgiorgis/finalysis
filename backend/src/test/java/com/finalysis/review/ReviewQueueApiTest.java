@@ -6,12 +6,14 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
+import com.finalysis.categorize.CategorizationService;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
 import com.finalysis.transfer.TransferRows;
@@ -38,8 +40,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * The review queue and its actions (ING-07, ING-13; docs/plans/phase-3c.md §4): mark a NEEDS_REVIEW
  * statement reviewed, the late-arrival re-queue, reading and dismissing unparsed uploads, and
- * {@code GET /api/review-queue} with its five kinds, competing candidates (§4.6) and possible matches
- * with join and dismiss (§4.5). Tests that import commit for real, and the accounts they create are
+ * {@code GET /api/review-queue} with its six kinds, competing candidates (§4.6), possible matches
+ * with join and dismiss (§4.5), and suggested one-sided transfers (CAT-08, phase-4.md §8). Tests that import commit for real, and the accounts they create are
  * deleted after each test; tests built from plain SQL rows are {@code @Transactional} and roll back.
  * Queue assertions filter by the test's own accounts, since the queue spans every account.
  */
@@ -62,13 +64,16 @@ class ReviewQueueApiTest {
     private final JdbcTemplate jdbc;
     private final ImportTestSupport support;
     private final TransferRows rows;
+    private final CategorizationService categorization;
 
-    ReviewQueueApiTest(MockMvc mockMvc, JsonMapper jsonMapper, AccountRepository accounts, JdbcTemplate jdbc) {
+    ReviewQueueApiTest(MockMvc mockMvc, JsonMapper jsonMapper, AccountRepository accounts, JdbcTemplate jdbc,
+                       CategorizationService categorization) {
         this.mockMvc = mockMvc;
         this.jsonMapper = jsonMapper;
         this.jdbc = jdbc;
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
         this.rows = new TransferRows(jdbc);
+        this.categorization = categorization;
     }
 
     @AfterEach
@@ -309,26 +314,37 @@ class ReviewQueueApiTest {
 
         JsonNode queue = queue(Map.of("accountId", Long.MAX_VALUE));
         assertThat(queue.get("items").size()).isZero();
-        assertThat(queue.get("counts")).isEqualTo(counts(0, 0, 0, 0, 0));
+        assertThat(queue.get("counts")).isEqualTo(counts(0, 0, 0, 0, 0, 0));
     }
 
-    /** A reviewed statement and a dismissed upload leave the queue; a late warning brings the statement back. */
+    /**
+     * A reviewed statement and a dismissed upload leave the queue; a late warning brings the statement back. The
+     * statement's unlinked online transfers are suggested one-sided transfers (CAT-08), so only these two kinds are
+     * looked at.
+     */
     @Test
     void reviewAndDismissRemoveTheirItems() throws Exception {
         long checking = support.account(AccountType.CHECKING, "1001");
         long may = importOk(checking, LEDGERBAL_MISMATCH, Map.of("periodEnd", "2026-05-20")).get("statementId").asLong();
         long upload = upload(checking);
-        assertThat(kinds(queue(Map.of("accountId", checking)))).containsExactlyInAnyOrder("STATEMENT", "UNPARSED_UPLOAD");
+        assertThat(statementAndUploadKinds(checking)).containsExactlyInAnyOrder("STATEMENT", "UNPARSED_UPLOAD");
 
         review(may);
         mockMvc.perform(post("/api/unparsed-uploads/{id}/dismiss", upload)).andExpect(status().isOk());
-        assertThat(queue(Map.of("accountId", checking)).get("items").size()).isZero();
+        assertThat(statementAndUploadKinds(checking)).isEmpty();
 
         importOk(checking, OFX_APRIL, Map.of()); // the re-check fails: May needs review again
-        JsonNode queue = queue(Map.of("accountId", checking));
-        assertThat(kinds(queue)).containsExactly("STATEMENT");
-        assertThat(item(queue, "STATEMENT").get("statementId").asLong()).isEqualTo(may);
-        assertThat(item(queue, "STATEMENT").get("balanceCheck").asString()).isEqualTo("FAILED");
+        assertThat(statementAndUploadKinds(checking)).containsExactly("STATEMENT");
+        JsonNode statements = queue(Map.of("accountId", checking, "kind", "STATEMENT"));
+        assertThat(item(statements, "STATEMENT").get("statementId").asLong()).isEqualTo(may);
+        assertThat(item(statements, "STATEMENT").get("balanceCheck").asString()).isEqualTo("FAILED");
+        assertThat(statements.get("counts").get("suggestedOneSidedTransfers").asInt()).isPositive();
+    }
+
+    private List<String> statementAndUploadKinds(long accountId) throws Exception {
+        return kinds(queue(Map.of("accountId", accountId))).stream()
+                .filter(kind -> kind.equals("STATEMENT") || kind.equals("UNPARSED_UPLOAD"))
+                .toList();
     }
 
     // ------------------------------------------------------------------ transfer candidate groups (§2.3)
@@ -569,6 +585,138 @@ class ReviewQueueApiTest {
         assertThat(support.count("SELECT count(*) FROM transfer_rejection WHERE out_txn_id = ?", out)).isZero();
     }
 
+    // ------------------------------------------------------------------ suggested one-sided transfers (CAT-08)
+
+    @Test
+    @Transactional
+    void aTransferCategoryWithoutALinkIsSuggested() throws Exception {
+        Accounts a = sqlAccounts();
+        long byRule = rows.txn(a.checking(), "-500.00", DAY);
+        ruleTransfer(byRule);
+        long byUser = rows.txn(a.checking(), "250.00", DAY);
+        categorize(byUser, "Transfer", "USER");
+        jdbc.update("UPDATE txn SET categorized_at = now() - interval '1 day' WHERE id = ?", byUser);
+        long expense = rows.txn(a.checking(), "-40.00", DAY);
+        categorize(expense, "Groceries", "USER");
+        rows.txn(a.checking(), "-41.00", DAY); // uncategorized
+        long seed = jdbc.queryForObject("SELECT category_rule_id FROM txn WHERE id = ?", Long.class, byRule);
+
+        JsonNode queue = queue(Map.of("accountId", a.checking()));
+
+        assertThat(queue.get("counts")).isEqualTo(counts(0, 0, 0, 0, 0, 2));
+        assertThat(kinds(queue)).containsOnly("SUGGESTED_ONE_SIDED_TRANSFER");
+        JsonNode newest = queue.get("items").get(0);
+        assertThat(newest.get("key").asString()).isEqualTo("txn-" + byRule);
+        assertThat(newest.get("txn").get("id").asLong()).isEqualTo(byRule);
+        assertThat(newest.get("txn").get("accountId").asLong()).isEqualTo(a.checking());
+        assertThat(newest.get("txn").get("amount").asString()).isEqualTo("-500.00");
+        assertThat(newest.get("categorySource").asString()).isEqualTo("RULE");
+        assertThat(newest.get("ruleId").asLong()).isEqualTo(seed);
+        assertThat(instant(newest.get("since"))).isEqualTo(jdbc.queryForObject(
+                "SELECT categorized_at FROM txn WHERE id = ?", OffsetDateTime.class, byRule).toInstant());
+        JsonNode older = queue.get("items").get(1);
+        assertThat(older.get("key").asString()).isEqualTo("txn-" + byUser);
+        assertThat(older.get("categorySource").asString()).isEqualTo("USER");
+        assertThat(older.get("ruleId").isNull()).isTrue();
+
+        assertThat(suggestedIds(a.checking())).containsExactly(byRule, byUser);
+        assertThat(queue(Map.of("accountId", a.savings())).get("counts")).isEqualTo(counts(0, 0, 0, 0, 0, 0));
+        JsonNode statements = queue(Map.of("accountId", a.checking(), "kind", "STATEMENT"));
+        assertThat(statements.get("items").size()).isZero();
+        assertThat(statements.get("counts").get("suggestedOneSidedTransfers").asInt()).as("counts ignore kind")
+                .isEqualTo(2);
+    }
+
+    /** Linked, excluded, in a candidate group or competing for a link: not suggested (listed there instead). */
+    @Test
+    @Transactional
+    void linkedExcludedGroupedAndCompetingTxnsAreNotSuggested() throws Exception {
+        Accounts a = sqlAccounts();
+        List<Long> transferKind = new ArrayList<>();
+        transferKind.add(rows.txn(a.checking(), "-70.00", DAY)); // one-sided link
+        rows.userLink(transferKind.getLast(), null, "UNMATCHED");
+        transferKind.add(rows.txn(a.checking(), "-80.00", DAY)); // not a transfer
+        rows.exclude(transferKind.getLast());
+        transferKind.add(rows.txn(a.checking(), "-200.00", DAY)); // a group of three
+        transferKind.add(rows.txn(a.savings(), "200.00", DAY));
+        transferKind.add(rows.txn(a.card(), "200.00", DAY.plusDays(1), "PAYMENT"));
+        long linkOut = rows.txn(a.checking(), "-300.00", DAY); // an AUTO link and a competitor
+        transferKind.add(linkOut);
+        long linkIn = rows.txn(a.savings(), "300.00", DAY);
+        transferKind.add(linkIn);
+        rows.autoLink(linkOut, linkIn);
+        transferKind.add(rows.txn(a.card(), "300.00", DAY.plusDays(2), "PAYMENT"));
+        transferKind.forEach(txn -> categorize(txn, "Transfer", "RULE"));
+
+        for (long account : List.of(a.checking(), a.savings(), a.card())) {
+            assertThat(suggestedIds(account)).as("account " + account).isEmpty();
+        }
+        assertThat(queue(Map.of("accountId", a.card())).get("counts")).isEqualTo(counts(0, 0, 1, 1, 0, 0));
+    }
+
+    /** Accepting (one-sided, either sign) is remembered: later detection and rules passes don't bring it back. */
+    @Test
+    @Transactional
+    void acceptingAsOneSidedIsRemembered() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-500.00", DAY);
+        long in = rows.txn(a.savings(), "750.00", DAY);
+        ruleTransfer(out);
+        ruleTransfer(in);
+        assertThat(suggestedIds(a.checking())).containsExactly(out);
+
+        createTransfer("{\"outTxnId\": " + out + "}");
+        createTransfer("{\"inTxnId\": " + in + "}");
+        detect();
+        categorization.categorizeTxn(out);
+        categorization.categorizeTxn(in);
+
+        assertThat(suggestedIds(a.checking())).isEmpty();
+        assertThat(suggestedIds(a.savings())).isEmpty();
+        assertThat(rows.isTransfer(out)).isTrue();
+    }
+
+    /** Dismissing (not a transfer) is remembered and keeps the category; undoing the exclusion lists it again. */
+    @Test
+    @Transactional
+    void dismissingAsNotATransferIsRemembered() throws Exception {
+        Accounts a = sqlAccounts();
+        long out = rows.txn(a.checking(), "-500.00", DAY);
+        ruleTransfer(out);
+
+        mockMvc.perform(post("/api/transactions/{id}/not-transfer", out)).andExpect(status().isOk());
+        detect();
+        categorization.categorizeTxn(out);
+
+        assertThat(suggestedIds(a.checking())).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT c.kind FROM txn t JOIN category c ON c.id = t.category_id WHERE t.id = ?",
+                String.class, out)).isEqualTo("TRANSFER");
+
+        mockMvc.perform(delete("/api/transactions/{id}/not-transfer", out)).andExpect(status().isNoContent());
+        assertThat(suggestedIds(a.checking())).containsExactly(out);
+    }
+
+    @Test
+    @Transactional
+    void linkingByHandOrCorrectingTheCategoryRemovesIt() throws Exception {
+        Accounts a = sqlAccounts();
+        long linked = rows.txn(a.checking(), "-500.00", DAY);
+        long counterpart = rows.txn(a.savings(), "500.00", DAY.plusDays(9)); // outside the window
+        long corrected = rows.txn(a.checking(), "-60.00", DAY);
+        ruleTransfer(linked);
+        ruleTransfer(corrected);
+        assertThat(suggestedIds(a.checking())).containsExactlyInAnyOrder(linked, corrected);
+
+        createTransfer("{\"outTxnId\": " + linked + ", \"inTxnId\": " + counterpart + "}");
+        mockMvc.perform(put("/api/transactions/{id}/category", corrected).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryId\": " + jdbc.queryForObject("SELECT id FROM category WHERE name = 'Groceries'",
+                                Long.class) + "}"))
+                .andExpect(status().isOk());
+
+        assertThat(suggestedIds(a.checking())).isEmpty();
+        assertThat(queue(Map.of("accountId", a.checking())).get("items").size()).isZero();
+    }
+
     // ------------------------------------------------------------------ the duplicate-account story (§7)
 
     /**
@@ -597,7 +745,7 @@ class ReviewQueueApiTest {
 
         mockMvc.perform(delete("/api/statements/{id}", wrongStatement)).andExpect(status().isOk());
 
-        assertThat(queue(Map.of("accountId", card)).get("counts")).isEqualTo(counts(0, 0, 0, 0, 0));
+        assertThat(queue(Map.of("accountId", card)).get("counts")).isEqualTo(counts(0, 0, 0, 0, 0, 0));
         assertThat(support.count("SELECT count(*) FROM transfer_link l JOIN txn t ON t.id = l.in_txn_id "
                 + "WHERE t.account_id = ?", card)).isPositive();
     }
@@ -640,8 +788,35 @@ class ReviewQueueApiTest {
     }
 
     private JsonNode counts(int statements, int uploads, int groups, int competing, int possibleMatches) {
+        return counts(statements, uploads, groups, competing, possibleMatches, 0);
+    }
+
+    private JsonNode counts(int statements, int uploads, int groups, int competing, int possibleMatches,
+                            int suggested) {
         return jsonMapper.valueToTree(Map.of("statements", statements, "unparsedUploads", uploads,
-                "transferCandidates", groups, "competingCandidates", competing, "possibleMatches", possibleMatches));
+                "transferCandidates", groups, "competingCandidates", competing, "possibleMatches", possibleMatches,
+                "suggestedOneSidedTransfers", suggested));
+    }
+
+    /** Gives the txn a description a seeded Transfer rule matches, and runs the rules for it. */
+    private void ruleTransfer(long txnId) {
+        jdbc.update("UPDATE txn SET raw_description = 'ONLINE TRANSFER TO SAV 5521' WHERE id = ?", txnId);
+        categorization.categorizeTxn(txnId);
+    }
+
+    /** Sets a category as the user or the AI would, bypassing the API. */
+    private void categorize(long txnId, String category, String source) {
+        jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = ?), category_source = ?,
+                               category_rule_id = NULL, categorized_at = now()
+                WHERE id = ?""", category, source, txnId);
+    }
+
+    private List<Long> suggestedIds(long accountId) throws Exception {
+        List<Long> ids = new ArrayList<>();
+        queue(Map.of("accountId", accountId, "kind", "SUGGESTED_ONE_SIDED_TRANSFER")).get("items")
+                .forEach(item -> ids.add(item.get("txn").get("id").asLong()));
+        return ids;
     }
 
     private static List<Long> ids(JsonNode txns) {

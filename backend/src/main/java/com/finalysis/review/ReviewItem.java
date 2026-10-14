@@ -16,8 +16,7 @@ import java.util.stream.Stream;
 
 /**
  * One thing waiting for the user (ING-07, docs/plans/phase-3c.md §4.1). Sealed, with the kind written as
- * {@code kind}, so Phase 4 adds {@code SUGGESTED_ONE_SIDED_TRANSFER} as one more record without changing
- * the others. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
+ * {@code kind}; Phase 4 added {@code SUGGESTED_ONE_SIDED_TRANSFER} (CAT-08) as one more record. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
  * decide (§3).
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
@@ -26,7 +25,8 @@ import java.util.stream.Stream;
         @JsonSubTypes.Type(ReviewItem.UnparsedUploadItem.class),
         @JsonSubTypes.Type(ReviewItem.TransferCandidatesItem.class),
         @JsonSubTypes.Type(ReviewItem.CompetingCandidateItem.class),
-        @JsonSubTypes.Type(ReviewItem.PossibleMatchItem.class)})
+        @JsonSubTypes.Type(ReviewItem.PossibleMatchItem.class),
+        @JsonSubTypes.Type(ReviewItem.SuggestedOneSidedTransferItem.class)})
 public sealed interface ReviewItem {
 
     /** When the item appeared; the queue lists the newest first. */
@@ -110,6 +110,25 @@ public sealed interface ReviewItem {
         @Override
         public Set<Long> accountIds() {
             return Set.of(out.accountId(), in.accountId());
+        }
+    }
+
+    /**
+     * A txn in a Transfer-kind category with no transfer link (CAT-08, docs/plans/phase-4.md §8). The user
+     * marks it one-sided, links it by hand, marks it not a transfer, or corrects its category.
+     *
+     * @param key            {@code txn-<id>}
+     * @param categorySource {@code RULE}, {@code AI} or {@code USER}
+     * @param ruleId         the rule behind a {@code RULE} category, else null
+     * @param since          when the txn was categorized
+     */
+    @JsonTypeName("SUGGESTED_ONE_SIDED_TRANSFER")
+    record SuggestedOneSidedTransferItem(String key, TxnSummary txn, String categorySource, Long ruleId,
+                                         OffsetDateTime since) implements ReviewItem {
+
+        @Override
+        public Set<Long> accountIds() {
+            return Set.of(txn.accountId());
         }
     }
 }

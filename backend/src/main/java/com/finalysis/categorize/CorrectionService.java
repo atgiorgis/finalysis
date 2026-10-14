@@ -49,7 +49,9 @@ public class CorrectionService {
         UPDATED,
         /** The merchant's existing user rule already pointed to it. */
         UNCHANGED,
-        /** No rule: {@code applyToMerchant} was false, or the txn has no merchant. */
+        /** Undo only: the merchant's correction rule was deleted. */
+        REMOVED,
+        /** No rule: {@code applyToMerchant} was false, the txn has no merchant, or (undo) no correction rule. */
         NONE
     }
 
@@ -63,6 +65,14 @@ public class CorrectionService {
      */
     public record Correction(long txnId, Long ruleId, RuleAction ruleAction, int otherTxnsUpdated,
                              int otherTxnsKeptUser, int otherTxnsKeptOtherRule) {}
+
+    /**
+     * What a full undo changed.
+     *
+     * @param ruleId           the deleted correction rule, null when none was deleted ({@code ruleAction} {@code NONE})
+     * @param otherTxnsUpdated the merchant's other txns whose category changed
+     */
+    public record Undo(long txnId, Long ruleId, RuleAction ruleAction, int otherTxnsUpdated) {}
 
     private record Row(long id, Long categoryId, CategorySource source, Long ruleId) {}
 
@@ -80,11 +90,7 @@ public class CorrectionService {
         if (!applyToMerchant || merchant == null) {
             return new Correction(txnId, null, RuleAction.NONE, 0, 0, 0);
         }
-        RuleDirection direction = switch (((BigDecimal) txn.get("amount")).signum()) {
-            case -1 -> RuleDirection.OUT;
-            case 1 -> RuleDirection.IN;
-            default -> RuleDirection.ANY;
-        };
+        RuleDirection direction = direction((BigDecimal) txn.get("amount"));
         Map<Long, Row> before = others(merchant, direction, txnId);
 
         CategorizationRule rule = rules.findActiveUserRule(RuleField.MERCHANT, RuleMatchType.EXACT, merchant, direction)
@@ -141,6 +147,58 @@ public class CorrectionService {
         }
     }
 
+    /**
+     * A full undo in one call: clears a {@code USER} category as {@link #clear} does, deletes the correction rule
+     * for the txn's merchant and direction, then runs the rules for the merchant's txns, which go back to the
+     * seeds, another rule, or uncategorized. Only a {@code USER_CORRECTION} rule is deleted: a rule the user made
+     * through the rules API ({@code USER}) or a seed is kept, and {@code ruleAction} is {@code NONE}. The rule is
+     * deleted even if the txn's category was already cleared, so the two-call undo can be finished here.
+     */
+    @Transactional
+    public Undo undo(long txnId) {
+        lock.acquire();
+        Map<String, Object> txn = txn(txnId);
+        jdbc.update("""
+                UPDATE txn
+                SET category_id = NULL, category_source = NULL, category_rule_id = NULL, categorized_at = NULL
+                WHERE id = ? AND category_source = 'USER'""", txnId);
+
+        String merchant = (String) txn.get("merchant");
+        if (merchant == null) {
+            categorization.categorizeTxn(txnId);
+            return new Undo(txnId, null, RuleAction.NONE, 0);
+        }
+        CategorizationRule rule = rules.findActiveUserRule(RuleField.MERCHANT, RuleMatchType.EXACT, merchant,
+                        direction((BigDecimal) txn.get("amount")))
+                .filter(found -> found.getSource() == RuleSource.USER_CORRECTION)
+                .orElse(null);
+        Map<Long, Row> before = others(merchant, RuleDirection.ANY, txnId);
+        if (rule != null) {
+            rules.delete(rule);
+            rules.flush(); // category_rule_id is set to null before the pass re-evaluates those txns
+        }
+        categorization.categorizeMerchant(merchant);
+
+        int updated = 0;
+        for (Row after : others(merchant, RuleDirection.ANY, txnId).values()) {
+            if (!Objects.equals(before.get(after.id()).categoryId(), after.categoryId())) {
+                updated++;
+            }
+        }
+        return rule == null
+                ? new Undo(txnId, null, RuleAction.NONE, updated)
+                : new Undo(txnId, rule.getId(), RuleAction.REMOVED, updated);
+    }
+
+    /** A rule's direction for this amount: money out, money in, or any for zero, which neither matches. */
+    private static RuleDirection direction(BigDecimal amount) {
+        return switch (amount.signum()) {
+            case -1 -> RuleDirection.OUT;
+            case 1 -> RuleDirection.IN;
+            default -> RuleDirection.ANY;
+        };
+    }
+
     /** The txn's merchant and amount, its row locked against a concurrent statement delete. */
     private Map<String, Object> txn(long txnId) {
         return jdbc.queryForList("SELECT merchant, amount FROM txn WHERE id = ? FOR UPDATE", txnId).stream()
@@ -148,7 +206,7 @@ public class CorrectionService {
                 .orElseThrow(() -> new NotFoundException("Transaction", txnId));
     }
 
-    /** The txns a correction rule for this merchant and direction matches, other than the corrected one. */
+    /** The merchant's txns in this direction (all of them for {@code ANY}), other than the given one. */
     private Map<Long, Row> others(String merchant, RuleDirection direction, long txnId) {
         String sign = switch (direction) {
             case OUT -> " AND amount < 0";

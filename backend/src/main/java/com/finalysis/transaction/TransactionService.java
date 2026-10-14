@@ -3,6 +3,7 @@ package com.finalysis.transaction;
 import com.finalysis.api.NotFoundException;
 import com.finalysis.categorize.CorrectionService;
 import com.finalysis.categorize.CorrectionService.Correction;
+import com.finalysis.categorize.CorrectionService.Undo;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,5 +44,11 @@ public class TransactionService {
     public TransactionResponse clearCorrection(long id) {
         corrections.clear(id);
         return get(id);
+    }
+
+    @Transactional
+    public UndoResponse undoCorrection(long id) {
+        Undo undo = corrections.undo(id);
+        return UndoResponse.of(get(id), undo);
     }
 }

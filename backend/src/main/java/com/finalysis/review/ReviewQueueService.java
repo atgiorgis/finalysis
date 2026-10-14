@@ -6,6 +6,7 @@ import com.finalysis.ingestion.Txn;
 import com.finalysis.ingestion.TxnRepository;
 import com.finalysis.ingestion.UnparsedUpload;
 import com.finalysis.ingestion.UnparsedUploadRepository;
+import com.finalysis.review.SuggestedTransferQuery.Suggested;
 import com.finalysis.transfer.CandidateGroup;
 import com.finalysis.transfer.CandidatePair;
 import com.finalysis.transfer.CompetingCandidateQuery;
@@ -36,8 +37,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Builds the review queue (ING-07, docs/plans/phase-3c.md §4.1) at request time, so it can't go stale:
- * statements and unparsed uploads from their tables, and the transfer items from the same read-only
- * queries and resolver as detection (§2.3, §4.5, §4.6). Nothing is stored and nothing is written.
+ * statements and unparsed uploads from their tables, the transfer items from the same read-only
+ * queries and resolver as detection (§2.3, §4.5, §4.6), and suggested one-sided transfers from their categories
+ * (CAT-08, phase-4.md §8). Nothing is stored and nothing is written.
  *
  * <p>One REPEATABLE READ transaction: every query sees the same snapshot, so a detection run committing
  * between two of them can't make an item show a link it no longer has.
@@ -64,12 +66,14 @@ public class ReviewQueueService {
     private final TransferResolver resolver;
     private final CompetingCandidateQuery competing;
     private final PossibleMatchQuery possibleMatches;
+    private final SuggestedTransferQuery suggestedTransfers;
     private final TransferProperties properties;
 
     public ReviewQueueService(StatementRepository statements, UnparsedUploadRepository uploads, TxnRepository txns,
                               TransferLinkRepository links, TransferCandidateQuery candidates,
                               TransferResolver resolver, CompetingCandidateQuery competing,
-                              PossibleMatchQuery possibleMatches, TransferProperties properties) {
+                              PossibleMatchQuery possibleMatches, SuggestedTransferQuery suggestedTransfers,
+                              TransferProperties properties) {
         this.statements = statements;
         this.uploads = uploads;
         this.txns = txns;
@@ -78,6 +82,7 @@ public class ReviewQueueService {
         this.resolver = resolver;
         this.competing = competing;
         this.possibleMatches = possibleMatches;
+        this.suggestedTransfers = suggestedTransfers;
         this.properties = properties;
     }
 
@@ -96,6 +101,11 @@ public class ReviewQueueService {
         groups.forEach(group -> txnIds.addAll(group.txnIds()));
         competingPairs.forEach(competingPair -> addIds(txnIds, competingPair.pair()));
         matches.forEach(match -> addIds(txnIds, match.pair()));
+        // A txn in a group or competing for a link is listed there, not as a suggestion (§8).
+        List<Suggested> suggested = suggestedTransfers.find().stream()
+                .filter(suggestion -> !txnIds.contains(suggestion.txnId()))
+                .toList();
+        suggested.forEach(suggestion -> txnIds.add(suggestion.txnId()));
         Map<Long, Txn> txnById = byId(txnIds, txns::findWithAccountByIdIn, Txn::getId);
         Map<Long, TransferLink> linkById = byId(
                 competingPairs.stream().map(CompetingPair::linkId).collect(Collectors.toSet()),
@@ -108,6 +118,7 @@ public class ReviewQueueService {
         competingByLink(competingPairs).forEach((linkId, pairs) ->
                 all.add(competingItem(linkById.get(linkId), pairs, txnById)));
         matches.forEach(match -> all.add(possibleMatchItem(match, txnById)));
+        suggested.forEach(suggestion -> all.add(suggestedItem(suggestion, txnById)));
 
         List<ReviewItem> forAccount = all.stream()
                 .filter(item -> accountId == null || item.accountIds().contains(accountId))
@@ -168,6 +179,12 @@ public class ReviewQueueService {
                 match.pair().daysApart(), match.since());
     }
 
+    private static ReviewItem suggestedItem(Suggested suggestion, Map<Long, Txn> txnById) {
+        return new ReviewItem.SuggestedOneSidedTransferItem("txn-" + suggestion.txnId(),
+                TxnSummary.from(txnById.get(suggestion.txnId())), suggestion.categorySource(), suggestion.ruleId(),
+                suggestion.since());
+    }
+
     private static ReviewQueueResponse.Counts counts(List<ReviewItem> items) {
         Map<ReviewItemKind, Integer> byKind = new EnumMap<>(ReviewItemKind.class);
         items.forEach(item -> byKind.merge(ReviewItemKind.of(item), 1, Integer::sum));
@@ -176,7 +193,8 @@ public class ReviewQueueService {
                 byKind.getOrDefault(ReviewItemKind.UNPARSED_UPLOAD, 0),
                 byKind.getOrDefault(ReviewItemKind.TRANSFER_CANDIDATES, 0),
                 byKind.getOrDefault(ReviewItemKind.COMPETING_CANDIDATE, 0),
-                byKind.getOrDefault(ReviewItemKind.POSSIBLE_MATCH, 0));
+                byKind.getOrDefault(ReviewItemKind.POSSIBLE_MATCH, 0),
+                byKind.getOrDefault(ReviewItemKind.SUGGESTED_ONE_SIDED_TRANSFER, 0));
     }
 
     /** The competing pairs of each link, by link id ascending (the query's order). */
@@ -211,6 +229,7 @@ public class ReviewQueueService {
             case ReviewItem.TransferCandidatesItem group -> new long[] {group.txns().getFirst().id(), 0};
             case ReviewItem.CompetingCandidateItem competing -> new long[] {competing.linkId(), 0};
             case ReviewItem.PossibleMatchItem match -> new long[] {match.outLinkId(), match.inLinkId()};
+            case ReviewItem.SuggestedOneSidedTransferItem suggestion -> new long[] {suggestion.txn().id(), 0};
         };
     }
 }

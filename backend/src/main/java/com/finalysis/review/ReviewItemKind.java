@@ -6,7 +6,8 @@ public enum ReviewItemKind {
     UNPARSED_UPLOAD,
     TRANSFER_CANDIDATES,
     COMPETING_CANDIDATE,
-    POSSIBLE_MATCH;
+    POSSIBLE_MATCH,
+    SUGGESTED_ONE_SIDED_TRANSFER;
 
     static ReviewItemKind of(ReviewItem item) {
         return switch (item) {
@@ -15,6 +16,7 @@ public enum ReviewItemKind {
             case ReviewItem.TransferCandidatesItem ignored -> TRANSFER_CANDIDATES;
             case ReviewItem.CompetingCandidateItem ignored -> COMPETING_CANDIDATE;
             case ReviewItem.PossibleMatchItem ignored -> POSSIBLE_MATCH;
+            case ReviewItem.SuggestedOneSidedTransferItem ignored -> SUGGESTED_ONE_SIDED_TRANSFER;
         };
     }
 }
