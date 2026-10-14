@@ -766,7 +766,7 @@ moves before AI wiring. Reasons:
 | 1 | Merchant cleaning | V13; `MerchantCleaner`, `merchant-cleaning.yml`, `MerchantCleaningRules`; P2P counterparty; `CategorizationListener` (stage 1, after detection); startup backfill and version re-clean; P2P/ACH edge-case fixture | `MerchantCleanerTest` (the §2.3 table, every answer-key description, idempotence, 64-char cut, NFKC/bidi), `MerchantCleanerSourceTest`, `MerchantBackfillTest` (Testcontainers: null → filled, version bump re-cleans, raw description and fingerprint untouched) | Done: "Phase 4 step 1: merchant cleaning" (notes below) |
 | 1b | Dev and holdout sets | Added at approval (§15). Generator writes `sample-data/categorization/dev.csv` and `holdout.csv` from disjoint name pools; holdout header notes it is frozen. Committed **before step 2 writes any seed rule** | `CategorizationSetsTest` (byte-identical regeneration, holdout SHA-256 pinned, name pools disjoint, every expected category exists) | Done: "Phase 4 step 1b: dev and holdout sets" (notes below) |
 | 2 | Rules engine | V14, V15; `RuleEngine` (comparator, regex deadline); stages 2–3; rules CRUD API; `POST /api/categorization/run` (AI off) | `RuleEngineTest` (each match type, field, direction, full ordering, ReDoS pattern ends), `RulesApiTest`, `CategorizationPipelineTest` (import → rule categories, idempotent second run, deactivating a seed clears its txns, USER never overwritten), `SeedRulesTest` (zero wrong answers on the answer key and dev set; no seed pattern contains a holdout merchant name) | Done: "Phase 4 step 2: rules engine" (notes below) |
-| 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Planned |
+| 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Done: "Phase 4 step 3: corrections and transaction API" (notes below) |
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Planned |
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Planned |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Planned |
@@ -964,6 +964,20 @@ Choices the plan left open, or refined:
 - **`Txn` gets `@DynamicUpdate`**, the only change outside `categorize` and `api`. A transfer action
   that loads a txn and changes `transferExcluded` must not write back a category (or merchant) it read
   before a concurrent pass under the other lock.
+- **Single-writer rule (what `@DynamicUpdate` relies on).** `@DynamicUpdate` only keeps a stale value
+  from being written back while each column has one writer. Today:
+  - `txn.category_id`, `category_source`, `category_rule_id` and `categorized_at` are written only by
+    the categorization code in `categorize` (rules pass, merchant memory, from step 3 corrections, from
+    step 7 the AI), with SQL, under the categorization lock. Main code never calls `Txn.categorize`
+    (a test fixture does, on insert);
+  - `txn.merchant` and `counterparty` only by merchant cleaning, under the same lock;
+  - `txn.is_transfer` only by the V9 trigger (the entity maps it read-only);
+  - `txn.transfer_excluded` only by the transfer actions, under the transfer lock.
+
+  Any future change that adds a second writer to one of these columns (for example a transfer action
+  that sets a category, or categorization that sets `transfer_excluded`) must not rely on
+  `@DynamicUpdate`: it uses a targeted SQL `UPDATE` of that column only (conditional on the value it
+  expects, as the categorization writes are), or adds optimistic locking (`@Version`) to `Txn`.
 - **Tests:** `RuleEngineTest` (54: every match type and boundary case, fields, direction including zero,
   each ordering criterion and a shuffled grid against an independent key, the ReDoS deadline, invalid
   regexes), `SeedRulesTest` (7), `CategorizationPipelineTest` (11: import against the answer key, an
@@ -972,6 +986,86 @@ Choices the plan left open, or refined:
   re-evaluates, memory and its exclusions, on-demand run), `RulesApiTest` (22). Plus new constraint
   checks in `SchemaMigrationTest`, the two new enums in `EnumCheckConstraintTest`, and the new columns
   in `CategorizationRuleRepositoryTest`.
+
+### Step 3 notes
+
+Built as planned: package `transaction` (`TransactionController`, `TransactionService`, `TransactionQuery`,
+`TransactionFilter`) for `GET /api/transactions`, `GET /api/transactions/{id}`, and `PUT` and
+`DELETE /api/transactions/{id}/category`. The correction itself is `CorrectionService` in `categorize`, so
+the category columns keep one writer (step 2 notes). No migration. Backend tests 1,817 → 1,841 (+24); frontend 1.
+
+**Rule scoping, as §9.2 says.** With `applyToMerchant` (default true) and a merchant, a correction
+upserts one rule: field `MERCHANT`, match type `EXACT`, pattern the txn's cleaned merchant, direction
+the txn's (negative amount `OUT`, positive `IN`), source `USER_CORRECTION`, default priority 0. Source
+rank (§3.2) makes it outrank every seed, whatever the seed's priority (`ZELLE` OUT at 100 is tested). Then
+the rules run for that merchant only: an `EXACT` merchant rule can't match any other txn.
+
+**What a correction reports on other txns.** "Other txns" are those the rule matches: the same merchant
+and direction, the corrected txn left out. The response is
+`{txn, ruleId, ruleAction, otherTxnsUpdated, otherTxnsKeptUser, otherTxnsKeptOtherRule}`:
+- `otherTxnsUpdated`: their category changed (RULE, AI or uncategorized before, all RULE now);
+- `otherTxnsKeptUser`: the user had categorized them, so they are left as they are;
+- `otherTxnsKeptOtherRule`: a higher-ranked user rule still wins on them (a user rule with a higher
+  priority, see below);
+- `ruleAction`: `CREATED`, `UPDATED` (the merchant's rule now points to the new category), `UNCHANGED`
+  or `NONE` (no rule touched).
+
+Txns in the other direction (a refund at the same cafe) are not matched and not counted.
+
+Choices the plan left open, or refined:
+- **Upsert key.** The key is the unique index's: field, match type, pattern, direction, among active
+  user rules. Correcting again changes that rule's category (`UPDATED`). If the user already made the
+  same rule through the rules API (source `USER`), the correction updates it and leaves its source
+  `USER`; the unique index allows only one. An inactive correction rule isn't reactivated; a new one is
+  created.
+- **Priority 0, not the maximum.** A correction rule keeps the default priority, so a user rule with a
+  higher priority (made through the rules API) still wins on the merchant's other txns. The correction
+  reports it (`otherTxnsKeptOtherRule`) instead of overriding it.
+- **Zero amount.** The rule's direction is `ANY`, since `OUT` and `IN` never match zero.
+- **No merchant, or `applyToMerchant: false`.** Only the txn changes; `ruleId` is null, `ruleAction` is
+  `NONE`.
+- **Undo is two calls.** `DELETE /api/transactions/{id}/category` clears the USER category and runs the
+  rules for that txn, as §9.2 says. The correction rule still exists, so the txn becomes RULE with the
+  corrected category. To undo fully, the user also deletes the rule
+  (`DELETE /api/categorization/rules/{ruleId}`, the id is in the correction response); the merchant's txns
+  then go back to the seeds. `CorrectionTest` covers both.
+- **Clearing a category that isn't USER** is a no-op: 200 with the txn unchanged, no rules pass. It's an
+  undo for corrections, not a way to re-ask the AI.
+- **Locking.** A correction or a clear takes the categorization lock and locks the txn row
+  (`FOR UPDATE`, against a concurrent statement delete). The correction, the rule upsert, the merchant
+  pass and the response's read are one transaction.
+- **List API.**
+  - Filters: `accountId`, `categoryId`, `source` (RULE, AI, USER), `uncategorized` (true: no category;
+    false: any category), `isTransfer`, `from` and `to` (inclusive, on `txn_date`) and `merchant`. They
+    combine with AND.
+  - `merchant` is the exact cleaned merchant, normalized like merchants (case, accents, spaces), not a
+    search.
+  - `categoryId` matches that category only. No category has a parent today.
+  - Unknown account or category ids give an empty page, not a 404.
+  - `uncategorized=true` with `categoryId` or `source` is a 400. So are page < 0, size outside 1–200
+    (default 50) and `from` after `to`.
+  - Ordered by `txn_date` then id, both newest first. The count and the page are read in one
+    REPEATABLE READ transaction.
+- **Txn response.** §9.2's fields, plus `counterparty` and `categorizedAt`. `category` is
+  `{id, name, kind, parentId}` (the existing `CategoryResponse`). `categoryModel` comes with V16 in step 7;
+  the column doesn't exist yet. The response is a flat record rather than `TxnSummary` plus fields, so
+  `transaction` doesn't depend on `transfer`.
+- **Bad query values no longer echo.** Spring's default 400 for a value that doesn't convert (`source=MAGIC`,
+  `from=April`) quoted the value. `ApiExceptionHandler` now answers the app's usual 400 with `errors`,
+  naming the parameter and the expected form, never the value. This also changes the existing endpoints'
+  400s for a bad enum or id (transfers, review queue, rules); nothing relied on the old text.
+- **`MerchantCleaner.normalize`** is public, for the `merchant` filter.
+- **ArchUnit:** nothing outside `transaction` depends on it, so the transaction API stays a leaf and
+  categorization stays the only writer of categories.
+- **Tests:** `TransactionApiTest` (10: every field and money as strings, null category fields, 404,
+  paging, each filter alone and combined, every 400), `CorrectionTest` (13: rule created, updated,
+  unchanged, IN and ANY directions, an API rule with the same key, no rule without a merchant or with
+  `applyToMerchant: false`, the merchant's other txns across two accounts with USER, AI and the other
+  direction, a seed with priority 100 outranked, a higher user rule reported, three imported sample
+  months, USER kept through every later pass, undo with and without the rule, clearing a non-USER
+  category, errors). `SensitiveDataLeakTest` covers the new error paths and a correction and undo with
+  markers. `PackageDependencyTest` has the leaf rule. `CategorizeRows` is public and handles several
+  accounts and dates.
 
 ### Requirement mapping
 

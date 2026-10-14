@@ -4,6 +4,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.review.ReviewQueueService;
+import com.finalysis.transaction.TransactionController;
 import com.finalysis.transfer.TransferDetector;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -16,7 +17,9 @@ import org.junit.jupiter.api.Test;
  * The feature dependencies of docs/plans/phase-3c.md §6: {@code transfer} uses {@code ingestion} and
  * {@code account}; {@code review} uses {@code ingestion} and {@code transfer}; {@code ingestion} uses
  * neither. Transfer detection is bank-agnostic and AI-free, so {@code transfer} also stays clear of
- * categorization, chat and any model client (no AI anywhere in 3c).
+ * categorization, chat and any model client (no AI anywhere in 3c). Phase 4's {@code transaction} package (the
+ * transaction API) is a leaf: it reads txns and calls {@code categorize} for corrections, and nothing depends on it,
+ * so the category columns keep the categorization code as their one writer (phase-4.md, step 2 notes).
  */
 class PackageDependencyTest {
 
@@ -36,6 +39,11 @@ class PackageDependencyTest {
                     "org.springframework.ai..", "software.amazon.awssdk..")
             .because("transfer detection is bank-agnostic and uses no AI (phase-3c.md §2.6)");
 
+    static final ArchRule NOTHING_DEPENDS_ON_THE_TRANSACTION_API = noClasses()
+            .that().resideOutsideOfPackage("com.finalysis.transaction..")
+            .should().dependOnClassesThat().resideInAPackage("com.finalysis.transaction..")
+            .because("the transaction API is a leaf; categories are written by the categorization code only");
+
     private static JavaClasses app;
 
     @BeforeAll
@@ -46,6 +54,7 @@ class PackageDependencyTest {
         // The import must see the code the rules are about, or they would pass on nothing.
         assertThat(app.contain(TransferDetector.class)).isTrue();
         assertThat(app.contain(ReviewQueueService.class)).isTrue();
+        assertThat(app.contain(TransactionController.class)).isTrue();
     }
 
     @Test
@@ -61,6 +70,11 @@ class PackageDependencyTest {
     @Test
     void transferAndReviewUseNoAiCategorizationOrChat() {
         NO_AI_IN_TRANSFERS_OR_REVIEW.check(app);
+    }
+
+    @Test
+    void nothingDependsOnTheTransactionApi() {
+        NOTHING_DEPENDS_ON_THE_TRANSACTION_API.check(app);
     }
 
     /** The rules catch a violation. */

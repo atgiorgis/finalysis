@@ -77,7 +77,7 @@ public class MerchantCleaner {
      * CAFÉ → CAFE); curly apostrophes made straight; control and format characters (bidi overrides
      * included) removed; upper case; single spaces.
      */
-    static String normalize(String raw) {
+    public static String normalize(String raw) {
         String text = LINE_BREAKS_AND_TABS.matcher(raw).replaceAll(" ");
         text = Normalizer.normalize(text, Normalizer.Form.NFKD);
         text = MARKS.matcher(text).replaceAll("");

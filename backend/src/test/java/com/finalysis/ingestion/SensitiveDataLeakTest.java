@@ -156,6 +156,7 @@ class SensitiveDataLeakTest {
         long card = exerciseCsvEndpoints();
         exerciseStatementEndpoints(checking, card);
         exerciseTransferAndReviewEndpoints(checking, card);
+        exerciseTransactionEndpoints(checking);
         databaseErrorsCarryNoRowValues();
 
         assertThat(problems).hasSizeGreaterThanOrEqualTo(20);
@@ -465,6 +466,46 @@ class SensitiveDataLeakTest {
         for (String problem : problems.subList(before, problems.size())) {
             assertThat(problem).as("SEC-10: no amount in a problem").doesNotContain(amounts);
         }
+    }
+
+    // ------------------------------------------------------------------ transactions and corrections (Phase 4)
+
+    /**
+     * Every error of the transaction API and corrections (Phase 4 step 3), plus a correction and an undo that
+     * succeed, on a txn whose description and merchant carry markers. The 200 bodies show the description by
+     * design (the user's own data); the problems and the log never do, nor the amount.
+     */
+    private void exerciseTransactionEndpoints(long checking) throws Exception {
+        long txn = markedTxn(checking, "-61.37", "WITHDRAWAL");
+        jdbc.update("UPDATE txn SET merchant = ? WHERE id = ?", DESCRIPTION + " TRANSFER", txn);
+        long category = jdbc.queryForObject("SELECT id FROM category WHERE name = 'Shopping'", Long.class);
+        int before = problems.size();
+
+        problem(mockMvc.perform(get("/api/transactions/{id}", 999_999_999)), 404, null);
+        problem(correction(999_999_999, "{\"categoryId\": " + category + "}"), 404, null);
+        problem(correction(txn, "{\"categoryId\": 999999999}"), 422, "category-invalid");
+        problem(correction(txn, "{}"), 400, null);
+        problem(correction(txn, "{\"categoryId\": " + category + ", \"merchant\": \"" + DESCRIPTION + "\"}"), 400, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.delete("/api/transactions/{id}/category", 999_999_999)), 404,
+                null);
+        problem(mockMvc.perform(get("/api/transactions").param("size", "0").param("merchant", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/transactions").param("merchant", " ")), 400, null);
+        problem(mockMvc.perform(get("/api/transactions").param("source", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/transactions").param("from", DESCRIPTION)), 400, null);
+        correction(txn, "{\"categoryId\": " + category + "}").andExpect(status().isOk());
+        mockMvc.perform(MockMvcRequestBuilders.delete("/api/transactions/{id}/category", txn)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/transactions").param("accountId", String.valueOf(checking))).andExpect(status().isOk());
+        jdbc.update("DELETE FROM categorization_rule WHERE source <> 'SEED'");
+
+        assertThat(problems.size() - before).isEqualTo(10);
+        for (String problem : problems.subList(before, problems.size())) {
+            assertThat(problem).as("SEC-10: no amount in a problem").doesNotContain("61.37");
+        }
+    }
+
+    private ResultActions correction(long txnId, String body) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.put("/api/transactions/{id}/category", txnId)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     /** A txn in a statement of its own, with a marker in its description. */

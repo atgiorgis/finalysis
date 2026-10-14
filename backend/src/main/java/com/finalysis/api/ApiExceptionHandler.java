@@ -14,6 +14,7 @@ import com.finalysis.transfer.TransferConflictException;
 import com.finalysis.transfer.TransferInvalidException;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -73,6 +75,31 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             case null, default -> ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Malformed request body");
         };
         return handleExceptionInternal(ex, problem, headers, status, request);
+    }
+
+    /**
+     * A query parameter or path variable that doesn't convert (an unknown enum value, a malformed date). Names
+     * the parameter, never echoes the value: Spring's default detail quotes it.
+     */
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Class<?> type = ex.getRequiredType();
+        String message;
+        if (type != null && type.isEnum()) {
+            message = "must be one of " + enumValues(type);
+        } else if (type == LocalDate.class) {
+            message = "must be a date (yyyy-MM-dd)";
+        } else if (type == Boolean.class || type == boolean.class) {
+            message = "must be true or false";
+        } else if (type != null && (Number.class.isAssignableFrom(type) || type.isPrimitive())) {
+            message = "must be a whole number";
+        } else {
+            message = "is not valid";
+        }
+        String name = ex.getPropertyName() != null ? ex.getPropertyName() : "parameter";
+        return handleExceptionInternal(ex, invalidRequest(List.of(new InvalidField(name, message))), headers, status,
+                request);
     }
 
     @ExceptionHandler(InvalidRequestException.class)

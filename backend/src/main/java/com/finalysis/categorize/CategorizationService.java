@@ -66,11 +66,25 @@ public class CategorizationService {
         return pass("AND t.statement_id = ?", statementId);
     }
 
-    /** Stages 2–3 for every txn: at startup, and after any rule change. */
+    /** Stages 2–3 for every txn: at startup, and after a change through the rules API. */
     @Transactional
     public RulesResult categorizeAll() {
         lock.acquire();
         return pass("");
+    }
+
+    /** Stages 2–3 for one merchant's txns: after a correction upserts that merchant's rule. */
+    @Transactional
+    public RulesResult categorizeMerchant(String merchant) {
+        lock.acquire();
+        return pass("AND t.merchant = ?", merchant);
+    }
+
+    /** Stages 2–3 for one txn: after the user clears its category. */
+    @Transactional
+    public RulesResult categorizeTxn(long txnId) {
+        lock.acquire();
+        return pass("AND t.id = ?", txnId);
     }
 
     /**
