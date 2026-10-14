@@ -765,6 +765,10 @@ Docs and close-out only; no behaviour changes.
   log counts, account ids and dates only. ("Get real statement" and "List real statements" still log
   the statement JSON, balances included, as before.)
 - **Newman** against a freshly reset dev database: folders 1–6, 101 requests, 260 assertions, 0 failures (2026-10-14). The dev database was left for the user to reset.
+  Re-run after V12 (no duplicate accounts, `c851365`): folders 1–6 against a throwaway
+  `pgvector/pgvector:pg17` container on port 55432 and the backend jar on port 18080, without `.env`
+  and without touching the dev database: 102 requests, 264 assertions, 0 failures (2026-10-14). The
+  extra request and its 4 assertions are the new `409 account-exists` case in 6. Errors.
 - **Test pools:** `src/test/resources/application.properties` sets Hikari's maximum pool size to 3
   for tests. Spring caches about ten contexts per run, each with its own pool, and ten pools of 10
   used all of Postgres's 100 connections. Step 6's `max_connections=200` on the test container is
