@@ -4,6 +4,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.bedrock.BedrockClientConfiguration;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
@@ -25,6 +26,8 @@ import org.junit.jupiter.api.Test;
  * a model provider (phase-4.md §7).
  */
 class PackageDependencyTest {
+
+    static final String BEDROCK_CONFIG = "com.finalysis.ai.bedrock..";
 
     static final ArchRule INGESTION_KNOWS_NO_TRANSFERS_OR_REVIEW = noClasses()
             .that().resideInAPackage("com.finalysis.ingestion..")
@@ -49,14 +52,22 @@ class PackageDependencyTest {
 
     /**
      * AI-03 and the local profile to come: code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only, so
-     * a provider is configuration (the pom and {@code application-<profile>.yml}), never code (phase-4.md §7).
+     * a provider is configuration (the pom and {@code application-<profile>.yml}), never code (phase-4.md §7). The one
+     * exception is {@code com.finalysis.ai.bedrock}, the profile-only configuration that sets the Bedrock client's
+     * retry strategy (step 7), which nothing may depend on.
      */
     static final ArchRule NO_PROVIDER_IN_CODE = noClasses()
             .that().resideInAPackage("com.finalysis..")
+            .and().resideOutsideOfPackage(BEDROCK_CONFIG)
             .should().dependOnClassesThat().resideInAnyPackage("org.springframework.ai.bedrock..",
                     "org.springframework.ai.model.bedrock..", "org.springframework.ai.ollama..",
                     "org.springframework.ai.model.ollama..", "software.amazon..")
             .because("a model provider is chosen by profile; code depends only on Spring AI's interfaces");
+
+    static final ArchRule NOTHING_DEPENDS_ON_PROVIDER_CONFIG = noClasses()
+            .that().resideOutsideOfPackage(BEDROCK_CONFIG)
+            .should().dependOnClassesThat().resideInAPackage(BEDROCK_CONFIG)
+            .because("the provider's client configuration is picked up by profile, never called");
 
     private static JavaClasses app;
 
@@ -71,6 +82,7 @@ class PackageDependencyTest {
         assertThat(app.contain(TransactionController.class)).isTrue();
         assertThat(app.contain(CategorizationModelClient.class)).isTrue();
         assertThat(app.contain(AiProperties.class)).isTrue();
+        assertThat(app.contain(BedrockClientConfiguration.class)).isTrue();
     }
 
     @Test
@@ -96,6 +108,7 @@ class PackageDependencyTest {
     @Test
     void noCodeDependsOnAModelProvider() {
         NO_PROVIDER_IN_CODE.check(app);
+        NOTHING_DEPENDS_ON_PROVIDER_CONFIG.check(app);
     }
 
     /** The rules catch a violation. */

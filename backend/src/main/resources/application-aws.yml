@@ -10,7 +10,9 @@ spring:
     bedrock:
       aws:
         region: us-east-1
-        # One call's limit; the SDK's own connection and socket timeouts stay at their defaults.
+        # One call's limit, retries included. Transport retries are the AWS SDK's standard strategy, at most 3
+        # attempts, for throttling and 5xx (com.finalysis.ai.bedrock.BedrockClientConfiguration); there is no other
+        # retry layer. The SDK's own connection and socket timeouts stay at their defaults.
         timeout: 30s
         profile:
           name: ${FINALYSIS_AWS_PROFILE:finalysis}

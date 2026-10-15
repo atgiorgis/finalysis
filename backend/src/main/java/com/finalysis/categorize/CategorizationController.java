@@ -1,5 +1,6 @@
 package com.finalysis.categorize;
 
+import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.CategorizationService.RunResult;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -26,10 +27,13 @@ public class CategorizationController {
 
     private final RuleService rules;
     private final CategorizationService categorization;
+    private final AiCategorizer aiCategorizer;
 
-    public CategorizationController(RuleService rules, CategorizationService categorization) {
+    public CategorizationController(RuleService rules, CategorizationService categorization,
+                                    AiCategorizer aiCategorizer) {
         this.rules = rules;
         this.categorization = categorization;
+        this.aiCategorizer = aiCategorizer;
     }
 
     /** In winning order (§3.2). */
@@ -64,9 +68,17 @@ public class CategorizationController {
         return ResponseEntity.noContent().build();
     }
 
-    /** Runs every stage now (§1.2); with {@code reclean}, re-cleans every merchant first. */
+    /**
+     * Runs every stage now (§1.2): with {@code reclean}, re-cleans every merchant first; then rules and memory, in
+     * one transaction; then, when AI is on and {@code ai} isn't false, the AI stage, with no transaction held across
+     * its calls. {@code force} also asks again for txns the AI already categorized or left for review; USER and RULE
+     * categories never change.
+     */
     @PostMapping("/run")
-    public RunResult run(@RequestParam(defaultValue = "false") boolean reclean) {
-        return categorization.run(reclean);
+    public RunResponse run(@RequestParam(defaultValue = "false") boolean reclean,
+                           @RequestParam(defaultValue = "true") boolean ai,
+                           @RequestParam(defaultValue = "false") boolean force) {
+        RunResult rulesResult = categorization.run(reclean);
+        return RunResponse.of(rulesResult, ai ? aiCategorizer.run(force) : AiRunResult.off());
     }
 }

@@ -12,6 +12,6 @@ import java.util.List;
 public record ReviewQueueResponse(Counts counts, List<ReviewItem> items) {
 
     public record Counts(int statements, int unparsedUploads, int transferCandidates, int competingCandidates,
-                         int possibleMatches, int suggestedOneSidedTransfers) {
+                         int possibleMatches, int suggestedOneSidedTransfers, int aiCategoryReviews) {
     }
 }

@@ -16,6 +16,7 @@ decisions matter as much as features.
 ## Repo layout
 - `backend/` organized by feature, not by layer:
   `account`, `ingestion`, `categorize`, `analytics`, `chat`, `config`
+- `com.finalysis.ai`: shared AI wiring (mode, model roles, token log), not a feature, since `categorize` uses it now and `chat` will in Phase 6.
 - `frontend/` pages, components, and a single `api.ts` for backend calls
 - `sample-data/` synthetic statements only
 - `compose.yaml` at the repo root
@@ -70,7 +71,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 4: categorization, plan approved: docs/plans/phase-4.md (steps 1 to 6 done, with 1b; step 7 next). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 4: categorization, plan approved: docs/plans/phase-4.md (steps 1 to 7 done, with 1b; step 8 next). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

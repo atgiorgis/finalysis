@@ -16,7 +16,8 @@ import java.util.stream.Stream;
 
 /**
  * One thing waiting for the user (ING-07, docs/plans/phase-3c.md §4.1). Sealed, with the kind written as
- * {@code kind}; Phase 4 added {@code SUGGESTED_ONE_SIDED_TRANSFER} (CAT-08) as one more record. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
+ * {@code kind}; Phase 4 added {@code SUGGESTED_ONE_SIDED_TRANSFER} (CAT-08) and
+ * {@code AI_CATEGORY_REVIEW} (CAT-02) as more records. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
  * decide (§3).
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
@@ -26,7 +27,8 @@ import java.util.stream.Stream;
         @JsonSubTypes.Type(ReviewItem.TransferCandidatesItem.class),
         @JsonSubTypes.Type(ReviewItem.CompetingCandidateItem.class),
         @JsonSubTypes.Type(ReviewItem.PossibleMatchItem.class),
-        @JsonSubTypes.Type(ReviewItem.SuggestedOneSidedTransferItem.class)})
+        @JsonSubTypes.Type(ReviewItem.SuggestedOneSidedTransferItem.class),
+        @JsonSubTypes.Type(ReviewItem.AiCategoryReviewItem.class)})
 public sealed interface ReviewItem {
 
     /** When the item appeared; the queue lists the newest first. */
@@ -125,6 +127,25 @@ public sealed interface ReviewItem {
     @JsonTypeName("SUGGESTED_ONE_SIDED_TRANSFER")
     record SuggestedOneSidedTransferItem(String key, TxnSummary txn, String categorySource, Long ruleId,
                                          OffsetDateTime since) implements ReviewItem {
+
+        @Override
+        public Set<Long> accountIds() {
+            return Set.of(txn.accountId());
+        }
+    }
+
+    /**
+     * A txn the AI looked at but left uncategorized (CAT-02, docs/plans/phase-4.md step 7 notes). The user gives it
+     * a category with a correction ({@code PUT /api/transactions/{id}/category}), which removes the item.
+     *
+     * @param key    {@code txn-<id>}
+     * @param reason {@code LOW_CONFIDENCE} (the answer was below the threshold) or {@code INVALID_ANSWER} (two
+     *               invalid answers)
+     * @param since  when the AI left it
+     */
+    @JsonTypeName("AI_CATEGORY_REVIEW")
+    record AiCategoryReviewItem(String key, TxnSummary txn, String reason, OffsetDateTime since)
+            implements ReviewItem {
 
         @Override
         public Set<Long> accountIds() {

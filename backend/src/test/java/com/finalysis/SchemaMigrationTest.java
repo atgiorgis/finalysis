@@ -84,6 +84,11 @@ class SchemaMigrationTest {
             "categorization_rule, ck_categorization_rule_pattern_upper, c",
             "txn,                 fk_txn_category_rule,                f",
             "txn,                 ck_txn_category_rule_source,         c",
+            "txn,                 ck_txn_category_ai_provenance,       c",
+            "txn,                 ck_txn_category_confidence,          c",
+            "txn,                 ck_txn_ai_review_reason,             c",
+            "txn,                 ck_txn_ai_review_has_time,           c",
+            "txn,                 ck_txn_ai_review_uncategorized,      c",
             "transfer_link,       uq_transfer_link_out,                u",
             "transfer_link,       uq_transfer_link_in,                 u",
             "transfer_link,       ck_transfer_link_distinct,           c",
@@ -167,6 +172,49 @@ class SchemaMigrationTest {
                 WHERE id = ?""", rule, txn))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("ck_txn_category_rule_source");
+    }
+
+    /** V16: the AI's model, confidence and prompt version exist only on an AI category, and only 0 to 1. */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+            RULE | category_model = 'm'                                 | ck_txn_category_ai_provenance
+            USER | category_confidence = 0.5                            | ck_txn_category_ai_provenance
+            RULE | category_prompt_version = '2'                        | ck_txn_category_ai_provenance
+            AI   | category_confidence = 1.001                          | ck_txn_category_confidence
+            AI   | category_confidence = -0.001                         | ck_txn_category_confidence
+            AI   | ai_review_reason = 'LOW_CONFIDENCE', ai_review_at = now() | ck_txn_ai_review_uncategorized
+            """)
+    void aiColumnsFollowTheAiCategory(String source, String set, String constraint) {
+        long account = insertAccount("1001");
+        long txn = insertTxn(account, insertStatement(account), "fp-ai-" + constraint + set.length());
+
+        assertThatThrownBy(() -> jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries'), category_source = ?,
+                               %s
+                WHERE id = ?""".formatted(set), source, txn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(constraint);
+    }
+
+    @Test
+    void anAiCategoryKeepsItsProvenanceAndAReviewNeedsAReasonAndATime() {
+        long account = insertAccount("1001");
+        long txn = insertTxn(account, insertStatement(account), "fp-ai-ok");
+
+        jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries'), category_source = 'AI',
+                               category_model = 'm', category_confidence = 0.875, category_prompt_version = '2'
+                WHERE id = ?""", txn);
+        jdbc.update("""
+                UPDATE txn SET category_id = NULL, category_source = NULL, category_model = NULL,
+                               category_confidence = NULL, category_prompt_version = NULL,
+                               ai_review_reason = 'INVALID_ANSWER', ai_review_at = now()
+                WHERE id = ?""", txn);
+
+        assertThatThrownBy(() -> jdbc.update("UPDATE txn SET ai_review_at = NULL WHERE id = ?", txn))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_txn_ai_review_has_time");
+        // The reason's values: EnumCheckConstraintTest.
     }
 
     @ParameterizedTest

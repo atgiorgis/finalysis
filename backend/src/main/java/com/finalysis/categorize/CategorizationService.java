@@ -33,6 +33,13 @@ public class CategorizationService {
     private static final Logger log = LoggerFactory.getLogger(CategorizationService.class);
     private static final int BATCH = 1000;
 
+    /**
+     * For every write that sets a category other than the AI's (V16): the AI provenance goes with the AI category,
+     * and a txn that has a category is no longer waiting for review.
+     */
+    static final String CLEAR_AI_COLUMNS = "category_model = NULL, category_confidence = NULL, "
+            + "category_prompt_version = NULL, ai_review_reason = NULL, ai_review_at = NULL";
+
     private final CategorizationLock lock;
     private final MerchantCleaningService cleaning;
     private final JdbcTemplate jdbc;
@@ -145,8 +152,8 @@ public class CategorizationService {
 
         int categorized = update("""
                 UPDATE txn
-                SET category_id = ?, category_source = 'RULE', category_rule_id = ?, categorized_at = now()
-                WHERE id = ? AND category_source IS DISTINCT FROM 'USER'""", categorize);
+                SET category_id = ?, category_source = 'RULE', category_rule_id = ?, categorized_at = now(), %s
+                WHERE id = ? AND category_source IS DISTINCT FROM 'USER'""".formatted(CLEAR_AI_COLUMNS), categorize);
         int cleared = update("""
                 UPDATE txn
                 SET category_id = NULL, category_source = NULL, category_rule_id = NULL, categorized_at = NULL
@@ -160,14 +167,19 @@ public class CategorizationService {
     /**
      * Stage 3: an uncategorized txn takes the latest AI category of its exact merchant in the same
      * direction, so a merchant goes to the model once. Linked txns are left out, as the AI leaves them out
-     * (§1.1). Copies from AI txns only, so a user's decision always comes through a rule.
+     * (§1.1). Copies from AI txns only, so a user's decision always comes through a rule. The model, confidence
+     * and prompt version are copied with the category, so the txn says where its category came from; a txn waiting
+     * for review gets its merchant's answer as well.
      */
     private int applyMemory(String scope, Object... args) {
         return jdbc.update("""
                 UPDATE txn t
-                SET category_id = m.category_id, category_source = 'AI', categorized_at = now()
+                SET category_id = m.category_id, category_source = 'AI', categorized_at = now(),
+                    category_model = m.category_model, category_confidence = m.category_confidence,
+                    category_prompt_version = m.category_prompt_version, ai_review_reason = NULL, ai_review_at = NULL
                 FROM (
-                    SELECT DISTINCT ON (merchant, sign(amount)) merchant, sign(amount) AS direction, category_id
+                    SELECT DISTINCT ON (merchant, sign(amount)) merchant, sign(amount) AS direction, category_id,
+                           category_model, category_confidence, category_prompt_version
                     FROM txn
                     WHERE category_source = 'AI' AND merchant IS NOT NULL
                     ORDER BY merchant, sign(amount), categorized_at DESC NULLS LAST, id DESC

@@ -32,6 +32,11 @@ import tools.jackson.databind.json.JsonMapper;
 public class CategorizationPromptBuilder {
 
     public static final String SYSTEM_PROMPT_RESOURCE = "categorize/categorization-system-prompt.txt";
+    /**
+     * Saved on every AI category. Bump it whenever the system prompt, the request's fields or the answer's structure
+     * changes; {@code PromptBuilderTest} pins all three to this value. 1 was steps 5–6 (HIGH/MEDIUM/LOW).
+     */
+    public static final String PROMPT_VERSION = "2";
     public static final String OPEN_TAG = "<transactions>";
     public static final String CLOSE_TAG = "</transactions>";
     static final int MAX_EXAMPLES = 3;

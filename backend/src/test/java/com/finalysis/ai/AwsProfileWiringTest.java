@@ -14,6 +14,7 @@ import com.finalysis.categorize.RedactionContext;
 import com.finalysis.support.IntegrationTest;
 import com.finalysis.support.NoCloudAiGuard;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -30,6 +31,7 @@ import org.springframework.core.NestedExceptionUtils;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 
 /**
  * The {@code aws} profile wires the cloud models without making a request (docs/plans/phase-4.md §10). The
@@ -67,6 +69,17 @@ class AwsProfileWiringTest {
         assertThat(properties.roles().categorization()).isEqualTo("us.anthropic.claude-haiku-4-5-20251001-v1:0");
         assertThat(properties.roles().embedding()).isEqualTo("amazon.titan-embed-text-v2:0");
         assertThat(properties.nativeStructuredOutput()).isTrue();
+    }
+
+    /** Spring AI's Bedrock chat model uses this client bean; its transport retries are the SDK's standard three. */
+    @Test
+    void theBedrockClientHasTheStandardRetryStrategy() {
+        BedrockRuntimeClient client = context.getBean(BedrockRuntimeClient.class);
+
+        assertThat(client.serviceClientConfiguration().overrideConfiguration().retryStrategy())
+                .hasValueSatisfying(strategy -> assertThat(strategy.maxAttempts()).isEqualTo(3));
+        assertThat(client.serviceClientConfiguration().overrideConfiguration().apiCallTimeout())
+                .contains(Duration.ofSeconds(30));
     }
 
     @Test
@@ -107,7 +120,7 @@ class AwsProfileWiringTest {
 
         assertThat(guard().requests()).isGreaterThan(before);
         assertThat(output).containsPattern("ai call role=categorization model=us\\.anthropic\\.claude-haiku-4-5-20251001-v1:0"
-                + " items=1 inputTokens=- outputTokens=- ms=\\d+ outcome=ERROR error=\\w+");
+                + " items=1 inputTokens=n/a outputTokens=n/a ms=\\d+ outcome=ERROR error=\\w+");
         assertThat(output).doesNotContain("BRAMBLEWICK", "Tests never call a cloud model");
     }
 

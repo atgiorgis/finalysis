@@ -13,7 +13,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * Runs the categorization pipeline (docs/plans/phase-4.md §1.2) after every import and once at startup:
- * merchant cleaning (stage 1), then rules and merchant memory (stages 2–3).
+ * merchant cleaning (stage 1), then rules and merchant memory (stages 2–3). After an import it then asks for the AI
+ * stage (5) in the background ({@link BackgroundAiCategorization}), which does nothing while AI is off. No AI at
+ * startup.
  *
  * <p>After an import commits, it runs after transfer detection ({@link #AFTER_TRANSFER_DETECTION}), since
  * later stages need to know which txns are linked. At startup it runs on the main thread once the app
@@ -35,10 +37,13 @@ class CategorizationListener {
 
     private final MerchantCleaningService cleaning;
     private final CategorizationService categorization;
+    private final BackgroundAiCategorization ai;
 
-    CategorizationListener(MerchantCleaningService cleaning, CategorizationService categorization) {
+    CategorizationListener(MerchantCleaningService cleaning, CategorizationService categorization,
+                           BackgroundAiCategorization ai) {
         this.cleaning = cleaning;
         this.categorization = categorization;
+        this.ai = ai;
     }
 
     @Order(AFTER_TRANSFER_DETECTION)
@@ -58,6 +63,12 @@ class CategorizationListener {
                     event.statementId(), result.examined(), result.ruleCategorized(), result.memoryApplied());
         } catch (RuntimeException e) {
             log.error("Rules after the import of statement {} failed ({}); the import stands, and the next run "
+                    + "catches up", event.statementId(), e.getClass().getName());
+        }
+        try {
+            ai.request();
+        } catch (RuntimeException e) {
+            log.error("AI categorization after the import of statement {} could not start ({}); the next run "
                     + "catches up", event.statementId(), e.getClass().getName());
         }
     }

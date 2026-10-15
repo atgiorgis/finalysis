@@ -8,6 +8,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ResponseEntity;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -48,13 +49,17 @@ public class CategorizationModelClient {
      * What came back.
      *
      * @param response     the parsed answer, or null when the model's output didn't fit the structure
-     * @param inputTokens  null when the provider didn't report it
-     * @param outputTokens null when the provider didn't report it
+     * @param inputTokens  null when the provider didn't report usage
+     * @param outputTokens null when the provider didn't report usage
      */
     public record Result(CategorizationResponse response, Integer inputTokens, Integer outputTokens, long millis) {
 
         public boolean parsed() {
             return response != null;
+        }
+
+        public boolean usageReported() {
+            return inputTokens != null;
         }
     }
 
@@ -74,6 +79,7 @@ public class CategorizationModelClient {
         String modelId = properties.roles().categorization();
         int items = prompt.request().items().size();
         long start = System.nanoTime();
+        LenientConverter converter = new LenientConverter();
         ResponseEntity<ChatResponse, CategorizationResponse> answer;
         try {
             // As messages, not .system()/.user() text: those are templates, and the JSON has braces.
@@ -83,7 +89,7 @@ public class CategorizationModelClient {
             if (properties.nativeStructuredOutput()) {
                 request = request.advisors(AdvisorParams.ENABLE_NATIVE_STRUCTURED_OUTPUT);
             }
-            answer = request.call().responseEntity(new LenientConverter());
+            answer = request.call().responseEntity(converter);
         } catch (RuntimeException e) {
             AiCallLog.record(ROLE, modelId, items, null, null, millisSince(start), AiCallLog.Outcome.ERROR, e);
             throw e;
@@ -91,12 +97,26 @@ public class CategorizationModelClient {
         long millis = millisSince(start);
         Usage usage = answer.response() == null || answer.response().getMetadata() == null
                 ? null : answer.response().getMetadata().getUsage();
-        Integer input = usage == null ? null : usage.getPromptTokens();
-        Integer output = usage == null ? null : usage.getCompletionTokens();
+        boolean reported = reported(usage);
+        Integer input = reported ? usage.getPromptTokens() : null;
+        Integer output = reported ? usage.getCompletionTokens() : null;
         CategorizationResponse parsed = answer.entity();
         AiCallLog.record(ROLE, modelId, items, input, output, millis,
-                parsed == null ? AiCallLog.Outcome.INVALID_OUTPUT : AiCallLog.Outcome.OK, null);
+                parsed == null ? AiCallLog.Outcome.INVALID_OUTPUT : AiCallLog.Outcome.OK, converter.failure());
         return new Result(parsed, input, output, millis);
+    }
+
+    /**
+     * Whether the provider reported usage. Spring AI stands in {@link EmptyUsage} (zeros) when it has none, and
+     * {@code DefaultUsage} turns missing counts into zeros; a call that sent a prompt never used zero input tokens,
+     * so zero input means "not reported", never "free".
+     */
+    static boolean reported(Usage usage) {
+        if (usage == null || usage instanceof EmptyUsage) {
+            return false;
+        }
+        Integer input = usage.getPromptTokens();
+        return input != null && input > 0 && usage.getCompletionTokens() != null;
     }
 
     private static long millisSince(long start) {
@@ -106,9 +126,12 @@ public class CategorizationModelClient {
     /**
      * Spring AI's converter (its JSON schema drives native structured output), but output that doesn't parse gives
      * null instead of an exception, so the call's tokens are still logged and the caller decides about a retry. The
-     * unparsed text is neither kept nor logged.
+     * unparsed text is neither kept nor logged; the parse exception is kept for its class name only (its message
+     * can quote the output). One per call.
      */
     static final class LenientConverter extends BeanOutputConverter<CategorizationResponse> {
+
+        private RuntimeException failure;
 
         LenientConverter() {
             super(CategorizationResponse.class);
@@ -122,8 +145,14 @@ public class CategorizationModelClient {
             try {
                 return super.convert(text);
             } catch (RuntimeException e) {
+                failure = e;
                 return null;
             }
+        }
+
+        /** Why the output didn't parse, if it didn't and that was an exception. */
+        RuntimeException failure() {
+            return failure;
         }
     }
 }

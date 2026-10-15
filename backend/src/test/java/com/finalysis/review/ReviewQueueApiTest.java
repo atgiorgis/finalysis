@@ -795,7 +795,7 @@ class ReviewQueueApiTest {
                             int suggested) {
         return jsonMapper.valueToTree(Map.of("statements", statements, "unparsedUploads", uploads,
                 "transferCandidates", groups, "competingCandidates", competing, "possibleMatches", possibleMatches,
-                "suggestedOneSidedTransfers", suggested));
+                "suggestedOneSidedTransfers", suggested, "aiCategoryReviews", 0));
     }
 
     /** Gives the txn a description a seeded Transfer rule matches, and runs the rules for it. */

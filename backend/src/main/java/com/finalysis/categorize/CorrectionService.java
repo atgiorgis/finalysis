@@ -84,8 +84,8 @@ public class CorrectionService {
         Category category = categories.findById(categoryId).orElseThrow(() -> new CategoryInvalidException(categoryId));
         jdbc.update("""
                 UPDATE txn
-                SET category_id = ?, category_source = 'USER', category_rule_id = NULL, categorized_at = now()
-                WHERE id = ?""", categoryId, txnId);
+                SET category_id = ?, category_source = 'USER', category_rule_id = NULL, categorized_at = now(), %s
+                WHERE id = ?""".formatted(CategorizationService.CLEAR_AI_COLUMNS), categoryId, txnId);
 
         String merchant = (String) txn.get("merchant");
         if (!applyToMerchant || merchant == null) {

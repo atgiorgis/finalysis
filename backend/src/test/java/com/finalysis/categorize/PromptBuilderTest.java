@@ -11,10 +11,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.converter.BeanOutputConverter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -58,6 +63,32 @@ class PromptBuilderTest {
         assertThat(prompt.candidateByKey()).isEqualTo(Map.of("i1", 0));
         assertThat(prompt.skipped()).isEmpty();
         assertThat(prompt.isEmpty()).isFalse();
+    }
+
+    /**
+     * The version saved on every AI category names exactly this prompt: the system prompt, the request's fields and
+     * the answer's schema. Changing any of them fails here until {@code PROMPT_VERSION} is bumped and the hash updated.
+     */
+    @Test
+    void thePromptVersionIsPinnedToThePromptRequestAndAnswer() throws Exception {
+        CategorizationPrompt prompt = builder.build(CATEGORIES, List.of(candidate("BLUE BEAN CAFE", "-6.25")),
+                RedactionContext.EMPTY);
+        String fingerprint = String.join("\n", prompt.system(),
+                fields(CategorizationRequest.class), fields(CategorizationRequest.Item.class),
+                fields(CategorizationRequest.Example.class),
+                new BeanOutputConverter<>(CategorizationResponse.class).getJsonSchema());
+        String sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(fingerprint.getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(CategorizationPromptBuilder.PROMPT_VERSION).isEqualTo("2");
+        assertThat(sha256).as("the prompt, request or answer changed: bump PROMPT_VERSION, then update this hash")
+                .isEqualTo("f1d68dd5426a61c96b85d63b734f60734e1c09a86af4f8336442919b0d69290e");
+    }
+
+    private static String fields(Class<? extends Record> type) {
+        return Arrays.stream(type.getRecordComponents())
+                .map(component -> component.getName() + ":" + component.getGenericType().getTypeName())
+                .collect(Collectors.joining(","));
     }
 
     /** §5.4: a string can't close the tag or break the JSON, even one that got past the guard (a category). */

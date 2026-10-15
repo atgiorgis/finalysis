@@ -392,7 +392,9 @@ class RulesApiTest {
                 .andExpect(jsonPath("$.merchantsCleaned").isNumber())
                 .andExpect(jsonPath("$.ruleCleared").isNumber())
                 .andExpect(jsonPath("$.memoryApplied").isNumber())
-                .andExpect(jsonPath("$.length()").value(4));
+                .andExpect(jsonPath("$.ai.status").value("OFF"))
+                .andExpect(jsonPath("$.ai.calls").value(0))
+                .andExpect(jsonPath("$.length()").value(5));
         assertThat(rows.category(txn)).isEqualTo("Dining");
 
         mockMvc.perform(post("/api/categorization/run").param("reclean", "true"))
@@ -400,6 +402,7 @@ class RulesApiTest {
                 .andExpect(jsonPath("$.ruleCategorized").value(0));
         mockMvc.perform(get("/api/categorization/run")).andExpect(status().isMethodNotAllowed());
         mockMvc.perform(post("/api/categorization/run").param("reclean", "maybe")).andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/categorization/run").param("force", "maybe")).andExpect(status().isBadRequest());
     }
 
     @Test

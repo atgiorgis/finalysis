@@ -76,3 +76,9 @@ finalysis:
   ai:
     # OFF here; CLOUD only from application-aws.yml, LOCAL later from application-local.yml.
     mode: OFF
+    # The AI stage (docs/plans/phase-4.md §4.5, step 7 notes); used only while a profile turns AI on.
+    categorization:
+      batch-size: 25          # items (merchant + direction) per call
+      max-items-per-run: 500  # cost guard: the rest waits for the next run
+      min-confidence: 0.70    # answers below it are not applied; their txns go to the review queue
+      run-after-import: true  # in the background after each import

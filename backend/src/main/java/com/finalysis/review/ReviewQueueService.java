@@ -6,6 +6,7 @@ import com.finalysis.ingestion.Txn;
 import com.finalysis.ingestion.TxnRepository;
 import com.finalysis.ingestion.UnparsedUpload;
 import com.finalysis.ingestion.UnparsedUploadRepository;
+import com.finalysis.review.AiCategoryReviewQuery.Waiting;
 import com.finalysis.review.SuggestedTransferQuery.Suggested;
 import com.finalysis.transfer.CandidateGroup;
 import com.finalysis.transfer.CandidatePair;
@@ -38,8 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Builds the review queue (ING-07, docs/plans/phase-3c.md §4.1) at request time, so it can't go stale:
  * statements and unparsed uploads from their tables, the transfer items from the same read-only
- * queries and resolver as detection (§2.3, §4.5, §4.6), and suggested one-sided transfers from their categories
- * (CAT-08, phase-4.md §8). Nothing is stored and nothing is written.
+ * queries and resolver as detection (§2.3, §4.5, §4.6), suggested one-sided transfers from their categories
+ * (CAT-08, phase-4.md §8), and txns the AI left uncategorized (CAT-02). Nothing is stored and nothing is written.
  *
  * <p>One REPEATABLE READ transaction: every query sees the same snapshot, so a detection run committing
  * between two of them can't make an item show a link it no longer has.
@@ -67,13 +68,14 @@ public class ReviewQueueService {
     private final CompetingCandidateQuery competing;
     private final PossibleMatchQuery possibleMatches;
     private final SuggestedTransferQuery suggestedTransfers;
+    private final AiCategoryReviewQuery aiCategoryReviews;
     private final TransferProperties properties;
 
     public ReviewQueueService(StatementRepository statements, UnparsedUploadRepository uploads, TxnRepository txns,
                               TransferLinkRepository links, TransferCandidateQuery candidates,
                               TransferResolver resolver, CompetingCandidateQuery competing,
                               PossibleMatchQuery possibleMatches, SuggestedTransferQuery suggestedTransfers,
-                              TransferProperties properties) {
+                              AiCategoryReviewQuery aiCategoryReviews, TransferProperties properties) {
         this.statements = statements;
         this.uploads = uploads;
         this.txns = txns;
@@ -83,6 +85,7 @@ public class ReviewQueueService {
         this.competing = competing;
         this.possibleMatches = possibleMatches;
         this.suggestedTransfers = suggestedTransfers;
+        this.aiCategoryReviews = aiCategoryReviews;
         this.properties = properties;
     }
 
@@ -106,6 +109,9 @@ public class ReviewQueueService {
                 .filter(suggestion -> !txnIds.contains(suggestion.txnId()))
                 .toList();
         suggested.forEach(suggestion -> txnIds.add(suggestion.txnId()));
+        // Uncategorized, so never a suggested transfer; a linked txn is never listed (the query leaves it out).
+        List<Waiting> waiting = aiCategoryReviews.find();
+        waiting.forEach(item -> txnIds.add(item.txnId()));
         Map<Long, Txn> txnById = byId(txnIds, txns::findWithAccountByIdIn, Txn::getId);
         Map<Long, TransferLink> linkById = byId(
                 competingPairs.stream().map(CompetingPair::linkId).collect(Collectors.toSet()),
@@ -119,6 +125,7 @@ public class ReviewQueueService {
                 all.add(competingItem(linkById.get(linkId), pairs, txnById)));
         matches.forEach(match -> all.add(possibleMatchItem(match, txnById)));
         suggested.forEach(suggestion -> all.add(suggestedItem(suggestion, txnById)));
+        waiting.forEach(item -> all.add(aiCategoryReviewItem(item, txnById)));
 
         List<ReviewItem> forAccount = all.stream()
                 .filter(item -> accountId == null || item.accountIds().contains(accountId))
@@ -185,6 +192,11 @@ public class ReviewQueueService {
                 suggestion.since());
     }
 
+    private static ReviewItem aiCategoryReviewItem(Waiting waiting, Map<Long, Txn> txnById) {
+        return new ReviewItem.AiCategoryReviewItem("txn-" + waiting.txnId(),
+                TxnSummary.from(txnById.get(waiting.txnId())), waiting.reason(), waiting.since());
+    }
+
     private static ReviewQueueResponse.Counts counts(List<ReviewItem> items) {
         Map<ReviewItemKind, Integer> byKind = new EnumMap<>(ReviewItemKind.class);
         items.forEach(item -> byKind.merge(ReviewItemKind.of(item), 1, Integer::sum));
@@ -194,7 +206,8 @@ public class ReviewQueueService {
                 byKind.getOrDefault(ReviewItemKind.TRANSFER_CANDIDATES, 0),
                 byKind.getOrDefault(ReviewItemKind.COMPETING_CANDIDATE, 0),
                 byKind.getOrDefault(ReviewItemKind.POSSIBLE_MATCH, 0),
-                byKind.getOrDefault(ReviewItemKind.SUGGESTED_ONE_SIDED_TRANSFER, 0));
+                byKind.getOrDefault(ReviewItemKind.SUGGESTED_ONE_SIDED_TRANSFER, 0),
+                byKind.getOrDefault(ReviewItemKind.AI_CATEGORY_REVIEW, 0));
     }
 
     /** The competing pairs of each link, by link id ascending (the query's order). */
@@ -230,6 +243,7 @@ public class ReviewQueueService {
             case ReviewItem.CompetingCandidateItem competing -> new long[] {competing.linkId(), 0};
             case ReviewItem.PossibleMatchItem match -> new long[] {match.outLinkId(), match.inLinkId()};
             case ReviewItem.SuggestedOneSidedTransferItem suggestion -> new long[] {suggestion.txn().id(), 0};
+            case ReviewItem.AiCategoryReviewItem waiting -> new long[] {waiting.txn().id(), 0};
         };
     }
 }

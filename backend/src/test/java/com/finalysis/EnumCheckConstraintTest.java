@@ -3,6 +3,7 @@ package com.finalysis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.account.AccountType;
+import com.finalysis.categorize.AiCategorizer;
 import com.finalysis.categorize.CategoryKind;
 import com.finalysis.categorize.CategorySource;
 import com.finalysis.categorize.RuleDirection;
@@ -47,6 +48,7 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_category_kind", CategoryKind.class),
                 Arguments.of("ck_txn_source_section", SourceSection.class),
                 Arguments.of("ck_txn_category_source", CategorySource.class),
+                Arguments.of("ck_txn_ai_review_reason", AiCategorizer.ReviewReason.class),
                 Arguments.of("ck_categorization_rule_match_type", RuleMatchType.class),
                 Arguments.of("ck_categorization_rule_source", RuleSource.class),
                 Arguments.of("ck_categorization_rule_field", RuleField.class),

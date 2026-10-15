@@ -75,8 +75,8 @@ public class CategorizeRows {
     public void categorize(long txnId, String category, String source) {
         jdbc.update("""
                 UPDATE txn SET category_id = (SELECT id FROM category WHERE name = ?), category_source = ?,
-                               category_rule_id = NULL, categorized_at = now()
-                WHERE id = ?""", category, source, txnId);
+                               category_rule_id = NULL, categorized_at = now(), %s
+                WHERE id = ?""".formatted(CategorizationService.CLEAR_AI_COLUMNS), category, source, txnId);
     }
 
     public long categoryId(String name) {

@@ -7,7 +7,8 @@ import org.slf4j.LoggerFactory;
  * The one log line every model call writes (AI-06, docs/plans/phase-4.md §4.5):
  * <pre>ai call role=categorization model=&lt;id&gt; items=25 inputTokens=1984 outputTokens=471 ms=1830 outcome=OK</pre>
  * Counts only: never a prompt, response, merchant, category or exception message. A failure adds the exception's
- * class name ({@code error=SdkClientException}). Token counts the provider didn't report are written as {@code -}.
+ * class name ({@code error=SdkClientException}). Token counts the provider didn't report are written as {@code n/a},
+ * never as 0, so a missing count can't pass for a free call.
  */
 public final class AiCallLog {
 
@@ -39,6 +40,6 @@ public final class AiCallLog {
     }
 
     private static String count(Integer tokens) {
-        return tokens == null ? "-" : tokens.toString();
+        return tokens == null ? "n/a" : tokens.toString();
     }
 }

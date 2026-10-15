@@ -93,8 +93,8 @@ For each txn, in order:
 |---|---|
 | No profile (today's default) | No `ChatModel` or `EmbeddingModel` bean. Stages 4–5 are no-ops (`AiMode.OFF`), stages 1–3 run. `/api/status` says `"ai": {"mode": "OFF"}`. Uncategorized txns stay null |
 | `aws` profile, Bedrock reachable | All stages |
-| Bedrock error, timeout or throttling | Spring AI retry (2 attempts, backoff). If it still fails, the batch is abandoned and the rest of the run stops. The log gets the exception class, batch size and run counts, never the message (it can echo the request). Txns stay uncategorized; the next run retries them |
-| Model returns invalid output | That batch is retried once. If it fails again, its items stay uncategorized (§4.4) |
+| Bedrock error, timeout or throttling | Spring AI retry (2 attempts, backoff); *changed in step 7: the AWS SDK's standard retries, 3 attempts, and no other layer (step 7 notes)*. If it still fails, the batch is abandoned and the rest of the run stops. The log gets the exception class, batch size and run counts, never the message (it can echo the request). Txns stay uncategorized; the next run retries them |
+| Model returns invalid output | That batch is retried once. If it fails again, its items stay uncategorized (§4.4) and, from step 7, go to the review queue |
 | Embedding fails | Stage 5 runs without examples; the merchants are embedded on the next run |
 
 An import never fails, rolls back or returns an error because of categorization, synchronous stages
@@ -300,7 +300,7 @@ record Example(String merchant, String category) {}
 // What the model must return (Spring AI structured output, .entity(CategorizationResponse.class)).
 record CategorizationResponse(List<Answer> answers) {}
 record Answer(String key, String category, Confidence confidence) {}
-enum Confidence { HIGH, MEDIUM, LOW }
+enum Confidence { HIGH, MEDIUM, LOW }      // step 7: a number from 0 to 1 instead (step 7 notes)
 ```
 
 - **Keys are per-request** (`i1`…), never txn or merchant ids. The mapping back stays in Java.
@@ -341,6 +341,7 @@ Every answer goes through Java checks; the model is never trusted:
 - Each key that was sent is answered at most once. Unknown keys are ignored; duplicate keys reject
   that key.
 - `category` must equal an allowed name (exact match after trim). Anything else means unanswered.
+- *Step 7 replaced this with a numeric confidence, a configurable threshold and the review queue (step 7 notes).*
 - **Confidence:** HIGH and MEDIUM are applied; **LOW is not.** Those txns stay uncategorized, are
   counted in the run result, and can be listed with `?uncategorized=true` (open question 3).
 - A response that won't parse: one retry of that batch, then its items stay uncategorized.
@@ -352,7 +353,7 @@ Every answer goes through Java checks; the model is never trusted:
 |---|---|---|
 | Items per call | 25 | `finalysis.ai.categorization.batch-size` |
 | Items per run | 500 (the rest wait for the next run) | `finalysis.ai.categorization.max-items-per-run` |
-| Retries on transient errors | 2, exponential backoff from 2 s | `spring.ai.retry.*` |
+| Retries on transient errors | 2, exponential backoff from 2 s (step 7: the AWS SDK's standard strategy, 3 attempts) | `spring.ai.retry.*` (step 7: `BedrockClientConfiguration`) |
 | Call timeout | 30 s | `spring.ai.bedrock.aws.timeout` (in `application-aws.yml` only) |
 | Max output tokens | 2000 | role option |
 
@@ -770,7 +771,7 @@ moves before AI wiring. Reasons:
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Done: "Phase 4 step 4: CAT-08 suggested one-sided transfers" (notes below) |
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Done: "Phase 4 step 5: redaction and prompt safety" (notes below) |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
-| 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Planned |
+| 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
 | 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Planned |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
@@ -1295,6 +1296,121 @@ answer, unparsable output, unreported usage, failure logged by class only, no ca
 `StatusControllerTest` (`{"mode": "OFF"}` and no model beans), `PackageDependencyTest` (+2), `ExposureTest` (the
 logger and content-logging checks, run under every profile), `App.test.tsx` (banner off, on, unknown provider).
 
+### Step 7 notes
+
+Built from the step 7 prompt, which changed four things the plan had decided (it is newer, so it wins):
+
+| Plan said | Step 7 does | Where |
+|---|---|---|
+| Confidence HIGH / MEDIUM / LOW; LOW not applied | A number from 0 to 1; below `finalysis.ai.categorization.min-confidence` (default **0.70**) not applied | `CategorizationResponse`, `AnswerValidator`, system prompt |
+| LOW txns stay uncategorized, no review-queue item (§15 decision 3, §13) | Low-confidence and twice-invalid txns stay uncategorized **and** go to the review queue, kind `AI_CATEGORY_REVIEW` | V16 `ai_review_reason`, `AiCategoryReviewQuery` |
+| Spring AI retry, 2 attempts (§1.4, §4.5) | The AWS SDK's standard retry strategy, at most 3 attempts, on the `BedrockRuntimeClient`; no Spring Retry or Spring AI retry layer | `com.finalysis.ai.bedrock.BedrockClientConfiguration` |
+| `category_model` only (§9.1) | Also the confidence and a prompt version on every AI category | V16 |
+
+**Pipeline.** `AiCategorizer` is stage 5. It reads candidates in one read-only transaction: txns with a merchant, on no
+transfer link, with no category (or, with `force`, an AI one), not already left for review (unless `force`). It
+groups them by merchant and sign (§4.1; the newest txn's amount is sent) and works through them in batches. Each batch
+goes through `CategorizationPromptBuilder` (cleaned merchant → `Redactor` → `OutboundPayloadGuard`, keys `i1`…, JSON
+between the tags), then `CategorizationModelClient`, with no transaction open. Its answers are written in a
+transaction of their own under the categorization lock, by txn id, with SQL that re-checks the row: still
+uncategorized (or still AI when forced), same merchant, not linked. So a correction or a rule that lands during the
+call wins, and a USER or RULE category is never written, even with `force`. Runs never overlap (a JVM lock).
+
+**Validation (`AnswerValidator`).** Every key must be one the batch sent, answered once, and every sent key answered;
+the category must be on the list (exact after trimming); the confidence a number from 0 to 1, stored at three
+decimals (formatting, not a computed value). One problem anywhere rejects the whole answer: a duplicate, missing or
+unknown key means the answers may not line up with the items any more. A rejected or unparsable answer is asked again
+once with the same prompt; rejected again, every txn in the batch gets `ai_review_reason = INVALID_ANSWER`. A valid
+answer below the threshold gives `LOW_CONFIDENCE`, without a retry (asking again gives the same answer). Logs name the
+problem kinds (`[UNKNOWN_CATEGORY]`) and the parse exception's class, never the model's output.
+
+**Where it runs.** `POST /api/categorization/run?ai=true&force=false` runs rules and memory in one transaction, then
+the AI stage outside it; the body is the old counts plus `ai` (status `OFF`, `DONE`, `CAP_REACHED` or
+`STOPPED_ON_ERROR`, items selected and sent, txns categorized, low-confidence, invalid, person-to-person and
+redaction-blocked items, calls, retries, calls without usage, tokens, items and txns remaining). After each import,
+`BackgroundAiCategorization` asks for a run on one daemon thread with room for one waiting run (a later request is
+dropped, since the waiting run covers it), as §1.2 planned. Nothing runs while AI is off. Not at startup.
+
+**Schema (V16).** `txn.category_model`, `category_confidence NUMERIC(4,3)`, `category_prompt_version`,
+`ai_review_reason` (`LOW_CONFIDENCE`, `INVALID_ANSWER`) and `ai_review_at`. Checks: the three provenance columns only
+on an AI category; confidence 0 to 1; a reason only on an uncategorized txn, and with its time. **Single writer:** all
+five are written only by `categorize`, with SQL, under the categorization lock; `Txn` doesn't map them. Every other
+write that sets a category (rules pass, correction) clears them with `CategorizationService.CLEAR_AI_COLUMNS`, so the
+provenance never outlives its category and a categorized txn is never waiting for review. Merchant memory copies the
+provenance with the category.
+
+**Cost guard, defaults.**
+- **`batch-size` 25** (1–50): about 2,000 input and 500 output tokens per call (§4.5), so 25 answers fit well inside
+  the 2,000-token output limit; a rejected batch, retried and then sent to review, costs at most 25 items.
+- **`max-items-per-run` 500**, counted in items sent (the unit that costs), not txns: at most 20 calls and about
+  $0.10 with Haiku 4.5 per run. A first real import (~150 new merchants, §4.5) fits in one run; a runaway (a re-clean
+  that changes every merchant, a forced run) is bounded. When the cap is reached the run stops between batches and
+  reports `itemsRemaining` and `txnsRemaining`; the next run continues where it stopped, since categorized and
+  reviewed txns aren't selected again.
+- **`min-confidence` 0.70**, proposed: the prompt asks for a value below 0.5 when the name doesn't say what the
+  business sells, so 0.70 leaves out unsure answers and the band just above them. Model confidences aren't
+  calibrated; step 9 should set it from the dev set (accuracy above and below the threshold).
+
+**Retries (AWS SDK only).** Spring AI's Bedrock Converse model uses a `BedrockRuntimeClient` bean when one exists.
+`BedrockClientConfiguration` (active only when `spring.ai.model.chat=bedrock-converse`) builds it as Spring AI would
+(same credentials and region beans, Apache HTTP client, timeouts) plus `AwsRetryStrategy.standardRetryStrategy()`
+with 3 attempts: throttling, 5xx and transient network errors, with backoff and jitter; 4xx is not retried.
+`spring.ai.bedrock.aws.timeout` (30 s) bounds the call, retries included. A call that still fails stops the run
+(`STOPPED_ON_ERROR`); its txns are left untouched, not sent to review, so the next run retries them. This is the only
+code that names the provider: `PackageDependencyTest` exempts `com.finalysis.ai.bedrock` from the provider rule and
+forbids any dependency on it. The Titan embedding client keeps Spring AI's own; step 8 decides.
+
+**Usage (step 6 review).** `AiCallLog` writes `n/a`, never 0, for counts the provider didn't report.
+`CategorizationModelClient` treats Spring AI's stand-ins as unreported: no usage, `EmptyUsage`, or zero/missing input
+tokens (a call that sent a prompt never used none). Runs count `callsWithoutUsage` and leave those calls out of the
+token totals.
+
+**Prompt version.** `CategorizationPromptBuilder.PROMPT_VERSION = "2"` (1 was steps 5–6). `PromptBuilderTest` pins a
+SHA-256 of the system prompt, the request records' fields and the answer's JSON schema, so changing any of them fails
+until the version is bumped. The system prompt now asks for a confidence from 0 to 1 (below 0.5 when unsure) and
+"exactly one answer per key, and no other keys".
+
+**Choices beyond the prompt:**
+- **Whole batch to review on a second invalid answer**, as the prompt says, even when only one answer was wrong.
+  Partial use would trust answers that may be misaligned.
+- **A forced re-ask that is rejected keeps the earlier AI category**: a rejected answer never removes a category.
+  Only uncategorized txns are marked for review.
+- **Txns left for review are skipped by later runs** unless `force` (idempotence: a second run makes no call). A
+  transport failure marks nothing, so those are retried.
+- **Review items are resolved by a correction**; there is no dismiss action. A category of any source clears the
+  reason; linked txns aren't listed.
+- **The transaction API** returns `categoryModel`, `categoryConfidence`, `categoryPromptVersion` and
+  `aiReviewReason` (§9.2 planned `categoryModel`).
+- **Person-to-person and redaction-blocked items** are selected on every run but never sent; they don't count toward
+  the cap. They can make a run report `CAP_REACHED` with only such items left; the next run reports `DONE`.
+- **Background run after import** (§1.2) is in this step, behind `finalysis.ai.categorization.run-after-import`
+  (default true).
+- **Test fixture in `sample-data/`:** `edge-cases/ai-categorization/ai-categorization-cases.csv`, written by
+  `tools/SampleDataGenerator.java` last and without the random generator (every other file unchanged). Fictional
+  businesses no seed matches and no dev or holdout name, a merchant in two directions and on two dates, identifiers,
+  a person-to-person payment and an injection line. The holdout is never read.
+- **Postman:** the four exact `counts` checks in folder 4 gain `aiCategoryReviews: 0` (AI is off under newman). Not
+  run with newman in this step.
+
+**Tests** (all with `FakeChatModel`; no Bedrock client exists in the AI test context and `NoCloudAiGuard` is in force):
+- `AiCategorizerTest` (Testcontainers, `@AiIntegrationTest`, 29): a valid batch (every txn of a merchant and direction,
+  provenance, newest amount, token line, nothing textual logged); batch size; each corruption invalid twice → review
+  (unknown category, unknown, duplicate and missing key, confidence above 1 or missing); unparsable then valid;
+  never parsable; low confidence and the threshold itself; the review queue and a correction resolving it; USER and
+  RULE never sent or changed, with and without `force`; a correction during the call wins; linked txns never sent;
+  a second run makes no call and changes nothing; `force`; a rejected forced answer; the cap and continuing runs;
+  usage missing; a failed call; AI off; the payload's exact fields and merchants with no identifiers, dates, ids or
+  raw descriptions; the injection line as inert data; a model that obeys it (rejected) and one swayed by it (only
+  its own merchant); merchant memory copying provenance and a correction clearing it; the run endpoint; an import
+  triggering a background run, whose failure never fails the import.
+- `AnswerValidatorTest` (21), `BedrockClientConfigurationTest` (4: 3 attempts for 429 and 5xx, 1 for 400 and 403,
+  against an in-process HTTP client), `AwsProfileWiringTest` (+1: the context's client has the strategy and the
+  30 s call timeout), `CategorizationModelClientTest` (n/a, `reported`, parse error class), `PromptBuilderTest`
+  (+1, the version pin), `SchemaMigrationTest` (+12, V16), `EnumCheckConstraintTest` (+1), `PackageDependencyTest`,
+  `RulesApiTest` (the run body), `ReviewQueueApiTest` (the new count), `SampleDataParserSelectionTest` (+1, 63 files).
+
+Backend tests 2,015 → 2,086 (+71); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1329,6 +1445,7 @@ At approval, requirements v1.32 records:
   totals treat it is Phase 5's call.
 - **A rule matches by merchant, not by amount.** "AMZN MKTP US" is always Shopping unless the user
   writes a narrower rule.
+- *Step 7: low-confidence and invalid-answer txns now have a review-queue item (`AI_CATEGORY_REVIEW`).*
 - **LOW-confidence txns stay uncategorized** until a correction or a rule. There's no review-queue item
   for them (the transaction list's `uncategorized=true` filter shows them).
 - **AI answers are never revisited automatically.** A wrong AI category stays until corrected; a

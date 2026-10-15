@@ -27,7 +27,8 @@ class TransactionQuery {
             SELECT t.id, t.account_id, a.name AS account_name, a.type AS account_type, t.statement_id, t.txn_date,
                    t.post_date, t.amount, t.source_section, t.raw_description, t.merchant, t.counterparty,
                    t.category_id, c.name AS category_name, c.kind AS category_kind, c.parent_id AS category_parent_id,
-                   t.category_source, t.category_rule_id, t.categorized_at, t.is_transfer, t.transfer_excluded
+                   t.category_source, t.category_rule_id, t.categorized_at, t.category_model, t.category_confidence,
+                   t.category_prompt_version, t.ai_review_reason, t.is_transfer, t.transfer_excluded
             FROM txn t
             JOIN account a ON a.id = t.account_id
             LEFT JOIN category c ON c.id = t.category_id
@@ -104,7 +105,8 @@ class TransactionQuery {
                 rs.getBigDecimal("amount"), SourceSection.valueOf(rs.getString("source_section")),
                 rs.getString("raw_description"), rs.getString("merchant"), rs.getString("counterparty"), category,
                 source == null ? null : CategorySource.valueOf(source), rs.getObject("category_rule_id", Long.class),
-                rs.getObject("categorized_at", OffsetDateTime.class), rs.getBoolean("is_transfer"),
-                rs.getBoolean("transfer_excluded"));
+                rs.getObject("categorized_at", OffsetDateTime.class), rs.getString("category_model"),
+                rs.getBigDecimal("category_confidence"), rs.getString("category_prompt_version"),
+                rs.getString("ai_review_reason"), rs.getBoolean("is_transfer"), rs.getBoolean("transfer_excluded"));
     }
 }
