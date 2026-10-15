@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
 class NoAiInIngestionTest {
 
     private static final DescribedPredicate<JavaClass> AI_OR_CATEGORIZATION = resideInAnyPackage(
-            "org.springframework.ai..", "software.amazon.awssdk..", "com.finalysis.chat..")
+            "org.springframework.ai..", "software.amazon.awssdk..", "com.finalysis.chat..", "com.finalysis.ai..")
             .or(resideInAPackage("com.finalysis.categorize..").and(not(belongToAnyOf(Category.class, CategorySource.class))))
             .as("AI, chat or categorization code (other than the Category entity and CategorySource)");
 

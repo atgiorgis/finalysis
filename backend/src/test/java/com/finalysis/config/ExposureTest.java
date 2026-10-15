@@ -112,6 +112,24 @@ class ExposureTest {
             assertThat(log.isFatalEnabled() || log.isErrorEnabled() || log.isWarnEnabled() || log.isInfoEnabled()
                     || log.isDebugEnabled() || log.isTraceEnabled()).as(logger).isFalse();
         }
+        // Model clients (AI-06, SEC-01): Spring AI logs exception messages and unparsable output at ERROR, and its
+        // observations can log prompts and completions; the AWS SDK and HTTP clients log requests below WARN.
+        for (String logger : List.of("org.springframework.ai", "org.springframework.ai.converter.BeanOutputConverter",
+                "org.springframework.ai.bedrock.titan.BedrockTitanEmbeddingModel",
+                "org.springframework.ai.bedrock.api.AbstractBedrockApi", "org.springframework.ai.chat.client")) {
+            Log log = LogFactory.getLog(logger);
+            assertThat(log.isFatalEnabled() || log.isErrorEnabled() || log.isWarnEnabled() || log.isInfoEnabled()
+                    || log.isDebugEnabled() || log.isTraceEnabled()).as(logger).isFalse();
+        }
+        for (String logger : List.of("software.amazon.awssdk", "software.amazon.awssdk.request",
+                "software.amazon.awssdk.http", "org.apache.http.wire", "org.apache.hc.client5.http.wire", "io.netty")) {
+            assertThat(LoggerFactory.getLogger(logger).isInfoEnabled()).as(logger).isFalse();
+        }
+        for (String content : List.of("spring.ai.chat.observations.log-prompt", "spring.ai.chat.observations.log-completion",
+                "spring.ai.chat.observations.include-error-logging", "spring.ai.chat.client.observations.log-prompt",
+                "spring.ai.chat.client.observations.log-completion", "spring.ai.tools.observations.include-content")) {
+            assertThat(environment.getProperty(content, Boolean.class, false)).as(content).isFalse();
+        }
     }
 
     /**
@@ -142,21 +160,26 @@ class ExposureTest {
 
     private static boolean forbidden(String key, String value) {
         boolean verbose = value.equals("debug") || value.equals("trace") || value.equals("all");
-        Map<String, Boolean> rules = Map.of(
-                "exposure", key.startsWith("management.endpoints.web.exposure.include") && !value.equals("health"),
-                "health details", key.matches("management\\.endpoint\\.health\\.show-(details|components)")
-                        && !value.equals("never"),
-                "cors", key.contains("cors") || key.contains("allowed-origins"),
-                "error details", key.matches("(spring\\.web|server)\\.error\\.include-.*") && !value.equals("never")
-                        && !key.endsWith("include-path"),
-                "devtools", key.equals("spring.devtools.add-properties") && value.equals("true"),
-                "request logging", key.matches("spring\\.mvc\\.log-(request-details|resolved-exception)") && value.equals("true"),
-                "sql logging", (key.contains("show-sql") || key.contains("show_sql") || key.contains("format_sql")
-                        || key.contains("highlight_sql")) && value.equals("true"),
-                "verbose framework logging", key.matches("logging\\.level\\.(org\\.hibernate|org\\.springframework\\.web"
-                        + "|org\\.apache\\.(tomcat|catalina|coyote)|root|web|sql).*") && verbose,
-                "pdf library logging", key.matches("logging\\.level\\.org\\.apache\\.(pdfbox|fontbox).*") && !value.equals("off"),
-                "disk uploads", key.equals("spring.servlet.multipart.file-size-threshold") && !value.equals("11mb"));
+        Map<String, Boolean> rules = Map.ofEntries(
+                Map.entry("exposure", key.startsWith("management.endpoints.web.exposure.include") && !value.equals("health")),
+                Map.entry("health details", key.matches("management\\.endpoint\\.health\\.show-(details|components)")
+                        && !value.equals("never")),
+                Map.entry("cors", key.contains("cors") || key.contains("allowed-origins")),
+                Map.entry("error details", key.matches("(spring\\.web|server)\\.error\\.include-.*") && !value.equals("never")
+                        && !key.endsWith("include-path")),
+                Map.entry("devtools", key.equals("spring.devtools.add-properties") && value.equals("true")),
+                Map.entry("request logging", key.matches("spring\\.mvc\\.log-(request-details|resolved-exception)") && value.equals("true")),
+                Map.entry("sql logging", (key.contains("show-sql") || key.contains("show_sql") || key.contains("format_sql")
+                        || key.contains("highlight_sql")) && value.equals("true")),
+                Map.entry("verbose framework logging", key.matches("logging\\.level\\.(org\\.hibernate|org\\.springframework\\.web"
+                        + "|org\\.apache\\.(tomcat|catalina|coyote)|root|web|sql).*") && verbose),
+                Map.entry("pdf library logging", key.matches("logging\\.level\\.org\\.apache\\.(pdfbox|fontbox).*") && !value.equals("off")),
+                Map.entry("model client logging", key.matches("logging\\.level\\.org\\.springframework\\.ai.*") && !value.equals("off")
+                        || key.matches("logging\\.level\\.(software\\.amazon|org\\.apache\\.(http|hc)|io\\.netty).*")
+                        && (verbose || value.equals("info"))),
+                Map.entry("model content logging", key.matches("spring\\.ai\\..*\\.(log-prompt|log-completion|include-content"
+                        + "|include-error-logging)") && value.equals("true")),
+                Map.entry("disk uploads", key.equals("spring.servlet.multipart.file-size-threshold") && !value.equals("11mb")));
         return rules.values().stream().anyMatch(Boolean::booleanValue);
     }
 }

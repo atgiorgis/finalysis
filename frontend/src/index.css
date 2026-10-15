@@ -16,3 +16,14 @@ main {
 .error {
   color: #c0392b;
 }
+
+.cloud-ai-banner {
+  position: sticky;
+  top: 0;
+  padding: 0.5rem 1rem;
+  background: #fff4ce;
+  color: #5c4400;
+  border-bottom: 1px solid #e0c060;
+  text-align: center;
+  font-weight: 600;
+}

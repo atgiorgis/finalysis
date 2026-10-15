@@ -1,2 +1,3 @@
 org.springframework.test.context.ContextCustomizerFactory=\
-com.finalysis.support.DevDatabaseGuard
+com.finalysis.support.DevDatabaseGuard,\
+com.finalysis.support.NoCloudAiGuard

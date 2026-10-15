@@ -1,0 +1,37 @@
+# Cloud AI through Amazon Bedrock (AI-03, docs/plans/phase-4.md §7, §11). Enabled only explicitly:
+#   SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
+# Credentials come from the named AWS CLI profile below (files under ~/.aws, outside the repo). No keys here,
+# in .env or anywhere in the repo. The UI shows a banner while this profile is active.
+spring:
+  ai:
+    model:
+      chat: bedrock-converse
+      embedding: bedrock-titan
+    bedrock:
+      aws:
+        region: us-east-1
+        # One call's limit; the SDK's own connection and socket timeouts stay at their defaults.
+        timeout: 30s
+        profile:
+          name: ${FINALYSIS_AWS_PROFILE:finalysis}
+      converse:
+        chat:
+          options:
+            model: us.anthropic.claude-haiku-4-5-20251001-v1:0
+            temperature: 0.0
+            max-tokens: 2000
+      titan:
+        embedding:
+          model: amazon.titan-embed-text-v2:0
+          # Titan's default in Spring AI is IMAGE.
+          input-type: TEXT
+
+finalysis:
+  ai:
+    mode: CLOUD
+    provider: bedrock
+    roles:
+      categorization: us.anthropic.claude-haiku-4-5-20251001-v1:0
+      main: us.anthropic.claude-haiku-4-5-20251001-v1:0   # Phase 6 chat may choose another
+      embedding: amazon.titan-embed-text-v2:0
+      vision: ""                                          # Phase 8, local only

@@ -33,6 +33,12 @@ spring:
     # Devtools (active under spring-boot:run) would otherwise turn on stack traces and messages in
     # error responses and log every resolved exception's message.
     add-properties: false
+  # AI is off unless a profile turns it on (AI-03, docs/plans/phase-4.md §7): the model starters create no
+  # ChatModel or EmbeddingModel and make no cloud calls. Only application-aws.yml enables them.
+  ai:
+    model:
+      chat: none
+      embedding: none
   jpa:
     # Flyway owns the schema; Hibernate only checks that every entity matches it at startup.
     hibernate:
@@ -57,3 +63,16 @@ logging:
     # app as exceptions, which PdfTextExtractor maps to fixed messages.
     org.apache.pdfbox: "OFF"
     org.apache.fontbox: "OFF"
+    # Model clients (AI-06, SEC-01). Spring AI logs exception messages and output it can't parse at ERROR, and
+    # either can echo what was sent; failures are logged by our code with the exception class only, and token
+    # counts by AiCallLog. The AWS SDK and its HTTP clients log requests and wire data below WARN.
+    org.springframework.ai: "OFF"
+    software.amazon.awssdk: WARN
+    org.apache.http: WARN
+    org.apache.hc: WARN
+    io.netty: WARN
+
+finalysis:
+  ai:
+    # OFF here; CLOUD only from application-aws.yml, LOCAL later from application-local.yml.
+    mode: OFF

@@ -3,6 +3,8 @@ package com.finalysis;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.finalysis.ai.AiProperties;
+import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
 import com.finalysis.transfer.TransferDetector;
@@ -19,7 +21,8 @@ import org.junit.jupiter.api.Test;
  * neither. Transfer detection is bank-agnostic and AI-free, so {@code transfer} also stays clear of
  * categorization, chat and any model client (no AI anywhere in 3c). Phase 4's {@code transaction} package (the
  * transaction API) is a leaf: it reads txns and calls {@code categorize} for corrections, and nothing depends on it,
- * so the category columns keep the categorization code as their one writer (phase-4.md, step 2 notes).
+ * so the category columns keep the categorization code as their one writer (phase-4.md, step 2 notes). No code names
+ * a model provider (phase-4.md §7).
  */
 class PackageDependencyTest {
 
@@ -36,13 +39,24 @@ class PackageDependencyTest {
     static final ArchRule NO_AI_IN_TRANSFERS_OR_REVIEW = noClasses()
             .that().resideInAnyPackage("com.finalysis.transfer..", "com.finalysis.review..")
             .should().dependOnClassesThat().resideInAnyPackage("com.finalysis.categorize..", "com.finalysis.chat..",
-                    "org.springframework.ai..", "software.amazon.awssdk..")
+                    "com.finalysis.ai..", "org.springframework.ai..", "software.amazon.awssdk..")
             .because("transfer detection is bank-agnostic and uses no AI (phase-3c.md §2.6)");
 
     static final ArchRule NOTHING_DEPENDS_ON_THE_TRANSACTION_API = noClasses()
             .that().resideOutsideOfPackage("com.finalysis.transaction..")
             .should().dependOnClassesThat().resideInAPackage("com.finalysis.transaction..")
             .because("the transaction API is a leaf; categories are written by the categorization code only");
+
+    /**
+     * AI-03 and the local profile to come: code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only, so
+     * a provider is configuration (the pom and {@code application-<profile>.yml}), never code (phase-4.md §7).
+     */
+    static final ArchRule NO_PROVIDER_IN_CODE = noClasses()
+            .that().resideInAPackage("com.finalysis..")
+            .should().dependOnClassesThat().resideInAnyPackage("org.springframework.ai.bedrock..",
+                    "org.springframework.ai.model.bedrock..", "org.springframework.ai.ollama..",
+                    "org.springframework.ai.model.ollama..", "software.amazon..")
+            .because("a model provider is chosen by profile; code depends only on Spring AI's interfaces");
 
     private static JavaClasses app;
 
@@ -55,6 +69,8 @@ class PackageDependencyTest {
         assertThat(app.contain(TransferDetector.class)).isTrue();
         assertThat(app.contain(ReviewQueueService.class)).isTrue();
         assertThat(app.contain(TransactionController.class)).isTrue();
+        assertThat(app.contain(CategorizationModelClient.class)).isTrue();
+        assertThat(app.contain(AiProperties.class)).isTrue();
     }
 
     @Test
@@ -77,11 +93,43 @@ class PackageDependencyTest {
         NOTHING_DEPENDS_ON_THE_TRANSACTION_API.check(app);
     }
 
+    @Test
+    void noCodeDependsOnAModelProvider() {
+        NO_PROVIDER_IN_CODE.check(app);
+    }
+
     /** The rules catch a violation. */
     @Test
     void theRulesFailOnAViolation() {
         JavaClasses violation = new ClassFileImporter().importClasses(com.finalysis.ingestion.UsesTransfer.class);
 
         assertThat(INGESTION_KNOWS_NO_TRANSFERS_OR_REVIEW.evaluate(violation).hasViolation()).isTrue();
+    }
+
+    @Test
+    void theProviderRuleFailsOnAProviderClass() {
+        JavaClasses bedrock = new ClassFileImporter().importClasses(UsesBedrock.class);
+        JavaClasses sdk = new ClassFileImporter().importClasses(UsesAwsSdk.class);
+        JavaClasses springAi = new ClassFileImporter().importClasses(UsesSpringAiInterfaces.class);
+
+        assertThat(NO_PROVIDER_IN_CODE.evaluate(bedrock).hasViolation()).isTrue();
+        assertThat(NO_PROVIDER_IN_CODE.evaluate(sdk).hasViolation()).isTrue();
+        assertThat(NO_PROVIDER_IN_CODE.evaluate(springAi).hasViolation()).isFalse();
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesBedrock {
+        private org.springframework.ai.bedrock.converse.BedrockChatOptions options;
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesAwsSdk {
+        private software.amazon.awssdk.regions.Region region;
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesSpringAiInterfaces {
+        private org.springframework.ai.chat.model.ChatModel chat;
+        private org.springframework.ai.embedding.EmbeddingModel embedding;
     }
 }

@@ -769,7 +769,7 @@ moves before AI wiring. Reasons:
 | 3 | Corrections + transaction API | `transaction` package: list, filters (`uncategorized=true` included), get, correct, uncorrect; correction rules outrank seeds | `TransactionApiTest` (filters, paging, money strings), `CorrectionTest` (rule upserted once, other txns updated, USER kept, outranks a seed with higher priority, undo) | Done: "Phase 4 step 3: corrections and transaction API" (notes below) |
 | 4 | CAT-08 | `SuggestedTransferQuery`, `SUGGESTED_ONE_SIDED_TRANSFER`, counts | `ReviewQueueApiTest` (extended: listed, not when linked, excluded or in a group; gone after one-sided, not-transfer or correction), scramble tests still green | Done: "Phase 4 step 4: CAT-08 suggested one-sided transfers" (notes below) |
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Done: "Phase 4 step 5: redaction and prompt safety" (notes below) |
-| 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Planned |
+| 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Planned |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
 | 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Planned |
@@ -1215,6 +1215,85 @@ Choices beyond the plan:
   - `RedactionStoredDataTest` (Testcontainers): the context from the database; building a prompt changes
     no stored value (`STARBUCKS ARLINGTON VA` stays).
   - Also: `MerchantCleaningRulesTest` (new keys) and `MerchantCleanerTest` (the email row).
+
+### Step 6 notes
+
+Built as planned (§7): the two Bedrock starters in the pom; `spring.ai.model.chat/embedding: none` and
+`finalysis.ai.mode: OFF` in `application.yml`; `application-aws.yml` with Bedrock in `us-east-1`, Claude Haiku 4.5
+through the `us.` inference profile (temperature 0, 2,000 output tokens, 30 s call timeout) and Titan Text Embeddings
+V2 (input type TEXT). New package `com.finalysis.ai`: `AiMode`, `AiProperties` (`finalysis.ai.*`: mode, provider,
+the four roles, `native-structured-output`), `AiStartupCheck`, `AiStatus` and `AiCallLog`. `/api/status` gains the
+`ai` block; the frontend shows the banner while `mode` is `CLOUD`. No migration. Backend tests 1,977 → 2,015 (+38);
+frontend 1 → 4.
+
+**Off by default, checked at startup.** Without a profile there is no `ChatModel` or `EmbeddingModel` bean and no
+AWS client, and the app runs rules-only with no AWS profile or credentials present (every existing test runs that
+way). `AiStartupCheck` fails startup when `aws` and `local` are both active, when the mode isn't OFF but a model is
+missing, and, beyond the plan, when a model exists while the mode is OFF (e.g. `spring.ai.model.chat` set by hand
+without the profile), so the banner can't be wrong.
+
+**Credentials.** Spring AI's own provider reads the AWS CLI profile named in `application-aws.yml`
+(`spring.ai.bedrock.aws.profile.name: ${FINALYSIS_AWS_PROFILE:finalysis}`), from the files under `~/.aws`. Nothing
+about credentials is in the repo. The SDK's `sso` and `ssooidc` modules are added at runtime scope (pinned to the SDK
+version Spring AI brings) so the profile may be an IAM Identity Center profile, as §11.2 suggested.
+
+**Provider rule.** `PackageDependencyTest.NO_PROVIDER_IN_CODE`: nothing in `com.finalysis..` depends on
+`org.springframework.ai.(model.)bedrock..`, `org.springframework.ai.(model.)ollama..` or `software.amazon..`, with a
+violation test. `com.finalysis.ai` joins the packages ingestion, transfer and review may not use.
+
+Choices beyond the plan:
+- **The call itself is in this step.** `CategorizationModelClient` (in `categorize`) sends one built
+  `CategorizationPrompt` through `ChatClient` and returns the structured answer and token counts, writing the AI-06
+  line whatever happens. The live smoke test needed a real call path; step 7 adds batching, the §4.4 checks, the
+  retry of unparsable output, the writes and the async stage around it. Details:
+  - the system prompt and user message go in as **messages**, not `.system()`/`.user()` text, which ChatClient
+    treats as templates (the JSON has braces);
+  - output that doesn't parse gives a null answer (`outcome=INVALID_OUTPUT`, tokens still logged), not an exception;
+  - native structured output works because ChatClient merges a call's options onto the model's own
+    (`BedrockChatOptions`, which carries the JSON schema); with `native-structured-output: false`, Spring AI appends
+    its format instructions after the `</transactions>` tag.
+- **Spring AI's loggers are OFF, not WARN.** Spring AI logs exception messages (Titan, the Bedrock API base) and
+  output it can't parse (`BeanOutputConverter`) at ERROR, and either can echo what was sent. Our code logs failures
+  with the exception class only. The AWS SDK, Apache HTTP and Netty loggers are at WARN. `ExposureTest` checks
+  these levels and forbids, in any config file, Spring AI logging below OFF, AWS or HTTP logging at INFO or lower,
+  and Spring AI's prompt/completion observation logging.
+- **Token counts a provider doesn't report** show as 0 (Spring AI's empty usage); `-` only when there's no usage
+  object at all.
+- **`ExposureWithProfilesTest`** now runs `dev` + `aws`; `local` has its own run (`ExposureWithLocalProfileTest`),
+  since the two profiles together fail startup.
+- **Found for step 7:** Bedrock Converse in Spring AI 2.0.1 doesn't use Spring AI's `RetryTemplate`
+  (`spring.ai.retry.*` has no effect on it); the AWS SDK's own retries apply. Step 7 decides the §4.5 retry
+  behaviour with that in mind.
+
+**The test suite never calls Bedrock.** `NoCloudAiGuard`, registered for every Spring test context like
+`DevDatabaseGuard`, puts in an AWS credentials provider that refuses; Spring AI's provider backs off, so a context
+with the `aws` profile builds its clients, but a request fails while it is being signed, before anything is sent.
+`AwsProfileWiringTest` shows both: starting the context asks for no credentials, and a call is stopped by the guard
+and logged as `outcome=ERROR` with the class name only. Unit tests use `FakeChatModel` (captures each `Prompt`,
+scripted answer and usage, or a failure).
+
+**Live smoke test (opt-in).** `LiveAiSmokeTest`, tagged `live-ai` and also gated on `-Dfinalysis.live-ai=true`;
+surefire excludes the tag unless the `ai-smoke` Maven profile is on, which selects only that tag and sets the
+property. It starts the app on Testcontainers with the `aws` profile and sends one synthetic description
+(`TST* BRAMBLEWICK NOODLE HOUSE 0193 ARLINGTON VA`, a name in no sample, dev or holdout file) through cleaning, the
+redaction context, `Redactor`, `OutboundPayloadGuard` and `CategorizationPromptBuilder`, asserts the guard sent
+exactly `BRAMBLEWICK NOODLE HOUSE`, calls the model, and prints one line:
+`ai-smoke category=<name> inputTokens=<n> outputTokens=<n> ms=<n>` (a category the list doesn't have is printed as a
+placeholder, never as the model's text). Run it with Docker up:
+
+```sh
+cd backend && ./mvnw test -Pai-smoke
+```
+
+(`FINALYSIS_AWS_PROFILE=<name>` uses another AWS CLI profile.) Not run in this step; checked only that the profile
+selects that one test, with the live switch forced off (`-Pai-smoke -Dfinalysis.live-ai=false`: 1 test, skipped).
+
+**Tests:** `AiModeTest` (OFF by default; CLOUD with both models starts; both profiles, a mode without models, a model
+without a mode, and a mode without provider or role ids each fail; the status block), `AwsProfileWiringTest`,
+`CategorizationModelClientTest` (exactly two messages, role options, native schema vs format instructions, parsed
+answer, unparsable output, unreported usage, failure logged by class only, no call when off or empty),
+`StatusControllerTest` (`{"mode": "OFF"}` and no model beans), `PackageDependencyTest` (+2), `ExposureTest` (the
+logger and content-logging checks, run under every profile), `App.test.tsx` (banner off, on, unknown provider).
 
 ### Requirement mapping
 

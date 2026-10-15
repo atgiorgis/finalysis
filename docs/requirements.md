@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.38 · **Date:** 2026-10-14 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.39 · **Date:** 2026-10-15 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -115,7 +115,7 @@ Ingestion coverage has three layers:
 | UI-02 | Upload page with account picker and review queue. | 7 · POC | Planned |
 | UI-03 | Chat panel. | 7 · POC | Planned |
 | UI-04 | Click any total or transaction to see its source statement line. | 7 · POC | Planned |
-| UI-05 | Visible banner whenever cloud AI (Bedrock) is active. | 7 · POC | Planned |
+| UI-05 | Visible banner whenever cloud AI (Bedrock) is active.<br>*Phase 4 step 6 (v1.39):* `GET /api/status` has an `ai` block (`{"mode": "OFF"}`, or mode, provider and the model per role; never a region, account or credential), and the app shows a persistent banner while `mode` is `CLOUD`. The full UI-05 stays Phase 7. | 7 · POC | Planned |
 | UI-06 | Notice when running the standard model tier ("explanations may be simplified"). | 10 | Planned |
 
 ## 7. Investment education and scenario planning
@@ -164,12 +164,12 @@ Ingestion coverage has three layers:
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| AI-01 | Four separately configurable model roles: main model (chat, Phase 6), categorization, embedding, vision. | 4, 8 | Planned |
+| AI-01 | Four separately configurable model roles: main model (chat, Phase 6), categorization, embedding, vision.<br>*Phase 4 step 6 (v1.39):* `finalysis.ai.roles.*` (`AiProperties`) holds a model id per role; a call passes its role's id in Spring AI's `ChatOptions`, so per-role models need no provider code. | 4, 8 | Planned |
 | AI-02 | Standard tier main model: Qwen3 14B. Deep tier: Qwen3 30B MoE (or a dense 27B on 32GB+). Final choice decided by evals. | 10 | Planned |
-| AI-03 | `local` profile (Ollama) is the default; `aws` profile (Bedrock) must be enabled explicitly. | 4, 10 | Planned |
+| AI-03 | `local` profile (Ollama) is the default; `aws` profile (Bedrock) must be enabled explicitly.<br>*Phase 4 step 6 (v1.39):* until the `local` profile exists, AI is off without a profile (`spring.ai.model.chat/embedding=none`, `finalysis.ai.mode=OFF`): no model beans, no cloud calls, rules-only categorization. Only `application-aws.yml` turns on Bedrock (mode CLOUD). Startup fails when `aws` and `local` are both active, when a mode has no model, or when a model exists while the mode is OFF. Code depends only on Spring AI's `ChatModel` and `EmbeddingModel`; an ArchUnit rule keeps provider classes (Bedrock, Ollama, AWS SDK) out of the code. | 4, 10 | Planned |
 | AI-04 | Embedding and main models stay loaded; vision model loads only when needed. | 10 | Planned |
 | AI-05 | Context length (`num_ctx`) set explicitly per model role; 8-bit KV cache supported. | 6, 10 | Planned |
-| AI-06 | Log token count for every model request. | 4, 6 | Planned |
+| AI-06 | Log token count for every model request.<br>*Phase 4 step 6 (v1.39):* every categorization call writes one INFO line, `ai call role= model= items= inputTokens= outputTokens= ms= outcome=` (`OK`, `INVALID_OUTPUT`, or `ERROR` with the exception's class name), never content or exception messages. Spring AI's loggers are off and the AWS SDK's and HTTP clients' are at WARN, since they can echo what was sent. | 4, 6 | Planned |
 | AI-07 | Benchmark at least one US-origin model alternative (e.g. Gemma, gpt-oss, Granite). | 9, 10 | Planned |
 
 ## 11. Privacy and security
@@ -245,3 +245,4 @@ Ingestion coverage has three layers:
 | 1.36 | 2026-10-14 | Phase 4 step 3: corrections and the transaction API. CAT-04: corrections set USER and upsert one exact merchant rule per direction that outranks seeds; the response reports what changed on the merchant's other txns; undo clears the USER category (and the rule, by deleting it). `GET /api/transactions` and `GET /api/transactions/{id}` (filters, paging, money as strings). A query value that doesn't convert is a 400 naming the parameter, never echoing the value. |
 | 1.37 | 2026-10-14 | Phase 4 step 4: CAT-08. Suggested one-sided transfers in the review queue (new kind and count; resolved with the existing transfer actions or a correction, which are remembered). CAT-04: `DELETE /api/transactions/{id}/category?removeRule=true` undoes a correction fully in one call (deletes the merchant's `USER_CORRECTION` rule only); the default `DELETE` is unchanged. |
 | 1.38 | 2026-10-14 | Phase 4 step 5: redaction and prompt safety, pure Java (no AI dependency). SEC-08: `Redactor` and `OutboundPayloadGuard` (allowlist, fails closed); person-to-person payments never sent. SEC-01: the outbound location rule implemented; the payload is exactly the plan's fields. SEC-02: JSON between tags, angle brackets escaped. DAT-04: cleaning also drops whole email addresses. CAT-04: `DELETE /api/transactions/{id}/category` always returns `{txn, ruleId, ruleAction, otherTxnsUpdated}` (`NONE`, null, 0 without `removeRule=true`). |
+| 1.39 | 2026-10-15 | Phase 4 step 6: AI wiring. AI-03: AI is off without a profile (no model beans, no cloud calls, rules-only); the `aws` profile turns on Bedrock (Claude Haiku 4.5 through the US inference profile for categorization, Titan Text Embeddings V2); inconsistent setups fail startup; code depends only on Spring AI interfaces (ArchUnit). AI-01: model ids per role in `finalysis.ai.roles.*`. AI-06: one token-count log line per call, no content. UI-05: `/api/status` reports the AI mode and the app shows a banner while cloud AI is on. The test suite never calls a cloud model; an opt-in live smoke test (`-Pai-smoke`) sends one synthetic merchant. |

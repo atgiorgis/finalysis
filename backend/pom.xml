@@ -26,6 +26,12 @@
              never automatically (docs/plans/phase-3b.md §1.3). -->
         <pdfbox.version>3.0.8</pdfbox.version>
         <archunit.version>1.5.1</archunit.version>
+        <!-- The AWS SDK version Spring AI 2.0.1's Bedrock modules bring; keep them equal when upgrading. -->
+        <aws-sdk.version>2.51.2</aws-sdk.version>
+        <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke profile flips these. -->
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>live-ai</surefire.excludedGroups>
+        <finalysis.live-ai>false</finalysis.live-ai>
     </properties>
 
     <dependencyManagement>
@@ -90,6 +96,30 @@
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
         </dependency>
+        <!-- AI (docs/plans/phase-4.md §7). Off unless the aws profile turns them on (spring.ai.model.*=none in
+             application.yml). Bedrock is named only here and in application-aws.yml; code uses Spring AI's
+             ChatModel and EmbeddingModel (PackageDependencyTest). -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-bedrock-converse</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-bedrock</artifactId>
+        </dependency>
+        <!-- Lets the AWS CLI profile in application-aws.yml be an IAM Identity Center (SSO) profile. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sso</artifactId>
+            <version>${aws-sdk.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssooidc</artifactId>
+            <version>${aws-sdk.version}</version>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -129,11 +159,38 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- Opt-in live smoke test against the cloud model (LiveAiSmokeTest): one synthetic merchant through
+             redaction and the guard, printing the category, token counts and latency only.
+               cd backend && ./mvnw test -Pai-smoke
+             Needs Docker (Testcontainers) and the AWS CLI profile named in application-aws.yml. -->
+        <profile>
+            <id>ai-smoke</id>
+            <properties>
+                <surefire.groups>live-ai</surefire.groups>
+                <surefire.excludedGroups></surefire.excludedGroups>
+                <finalysis.live-ai>true</finalysis.live-ai>
+            </properties>
+        </profile>
+    </profiles>
+
     <build>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Tests tagged live-ai call a real cloud model; they run only with -Pai-smoke (below). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+                    <groups>${surefire.groups}</groups>
+                    <systemPropertyVariables>
+                        <finalysis.live-ai>${finalysis.live-ai}</finalysis.live-ai>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
             <!-- Runs the PDF skeleton debug tool (scripts/pdf-skeleton.sh); not bound to any phase. -->
             <plugin>
