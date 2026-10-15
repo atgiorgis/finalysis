@@ -773,7 +773,7 @@ moves before AI wiring. Reasons:
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Done: "Phase 4 step 8: embeddings and similar-merchant examples" (notes below) |
-| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Planned |
+| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | In progress: 9a "Phase 4 step 9a: accuracy evaluation harness" (notes below); live runs and settings next |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
 
 ### Step 1 notes
@@ -1457,6 +1457,10 @@ embedding call stopped by `NoCloudAiGuard` before it is signed. No ArchUnit chan
 `com.finalysis.ai.bedrock` names the provider. If the same retries are wanted, a `TitanEmbeddingBedrockApi` subclass in
 `com.finalysis.ai.bedrock` could send through the shared client, inside the existing exemption.
 
+*Step 8 review:* accepted as a known limitation, with no subclass: embedding calls keep the AWS SDK's default
+retries. The local model replaces this path (the review said Phase 8; this plan's scope note puts the `local`
+profile in Phase 10). See §13.
+
 **Direct assignment (off).** `finalysis.ai.examples.direct-assignment` (false) and `direct-min-similarity` (0.97): an
 item whose nearest example is at least that similar takes its category without a chat call. Such a row is an AI
 category whose model is the embedding model's id, with no confidence and no prompt version, so step 9 can tell them
@@ -1509,6 +1513,122 @@ Not done here, as the prompt said: dev or holdout accuracy, the live smoke test,
 
 Backend tests 2,086 → 2,139 (+53); frontend 4.
 
+### Step 9a notes
+
+Built from the step 9a prompt: the evaluation harness and its guards. **No live call was made, and no dev or holdout
+accuracy was computed**; the live dev and holdout runs are yours. Step 9 stays in progress: after the dev run, set
+`min-confidence`, `min-similarity`, `max-examples-per-batch` and direct assignment from it; then the holdout run,
+`CategorizationAccuracyTest` and the coverage floor. Where the prompt differs from this plan, the prompt wins (it is
+newer):
+
+| Plan said | Step 9a does | Where |
+|---|---|---|
+| Report the answer key, dev and holdout (§10) | One set per run, dev or holdout (`-Deval.set`) | `CategorizationLiveEvalIT` |
+| Configurations: rules only, rules + AI, rules + AI + examples, AI only (rules off) | A rules only, B rules + AI with no examples, C + examples, D + direct assignment; no AI-only variant | `EvalRunner` |
+| `./mvnw verify -Pai-eval`, tag `live-ai` | `./mvnw test -Pai-eval` with its own tag `ai-eval` and switch `finalysis.ai-eval`; `*IT` classes are included only under the profile | `pom.xml`, `NoCloudAiGuard` |
+| Results go into this plan and the README | `docs/eval/<set>-<commit12>-<yyyyMMddTHHmmssZ>.json` and `.md`, and the console | `EvalReport` |
+| `CategorizationAccuracyTest` (in-suite, rules only) in step 9 | Not in 9a: it would compute dev accuracy | later in step 9 |
+| Up to `k` examples per item (step 8) | Also a cap per call, `max-examples-per-batch` (default 50) | `SimilarMerchantProperties`, `CategorizationPromptBuilder` |
+
+**How it runs.** `cd backend && ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.70
+-Deval.direct-min-similarity=0.97`. Three separate things keep it out of a normal build, and `EvalExclusionTest`
+checks each one: surefire's default includes don't match `*IT` (the profile adds `**/*IT.java`); the `ai-eval` tag is
+in the default `excludedGroups`; and the class is enabled, and `NoCloudAiGuard` lifted for it, only with
+`-Dfinalysis.ai-eval=true`, which only the profile sets. The smoke profile excludes the tag. The class runs on
+Testcontainers with the `aws` profile. A run with no set refuses to start.
+
+**Seeding (`EvalSeeder`).** It first checks the database has no txns, since stage 5 reads every uncategorized txn. One
+checking account ("Harness Checking", last four 0000; it checks that no description contains these, so redaction
+treats the rows as it would anywhere), a CSV mapping, then the set's rows imported as one CSV statement per calendar
+month through `StatementImportService`. Row n is dated 2025-01-01 + (n − 1) days, so each row is found by its date.
+Cleaning and the seed rules run through the import's own listener, as after a real upload. The import takes
+`StatementLine` (date, description, amount), which has no label field. Labels are read only when scoring, and
+seeding fails if any USER or AI category exists afterwards. So examples can only come from RULE rows.
+
+**Variants (`EvalRunner`).** A is what seeding left; its time is a second rules pass, which must change nothing. Before
+B, C and D, the AI's writes are undone (AI categories, review marks, every embedding), and the run fails unless the
+database is then exactly as after A. Each variant therefore starts from the same state and pays for its own
+embeddings. Each AI variant runs `AiCategorizer` built as the app builds it, with the run's `min-confidence`: B with
+the embedder switched off and `k` 0 (no embedding call, an empty examples block); C with the context's example
+settings and direct assignment off; D the same plus direct assignment at the run's `direct-min-similarity`. Batch
+size, the caps, `k`, `min-similarity` and `max-examples-per-batch` are the configured ones and are recorded.
+
+**Metrics (`EvalMetrics`, pure Java).** Each row is one txn. A row is *categorized* if the txn has a category (a
+linked txn with none counts as Transfer, §1.1), *correct* or *wrong* by name, in *review* if it is left for the review
+queue, and *uncategorized* otherwise. Coverage = categorized / rows, accuracy = correct / categorized, overall =
+correct / rows. Results are also split by source (rule, AI, direct). Confidence bands (0.1 wide; 1.0 falls in the
+last) count every answered row, applied or not, and report the model's accuracy in each band. Direct assignments
+have no confidence and are counted on their own. The headline numbers come from the database after the run; the
+answers' confidences come from the run itself, below.
+
+**Saved confidences and the sweep.** The database never stores an answer below the threshold. A new
+`AiRunObserver`, passed only by the harness (`AiCategorizer.run(force, observer)`; the app passes `NONE`), receives
+each item's outcome (applied, low confidence, invalid, direct, person-to-person, redaction-blocked) with the model's
+category and confidence, and each batch's prompt and calls. Every row's answer and confidence go into the JSON. Dev
+runs add a sweep from 0.50 to 0.95 in steps of 0.05, computed from those rows with no further call: an answered row
+counts as categorized with the model's answer when its confidence is at or above the threshold, and as in review
+otherwise. At the run's own threshold the sweep equals the headline numbers (tested). Holdout runs have no sweep,
+since choosing a threshold on the holdout would be tuning on it.
+
+**Usage and cost.** These come from the run's own counts: chat calls and retries, input and output tokens, embedding
+calls and tokens, and calls without usage. The cost estimate uses `src/test/resources/eval/model-prices.json`
+(Claude Haiku 4.5 at $1 / $5 and Titan V2 at $0.02 per million tokens, as in §4.5, to be checked against the AWS
+pricing page). A model missing from the file gets no estimate rather than a guess. With any call missing usage, the
+estimate is marked as a lower bound (`>=`). Wall time is measured around each AI run.
+
+**Examples share.** It is reported two ways. *Estimated*, per variant: the examples block's characters as a share of
+everything sent, with each batch weighted by its calls. *Measured*: (C's input tokens − B's) / C's. B and C send the
+same items in the same batches, so the difference is the examples. This holds only if both reported usage for every
+call and made the same number of calls; otherwise it is `n/a`.
+
+**Examples cap.** `finalysis.ai.examples.max-examples-per-batch`, **default 50** (allowed 0 to 500 = 50 × 10). Each
+item's nearest example is kept before any item's second, and so on; a duplicate takes no room. In a full batch of 25
+items with `k` 5, the block could hold 125 examples, about 14 tokens each, so over 1,700 tokens: more than the items
+and the system prompt together. 50 is two per item on average, which keeps the block to roughly half of a full
+batch's input by the estimate above. The dev run's share column is there so you can judge the cap. The run body's
+`itemsWithExamples` still counts items that had a neighbour before the cap.
+
+**Holdout guard (`EvalGuards`).** It runs in `@BeforeAll`, before the context, database or any model, in this order:
+the SHA-256 is still `2020780e…92af` (the same pin as `CategorizationSetsTest`; a test checks they match), then
+`-Deval.holdout.confirm=true`, then no file named `holdout-*` in `docs/eval/`, then `git status --porcelain` is
+empty (untracked files count). The commit, the dirty flag and every AI setting are recorded: the configured ones
+from an allowlist (mode, provider, roles, native structured output, dimensions, region, timeout, chat options,
+Titan model and input type; never the AWS profile name) plus batch size, caps, example settings, prompt version and
+the system prompt's SHA-256.
+
+**Choices beyond the prompt:**
+- **Results are written however the run ends**, and a variant that didn't finish shows its status (`CAP_REACHED`,
+  `STOPPED_ON_ERROR`). A failed holdout run still blocks a second one; deleting its files is your call.
+- **A dev run writes into `docs/eval/`**, which leaves the tree dirty: commit the dev results before a holdout run.
+- **The Markdown lists the wrong rows for dev runs only.** The JSON always holds every row.
+- **Embeddings are cleared between variants**, so C and D each show the full embedding cost and time a first run
+  would have.
+- **Test fixture:** `sample-data/edge-cases/ai-categorization/eval-harness-cases.csv` (nine rows in the dev
+  format), written by `tools/SampleDataGenerator.java` last and without the random generator; every other file is
+  unchanged. `CategorizationSetsTest` checks that its words are not in the holdout names. `EvalGuards` and
+  `EvalGuardsTest` join the holdout readers allowed to name it (they hash it and nothing more).
+
+**Tests** (fakes only; `NoCloudAiGuard` in force):
+- `EvalRunnerTest` (Testcontainers, `@AiIntegrationTest`, 9): the wiring of each variant (calls, embeddings, the
+  examples block, direct assignment, settings); every number worked out by hand for A–D (coverage, accuracy, wrong,
+  review, by source, bands); usage and cost, and an unpriced model; the sweep from saved confidences with no extra
+  call, equal to the headline at 0.70, and none without the flag; examples only from RULE merchants, no USER rows, a
+  label-free import; seeding refused on a database with txns; the JSON and Markdown files, their names, and no
+  overwrite.
+- `EvalMetricsTest` (6): metric math on ten hand-made rows, band edges, the sweep point by point, the sweep at the
+  run's threshold equal to the headline, rounding.
+- `EvalGuardsTest` (9): each guard (changed hash first and before git is asked, unreadable file, missing confirm,
+  earlier results, dirty tree), dev results not blocking, the pin matching `CategorizationSetsTest`, git state.
+- `EvalExclusionTest` (6): the default excludes, no `*IT` include, only the eval profile selects the tag, the class's
+  tag and switch, no other class carries the tag, the guard in force without the switch.
+- `PromptBuilderTest` (+1, the cap by rank), `EmbeddingStageTest` (+1, the configured cap reaches the prompt),
+  `AiCategorizerTest` (+1, the observer's outcomes and batches), `AnswerValidatorTest` (the cap's default and
+  limits), `CategorizationSetsTest`, `SampleDataParserSelectionTest` (65 files).
+
+Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman, dev or holdout accuracy.
+
+Backend tests 2,139 → 2,173 (+34); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1523,7 +1643,7 @@ Backend tests 2,086 → 2,139 (+53); frontend 4.
 | AI-06 | 6, 7 | token log assertions |
 | CAT-02 | 7 | `AiCategorizerTest` |
 | CAT-03, DAT-06 | 8 | `EmbeddingStageTest` |
-| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report |
+| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report; 9a: `EvalRunnerTest`, `EvalMetricsTest`, `EvalGuardsTest`, `EvalExclusionTest` |
 
 At approval, requirements v1.32 records:
 - AI-01 gains the categorization role (four roles);
@@ -1552,7 +1672,8 @@ At approval, requirements v1.32 records:
   be per-bank knowledge outside the parser.
 - **Embeddings send merchant names to Bedrock too.** Same redaction, same allowlist.
 - *Step 8: Titan's Bedrock client is Spring AI's own, so embedding calls get the AWS SDK's default retries, not the
-  chat client's strategy (step 8 notes). A failed embedding only leaves items without examples.*
+  chat client's strategy (step 8 notes). A failed embedding only leaves items without examples. Accepted at the step 8
+  review, no subclass; the local model replaces this path.*
 - *Step 8: the AI no longer runs after an import unless `run-after-import` is turned on.*
 - **Titan embeds one merchant per call.** A first import with many new merchants takes longer in the
   background.

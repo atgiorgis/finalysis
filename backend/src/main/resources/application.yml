@@ -93,3 +93,6 @@ finalysis:
       max-embeddings-per-run: 500  # cost guard: embedding calls per run; the rest wait for the next run
       direct-assignment: false     # give the nearest example's category without a chat call; step 9 measures it
       direct-min-similarity: 0.97  # how similar that example must be (used only when direct-assignment is on)
+      # Distinct examples per call at most; each item's nearest is kept before any item's second. 50 is two per item
+      # in a full batch of 25 (k 5 could reach 125). The step 9 eval reports the examples' share of input tokens.
+      max-examples-per-batch: 50

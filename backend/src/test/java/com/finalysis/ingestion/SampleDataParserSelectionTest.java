@@ -84,9 +84,9 @@ class SampleDataParserSelectionTest {
                 .anyMatch(name -> name.startsWith("pdf/edge-cases/") && name.endsWith(".pdf"));
         // 25 CSV statements, 1 broken, 13 OFX/QFX, 4 OFX and 9 CSV edge cases, 3 transfer edge-case
         // statements and their expected outcomes, 1 merchant edge-case statement and its expected
-        // merchants, manifest, answer key, categorization dev and holdout sets, AI categorization and
-        // similar-merchant cases
-        assertThat(textSampleFiles()).hasSize(64);
+        // merchants, manifest, answer key, categorization dev and holdout sets, AI categorization,
+        // similar-merchant and eval harness cases
+        assertThat(textSampleFiles()).hasSize(65);
         // 6 monthly PDFs and 12 edge cases
         assertThat(sampleFiles().filter(SampleDataParserSelectionTest::isPdf)).hasSize(18);
     }

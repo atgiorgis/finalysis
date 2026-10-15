@@ -216,12 +216,20 @@ public class AiCategorizer {
      * @param force also ask again for txns the AI already categorized or left for review
      */
     public AiRunResult run(boolean force) {
+        return run(force, AiRunObserver.NONE);
+    }
+
+    /**
+     * {@link #run(boolean)}, telling {@code observer} each item's outcome and each batch's calls (the accuracy
+     * evaluation; docs/plans/phase-4.md, step 9a notes).
+     */
+    public AiRunResult run(boolean force, AiRunObserver observer) {
         if (!ai.enabled() || chatModel.getIfAvailable() == null) {
             return AiRunResult.off();
         }
         running.lock();
         try {
-            AiRunResult result = categorize(force);
+            AiRunResult result = categorize(force, observer);
             log.info("AI categorization: status={} items={} sent={} txnsCategorized={} lowConfidence={} invalid={} "
                             + "personToPerson={} redactionBlocked={} calls={} retries={} callsWithoutUsage={} "
                             + "inputTokens={} outputTokens={} itemsRemaining={} txnsRemaining={} withExamples={} "
@@ -237,7 +245,7 @@ public class AiCategorizer {
         }
     }
 
-    private AiRunResult categorize(boolean force) {
+    private AiRunResult categorize(boolean force, AiRunObserver observer) {
         Selection selection = readOnly.execute(status -> select(force));
         Set<String> allowed = Set.copyOf(selection.categories());
         Tally tally = new Tally();
@@ -254,7 +262,7 @@ public class AiCategorizer {
         List<Group> groups = selection.groups();
         if (examples.directAssignment()) {
             List<Group> direct = groups.stream().filter(group -> isDirect(similar.get(group))).toList();
-            assignDirectly(direct, similar, selection.categoryIds(), force, tally);
+            assignDirectly(direct, similar, selection.categoryIds(), force, tally, observer);
             Set<Group> assigned = Set.copyOf(direct);
             groups = groups.stream().filter(group -> !assigned.contains(group)).toList();
         }
@@ -270,18 +278,23 @@ public class AiCategorizer {
             List<Group> batch = groups.subList(next, Math.min(next + Math.min(properties.batchSize(), room),
                     groups.size()));
             CategorizationPrompt prompt = promptBuilder.build(selection.categories(), candidates(batch, similar),
-                    selection.context());
-            for (Skip skip : prompt.skipped().values()) {
-                if (skip == Skip.PERSON_TO_PERSON) {
+                    selection.context(), examples.maxExamplesPerBatch());
+            for (Map.Entry<Integer, Skip> skip : prompt.skipped().entrySet()) {
+                AiRunObserver.Outcome outcome;
+                if (skip.getValue() == Skip.PERSON_TO_PERSON) {
                     tally.personToPerson++;
+                    outcome = AiRunObserver.Outcome.PERSON_TO_PERSON;
                 } else {
                     tally.redactionBlocked++;
+                    outcome = AiRunObserver.Outcome.REDACTION_BLOCKED;
                 }
+                observer.itemDecided(decision(batch.get(skip.getKey()), outcome, null, null, null));
             }
             if (!prompt.isEmpty()) {
                 Validation answer;
+                List<Result> attempts = new ArrayList<>();
                 try {
-                    answer = ask(prompt, allowed, tally);
+                    answer = ask(prompt, allowed, tally, attempts);
                 } catch (RuntimeException e) {
                     // The SDK has already retried what it could; the message can echo the request, so class only.
                     log.warn("AI categorization call failed ({}); the run stops and the rest waits for the next run",
@@ -289,10 +302,11 @@ public class AiCategorizer {
                     status = Status.STOPPED_ON_ERROR;
                     break;
                 }
+                observer.batchAnswered(prompt, List.copyOf(attempts));
                 tally.sent += prompt.request().items().size();
                 tally.withExamples += (int) prompt.candidateByKey().values().stream()
                         .filter(index -> !similar.get(batch.get(index)).isEmpty()).count();
-                write(prompt, batch, answer, selection.categoryIds(), force, tally);
+                write(prompt, batch, answer, selection.categoryIds(), force, tally, observer);
             }
             next += batch.size();
         }
@@ -305,7 +319,7 @@ public class AiCategorizer {
     }
 
     /** The model's validated answer, or an invalid validation after {@value #ATTEMPTS} invalid answers. */
-    private Validation ask(CategorizationPrompt prompt, Set<String> allowed, Tally tally) {
+    private Validation ask(CategorizationPrompt prompt, Set<String> allowed, Tally tally, List<Result> attempts) {
         Set<String> keys = prompt.candidateByKey().keySet();
         Validation validation = null;
         for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
@@ -313,6 +327,7 @@ public class AiCategorizer {
                 tally.retries++;
             }
             Result result = client.categorize(prompt);
+            attempts.add(result);
             tally.count(result);
             validation = AnswerValidator.validate(result.response(), keys, allowed);
             if (validation.valid()) {
@@ -381,13 +396,17 @@ public class AiCategorizer {
      * person-to-person or redaction-blocked item never has a vector, so it never gets here.
      */
     private void assignDirectly(List<Group> direct, Map<Group, List<SimilarMerchant>> similar,
-                                Map<String, Long> categoryIds, boolean force, Tally tally) {
+                                Map<String, Long> categoryIds, boolean force, Tally tally,
+                                AiRunObserver observer) {
         if (direct.isEmpty()) {
             return;
         }
         List<Object[]> apply = new ArrayList<>();
         for (Group group : direct) {
-            long categoryId = categoryIds.get(similar.get(group).getFirst().category());
+            SimilarMerchant nearest = similar.get(group).getFirst();
+            observer.itemDecided(decision(group, AiRunObserver.Outcome.DIRECT, nearest.category(), null,
+                    nearest.similarity()));
+            long categoryId = categoryIds.get(nearest.category());
             group.txnIds().forEach(id -> apply.add(new Object[] {categoryId, embeddingStage.modelId(), null, null, id,
                     group.merchant(), force}));
         }
@@ -399,7 +418,7 @@ public class AiCategorizer {
     }
 
     private void write(CategorizationPrompt prompt, List<Group> batch, Validation answer, Map<String, Long> categoryIds,
-                       boolean force, Tally tally) {
+                       boolean force, Tally tally, AiRunObserver observer) {
         String model = ai.roles().categorization();
         List<Object[]> apply = new ArrayList<>();
         List<Object[]> review = new ArrayList<>();
@@ -408,11 +427,16 @@ public class AiCategorizer {
             Accepted accepted = answer.byKey().get(sent.getKey());
             if (!answer.valid() || accepted == null) {
                 tally.invalid++;
+                observer.itemDecided(decision(group, AiRunObserver.Outcome.INVALID, null, null, null));
                 group.txnIds().forEach(id -> review.add(new Object[] {ReviewReason.INVALID_ANSWER.name(), id}));
             } else if (accepted.confidence().compareTo(properties.minConfidence()) < 0) {
                 tally.lowConfidence++;
+                observer.itemDecided(decision(group, AiRunObserver.Outcome.LOW_CONFIDENCE, accepted.category(),
+                        accepted.confidence(), null));
                 group.txnIds().forEach(id -> review.add(new Object[] {ReviewReason.LOW_CONFIDENCE.name(), id}));
             } else {
+                observer.itemDecided(decision(group, AiRunObserver.Outcome.APPLIED, accepted.category(),
+                        accepted.confidence(), null));
                 long categoryId = categoryIds.get(accepted.category());
                 group.txnIds().forEach(id -> apply.add(new Object[] {categoryId, model, accepted.confidence(),
                         CategorizationPromptBuilder.PROMPT_VERSION, id, group.merchant(), force}));
@@ -427,6 +451,12 @@ public class AiCategorizer {
                     SET ai_review_reason = ?, ai_review_at = now()
                     WHERE id = ? AND category_id IS NULL AND NOT is_transfer""", review);
         });
+    }
+
+    private static AiRunObserver.ItemDecision decision(Group group, AiRunObserver.Outcome outcome, String category,
+                                                       BigDecimal confidence, Double similarity) {
+        return new AiRunObserver.ItemDecision(group.merchant(), group.direction(), group.txnIds(), outcome, category,
+                confidence, similarity);
     }
 
     private static int sum(int[] counts) {

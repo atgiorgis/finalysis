@@ -1,0 +1,12 @@
+# Finalysis accuracy harness test set (docs/plans/phase-4.md, step 9a). Synthetic; for the harness's
+# own tests only, with scripted model answers. Never a measure of accuracy.
+description,amount,expected_category,name
+QUELLBRIDGE DELI 0042,-6.50,Dining,QUELLBRIDGE
+TST* QUELLBRIDGE DELI,-7.25,Dining,QUELLBRIDGE
+ORRISWICK PANTRY,-14.20,Groceries,ORRISWICK
+ORRISWICK PANTRY,-9.80,Groceries,ORRISWICK
+VELLICOTT SANDWICH SHOP,-11.00,Dining,VELLICOTT
+BRISKWATER FERRYLINE,-42.00,Transportation,BRISKWATER
+MOSSGRAVE ATELIER,-60.00,Shopping,MOSSGRAVE
+KESTRAVEN LOGISTICS PAYROLL,1500.00,Income,KESTRAVEN
+ZELLE PAYMENT TO JANE Q SAMPLE CONF# 7RT2Z9,-25.00,Person-to-Person Out,

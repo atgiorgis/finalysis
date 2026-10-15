@@ -28,10 +28,16 @@
         <archunit.version>1.5.1</archunit.version>
         <!-- The AWS SDK version Spring AI 2.0.1's Bedrock modules bring; keep them equal when upgrading. -->
         <aws-sdk.version>2.51.2</aws-sdk.version>
-        <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke profile flips these. -->
+        <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke and ai-eval profiles flip these. -->
         <surefire.groups></surefire.groups>
-        <surefire.excludedGroups>live-ai</surefire.excludedGroups>
+        <surefire.excludedGroups>live-ai,ai-eval</surefire.excludedGroups>
         <finalysis.live-ai>false</finalysis.live-ai>
+        <finalysis.ai-eval>false</finalysis.ai-eval>
+        <!-- Inputs of the accuracy evaluation (ai-eval profile); override with -D. No set: it refuses to run. -->
+        <eval.set></eval.set>
+        <eval.min-confidence>0.70</eval.min-confidence>
+        <eval.direct-min-similarity>0.97</eval.direct-min-similarity>
+        <eval.holdout.confirm>false</eval.holdout.confirm>
     </properties>
 
     <dependencyManagement>
@@ -168,9 +174,36 @@
             <id>ai-smoke</id>
             <properties>
                 <surefire.groups>live-ai</surefire.groups>
-                <surefire.excludedGroups></surefire.excludedGroups>
+                <surefire.excludedGroups>ai-eval</surefire.excludedGroups>
                 <finalysis.live-ai>true</finalysis.live-ai>
             </properties>
+        </profile>
+        <!-- Opt-in accuracy evaluation against the cloud models (CategorizationLiveEvalIT; docs/plans/phase-4.md,
+             step 9a notes): the dev or holdout set through four variants, results in docs/eval/.
+               cd backend && ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.70 \
+                   -Deval.direct-min-similarity=0.97
+             A holdout run also needs -Deval.holdout.confirm=true, a clean working tree and no earlier holdout
+             results. Needs Docker (Testcontainers) and the AWS CLI profile named in application-aws.yml. -->
+        <profile>
+            <id>ai-eval</id>
+            <properties>
+                <surefire.groups>ai-eval</surefire.groups>
+                <surefire.excludedGroups>live-ai</surefire.excludedGroups>
+                <finalysis.ai-eval>true</finalysis.ai-eval>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 
@@ -180,7 +213,9 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- Tests tagged live-ai call a real cloud model; they run only with -Pai-smoke (below). -->
+            <!-- Tests tagged live-ai or ai-eval call a real cloud model; they run only with -Pai-smoke or -Pai-eval
+                 (below). *IT classes aren't in surefire's default includes, so the evaluation isn't even selected
+                 without its profile. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -189,6 +224,11 @@
                     <groups>${surefire.groups}</groups>
                     <systemPropertyVariables>
                         <finalysis.live-ai>${finalysis.live-ai}</finalysis.live-ai>
+                        <finalysis.ai-eval>${finalysis.ai-eval}</finalysis.ai-eval>
+                        <eval.set>${eval.set}</eval.set>
+                        <eval.min-confidence>${eval.min-confidence}</eval.min-confidence>
+                        <eval.direct-min-similarity>${eval.direct-min-similarity}</eval.direct-min-similarity>
+                        <eval.holdout.confirm>${eval.holdout.confirm}</eval.holdout.confirm>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

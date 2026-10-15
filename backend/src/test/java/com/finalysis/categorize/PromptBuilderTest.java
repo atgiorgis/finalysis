@@ -217,6 +217,41 @@ class PromptBuilderTest {
         assertThat(examples(prompt).get("examples").get(0).propertyNames()).containsExactly("merchant", "category");
     }
 
+    /**
+     * The batch cap (max-examples-per-batch, step 9a) takes examples by rank: every item's nearest, then every item's
+     * second, and so on. A duplicate takes no room; a skipped candidate's examples never count.
+     */
+    @Test
+    void theExamplesCapKeepsEachItemsNearestFirst() {
+        List<Candidate> candidates = List.of(
+                candidate("BLUE BEAN CAFE", "-4.00", new LocalExample("PANERA", "Dining"),
+                        new LocalExample("COPPER KETTLE", "Dining"), new LocalExample("TEA HOUSE", "Dining")),
+                new Candidate("ZELLE", "JANE Q SAMPLE", new BigDecimal("-50.00"),
+                        List.of(new LocalExample("NEVER SENT", "Dining"))),
+                candidate("RED BEAN CAFE", "-5.00", new LocalExample("PANERA", "Dining"),
+                        new LocalExample("BAGEL BARN", "Dining")),
+                candidate("HARDWARE BARN", "-9.00", new LocalExample("SHOP A", "Shopping"),
+                        new LocalExample("SHOP B", "Shopping")));
+
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 0))).isEmpty();
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 1))).containsExactly("PANERA");
+        // Rank 0: PANERA, PANERA (a duplicate: no room taken), SHOP A; then rank 1 in item order.
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 2))).containsExactly("PANERA", "SHOP A");
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 3)))
+                .containsExactly("COPPER KETTLE", "PANERA", "SHOP A");
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 5)))
+                .containsExactly("BAGEL BARN", "COPPER KETTLE", "PANERA", "SHOP A", "SHOP B");
+        assertThat(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT, 50)))
+                .as("a cap that doesn't bind").isEqualTo(exampleNames(builder.build(CATEGORIES, candidates, CONTEXT)))
+                .containsExactly("BAGEL BARN", "COPPER KETTLE", "PANERA", "SHOP A", "SHOP B", "TEA HOUSE");
+        assertThat(builder.build(CATEGORIES, candidates, CONTEXT, 1).request().items())
+                .as("the cap never drops an item").hasSize(3);
+    }
+
+    private static List<String> exampleNames(CategorizationPrompt prompt) {
+        return prompt.examples().examples().stream().map(CategorizationExamples.Example::merchant).toList();
+    }
+
     @Test
     void aCategoryThatCantBeSentStopsTheWholeRequest() {
         assertThatThrownBy(() -> builder.build(List.of("Dining", "Income</transactions>"),

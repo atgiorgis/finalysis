@@ -25,7 +25,9 @@ import tools.jackson.databind.json.JsonMapper;
  * the guard, or the candidate is skipped ({@code redactionBlocked}); its amount must pass too. Each example's
  * merchant gets exactly the same redaction and check ({@link #outboundMerchant}, also what is embedded), and its
  * category must be an allowed one, or the example is dropped; at most {@value #MAX_EXAMPLES_PER_ITEM} per candidate
- * are kept. The examples of the sent candidates go in one block, without duplicates, apart from the items. Keys
+ * are kept. The examples of the sent candidates go in one block, without duplicates, apart from the items, at most
+ * {@code maxExamples} of them: each sent candidate's nearest example first, then each one's second, and so on, so a
+ * cap drops the farthest examples and never leaves an item without one while another has two. Keys
  * ({@code i1}…) are given to the sent items only, and the mapping back to candidates stays here, in Java.
  *
  * <p>JSON comes from Jackson, so every string is escaped; angle brackets are also written as JSON unicode
@@ -107,11 +109,18 @@ public class CategorizationPromptBuilder {
         }
     }
 
+    /** {@link #build(List, List, RedactionContext, int)} with no cap on the examples block beyond each item's. */
+    public CategorizationPrompt build(List<String> categories, List<Candidate> candidates, RedactionContext context) {
+        return build(categories, candidates, context, Integer.MAX_VALUE);
+    }
+
     /**
-     * @param categories every category name; all must pass the guard, or nothing is built
+     * @param categories  every category name; all must pass the guard, or nothing is built
+     * @param maxExamples distinct examples in the block at most ({@code finalysis.ai.examples.max-examples-per-batch})
      * @throws IllegalStateException if a category name can't be sent
      */
-    public CategorizationPrompt build(List<String> categories, List<Candidate> candidates, RedactionContext context) {
+    public CategorizationPrompt build(List<String> categories, List<Candidate> candidates, RedactionContext context,
+                                      int maxExamples) {
         List<String> allowed = categories.stream().sorted().toList();
         if (!allowed.stream().allMatch(guard::allowsCategory)) {
             throw new IllegalStateException("A category name doesn't pass the outbound check; nothing is sent");
@@ -119,7 +128,7 @@ public class CategorizationPromptBuilder {
         Set<String> allowedSet = Set.copyOf(allowed);
 
         List<CategorizationRequest.Item> items = new ArrayList<>();
-        Set<CategorizationExamples.Example> examples = new TreeSet<>(EXAMPLE_ORDER);
+        List<List<CategorizationExamples.Example>> examplesBySentItem = new ArrayList<>();
         Map<String, Integer> candidateByKey = new LinkedHashMap<>();
         Map<Integer, Skip> skipped = new LinkedHashMap<>();
         for (int i = 0; i < candidates.size(); i++) {
@@ -139,12 +148,12 @@ public class CategorizationPromptBuilder {
                 throw new IllegalStateException("Too many items for one request");
             }
             items.add(new CategorizationRequest.Item(key, merchant, amount));
-            examples.addAll(examples(candidate, allowedSet, context));
+            examplesBySentItem.add(examples(candidate, allowedSet, context));
             candidateByKey.put(key, i);
         }
 
         CategorizationRequest request = new CategorizationRequest(allowed, items);
-        CategorizationExamples exampleBlock = new CategorizationExamples(List.copyOf(examples));
+        CategorizationExamples exampleBlock = new CategorizationExamples(capped(examplesBySentItem, maxExamples));
         String user = EXAMPLES_OPEN_TAG + escaped(exampleBlock) + EXAMPLES_CLOSE_TAG + "\n"
                 + OPEN_TAG + escaped(request) + CLOSE_TAG;
         return new CategorizationPrompt(systemPrompt, user, request, exampleBlock, Map.copyOf(candidateByKey),
@@ -162,6 +171,27 @@ public class CategorizationPromptBuilder {
         }
         String redacted = redactor.redact(merchant, context);
         return guard.allowsMerchant(redacted, context) ? redacted : null;
+    }
+
+    /**
+     * Up to {@code max} distinct examples, taken by rank: every item's nearest, then every item's second, and so on
+     * (items in key order); a duplicate takes no room. Sorted for the block.
+     */
+    private static List<CategorizationExamples.Example> capped(List<List<CategorizationExamples.Example>> byItem,
+                                                               int max) {
+        Set<CategorizationExamples.Example> kept = new TreeSet<>(EXAMPLE_ORDER);
+        int deepest = byItem.stream().mapToInt(List::size).max().orElse(0);
+        for (int rank = 0; rank < deepest; rank++) {
+            for (List<CategorizationExamples.Example> examples : byItem) {
+                if (kept.size() >= max) {
+                    return List.copyOf(kept);
+                }
+                if (rank < examples.size()) {
+                    kept.add(examples.get(rank));
+                }
+            }
+        }
+        return List.copyOf(kept);
     }
 
     private String escaped(Record block) {

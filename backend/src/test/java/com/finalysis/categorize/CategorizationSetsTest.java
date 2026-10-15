@@ -40,10 +40,12 @@ class CategorizationSetsTest {
 
     /**
      * The only classes allowed to name the holdout: this test, the category check, the seed leakage check (names
-     * only, step 2) and the CAT-05 reports (step 9).
+     * only, step 2), the CAT-05 reports (step 9), and the live evaluation's guard (hash, confirmation, earlier
+     * results; step 9a) with its tests, which read nothing but the file's hash.
      */
     private static final Set<String> HOLDOUT_READERS = Set.of("CategorizationSetsTest.java", "CategorySeedTest.java",
-            "SeedRulesTest.java", "CategorizationAccuracyTest.java", "CategorizationLiveEvalIT.java");
+            "SeedRulesTest.java", "CategorizationAccuracyTest.java", "CategorizationLiveEvalIT.java",
+            "EvalGuards.java", "EvalGuardsTest.java");
 
     private static final Pattern WORD = Pattern.compile("[A-Z]{3,}");
     private static final Pattern MONEY = Pattern.compile("-?\\d+\\.\\d{2}");
@@ -128,10 +130,12 @@ class CategorizationSetsTest {
                 dir.resolve("similar-merchant-cases.csv"))) {
             Files.readAllLines(file).stream().skip(1).forEach(line -> fixtures.addAll(words(line.split(",", -1)[2])));
         }
+        // The harness test set (step 9a) is in the dev format: description first.
+        rows(dir.resolve("eval-harness-cases.csv")).forEach(row -> fixtures.addAll(words(row.description())));
         Set<String> shared = nameWords(HOLDOUT);
         shared.retainAll(fixtures);
 
-        assertThat(fixtures).contains("QUORVANE", "BRAMBLEWICK");
+        assertThat(fixtures).contains("QUORVANE", "BRAMBLEWICK", "ORRISWICK");
         assertThat(shared).as("holdout name words found in the AI fixtures").isEmpty();
     }
 

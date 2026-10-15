@@ -13,6 +13,10 @@ import com.finalysis.ai.AiMode;
 import com.finalysis.ai.AiProperties;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.AiCategorizer.Status;
+import com.finalysis.categorize.AiRunObserver.ItemDecision;
+import com.finalysis.categorize.AiRunObserver.Outcome;
+import com.finalysis.categorize.CategorizationModelClient.Result;
+import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
 import com.finalysis.categorize.ModelAnswers.Sent;
 import com.finalysis.support.AiIntegrationTest;
 import com.finalysis.support.FakeChatModel;
@@ -272,6 +276,61 @@ class AiCategorizerTest {
                 + " items=9 inputTokens=1984 outputTokens=471 ms=\\d+ outcome=OK");
         assertThat(output).contains("AI categorization: status=DONE items=10 sent=9 txnsCategorized=10");
         assertThat(output).doesNotContain("QUILLFEATHER", "TEAROOM", "Refunds & Rebates");
+    }
+
+    /** The evaluation's view of a run (step 9a): each selected item's outcome once, and each batch with its calls. */
+    @Test
+    void anObserverSeesEveryItemsOutcomeAndEachBatch() {
+        insertAll();
+        model.answering(prompt -> ModelAnswers.json(ModelAnswers.items(prompt).stream()
+                .map(item -> item.merchant().contains("TEAROOM") ? ModelAnswers.answer(item.key(), "Dining", 0.40)
+                        : item.merchant().contains("GANTRYWELL") ? ModelAnswers.answer(item.key(), "No Such", SURE)
+                        : ModelAnswers.answer(item.key(), category(item), SURE))
+                .toList()), 100, 20);
+        List<ItemDecision> decisions = new ArrayList<>();
+        List<String> batches = new ArrayList<>();
+        AiRunObserver observer = new AiRunObserver() {
+            @Override
+            public void batchAnswered(CategorizationPrompt prompt, List<Result> attempts) {
+                batches.add(prompt.request().items().size() + " items, " + attempts.size() + " call(s), "
+                        + attempts.getFirst().inputTokens() + " tokens");
+            }
+
+            @Override
+            public void itemDecided(ItemDecision decision) {
+                decisions.add(decision);
+            }
+        };
+
+        AiRunResult result = categorizer.run(false, observer);
+
+        assertThat(batches).containsExactly("9 items, 1 call(s), 100 tokens");
+        assertThat(decisions).hasSize(result.itemsSelected());
+        assertThat(decisions).extracting(ItemDecision::outcome).containsOnly(Outcome.APPLIED, Outcome.LOW_CONFIDENCE,
+                Outcome.INVALID, Outcome.PERSON_TO_PERSON);
+        assertThat(decision("tearoom", decisions)).satisfies(d -> {
+            assertThat(d.outcome()).isEqualTo(Outcome.LOW_CONFIDENCE);
+            assertThat(d.category()).as("kept though not applied").isEqualTo("Dining");
+            assertThat(d.confidence()).isEqualByComparingTo("0.40");
+        });
+        assertThat(decision("toolworks", decisions)).satisfies(d -> {
+            assertThat(d.outcome()).isEqualTo(Outcome.INVALID);
+            assertThat(d.category()).isNull();
+        });
+        assertThat(decision("person-to-person", decisions).outcome()).isEqualTo(Outcome.PERSON_TO_PERSON);
+        assertThat(decision("emporium", decisions)).satisfies(d -> {
+            assertThat(d.outcome()).isEqualTo(Outcome.APPLIED);
+            assertThat(d.direction()).isEqualTo(-1);
+            assertThat(d.txnIds()).containsExactlyInAnyOrder(txn("emporium"), txn("emporium-older"));
+            assertThat(d.confidence()).isEqualByComparingTo("0.92");
+        });
+        assertThat(storedWithoutTime("tearoom")).isEqualTo(review("LOW_CONFIDENCE"));
+        assertThat(result.itemsLowConfidence()).isOne();
+        assertThat(result.itemsInvalid()).isOne();
+    }
+
+    private ItemDecision decision(String label, List<ItemDecision> decisions) {
+        return decisions.stream().filter(d -> d.txnIds().contains(txn(label))).findFirst().orElseThrow();
     }
 
     @Test

@@ -175,18 +175,20 @@ class AnswerValidatorTest {
     void theExampleSettingsAndTheirLimits() {
         SimilarMerchantProperties defaults = new Binder(new MapConfigurationPropertySource(Map.of()))
                 .bindOrCreate("finalysis.ai.examples", SimilarMerchantProperties.class);
-        assertThat(defaults).isEqualTo(new SimilarMerchantProperties(5, 0.65, 500, false, 0.97));
+        assertThat(defaults).isEqualTo(new SimilarMerchantProperties(5, 0.65, 500, false, 0.97, 50));
         assertThat(defaults.directAssignment()).as("direct assignment is off unless configured").isFalse();
 
         for (Runnable invalid : List.<Runnable>of(
-                () -> new SimilarMerchantProperties(-1, 0.65, 500, false, 0.97),
-                () -> new SimilarMerchantProperties(11, 0.65, 500, false, 0.97),
-                () -> new SimilarMerchantProperties(5, -0.1, 500, false, 0.97),
-                () -> new SimilarMerchantProperties(5, 1.1, 500, false, 1.1),
-                () -> new SimilarMerchantProperties(5, Double.NaN, 500, false, 0.97),
-                () -> new SimilarMerchantProperties(5, 0.65, -1, false, 0.97),
-                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 0.5),
-                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 1.01))) {
+                () -> new SimilarMerchantProperties(-1, 0.65, 500, false, 0.97, 50),
+                () -> new SimilarMerchantProperties(11, 0.65, 500, false, 0.97, 50),
+                () -> new SimilarMerchantProperties(5, -0.1, 500, false, 0.97, 50),
+                () -> new SimilarMerchantProperties(5, 1.1, 500, false, 1.1, 50),
+                () -> new SimilarMerchantProperties(5, Double.NaN, 500, false, 0.97, 50),
+                () -> new SimilarMerchantProperties(5, 0.65, -1, false, 0.97, 50),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 0.5, 50),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 1.01, 50),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 0.97, -1),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 0.97, 501))) {
             assertThatThrownBy(invalid::run).isInstanceOf(IllegalArgumentException.class);
         }
     }

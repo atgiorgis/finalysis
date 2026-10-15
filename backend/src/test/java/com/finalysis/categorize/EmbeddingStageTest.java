@@ -189,7 +189,7 @@ class EmbeddingStageTest {
     }
 
     private static SimilarMerchantProperties examples(int k, double minSimilarity, int cap, boolean direct) {
-        return new SimilarMerchantProperties(k, minSimilarity, cap, direct, 0.97);
+        return new SimilarMerchantProperties(k, minSimilarity, cap, direct, 0.97, 50);
     }
 
     /** The context's embedder under another model id, as after a model switch. */
@@ -233,6 +233,16 @@ class EmbeddingStageTest {
                 INJECTION + "=Shopping", RULE_NEIGHBOUR + "=Dining", USER_NEIGHBOUR + "=Dining");
         assertThat(result.itemsWithExamples()).isOne();
         assertThat(result.itemsDirect()).isZero();
+    }
+
+    /** The pipeline passes max-examples-per-batch to the prompt (step 9a): the nearest example is the one kept. */
+    @Test
+    void theExamplesCapIsTheConfiguredOne() {
+        insertAll();
+
+        categorizer(embedder, new SimilarMerchantProperties(5, 0.65, 500, false, 0.97, 1)).run(false);
+
+        assertThat(ModelAnswers.exampleList(onlyPrompt())).containsExactly(USER_NEIGHBOUR + "=Dining");
     }
 
     @Test
@@ -585,7 +595,7 @@ class EmbeddingStageTest {
     /** application.yml's values, which no profile overrides. */
     @Test
     void theContextRunsWithTheDocumentedDefaults() {
-        assertThat(contextExamples).isEqualTo(new SimilarMerchantProperties(5, 0.65, 500, false, 0.97));
+        assertThat(contextExamples).isEqualTo(new SimilarMerchantProperties(5, 0.65, 500, false, 0.97, 50));
         assertThat(embedder.dimensions()).isEqualTo(MerchantEmbeddingRepository.DIMENSIONS);
         assertThat(embedder.modelId()).isEqualTo(MODEL);
         assertThat(categorizationSettings.runAfterImport()).isFalse();
