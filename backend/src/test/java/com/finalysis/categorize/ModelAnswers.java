@@ -25,12 +25,29 @@ final class ModelAnswers {
     private ModelAnswers() {
     }
 
-    /** The user message's JSON, between the tags. */
+    /** The user message's transactions JSON, between its tags. */
     static JsonNode request(Prompt prompt) {
-        String user = prompt.getInstructions().get(1).getText();
-        String open = CategorizationPromptBuilder.OPEN_TAG;
-        String close = CategorizationPromptBuilder.CLOSE_TAG;
-        return JSON.readTree(user.substring(open.length(), user.lastIndexOf(close)));
+        return block(prompt.getInstructions().get(1).getText(), CategorizationPromptBuilder.OPEN_TAG,
+                CategorizationPromptBuilder.CLOSE_TAG);
+    }
+
+    /** The user message's examples JSON, between its tags. */
+    static JsonNode examples(Prompt prompt) {
+        return block(prompt.getInstructions().get(1).getText(), CategorizationPromptBuilder.EXAMPLES_OPEN_TAG,
+                CategorizationPromptBuilder.EXAMPLES_CLOSE_TAG);
+    }
+
+    /** The JSON between the first {@code open} and the last {@code close}. */
+    static JsonNode block(String user, String open, String close) {
+        return JSON.readTree(user.substring(user.indexOf(open) + open.length(), user.lastIndexOf(close)));
+    }
+
+    /** Every example sent, as {@code merchant=category}. */
+    static List<String> exampleList(Prompt prompt) {
+        List<String> examples = new ArrayList<>();
+        examples(prompt).get("examples").forEach(example -> examples.add(
+                example.get("merchant").asString() + "=" + example.get("category").asString()));
+        return examples;
     }
 
     static List<Sent> items(Prompt prompt) {

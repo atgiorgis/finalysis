@@ -27,6 +27,9 @@ spring:
           model: amazon.titan-embed-text-v2:0
           # Titan's default in Spring AI is IMAGE.
           input-type: TEXT
+          # Spring AI builds Titan's Bedrock client itself (no client bean is used), so embedding calls get the SDK's
+          # default retries, not the chat client's strategy, and the timeout above. A failed embedding never stops
+          # categorization: the items go without examples and the next run embeds them (step 8 notes).
 
 finalysis:
   ai:

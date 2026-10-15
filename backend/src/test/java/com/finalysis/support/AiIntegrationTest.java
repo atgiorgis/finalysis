@@ -1,23 +1,21 @@
 package com.finalysis.support;
 
-import static org.mockito.Mockito.mock;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * {@link IntegrationTest} with AI on and a {@link FakeChatModel} as the only chat model (docs/plans/phase-4.md §10):
- * mode CLOUD (so the data-minimization path is the one under test), no {@code aws} profile, so no Bedrock client
- * exists and {@link NoCloudAiGuard} stays in force. The embedding model is a stub until step 8 uses it. Test classes
- * share the context and its fake: reset it ({@link FakeChatModel#reset()}) before each test.
+ * {@link IntegrationTest} with AI on, a {@link FakeChatModel} as the only chat model and a {@link FakeEmbeddingModel}
+ * as the only embedding model (docs/plans/phase-4.md §10): mode CLOUD (so the data-minimization path is the one under
+ * test), no {@code aws} profile, so no Bedrock client exists and {@link NoCloudAiGuard} stays in force. Test classes
+ * share the context and its fakes: reset them ({@link FakeChatModel#reset()}, {@link FakeEmbeddingModel#reset()})
+ * before each test, and delete the embeddings a test made.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -28,11 +26,12 @@ import org.springframework.test.context.TestPropertySource;
         "finalysis.ai.mode=CLOUD",
         "finalysis.ai.provider=test",
         "finalysis.ai.roles.categorization=" + AiIntegrationTest.CATEGORIZATION_MODEL,
-        "finalysis.ai.roles.embedding=test-embedding-model",
+        "finalysis.ai.roles.embedding=" + AiIntegrationTest.EMBEDDING_MODEL,
         "finalysis.ai.roles.main=test-main-model"})
 public @interface AiIntegrationTest {
 
     String CATEGORIZATION_MODEL = "test-categorization-model";
+    String EMBEDDING_MODEL = "test-embedding-model";
 
     @TestConfiguration(proxyBeanMethods = false)
     class FakeModels {
@@ -43,8 +42,8 @@ public @interface AiIntegrationTest {
         }
 
         @Bean
-        EmbeddingModel stubEmbeddingModel() {
-            return mock(EmbeddingModel.class);
+        FakeEmbeddingModel fakeEmbeddingModel() {
+            return new FakeEmbeddingModel();
         }
     }
 }

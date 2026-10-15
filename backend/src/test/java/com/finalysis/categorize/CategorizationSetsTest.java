@@ -116,6 +116,25 @@ class CategorizationSetsTest {
         assertThat(shared).as("holdout name words found in the answer key or merchant fixture").isEmpty();
     }
 
+    /**
+     * The AI tests' fixtures (steps 7 and 8) use businesses of their own: their descriptions share no word with the
+     * holdout names. Reads the description column only.
+     */
+    @Test
+    void holdoutNamesShareNoWordWithTheAiFixtures() throws IOException {
+        Set<String> fixtures = new TreeSet<>();
+        Path dir = ImportTestSupport.SAMPLE_DATA.resolve("edge-cases/ai-categorization");
+        for (Path file : List.of(dir.resolve("ai-categorization-cases.csv"),
+                dir.resolve("similar-merchant-cases.csv"))) {
+            Files.readAllLines(file).stream().skip(1).forEach(line -> fixtures.addAll(words(line.split(",", -1)[2])));
+        }
+        Set<String> shared = nameWords(HOLDOUT);
+        shared.retainAll(fixtures);
+
+        assertThat(fixtures).contains("QUORVANE", "BRAMBLEWICK");
+        assertThat(shared).as("holdout name words found in the AI fixtures").isEmpty();
+    }
+
     /** Main code never names the holdout, and only the reporting tests read it. */
     @Test
     void onlyTheReportsReadTheHoldout() throws IOException {

@@ -73,8 +73,13 @@ class OutboundPayloadTest {
         CategorizationPrompt prompt = builder.build(CATEGORIES, candidates, context);
 
         String user = prompt.user();
-        assertThat(user).startsWith("<transactions>").endsWith("</transactions>");
-        String body = user.substring("<transactions>".length(), user.length() - "</transactions>".length());
+        assertThat(user).startsWith("<examples>").endsWith("</transactions>");
+        String examples = user.substring("<examples>".length(), user.indexOf("</examples>\n<transactions>"));
+        assertThat(json.readTree(examples)).isEqualTo(json.readTree("""
+                {"examples": [{"merchant": "ATM", "category": "Cash & ATM"},
+                              {"merchant": "BLUE BEAN CAFE", "category": "Dining"}]}"""));
+        String body = user.substring(user.indexOf("<transactions>") + "<transactions>".length(),
+                user.length() - "</transactions>".length());
         assertThat(json.readTree(body)).isEqualTo(json.readTree("""
                 {
                   "allowedCategories": ["Bank Fees", "Cash & ATM", "Dining", "Groceries", "HOA & Condo Fees", "Health",
@@ -82,14 +87,12 @@ class OutboundPayloadTest {
                                         "Person-to-Person Out", "Refunds & Rebates", "Shopping", "Subscriptions",
                                         "Tolls", "Transfer", "Transportation", "Utilities"],
                   "items": [
-                    {"key": "i1", "merchant": "ACME INS PREM", "amount": "-120.00", "similar": []},
-                    {"key": "i2", "merchant": "ONLINE TRANSFER TO SAVINGS", "amount": "-500.00", "similar": []},
-                    {"key": "i3", "merchant": "STARBUCKS", "amount": "-5.75", "similar": [
-                      {"merchant": "BLUE BEAN CAFE", "category": "Dining"},
-                      {"merchant": "ATM", "category": "Cash & ATM"}]},
-                    {"key": "i4", "merchant": "NOVA BOOKS", "amount": "-18.40", "similar": []},
-                    {"key": "i5", "merchant": "BILL PAY CITY WATER", "amount": "-61.37", "similar": []},
-                    {"key": "i6", "merchant": "PAYROLL BRIGHTWAY", "amount": "2500.00", "similar": []}
+                    {"key": "i1", "merchant": "ACME INS PREM", "amount": "-120.00"},
+                    {"key": "i2", "merchant": "ONLINE TRANSFER TO SAVINGS", "amount": "-500.00"},
+                    {"key": "i3", "merchant": "STARBUCKS", "amount": "-5.75"},
+                    {"key": "i4", "merchant": "NOVA BOOKS", "amount": "-18.40"},
+                    {"key": "i5", "merchant": "BILL PAY CITY WATER", "amount": "-61.37"},
+                    {"key": "i6", "merchant": "PAYROLL BRIGHTWAY", "amount": "2500.00"}
                   ]
                 }"""));
         assertThat(prompt.skipped()).isEqualTo(Map.of(2, Skip.PERSON_TO_PERSON));

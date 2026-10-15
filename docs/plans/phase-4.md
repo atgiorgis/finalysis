@@ -772,7 +772,7 @@ moves before AI wiring. Reasons:
 | 5 | Redaction + prompt safety | `Redactor` (with the outbound-only location strip, §5.2), `OutboundPayloadGuard`, `CategorizationPromptBuilder` (records of §4.2, system prompt resource, JSON-in-tags). Pure Java, **no Spring AI dependency yet** | `RedactorTest` (incl. `STARBUCKS ARLINGTON VA` → `STARBUCKS`, `METRO POWER CO` → `METRO`, stored merchant unchanged), `OutboundPayloadGuardTest` (§5.5, property test, golden file), `PromptBuilderTest` (escaping, tag can't be closed) | Done: "Phase 4 step 5: redaction and prompt safety" (notes below) |
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
-| 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Planned |
+| 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Done: "Phase 4 step 8: embeddings and similar-merchant examples" (notes below) |
 | 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Planned |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
 
@@ -1411,6 +1411,104 @@ until the version is bumped. The system prompt now asks for a confidence from 0 
 
 Backend tests 2,015 → 2,086 (+71); frontend 4.
 
+### Step 8 notes
+
+Built from the step 8 prompt, which also carried two fixes to step 7. Where it differs from this plan, the prompt
+wins (it is newer):
+
+| Plan said | Step 8 does | Where |
+|---|---|---|
+| A rejected answer rejects the whole batch (step 7) | Two levels: bad JSON or a duplicate, missing or unknown key still rejects the whole answer (one retry, then the batch goes to review); an unknown category or a confidence outside 0 to 1 rejects only that item (review, `INVALID_ANSWER`), the rest is saved, no retry | `AnswerValidator`, `AiCategorizer` |
+| `run-after-import` default true (step 7) | Default **false**, in `AiCategorizationProperties` and `application.yml`; no profile file sets it | `application.yml` |
+| No change to `merchant_embedding` (§9.1) | V17 replaces it: key `(merchant, model)`, `dimensions`, `input_sha256`, the HNSW cosine index | `V17__merchant_embedding_by_model.sql` |
+| Up to **3** examples, `max-distance` 0.35 (§6) | Up to **k = 5**, `min-similarity` **0.65** (the same cut, as a similarity) | `SimilarMerchantProperties` |
+| Examples inside each item, `similar` (§4.2) | Their own block, `<examples>`…`</examples>`, before `<transactions>`; merchant and category only; prompt version **3** | `CategorizationPromptBuilder`, `CategorizationExamples` |
+| `EmbeddingModel.dimensions()` checked at startup (§6) | `finalysis.ai.embedding.dimensions` (1024) checked at startup, and every returned vector checked against it. Spring AI's `dimensions()` embeds a test text for a model it doesn't know (Titan v2 among them): a cloud call at startup | `EmbeddingProperties`, `MerchantEmbeddingStage` |
+| `findStale(current)` re-embeds after a model switch (§6) | Cached per model and per outbound text (its SHA-256): a merchant is embedded again only when its text or the model changes; rows of an earlier model stay and are never compared | `MerchantEmbeddingStage`, `MerchantEmbeddingRepository` |
+
+**Stage 4 (`MerchantEmbeddingStage`).** Runs inside an AI run, before the first chat batch, with no transaction open,
+and only when stage 5 has something to send. Text: `CategorizationPromptBuilder.outboundMerchant`, the one method that
+also writes the chat model's items and examples (cleaned merchant, `Redactor`, `OutboundPayloadGuard`); person-to-person
+and guard-refused merchants are never embedded. Order: the items' merchants, then merchants with a USER or RULE
+category that lack a current vector (they are the examples). Each is one call (Titan has no batch call) through
+`TextEmbedder`, at most `max-embeddings-per-run` (500) calls per run; the rest wait for the next run. A failed or
+unusable call stops this stage only (`STOPPED_ON_ERROR`): stage 5 goes on with the vectors it has. The key stays the
+cleaned `txn.merchant`.
+
+**Examples.** For each item with a vector: the 40 nearest merchants of the same model (pgvector's HNSW scan returns at
+most `hnsw.ef_search`, 40 by default), not the item's own merchant, each labeled with the category of its newest USER
+or RULE txn in the item's direction, at least `min-similarity`, nearest first, at most `k`. AI categories never make an
+example. The batch's examples go in one block, without duplicates, sorted, with no link to an item. `EXPLAIN` shows
+the nearest-neighbour query can use the HNSW index.
+
+**`TextEmbedder` (in `com.finalysis.ai`).** Our interface over Spring AI's `EmbeddingModel`: one text per call with the
+embedding role's model id in the options, one AI-06 line (`ai call role=embedding model= items=1 inputTokens= ms=
+outcome=`; no output tokens), vectors checked (one vector, the configured length, finite). Usage: missing usage,
+`EmptyUsage` or 0 input tokens (what Spring AI's Titan model reports when Bedrock gave none) count as not reported,
+`n/a` in the log and `callsWithoutUsage` in the run.
+
+**Titan's client (reported, not changed).** Spring AI 2.0.1's `TitanEmbeddingBedrockApi` builds its own
+`BedrockRuntimeClient` in its constructor (region, the context's credentials provider, and `apiCallTimeout` from
+`spring.ai.bedrock.aws.timeout`) and takes no client bean or retry strategy. So embedding calls get the AWS SDK's
+default retries, not the standard 3-attempt strategy the chat client has. Logging is quiet only because
+`org.springframework.ai` is OFF: on a failure, Titan's model logs the input text at ERROR. `ExposureTest` already pins
+that logger off. The context's credentials do reach it: under the `aws` profile, `AwsProfileWiringTest` shows an
+embedding call stopped by `NoCloudAiGuard` before it is signed. No ArchUnit change: nothing outside
+`com.finalysis.ai.bedrock` names the provider. If the same retries are wanted, a `TitanEmbeddingBedrockApi` subclass in
+`com.finalysis.ai.bedrock` could send through the shared client, inside the existing exemption.
+
+**Direct assignment (off).** `finalysis.ai.examples.direct-assignment` (false) and `direct-min-similarity` (0.97): an
+item whose nearest example is at least that similar takes its category without a chat call. Such a row is an AI
+category whose model is the embedding model's id, with no confidence and no prompt version, so step 9 can tell them
+apart. Counted in `itemsDirect`.
+
+**Run body.** `ai` gains `itemsWithExamples`, `itemsDirect` and `embeddings` (`status`, `merchants`, `cached`,
+`embedded`, `calls`, `callsWithoutUsage`, `inputTokens`, `remaining`).
+
+**Choices beyond the prompt:**
+- **`input_sha256`** on each row, so "re-embed only when the outbound text changes" needs no text stored twice.
+- **Key `(merchant, model)`**: switching back to an earlier model finds its vectors still there.
+- **V1's table is dropped and created again**, not altered: nothing wrote to it before this step.
+- **A label is direction-matched** (a store's refund says nothing about a purchase), and **the item's own merchant is
+  never its example**, as §6 planned.
+- **Embeddings only when there is something to send**: labeled merchants are embedded the first time an item needs
+  examples, not after every import.
+- **A missing confidence** is an item problem like one outside 0 to 1, and **item rejects reuse `INVALID_ANSWER`**
+  (no new review reason, no migration).
+- **k** may be 0 to 10, the embedding cap 0 or more; `direct-min-similarity` may not be below `min-similarity`.
+- **Fixture:** `sample-data/edge-cases/ai-categorization/similar-merchant-cases.csv`, written by
+  `tools/SampleDataGenerator.java` after the step 7 file and without the random generator (every other file
+  unchanged): items, neighbours labeled by the user, a rule and the AI, a refund in the other direction, one with
+  identifiers, a person-to-person payment and a labeled merchant whose name is an instruction.
+  `CategorizationSetsTest` now checks that neither AI fixture shares a word with the holdout names.
+- **The background-run test** moved to `BackgroundAiCategorizationTest`, which turns `run-after-import` on;
+  `AiCategorizerTest` checks that an import starts nothing by default.
+
+**Tests** (with `FakeEmbeddingModel`: a unit vector seeded by the text's SHA-256, neighbours placed at exact
+similarities, usage on or off, failures, wrong lengths; it replaces the Mockito stub in `@AiIntegrationTest`;
+`NoCloudAiGuard` stays in force):
+- `EmbeddingStageTest` (Testcontainers, 20): only USER and RULE neighbours above the floor; an AI-labeled merchant
+  becomes an example once the user gives it; the label in the item's direction; the floor and `k` as settings; the
+  model filter; a model switch re-embedding everything and keeping vectors apart; the embedded text equal to the
+  chat model's outbound text (no identifiers, no raw description); person-to-person never embedded; a second run with
+  zero embedding calls; a changed outbound text embedded again; the cap and a continuing run; a cap of 0; tokens and
+  `n/a` in the log and the run body; a failed embedding; a vector of the wrong length; the wrong-dimension startup
+  failure; the examples block delimited, with an injection inside an example kept as data; direct assignment off by
+  default, and on.
+- `MerchantEmbeddingRepositoryTest` (rewritten, 32): round trip, one row per merchant and model, hashes per model,
+  V17's checks and key, nearest first with similarity, trusted labels only and the newest, direction, model and self
+  filters, floor, limit and pool, `EXPLAIN` using the HNSW index for both queries, argument checks.
+- `SpringAiTextEmbedderTest` (8), `AnswerValidatorTest` (per-item rejection, the example settings, defaults bound
+  from nothing: `run-after-import` false), `AiCategorizerTest` (whole-answer vs item corruptions, a key problem
+  outranking an item problem, the payload's fields, an import starting nothing by default), `PromptBuilderTest` (the
+  two blocks, the merged examples block, `outboundMerchant`, the version pin), `OutboundPayloadTest`,
+  `AwsProfileWiringTest` (+2), `BackgroundAiCategorizationTest`, `SchemaMigrationTest` (+5), `CategorizationSetsTest`
+  (+1), `SampleDataParserSelectionTest` (64 files), `MerchantBackfillTest`.
+
+Not done here, as the prompt said: dev or holdout accuracy, the live smoke test, newman.
+
+Backend tests 2,086 → 2,139 (+53); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1453,6 +1551,9 @@ At approval, requirements v1.32 records:
 - **Bank-provided categories are ignored** (Apex's `Category` column isn't mapped). Using them would
   be per-bank knowledge outside the parser.
 - **Embeddings send merchant names to Bedrock too.** Same redaction, same allowlist.
+- *Step 8: Titan's Bedrock client is Spring AI's own, so embedding calls get the AWS SDK's default retries, not the
+  chat client's strategy (step 8 notes). A failed embedding only leaves items without examples.*
+- *Step 8: the AI no longer runs after an import unless `run-after-import` is turned on.*
 - **Titan embeds one merchant per call.** A first import with many new merchants takes longer in the
   background.
 

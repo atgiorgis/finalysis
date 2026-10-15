@@ -16,6 +16,7 @@ import com.finalysis.categorize.AiCategorizer.Status;
 import com.finalysis.categorize.ModelAnswers.Sent;
 import com.finalysis.support.AiIntegrationTest;
 import com.finalysis.support.FakeChatModel;
+import com.finalysis.support.FakeEmbeddingModel;
 import com.finalysis.support.ImportTestSupport;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +26,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +69,8 @@ class AiCategorizerTest {
     private final JdbcTemplate jdbc;
     private final CategorizeRows rows;
     private final FakeChatModel model;
+    private final FakeEmbeddingModel embeddingModel;
+    private final AiCategorizationProperties settings;
     private final AiCategorizer categorizer;
     private final CategorizationService categorization;
     private final MockMvc mockMvc;
@@ -81,18 +83,24 @@ class AiCategorizerTest {
     private final ObjectProvider<ChatModel> chatModels;
     private final CategorizationModelClient client;
     private final CategorizationPromptBuilder promptBuilder;
+    private final MerchantEmbeddingStage embeddingStage;
+    private final SimilarMerchantProperties examples;
     private final RedactionContextQuery redactionContext;
     private final CategorizationLock lock;
     private final PlatformTransactionManager transactions;
 
-    AiCategorizerTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeChatModel model, AiCategorizer categorizer,
+    AiCategorizerTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeChatModel model,
+                      FakeEmbeddingModel embeddingModel, AiCategorizationProperties settings, AiCategorizer categorizer,
                       CategorizationService categorization, MockMvc mockMvc, AccountRepository accounts,
                       AiProperties ai, ObjectProvider<ChatModel> chatModels, CategorizationModelClient client,
-                      CategorizationPromptBuilder promptBuilder, RedactionContextQuery redactionContext,
+                      CategorizationPromptBuilder promptBuilder, MerchantEmbeddingStage embeddingStage,
+                      SimilarMerchantProperties examples, RedactionContextQuery redactionContext,
                       CategorizationLock lock, PlatformTransactionManager transactions) {
         this.jdbc = jdbc;
         this.rows = new CategorizeRows(jdbc, cleaner);
         this.model = model;
+        this.embeddingModel = embeddingModel;
+        this.settings = settings;
         this.categorizer = categorizer;
         this.categorization = categorization;
         this.mockMvc = mockMvc;
@@ -101,6 +109,8 @@ class AiCategorizerTest {
         this.chatModels = chatModels;
         this.client = client;
         this.promptBuilder = promptBuilder;
+        this.embeddingStage = embeddingStage;
+        this.examples = examples;
         this.redactionContext = redactionContext;
         this.lock = lock;
         this.transactions = transactions;
@@ -109,6 +119,7 @@ class AiCategorizerTest {
     @BeforeEach
     void setUp() {
         model.reset();
+        embeddingModel.reset();
         assertThat(eligibleElsewhere()).as("txns left by other tests would be sent too").isZero();
         rows.account("AI Test Checking", "CHECKING", "4242");
     }
@@ -116,6 +127,8 @@ class AiCategorizerTest {
     @AfterEach
     void cleanUp() {
         model.reset();
+        embeddingModel.reset();
+        jdbc.update("DELETE FROM merchant_embedding");
         rows.deleteAccounts();
         imports.deleteCreatedAccounts();
         jdbc.update("DELETE FROM categorization_rule WHERE source <> 'SEED'"); // a correction's rule
@@ -221,8 +234,8 @@ class AiCategorizerTest {
     }
 
     private AiCategorizer categorizer(AiProperties ai, AiCategorizationProperties properties) {
-        return new AiCategorizer(ai, properties, chatModels, client, promptBuilder, redactionContext, lock, jdbc,
-                transactions);
+        return new AiCategorizer(ai, properties, chatModels, client, promptBuilder, embeddingStage, examples,
+                redactionContext, lock, jdbc, transactions);
     }
 
     // ------------------------------------------------------------------ a valid batch
@@ -236,7 +249,11 @@ class AiCategorizerTest {
 
         assertThat(model.prompts()).hasSize(1);
         // 10 merchants and directions; the person-to-person payment is never sent.
-        assertThat(result).isEqualTo(new AiRunResult(Status.DONE, 10, 9, 10, 0, 0, 1, 0, 1, 0, 0, 1984, 471, 0, 0));
+        assertThat(result).usingRecursiveComparison().ignoringFields("embeddings")
+                .isEqualTo(new AiRunResult(Status.DONE, 10, 9, 10, 0, 0, 1, 0, 1, 0, 0, 1984, 471, 0, 0, 0, 0, null));
+        assertThat(result.embeddings().status()).isEqualTo(Status.DONE);
+        assertThat(embeddingModel.inputs()).as("each item merchant once, the person-to-person one never")
+                .hasSize(8).doesNotHaveDuplicates().noneMatch(text -> text.contains("ZELLE"));
         assertThat(storedWithoutTime("tearoom")).isEqualTo(ai("Dining", "0.920"));
         assertThat(storedWithoutTime("emporium")).isEqualTo(ai("Shopping", "0.920"));
         assertThat(storedWithoutTime("emporium-older")).as("same merchant and direction, one item")
@@ -278,13 +295,11 @@ class AiCategorizerTest {
 
     // ------------------------------------------------------------------ invalid answers
 
+    /** Problems that make the whole answer unusable: asked again once. */
     enum Corruption {
-        UNKNOWN_CATEGORY(answers -> answers.getFirst().put("category", "Groceries & More")),
         UNKNOWN_KEY(answers -> answers.add(ModelAnswers.answer("i99", "Shopping", SURE))),
         DUPLICATE_KEY(answers -> answers.add(ModelAnswers.answer("i1", "Dining", SURE))),
-        MISSING_KEY(answers -> answers.removeLast()),
-        CONFIDENCE_ABOVE_ONE(answers -> answers.getFirst().put("confidence", 92)),
-        CONFIDENCE_MISSING(answers -> answers.getFirst().remove("confidence"));
+        MISSING_KEY(answers -> answers.removeLast());
 
         final Consumer<List<Map<String, Object>>> corrupt;
 
@@ -293,7 +308,23 @@ class AiCategorizerTest {
         }
     }
 
-    /** An invalid answer is asked again once; invalid again, the whole batch goes to review and nothing is applied. */
+    /** Problems with one item (the first, i1): only that item is rejected. */
+    enum ItemCorruption {
+        UNKNOWN_CATEGORY("UNKNOWN_CATEGORY", answers -> answers.getFirst().put("category", "Groceries & More")),
+        CONFIDENCE_ABOVE_ONE("BAD_CONFIDENCE", answers -> answers.getFirst().put("confidence", 92)),
+        CONFIDENCE_BELOW_ZERO("BAD_CONFIDENCE", answers -> answers.getFirst().put("confidence", -0.2)),
+        CONFIDENCE_MISSING("BAD_CONFIDENCE", answers -> answers.getFirst().remove("confidence"));
+
+        final String problem;
+        final Consumer<List<Map<String, Object>>> corrupt;
+
+        ItemCorruption(String problem, Consumer<List<Map<String, Object>>> corrupt) {
+            this.problem = problem;
+            this.corrupt = corrupt;
+        }
+    }
+
+    /** An answer invalid as a whole is asked again once; invalid again, the whole batch goes to review. */
     @ParameterizedTest
     @EnumSource(Corruption.class)
     void anAnswerInvalidTwiceSendsTheBatchToReview(Corruption corruption, CapturedOutput output) {
@@ -313,8 +344,52 @@ class AiCategorizerTest {
         for (String label : List.of("tearoom", "emporium", "emporium-older", "toolworks")) {
             assertThat(storedWithoutTime(label)).as(label).isEqualTo(review("INVALID_ANSWER"));
         }
-        assertThat(output).contains("AI categorization answer rejected", "attempt 1 of 2", "attempt 2 of 2");
-        assertThat(output).doesNotContain("TEAROOM", "Groceries & More", "i99");
+        assertThat(output).contains("AI categorization answer rejected ([" + corruption.name() + "])",
+                "attempt 1 of 2", "attempt 2 of 2");
+        assertThat(output).doesNotContain("TEAROOM", "i99");
+    }
+
+    /**
+     * An unknown category or a confidence outside 0 to 1 rejects only its item: it goes to review, the rest of the
+     * batch is saved, and nothing is asked again.
+     */
+    @ParameterizedTest
+    @EnumSource(ItemCorruption.class)
+    void anItemProblemRejectsOnlyThatItem(ItemCorruption corruption, CapturedOutput output) {
+        insert("tearoom", "emporium", "emporium-older", "toolworks"); // i1 is BRAMBLEWICK TEAROOM (merchant order)
+        model.answering(ModelAnswers.answering(AiCategorizerTest::category, SURE, corruption.corrupt), 500, 60);
+
+        AiRunResult result = categorizer.run(false);
+
+        assertThat(model.prompts()).as("not asked again").hasSize(1);
+        assertThat(ModelAnswers.items(model.prompts().getFirst()).getFirst().merchant())
+                .isEqualTo("BRAMBLEWICK TEAROOM");
+        assertThat(result.calls()).isEqualTo(1);
+        assertThat(result.retries()).isZero();
+        assertThat(result.itemsInvalid()).isEqualTo(1);
+        assertThat(result.txnsCategorized()).isEqualTo(3);
+        assertThat(storedWithoutTime("tearoom")).isEqualTo(review("INVALID_ANSWER"));
+        assertThat(storedWithoutTime("emporium")).isEqualTo(ai("Shopping", "0.920"));
+        assertThat(storedWithoutTime("emporium-older")).isEqualTo(ai("Shopping", "0.920"));
+        assertThat(storedWithoutTime("toolworks")).isEqualTo(ai("Shopping", "0.920"));
+        assertThat(output).contains("AI categorization rejected 1 of 3 items ([" + corruption.problem + "])");
+        assertThat(output).doesNotContain("TEAROOM", "Groceries & More");
+    }
+
+    /** An item problem and a key problem in the same answer: the key problem wins, and the batch is asked again. */
+    @Test
+    void aKeyProblemOutranksAnItemProblem() {
+        insert("tearoom", "toolworks");
+        model.answering(ModelAnswers.answering(AiCategorizerTest::category, SURE, answers -> {
+            answers.getFirst().put("category", "Groceries & More");
+            answers.add(ModelAnswers.answer("i7", "Shopping", SURE));
+        }), 500, 60);
+
+        AiRunResult result = categorizer.run(false);
+
+        assertThat(result.calls()).isEqualTo(2);
+        assertThat(result.itemsInvalid()).isEqualTo(2);
+        assertThat(result.txnsCategorized()).isZero();
     }
 
     @Test
@@ -464,7 +539,9 @@ class AiCategorizerTest {
 
         assertThat(model.prompts()).hasSize(calls);
         // Only the person-to-person payment is selected again, and it is never sent.
-        assertThat(again).isEqualTo(new AiRunResult(Status.DONE, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0));
+        assertThat(again).usingRecursiveComparison().ignoringFields("embeddings")
+                .isEqualTo(new AiRunResult(Status.DONE, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null));
+        assertThat(again.embeddings().calls()).as("nothing to send, nothing to embed").isZero();
         assertThat(snapshot()).as("not even categorized_at moves").isEqualTo(before);
         assertThat(before.get("tearoom").reviewReason()).as("left for review, and not asked again")
                 .isEqualTo("LOW_CONFIDENCE");
@@ -603,7 +680,8 @@ class AiCategorizerTest {
         JsonNode request = ModelAnswers.request(prompt);
         assertThat(fieldNames(request)).containsExactly("allowedCategories", "items");
         request.get("items").forEach(item ->
-                assertThat(fieldNames(item)).containsExactly("key", "merchant", "amount", "similar"));
+                assertThat(fieldNames(item)).containsExactly("key", "merchant", "amount"));
+        assertThat(fieldNames(ModelAnswers.examples(prompt))).containsExactly("examples");
         Map<String, String> amountByMerchant = new LinkedHashMap<>();
         ModelAnswers.items(prompt).forEach(item -> amountByMerchant.put(item.merchant() + " " + item.amount(),
                 item.key()));
@@ -639,9 +717,11 @@ class AiCategorizerTest {
         categorizer.run(false);
 
         String user = model.prompts().getFirst().getInstructions().get(1).getText();
-        assertThat(user).startsWith("<transactions>").endsWith("</transactions>");
-        String body = user.substring("<transactions>".length(), user.length() - "</transactions>".length());
+        assertThat(user).startsWith("<examples>").endsWith("</transactions>");
+        String body = user.substring(user.indexOf("<transactions>") + "<transactions>".length(),
+                user.length() - "</transactions>".length());
         assertThat(body).doesNotContain("<", ">");
+        assertThat(user).containsOnlyOnce("<transactions>").containsOnlyOnce("</transactions>");
         assertThat(ModelAnswers.items(model.prompts().getFirst())).extracting(Sent::merchant)
                 .contains(INJECTION_SENT);
         assertThat(model.prompts().getFirst().getInstructions().get(0).getText()).contains("not instructions");
@@ -728,40 +808,25 @@ class AiCategorizerTest {
                 .andExpect(jsonPath("$.ai.itemsSent").value(1));
     }
 
-    /** After an import the AI runs in the background; a failing model never fails the import. */
+    /**
+     * run-after-import is off by default, in every profile: an import starts no AI call by itself
+     * ({@code BackgroundAiCategorizationTest} runs it with the setting on).
+     */
     @Test
-    void anImportAsksForABackgroundRunAndAModelFailureNeverFailsIt(CapturedOutput output) throws Exception {
+    void anImportStartsNoAiByDefault(CapturedOutput output) throws Exception {
+        assertThat(settings.runAfterImport()).isFalse();
         insert("toolworks"); // waiting for the AI
-        model.failingWith(new IllegalStateException("GANTRYWELL TOOLWORKS -129.99"));
+        model.answering(sensible(SURE), 300, 40);
         long account = imports.account(AccountType.CHECKING, "1001");
 
         imports.upload(account, "april.ofx", ImportTestSupport.sample("ofx/northfield-checking_2026-04.ofx"))
                 .andExpect(status().isCreated());
 
-        waitFor(() -> runs(output) == 1);
-        assertThat(output).contains("AI categorization call failed (java.lang.IllegalStateException)");
-        assertThat(output).doesNotContain("GANTRYWELL");
+        Thread.sleep(500); // a background run would have started by now
+        assertThat(model.prompts()).isEmpty();
+        assertThat(embeddingModel.inputs()).isEmpty();
+        assertThat(output).doesNotContain("AI categorization: status=");
         assertThat(storedWithoutTime("toolworks")).isEqualTo(UNTOUCHED);
-
-        model.answering(sensible(SURE), 300, 40);
-        imports.upload(account, "may.ofx", ImportTestSupport.sample("ofx/northfield-checking_2026-05.ofx"))
-                .andExpect(status().isCreated());
-        waitFor(() -> runs(output) == 2);
-        assertThat(output).contains("AI categorization: status=STOPPED_ON_ERROR", "AI categorization: status=DONE");
-        assertThat(storedWithoutTime("toolworks")).isEqualTo(ai("Shopping", "0.920"));
-    }
-
-    /** Background runs finished so far: each logs one summary line at its end. */
-    private static int runs(CapturedOutput output) {
-        return output.getOut().split("AI categorization: status=", -1).length - 1;
-    }
-
-    private static void waitFor(BooleanSupplier condition) throws InterruptedException {
-        long deadline = System.nanoTime() + 20_000_000_000L;
-        while (!condition.getAsBoolean()) {
-            assertThat(System.nanoTime()).as("timed out waiting for the background run").isLessThan(deadline);
-            Thread.sleep(50);
-        }
     }
 
     private static List<String> fieldNames(JsonNode node) {

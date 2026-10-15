@@ -10,14 +10,20 @@ import com.finalysis.categorize.CategorizationResponse.Answer;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 
-/** {@link AnswerValidator} (docs/plans/phase-4.md §4.4): every check, and that one problem rejects the whole answer. */
+/**
+ * {@link AnswerValidator} (docs/plans/phase-4.md §4.4, step 8 notes): every check; a parse or key problem rejects the
+ * whole answer, a category or confidence problem only its item.
+ */
 class AnswerValidatorTest {
 
     private static final Set<String> SENT = Set.of("i1", "i2");
@@ -37,6 +43,7 @@ class AnswerValidatorTest {
         assertThat(validation.byKey()).containsExactly(
                 Map.entry("i1", new Accepted("Dining", new BigDecimal("0.920"))),
                 Map.entry("i2", new Accepted("Cash & ATM", new BigDecimal("0.700"))));
+        assertThat(validation.rejected()).isEmpty();
     }
 
     @Test
@@ -80,46 +87,77 @@ class AnswerValidatorTest {
         assertThat(validate().problems()).containsExactly(Problem.MISSING_KEY);
     }
 
+    /** Rejects i1 alone: the answer is still usable and i2 is accepted. */
+    private static void assertOnlyFirstItemRejected(Validation validation, Problem problem) {
+        assertThat(validation.valid()).as("the answer as a whole is usable").isTrue();
+        assertThat(validation.problems()).isEmpty();
+        assertThat(validation.rejected()).containsExactly(Map.entry("i1", problem));
+        assertThat(validation.itemProblems()).containsExactly(problem);
+        assertThat(validation.byKey())
+                .containsExactly(Map.entry("i2", new Accepted("Dining", new BigDecimal("0.900"))));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"Groceries", "dining", "Dining!", "", "Cash and ATM"})
-    void aCategoryOffTheListIsRejected(String category) {
-        assertThat(validate(new Answer("i1", category, 0.9), new Answer("i2", "Dining", 0.9)).problems())
-                .containsExactly(Problem.UNKNOWN_CATEGORY);
+    void aCategoryOffTheListRejectsOnlyItsItem(String category) {
+        assertOnlyFirstItemRejected(validate(new Answer("i1", category, 0.9), new Answer("i2", "Dining", 0.9)),
+                Problem.UNKNOWN_CATEGORY);
     }
 
     @Test
-    void aMissingCategoryIsRejected() {
-        assertThat(validate(new Answer("i1", null, 0.9), new Answer("i2", "Dining", 0.9)).problems())
-                .containsExactly(Problem.UNKNOWN_CATEGORY);
+    void aMissingCategoryRejectsOnlyItsItem() {
+        assertOnlyFirstItemRejected(validate(new Answer("i1", null, 0.9), new Answer("i2", "Dining", 0.9)),
+                Problem.UNKNOWN_CATEGORY);
     }
 
     @ParameterizedTest
     @ValueSource(doubles = {-0.01, 1.01, 85, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
-    void aConfidenceOutsideZeroToOneIsRejected(double confidence) {
-        assertThat(validate(new Answer("i1", "Dining", confidence), new Answer("i2", "Dining", 0.9)).problems())
-                .containsExactly(Problem.BAD_CONFIDENCE);
+    void aConfidenceOutsideZeroToOneRejectsOnlyItsItem(double confidence) {
+        assertOnlyFirstItemRejected(validate(new Answer("i1", "Dining", confidence), new Answer("i2", "Dining", 0.9)),
+                Problem.BAD_CONFIDENCE);
     }
 
     @Test
-    void aMissingConfidenceIsRejected() {
-        assertThat(validate(new Answer("i1", "Dining", null), new Answer("i2", "Dining", 0.9)).problems())
-                .containsExactly(Problem.BAD_CONFIDENCE);
+    void aMissingConfidenceRejectsOnlyItsItem() {
+        assertOnlyFirstItemRejected(validate(new Answer("i1", "Dining", null), new Answer("i2", "Dining", 0.9)),
+                Problem.BAD_CONFIDENCE);
     }
 
     @Test
-    void everyProblemIsReported() {
+    void everyItemCanBeRejectedWhileTheAnswerStaysUsable() {
+        Validation validation = validate(new Answer("i1", "Groceries", 0.9), new Answer("i2", "Dining", 1.5));
+
+        assertThat(validation.valid()).isTrue();
+        assertThat(validation.byKey()).isEmpty();
+        assertThat(validation.rejected()).containsExactly(Map.entry("i1", Problem.UNKNOWN_CATEGORY),
+                Map.entry("i2", Problem.BAD_CONFIDENCE));
+    }
+
+    @Test
+    void aKeyProblemRejectsTheWholeAnswerEvenWhenItemsAreFine() {
         Validation validation = validate(new Answer("i1", "Groceries", 0.9), new Answer("i1", "Dining", 0.9),
                 new Answer("i9", "Dining", 0.9));
 
-        assertThat(validation.problems()).containsExactlyInAnyOrder(Problem.UNKNOWN_CATEGORY, Problem.DUPLICATE_KEY,
-                Problem.UNKNOWN_KEY, Problem.MISSING_KEY);
+        assertThat(validation.problems()).containsExactlyInAnyOrder(Problem.DUPLICATE_KEY, Problem.UNKNOWN_KEY,
+                Problem.MISSING_KEY);
         assertThat(validation.valid()).isFalse();
+        assertThat(validation.byKey()).isEmpty();
+        assertThat(validation.rejected()).as("nothing from an invalid answer is used, not even its rejections")
+                .isEmpty();
+    }
+
+    @Test
+    void onlyParseAndKeyProblemsRejectTheWholeAnswer() {
+        assertThat(EnumSet.allOf(Problem.class)).filteredOn(Problem::wholeAnswer).containsExactlyInAnyOrder(
+                Problem.UNPARSABLE, Problem.UNKNOWN_KEY, Problem.DUPLICATE_KEY, Problem.MISSING_KEY);
     }
 
     @Test
     void theDefaultSettingsAndTheirLimits() {
-        AiCategorizationProperties defaults = new AiCategorizationProperties(25, 500, new BigDecimal("0.70"), true);
-        assertThat(defaults.batchSize()).isEqualTo(25);
+        AiCategorizationProperties defaults = new Binder(new MapConfigurationPropertySource(Map.of()))
+                .bindOrCreate("finalysis.ai.categorization", AiCategorizationProperties.class);
+        assertThat(defaults).isEqualTo(new AiCategorizationProperties(25, 500, new BigDecimal("0.70"), false));
+        assertThat(defaults.runAfterImport()).as("off unless configured").isFalse();
 
         for (Runnable invalid : List.<Runnable>of(
                 () -> new AiCategorizationProperties(0, 500, new BigDecimal("0.70"), true),
@@ -130,6 +168,26 @@ class AnswerValidatorTest {
                 () -> new AiCategorizationProperties(25, 500, null, true))) {
             assertThatThrownBy(invalid::run)
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    void theExampleSettingsAndTheirLimits() {
+        SimilarMerchantProperties defaults = new Binder(new MapConfigurationPropertySource(Map.of()))
+                .bindOrCreate("finalysis.ai.examples", SimilarMerchantProperties.class);
+        assertThat(defaults).isEqualTo(new SimilarMerchantProperties(5, 0.65, 500, false, 0.97));
+        assertThat(defaults.directAssignment()).as("direct assignment is off unless configured").isFalse();
+
+        for (Runnable invalid : List.<Runnable>of(
+                () -> new SimilarMerchantProperties(-1, 0.65, 500, false, 0.97),
+                () -> new SimilarMerchantProperties(11, 0.65, 500, false, 0.97),
+                () -> new SimilarMerchantProperties(5, -0.1, 500, false, 0.97),
+                () -> new SimilarMerchantProperties(5, 1.1, 500, false, 1.1),
+                () -> new SimilarMerchantProperties(5, Double.NaN, 500, false, 0.97),
+                () -> new SimilarMerchantProperties(5, 0.65, -1, false, 0.97),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 0.5),
+                () -> new SimilarMerchantProperties(5, 0.65, 500, false, 1.01))) {
+            assertThatThrownBy(invalid::run).isInstanceOf(IllegalArgumentException.class);
         }
     }
 }

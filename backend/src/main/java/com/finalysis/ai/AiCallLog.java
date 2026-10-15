@@ -8,7 +8,8 @@ import org.slf4j.LoggerFactory;
  * <pre>ai call role=categorization model=&lt;id&gt; items=25 inputTokens=1984 outputTokens=471 ms=1830 outcome=OK</pre>
  * Counts only: never a prompt, response, merchant, category or exception message. A failure adds the exception's
  * class name ({@code error=SdkClientException}). Token counts the provider didn't report are written as {@code n/a},
- * never as 0, so a missing count can't pass for a free call.
+ * never as 0, so a missing count can't pass for a free call. An embedding call has no output tokens, so its line has
+ * none: <pre>ai call role=embedding model=&lt;id&gt; items=1 inputTokens=7 ms=210 outcome=OK</pre>
  */
 public final class AiCallLog {
 
@@ -36,6 +37,18 @@ public final class AiCallLog {
             log.info("ai call role={} model={} items={} inputTokens={} outputTokens={} ms={} outcome={} error={}",
                     role, model, items, count(inputTokens), count(outputTokens), millis, outcome,
                     error.getClass().getSimpleName());
+        }
+    }
+
+    /** An embedding call's line: input tokens only, since an embedding has no output tokens. */
+    public static void recordEmbedding(String role, String model, int items, Integer inputTokens, long millis,
+                                       Outcome outcome, Throwable error) {
+        if (error == null) {
+            log.info("ai call role={} model={} items={} inputTokens={} ms={} outcome={}",
+                    role, model, items, count(inputTokens), millis, outcome);
+        } else {
+            log.info("ai call role={} model={} items={} inputTokens={} ms={} outcome={} error={}",
+                    role, model, items, count(inputTokens), millis, outcome, error.getClass().getSimpleName());
         }
     }
 

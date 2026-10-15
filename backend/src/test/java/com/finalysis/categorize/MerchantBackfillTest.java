@@ -127,16 +127,17 @@ class MerchantBackfillTest {
         jdbc.update("UPDATE app_setting SET value = 'earlier rules' WHERE key = ?", MerchantCleaningService.RULES_SETTING);
         float[] vector = new float[MerchantEmbeddingRepository.DIMENSIONS];
         Arrays.fill(vector, 0.5f);
-        embeddings.upsert("TEST UNUSED MERCHANT", vector, "test-model");
-        embeddings.upsert("CORNER BEAN CAFE", vector, "test-model"); // used by the fixture
+        String hash = MerchantEmbeddingStage.sha256("ANY TEXT");
+        embeddings.upsert("TEST UNUSED MERCHANT", "test-model", hash, vector);
+        embeddings.upsert("CORNER BEAN CAFE", "test-model", hash, vector); // used by the fixture
 
         CleaningResult result = cleaning.backfill();
 
         assertThat(result.fullReclean()).isTrue();
         assertThat(result.orphanEmbeddingsRemoved()).isGreaterThanOrEqualTo(1);
         assertThat(rows(statementId)).isEqualTo(cleaned);
-        assertThat(embeddings.findByMerchant("TEST UNUSED MERCHANT")).isEmpty();
-        assertThat(embeddings.findByMerchant("CORNER BEAN CAFE")).isPresent();
+        assertThat(embeddings.find("TEST UNUSED MERCHANT", "test-model")).isEmpty();
+        assertThat(embeddings.find("CORNER BEAN CAFE", "test-model")).isPresent();
         assertThat(recordedRules()).isEqualTo(rules.fingerprint());
         assertThat(cleaning.backfill().fullReclean()).as("recorded, so the next start doesn't re-clean").isFalse();
         jdbc.update("DELETE FROM merchant_embedding WHERE merchant = 'CORNER BEAN CAFE'");

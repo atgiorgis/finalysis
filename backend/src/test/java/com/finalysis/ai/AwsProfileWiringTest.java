@@ -6,11 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.finalysis.categorize.AiCategorizationProperties;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.categorize.CategorizationPromptBuilder;
 import com.finalysis.categorize.CategorizationPromptBuilder.Candidate;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
 import com.finalysis.categorize.RedactionContext;
+import com.finalysis.categorize.SimilarMerchantProperties;
 import com.finalysis.support.IntegrationTest;
 import com.finalysis.support.NoCloudAiGuard;
 import java.math.BigDecimal;
@@ -50,14 +52,17 @@ class AwsProfileWiringTest {
     private final MockMvc mockMvc;
     private final CategorizationPromptBuilder promptBuilder;
     private final CategorizationModelClient client;
+    private final TextEmbedder embedder;
 
     AwsProfileWiringTest(ApplicationContext context, AiProperties properties, MockMvc mockMvc,
-                         CategorizationPromptBuilder promptBuilder, CategorizationModelClient client) {
+                         CategorizationPromptBuilder promptBuilder, CategorizationModelClient client,
+                         TextEmbedder embedder) {
         this.context = context;
         this.properties = properties;
         this.mockMvc = mockMvc;
         this.promptBuilder = promptBuilder;
         this.client = client;
+        this.embedder = embedder;
     }
 
     @Test
@@ -80,6 +85,17 @@ class AwsProfileWiringTest {
                 .hasValueSatisfying(strategy -> assertThat(strategy.maxAttempts()).isEqualTo(3));
         assertThat(client.serviceClientConfiguration().overrideConfiguration().apiCallTimeout())
                 .contains(Duration.ofSeconds(30));
+    }
+
+    /** Step 8: embeddings use the embedding role's id and 1024 dimensions; nothing runs by itself after an import. */
+    @Test
+    void theEmbedderAndTheAiSettingsUnderTheProfile() {
+        assertThat(embedder.enabled()).isTrue();
+        assertThat(embedder.modelId()).isEqualTo("amazon.titan-embed-text-v2:0");
+        assertThat(embedder.dimensions()).isEqualTo(1024);
+        assertThat(context.getBean(AiCategorizationProperties.class).runAfterImport())
+                .as("run-after-import is off in the aws profile too").isFalse();
+        assertThat(context.getBean(SimilarMerchantProperties.class).directAssignment()).isFalse();
     }
 
     @Test
@@ -121,6 +137,24 @@ class AwsProfileWiringTest {
         assertThat(guard().requests()).isGreaterThan(before);
         assertThat(output).containsPattern("ai call role=categorization model=us\\.anthropic\\.claude-haiku-4-5-20251001-v1:0"
                 + " items=1 inputTokens=n/a outputTokens=n/a ms=\\d+ outcome=ERROR error=\\w+");
+        assertThat(output).doesNotContain("BRAMBLEWICK", "Tests never call a cloud model");
+    }
+
+    /**
+     * Titan's client, which Spring AI builds itself, takes the context's credentials too: an embedding call is
+     * stopped by the guard before it is signed, and logged by class only.
+     */
+    @Test
+    @Order(3)
+    void anEmbeddingCallIsBlockedBeforeItIsSentAndLoggedByClassOnly(CapturedOutput output) {
+        int before = guard().requests();
+
+        assertThatThrownBy(() -> embedder.embed("BRAMBLEWICK NOODLE HOUSE")).satisfies(e -> assertThat(
+                NestedExceptionUtils.getMostSpecificCause(e)).isInstanceOf(NoCloudAiGuard.CloudCallBlockedException.class));
+
+        assertThat(guard().requests()).isGreaterThan(before);
+        assertThat(output).containsPattern("ai call role=embedding model=amazon\\.titan-embed-text-v2:0"
+                + " items=1 inputTokens=n/a ms=\\d+ outcome=ERROR error=\\w+");
         assertThat(output).doesNotContain("BRAMBLEWICK", "Tests never call a cloud model");
     }
 

@@ -81,4 +81,15 @@ finalysis:
       batch-size: 25          # items (merchant + direction) per call
       max-items-per-run: 500  # cost guard: the rest waits for the next run
       min-confidence: 0.70    # answers below it are not applied; their txns go to the review queue
-      run-after-import: true  # in the background after each import
+      # Off in every profile (no profile file overrides it): with AI on, an import never starts cloud calls by
+      # itself; run the AI with POST /api/categorization/run. True runs it in the background after each import.
+      run-after-import: false
+    # Embeddings and similar-merchant examples (CAT-03, docs/plans/phase-4.md §6, step 8 notes).
+    embedding:
+      dimensions: 1024        # must match merchant_embedding's vector(1024); checked at startup when AI is on
+    examples:
+      k: 5                    # similar merchants per item at most (0 to 10)
+      min-similarity: 0.65    # cosine similarity an example needs; step 9 sets it from the dev set
+      max-embeddings-per-run: 500  # cost guard: embedding calls per run; the rest wait for the next run
+      direct-assignment: false     # give the nearest example's category without a chat call; step 9 measures it
+      direct-min-similarity: 0.97  # how similar that example must be (used only when direct-assignment is on)

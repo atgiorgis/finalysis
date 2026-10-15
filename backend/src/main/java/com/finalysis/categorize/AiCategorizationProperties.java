@@ -11,12 +11,13 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param batchSize      items (distinct merchants and directions) per model call
  * @param maxItemsPerRun items sent per run, all batches together; the rest wait for the next run (cost guard)
  * @param minConfidence  answers below this confidence are not applied; their txns go to the review queue
- * @param runAfterImport run stage 5 in the background after each import; off, it runs only on demand
+ * @param runAfterImport run stages 4 and 5 in the background after each import. Off by default in every profile:
+ *                       the AI then runs only on demand ({@code POST /api/categorization/run})
  */
 @ConfigurationProperties("finalysis.ai.categorization")
 public record AiCategorizationProperties(@DefaultValue("25") int batchSize, @DefaultValue("500") int maxItemsPerRun,
                                          @DefaultValue("0.70") BigDecimal minConfidence,
-                                         @DefaultValue("true") boolean runAfterImport) {
+                                         @DefaultValue("false") boolean runAfterImport) {
 
     /** The prompt's keys are {@code i1}… and 25 answers fit well inside the 2,000 output tokens; 50 still would. */
     static final int MAX_BATCH_SIZE = 50;
