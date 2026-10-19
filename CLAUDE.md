@@ -71,7 +71,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 4: categorization, plan approved: docs/plans/phase-4.md (steps 1 to 9 done, with 1b; accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; step 10, docs, Postman and tag, next). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 5: analytics, not started (no plan yet). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

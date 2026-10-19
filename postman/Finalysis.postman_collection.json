@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there (the README gives the newman command, which leaves out **7. Real-file test**), or set Postman's working directory (Settings → General) to the repo root. Folders 1 to 6 use only fictional sample data; **7. Real-file test** is for manual runs with your own file, selected in Postman.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6 and **8. Categorization**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **9. Lookups**: manual lookups by id.\n- **10. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -936,7 +936,7 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('one of each, two transfer groups', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 1, unparsedUploads: 1, transferCandidates: 2, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0}));",
+                      "pm.test('one of each, two transfer groups', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 1, unparsedUploads: 1, transferCandidates: 2, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0, notTransferUncategorized: 0}));",
                       "pm.test('newest first', () => { for (let i = 1; i < body.items.length; i++) pm.expect(body.items[i - 1].since >= body.items[i].since).to.be.true; });",
                       "pm.test('kinds, CAT-08 suggestions left out', () => pm.expect(body.items.map(i => i.kind).filter(k => k !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql(['UNPARSED_UPLOAD', 'TRANSFER_CANDIDATES', 'TRANSFER_CANDIDATES', 'STATEMENT']));",
                       "const checking = Number(pm.collectionVariables.get('checkingId')), duplicate = Number(pm.collectionVariables.get('duplicateId'));",
@@ -981,7 +981,7 @@
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
                       "pm.test('only the Apex group', () => { pm.expect(body.items.length).to.eql(1); pm.expect(body.items[0].kind).to.eql('TRANSFER_CANDIDATES'); });",
-                      "pm.test('counts follow the account, not the kind', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 1, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0}));"
+                      "pm.test('counts follow the account, not the kind', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 1, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0, notTransferUncategorized: 0}));"
                     ]
                   }
                 }
@@ -1559,7 +1559,7 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('empty', () => { pm.expect(body.items.filter(i => i.kind !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql([]); pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0}); });"
+                      "pm.test('empty', () => { pm.expect(body.items.filter(i => i.kind !== 'SUGGESTED_ONE_SIDED_TRANSFER')).to.eql([]); pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 0, possibleMatches: 0, aiCategoryReviews: 0, notTransferUncategorized: 0}); });"
                     ]
                   }
                 }
@@ -1621,7 +1621,7 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('only a competing candidate', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 1, possibleMatches: 0, aiCategoryReviews: 0}));",
+                      "pm.test('only a competing candidate', () => pm.expect(_.omit(body.counts, 'suggestedOneSidedTransfers')).to.eql({statements: 0, unparsedUploads: 0, transferCandidates: 0, competingCandidates: 1, possibleMatches: 0, aiCategoryReviews: 0, notTransferUncategorized: 0}));",
                       "const item = body.items.find(i => i.kind === 'COMPETING_CANDIDATE');",
                       "pm.test('the unconfirmed Summit link', () => { pm.expect(item.kind).to.eql('COMPETING_CANDIDATE'); pm.expect(item.linkId).to.eql(Number(pm.collectionVariables.get('summitLinkId'))); pm.expect(item.key).to.eql('link-' + item.linkId); });",
                       "pm.test('the second account\\'s row competes for it', () => { pm.expect(item.competitors.map(t => t.accountId)).to.eql([Number(pm.collectionVariables.get('duplicateId'))]); pm.expect(item.pairs.length).to.eql(2); });"
@@ -2856,6 +2856,357 @@
               ]
             }
           ]
+        },
+        {
+          "name": "Categorization",
+          "item": [
+            {
+              "name": "Unknown transaction → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown source filter → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?source=BANK"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Page size over 200 → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?size=201"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();",
+                      "pm.test('names size', () => pm.expect(body.errors).to.deep.include({field: 'size', message: 'must be 1 to 200'}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Correct without a categoryId → 400",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{errTxnId}}/category",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Any txn: the request fails before anything is written.",
+                      "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
+                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();",
+                      "pm.test('names categoryId', () => pm.expect(body.errors.map(e => e.field)).to.include('categoryId'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Correct with an unknown category → 422 category-invalid",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{errTxnId}}/category",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"categoryId\": 999999}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Any txn: the request fails before anything is written.",
+                      "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
+                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('type category-invalid', () => pm.expect(body.type).to.eql('urn:finalysis:problem:category-invalid'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Bad removeRule → 400",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{errTxnId}}/category?removeRule=maybe"
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Any txn: the request fails before anything is written.",
+                      "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
+                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Rule with a bad regex → 422 rule-invalid",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"matchType\": \"REGEX\", \"pattern\": \"((\", \"categoryId\": 1}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('type rule-invalid', () => pm.expect(body.type).to.eql('urn:finalysis:problem:rule-invalid'));",
+                      "pm.test('names the pattern, never echoes it', () => { pm.expect(body.field).to.eql('pattern'); pm.expect(body.detail).to.not.include('(('); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Rule with an unknown category → 422 category-invalid",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"ZZ\", \"categoryId\": 999999}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('422', () => pm.response.to.have.status(422));",
+                      "const body = pm.response.json();",
+                      "pm.test('type category-invalid', () => pm.expect(body.type).to.eql('urn:finalysis:problem:category-invalid'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete a seeded rule → 409 rule-seeded",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{seedRuleId}}"
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/categorization/rules?source=SEED`, (err, res) => {",
+                      "    pm.collectionVariables.set('seedRuleId', res.json()[0].id);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type rule-seeded', () => pm.expect(body.type).to.eql('urn:finalysis:problem:rule-seeded'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Change a seeded rule's pattern → 409 rule-seeded",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{seedRuleId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"pattern\": \"ZZ\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/categorization/rules?source=SEED`, (err, res) => {",
+                      "    pm.collectionVariables.set('seedRuleId', res.json()[0].id);",
+                      "});"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type rule-seeded', () => pm.expect(body.type).to.eql('urn:finalysis:problem:rule-seeded'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown rule → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run with ai=maybe → 400",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/run?ai=maybe"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
         }
       ],
       "description": "Every request here is refused, and nothing is written (except the confirmed mapping change, which is restored)."
@@ -3307,7 +3658,812 @@
       ]
     },
     {
-      "name": "8. Lookups",
+      "name": "8. Categorization",
+      "description": "Phase 4 over the API, with AI **off** (no `aws` profile): runs, a correction and its full undo, \"not a transfer\" and its undo, the review-queue kinds `SUGGESTED_ONE_SIDED_TRANSFER`, `NOT_TRANSFER_UNCATEGORIZED` and `AI_CATEGORY_REVIEW`, and rules CRUD. Every AI request expects `status: OFF` and 0 calls; none can reach Bedrock. Runs after folders 1–6 on a freshly reset database; ids and expected counts are read from the API, not hard-coded.",
+      "item": [
+        {
+          "name": "Status: AI is off",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status",
+            "description": "Newman runs without the `aws` profile, so every AI request in this folder expects AI to be off."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('AI off: mode only, no provider or models', () => pm.expect(pm.response.json().ai).to.eql({mode: 'OFF'}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run without AI (ai=false)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/categorization/run?ai=false",
+            "description": "Stages 1–3 (cleaning, rules, merchant memory) only. The imports already ran them, so the counts are whatever the folders before left to do."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('rules-stage counts', () => ['merchantsCleaned', 'ruleCategorized', 'ruleCleared', 'memoryApplied'].forEach(k => pm.expect(body[k]).to.be.a('number')));",
+                  "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                  "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                  "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run with AI (ai=true): AI is off, nothing is sent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/categorization/run?ai=true",
+            "description": "Asks for the AI stage; with AI off it returns `status: OFF` and makes no call. With the `aws` profile this request would call Bedrock, so newman must run without it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                  "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                  "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });",
+                  "pm.test('rules are idempotent: a second pass changes nothing', () => pm.expect(_.pick(body, ['ruleCategorized', 'ruleCleared', 'memoryApplied'])).to.eql({ruleCategorized: 0, ruleCleared: 0, memoryApplied: 0}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run with force: still OFF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/categorization/run?force=true",
+            "description": "`force` re-asks the AI for txns it already categorized or left for review. With AI off: nothing."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                  "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                  "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Corrections",
+          "item": [
+            {
+              "name": "Pick an Apex purchase categorized by a rule",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?accountId={{apexId}}&source=RULE&isTransfer=false&size=200",
+                "description": "Finds, without hard-coding a description, the lowest-id purchase of the first merchant (by name) with two or more rule-categorized purchases on the Apex card."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('one page holds them all', () => pm.expect(body.total).to.be.at.most(200));",
+                      "pm.test('RULE txns carry their rule', () => body.items.forEach(t => { pm.expect(t.categorySource).to.eql('RULE'); pm.expect(t.ruleId).to.be.a('number'); }));",
+                      "const purchases = body.items.filter(t => t.merchant && t.amount.startsWith('-') && t.category.kind === 'EXPENSE');",
+                      "const byMerchant = _.groupBy(purchases, 'merchant');",
+                      "const merchant = Object.keys(byMerchant).sort().find(m => byMerchant[m].length >= 2);",
+                      "pm.test('a merchant with at least two purchases', () => pm.expect(merchant).to.be.a('string'));",
+                      "if (!merchant) {",
+                      "    return;",
+                      "}",
+                      "const txn = _.minBy(byMerchant[merchant], 'id');",
+                      "pm.collectionVariables.set('correctTxnId', txn.id);",
+                      "pm.collectionVariables.set('correctMerchant', merchant);",
+                      "pm.collectionVariables.set('correctMerchantQuery', encodeURIComponent(merchant));",
+                      "pm.collectionVariables.set('originalCategoryId', txn.category.id);",
+                      "pm.collectionVariables.set('originalRuleId', txn.ruleId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Pick the correction's category",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categories"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const categories = pm.response.json();",
+                      "const original = categories.find(cat => cat.id === Number(pm.collectionVariables.get('originalCategoryId')));",
+                      "const target = categories.find(cat => cat.name === (original.name === 'Shopping' ? 'Dining' : 'Shopping'));",
+                      "pm.test('an expense category other than the current one', () => { pm.expect(target.kind).to.eql('EXPENSE'); pm.expect(target.id).to.not.eql(original.id); });",
+                      "pm.collectionVariables.set('newCategoryId', target.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The merchant's transactions, before",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?merchant={{correctMerchantQuery}}&size=200"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('only that merchant', () => body.items.forEach(t => pm.expect(t.merchant).to.eql(pm.collectionVariables.get('correctMerchant'))));",
+                      "const id = Number(pm.collectionVariables.get('correctTxnId'));",
+                      "const newId = Number(pm.collectionVariables.get('newCategoryId'));",
+                      "// The correction rule covers the merchant's other money-out txns; a category you set (USER) is kept.",
+                      "const expected = body.items.filter(t => t.id !== id && t.amount.startsWith('-') && t.categorySource !== 'USER' && (!t.category || t.category.id !== newId)).length;",
+                      "pm.test('at least one other purchase will follow', () => pm.expect(expected).to.be.at.least(1));",
+                      "pm.collectionVariables.set('expectedOthersUpdated', expected);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get a transaction's category fields",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{correctTxnId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the picked txn', () => { pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('correctTxnId'))); pm.expect(body.merchant).to.eql(pm.collectionVariables.get('correctMerchant')); });",
+                      "pm.test('categorized by its rule', () => { pm.expect(body.categorySource).to.eql('RULE'); pm.expect(body.ruleId).to.eql(Number(pm.collectionVariables.get('originalRuleId'))); pm.expect(body.categorizedAt).to.be.a('string'); });",
+                      "pm.test('category id, name and kind', () => { pm.expect(body.category.id).to.eql(Number(pm.collectionVariables.get('originalCategoryId'))); pm.expect(body.category.name).to.be.a('string'); pm.expect(body.category.kind).to.eql('EXPENSE'); });",
+                      "pm.test('no AI provenance', () => pm.expect(_.pick(body, ['categoryModel', 'categoryConfidence', 'categoryPromptVersion', 'aiReviewReason'])).to.eql({categoryModel: null, categoryConfidence: null, categoryPromptVersion: null, aiReviewReason: null}));",
+                      "pm.test('not a transfer, not excluded', () => { pm.expect(body.isTransfer).to.eql(false); pm.expect(body.transferExcluded).to.eql(false); });",
+                      "pm.test('money as a string', () => pm.expect(body.amount).to.match(/^-\\d+\\.\\d{2}$/));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Set the category (applies to the merchant)",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{correctTxnId}}/category",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"categoryId\": {{newCategoryId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "CAT-04: `applyToMerchant` defaults to true, so this upserts a USER_CORRECTION rule (merchant, EXACT, money out) that outranks the seeds."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('USER category on the txn, no rule on it', () => { pm.expect(body.txn.categorySource).to.eql('USER'); pm.expect(body.txn.category.id).to.eql(Number(pm.collectionVariables.get('newCategoryId'))); pm.expect(body.txn.ruleId).to.eql(null); });",
+                      "pm.test('a correction rule was created', () => { pm.expect(body.ruleAction).to.eql('CREATED'); pm.expect(body.ruleId).to.be.a('number'); });",
+                      "pm.test('the merchant\\'s other purchases followed', () => pm.expect(_.pick(body, ['otherTxnsUpdated', 'otherTxnsKeptUser', 'otherTxnsKeptOtherRule'])).to.eql({otherTxnsUpdated: Number(pm.collectionVariables.get('expectedOthersUpdated')), otherTxnsKeptUser: 0, otherTxnsKeptOtherRule: 0}));",
+                      "pm.collectionVariables.set('correctionRuleId', body.ruleId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The correction rule",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{correctionRuleId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('merchant, exact, money out', () => pm.expect(_.pick(body, ['source', 'field', 'matchType', 'pattern', 'direction', 'active'])).to.eql({source: 'USER_CORRECTION', field: 'MERCHANT', matchType: 'EXACT', pattern: pm.collectionVariables.get('correctMerchant'), direction: 'OUT', active: true}));",
+                      "pm.test('the new category', () => pm.expect(body.category.id).to.eql(Number(pm.collectionVariables.get('newCategoryId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The merchant's other purchases follow the rule",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?merchant={{correctMerchantQuery}}&categoryId={{newCategoryId}}&source=RULE&size=200"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('as many as the correction said', () => pm.expect(body.total).to.eql(Number(pm.collectionVariables.get('expectedOthersUpdated'))));",
+                      "pm.test('each by the correction rule', () => body.items.forEach(t => pm.expect(t.ruleId).to.eql(Number(pm.collectionVariables.get('correctionRuleId')))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Remove the category and its rule (removeRule=true)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{correctTxnId}}/category?removeRule=true",
+                "description": "A full undo in one call: clears the USER category, deletes the merchant's correction rule, and re-runs the rules for the merchant."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the correction rule was deleted', () => { pm.expect(body.ruleAction).to.eql('REMOVED'); pm.expect(body.ruleId).to.eql(Number(pm.collectionVariables.get('correctionRuleId'))); });",
+                      "pm.test('the other purchases went back', () => pm.expect(body.otherTxnsUpdated).to.eql(Number(pm.collectionVariables.get('expectedOthersUpdated'))));",
+                      "pm.test('the txn is back on its seed rule', () => { pm.expect(body.txn.categorySource).to.eql('RULE'); pm.expect(body.txn.category.id).to.eql(Number(pm.collectionVariables.get('originalCategoryId'))); pm.expect(body.txn.ruleId).to.eql(Number(pm.collectionVariables.get('originalRuleId'))); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The correction rule is gone",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{correctionRuleId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Not a transfer",
+          "item": [
+            {
+              "name": "Review queue: CAT-08 suggestions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=SUGGESTED_ONE_SIDED_TRANSFER",
+                "description": "The checking statements' online transfers to the savings account, which has no statement here: a Transfer-kind rule category with no link."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('only that kind, counted', () => { body.items.forEach(i => pm.expect(i.kind).to.eql('SUGGESTED_ONE_SIDED_TRANSFER')); pm.expect(body.counts.suggestedOneSidedTransfers).to.eql(body.items.length); });",
+                      "pm.test('at least two', () => pm.expect(body.items.length).to.be.at.least(2));",
+                      "pm.test('nothing marked, no AI reviews', () => { pm.expect(body.counts.notTransferUncategorized).to.eql(0); pm.expect(body.counts.aiCategoryReviews).to.eql(0); });",
+                      "pm.test('each from a rule, keyed by txn', () => body.items.forEach(i => { pm.expect(i.categorySource).to.eql('RULE'); pm.expect(i.ruleId).to.be.a('number'); pm.expect(i.key).to.eql('txn-' + i.txn.id); }));",
+                      "const items = _.sortBy(body.items, i => i.txn.id);",
+                      "if (items.length < 2) {",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('suggestedCount', items.length);",
+                      "pm.collectionVariables.set('suggestedTxnId', items[0].txn.id);",
+                      "pm.collectionVariables.set('oneSidedTxnId', items[1].txn.id);",
+                      "pm.collectionVariables.set('oneSidedSide', items[1].txn.amount.startsWith('-') ? 'outTxnId' : 'inTxnId');"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mark a suggested transfer not a transfer",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{suggestedTxnId}}/not-transfer"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('excluded; it was on no link', () => pm.expect(pm.response.json()).to.eql({txnId: Number(pm.collectionVariables.get('suggestedTxnId')), transferExcluded: true, removedLinkId: null}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Its Transfer category is cleared",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{suggestedTxnId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('uncategorized, no rule', () => pm.expect(_.pick(body, ['category', 'categorySource', 'ruleId'])).to.eql({category: null, categorySource: null, ruleId: null}));",
+                      "pm.test('marked, not linked', () => { pm.expect(body.transferExcluded).to.eql(true); pm.expect(body.isTransfer).to.eql(false); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: NOT_TRANSFER_UNCATEGORIZED",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=NOT_TRANSFER_UNCATEGORIZED"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const id = Number(pm.collectionVariables.get('suggestedTxnId'));",
+                      "pm.test('the marked txn, waiting for your category', () => { pm.expect(body.items.length).to.eql(1); pm.expect(body.items[0].kind).to.eql('NOT_TRANSFER_UNCATEGORIZED'); pm.expect(body.items[0].key).to.eql('txn-' + id); pm.expect(body.items[0].txn.id).to.eql(id); pm.expect(body.items[0].since).to.be.a('string'); });",
+                      "pm.test('counted, and no longer a suggestion', () => { pm.expect(body.counts.notTransferUncategorized).to.eql(1); pm.expect(body.counts.suggestedOneSidedTransfers).to.eql(Number(pm.collectionVariables.get('suggestedCount')) - 1); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run the rules: no Transfer rule applies to it",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/run?ai=false"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                      "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                      "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Still uncategorized after the run",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{suggestedTxnId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('no category came back', () => pm.expect(pm.response.json().category).to.eql(null));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Undo not-a-transfer",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions/{{suggestedTxnId}}/not-transfer",
+                "description": "Restores eligibility only: nothing runs, so the txn stays uncategorized until the next rules pass."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: NOT_TRANSFER_UNCATEGORIZED is empty",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=NOT_TRANSFER_UNCATEGORIZED"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('nothing listed or counted', () => { pm.expect(body.items).to.eql([]); pm.expect(body.counts.notTransferUncategorized).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run the rules: the Transfer rule applies again",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/run?ai=false"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the unmarked txn was categorized', () => pm.expect(body.ruleCategorized).to.be.at.least(1));",
+                      "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                      "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                      "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: suggested again",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=SUGGESTED_ONE_SIDED_TRANSFER"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('back to the same count', () => pm.expect(body.counts.suggestedOneSidedTransfers).to.eql(Number(pm.collectionVariables.get('suggestedCount'))));",
+                      "pm.test('the txn is listed', () => pm.expect(body.items.map(i => i.txn.id)).to.include(Number(pm.collectionVariables.get('suggestedTxnId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Resolve a suggestion: mark it one-sided",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/transfers",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"{{oneSidedSide}}\": {{oneSidedTxnId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "CAT-08: a transfer to an account that isn't in the app. The link takes the txn out of spending and off the suggestions."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "pm.test('UNMATCHED, USER', () => { pm.expect(pm.response.json().status).to.eql('UNMATCHED'); pm.expect(pm.response.json().method).to.eql('USER'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: the one-sided txn is no longer suggested",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=SUGGESTED_ONE_SIDED_TRANSFER"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('one fewer', () => pm.expect(body.counts.suggestedOneSidedTransfers).to.eql(Number(pm.collectionVariables.get('suggestedCount')) - 1));",
+                      "pm.test('not listed', () => pm.expect(body.items.map(i => i.txn.id)).to.not.include(Number(pm.collectionVariables.get('oneSidedTxnId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Review queue: AI_CATEGORY_REVIEW (empty with AI off)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/review-queue?kind=AI_CATEGORY_REVIEW",
+                "description": "Low-confidence or invalid AI answers are listed here. With AI off there are none; `AiCategorizerTest` and `ReviewQueueApiTest` cover the listed case."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('nothing listed or counted', () => { pm.expect(body.items).to.eql([]); pm.expect(body.counts.aiCategoryReviews).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rules",
+          "item": [
+            {
+              "name": "List seeded rules",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules?source=SEED"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('some, all seeded', () => { pm.expect(body.length).to.be.above(0); body.forEach(r => pm.expect(r.source).to.eql('SEED')); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create a rule",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"  zz postman   test \", \"categoryId\": {{newCategoryId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('a USER rule with the defaults, pattern normalized', () => pm.expect(_.pick(body.rule, ['source', 'field', 'matchType', 'pattern', 'direction', 'priority', 'active'])).to.eql({source: 'USER', field: 'MERCHANT', matchType: 'CONTAINS', pattern: 'ZZ POSTMAN TEST', direction: 'ANY', priority: 0, active: true}));",
+                      "pm.test('matches nothing yet', () => pm.expect(_.pick(body, ['matchCount', 'winCount', 'shadowedBy'])).to.eql({matchCount: 0, winCount: 0, shadowedBy: null}));",
+                      "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/categorization/rules/' + body.rule.id + '$')));",
+                      "pm.collectionVariables.set('userRuleId', body.rule.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create it again → 409 rule-exists",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"ZZ POSTMAN TEST\", \"categoryId\": {{newCategoryId}}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('409', () => pm.response.to.have.status(409));",
+                      "const body = pm.response.json();",
+                      "pm.test('type rule-exists', () => pm.expect(body.type).to.eql('urn:finalysis:problem:rule-exists'));",
+                      "pm.test('names the existing rule', () => pm.expect(body.ruleId).to.eql(Number(pm.collectionVariables.get('userRuleId'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Deactivate it",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{userRuleId}}",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"active\": false}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('inactive', () => pm.expect(pm.response.json().rule.active).to.eql(false));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete it",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules/{{userRuleId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "No user rules left",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/rules?source=USER"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('none', () => pm.expect(pm.response.json()).to.eql([]));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Lookups",
       "description": "Manual lookups: fill in the id and send. Nothing is asserted. Not part of the newman run.",
       "item": [
         {
@@ -3586,6 +4742,61 @@
           }
         }
       ]
+    },
+    {
+      "name": "10. Live AI (aws profile)",
+      "description": "**Needs the `aws` profile and makes live Bedrock calls (they cost money).** Not part of the newman run: the README's command leaves this folder out, and in the Collection Runner untick it. Send by hand, after starting the backend with `SPRING_PROFILES_ACTIVE=aws`. Nothing is asserted; the console logs the mode and counts only, never merchants, descriptions or amounts.",
+      "item": [
+        {
+          "name": "Status: cloud AI on",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ai = pm.response.json().ai;",
+                  "console.log('AI mode:', ai.mode, ai.provider || '', ai.models ? JSON.stringify(ai.models) : '');",
+                  "if (ai.mode === 'OFF') {",
+                  "    console.log('AI is off: start the backend with SPRING_PROFILES_ACTIVE=aws to use this folder.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run with AI (live call)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/categorization/run?ai=true",
+            "description": "Rules, then the AI for what they left: cleaned merchant and amount only, redacted and checked by the guard before sending. Low-confidence answers go to the review queue (`AI_CATEGORY_REVIEW`)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code !== 200) {",
+                  "    console.log('Run:', pm.response.code);",
+                  "    return;",
+                  "}",
+                  "const ai = pm.response.json().ai;",
+                  "// Counts only.",
+                  "console.log(`AI run: ${ai.status}, items ${ai.itemsSelected}, sent ${ai.itemsSent}, categorized ${ai.txnsCategorized}, low confidence ${ai.itemsLowConfidence}, invalid ${ai.itemsInvalid}, blocked ${ai.redactionBlocked}, calls ${ai.calls}, tokens ${ai.inputTokens} in / ${ai.outputTokens} out`);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -3715,6 +4926,66 @@
     },
     {
       "key": "txnUncategorized",
+      "value": ""
+    },
+    {
+      "key": "correctTxnId",
+      "value": ""
+    },
+    {
+      "key": "correctMerchant",
+      "value": ""
+    },
+    {
+      "key": "correctMerchantQuery",
+      "value": ""
+    },
+    {
+      "key": "originalCategoryId",
+      "value": ""
+    },
+    {
+      "key": "originalRuleId",
+      "value": ""
+    },
+    {
+      "key": "newCategoryId",
+      "value": ""
+    },
+    {
+      "key": "expectedOthersUpdated",
+      "value": ""
+    },
+    {
+      "key": "correctionRuleId",
+      "value": ""
+    },
+    {
+      "key": "suggestedCount",
+      "value": ""
+    },
+    {
+      "key": "suggestedTxnId",
+      "value": ""
+    },
+    {
+      "key": "oneSidedTxnId",
+      "value": ""
+    },
+    {
+      "key": "oneSidedSide",
+      "value": ""
+    },
+    {
+      "key": "userRuleId",
+      "value": ""
+    },
+    {
+      "key": "errTxnId",
+      "value": ""
+    },
+    {
+      "key": "seedRuleId",
       "value": ""
     }
   ]

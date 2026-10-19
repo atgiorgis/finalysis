@@ -60,16 +60,27 @@ review queue** reads statements, then resolves every item in the review queue th
 links a card payment by hand, confirms, unlinks and relinks it, marks one-sided transfers and joins
 a possible match, accepts the statement needing review, dismisses the upload, deletes the wrong
 statement and imports it again to produce a competing candidate. **6. Errors** sends a request for
-each error the sample files can trigger; **7. Real-file test** is for your own files (below).
+each error the sample files can trigger. **8. Categorization** runs categorization with and without
+`ai` and with `force`, reads a txn's category fields, corrects a category and undoes it with its rule
+(`removeRule=true`), marks a CAT-08 suggestion not a transfer and undoes that, resolves another
+suggestion as one-sided, reads the review queue by kind, and creates, deactivates and deletes a rule.
+Its ids and expected counts come from the API, not from hard-coded descriptions.
 Setup is strict, so a second run without a reset fails.
+
+**Newman runs with AI off** (no `aws` profile). Every AI request in the run asserts `status: OFF`
+and 0 calls, so the run never reaches Bedrock. Three folders are manual and left out of the run:
+**7. Real-file test** (your own files, below), **9. Lookups** (a txn by id, coverage counts) and
+**10. Live AI (aws profile)**, which makes live Bedrock calls and needs the backend started with
+`SPRING_PROFILES_ACTIVE=aws`. In the Collection Runner, untick those three.
 
 ```sh
 scripts/reset-dev-db.sh                    # wipes the dev database; see below
-(cd backend && ./mvnw spring-boot:run)     # in another terminal
+(cd backend && ./mvnw spring-boot:run)     # in another terminal, without the aws profile
 npx newman run postman/Finalysis.postman_collection.json \
     -e postman/Finalysis-Local.postman_environment.json --working-dir . \
     --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
-    --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors"
+    --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
+    --folder "8. Categorization"
 ```
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
@@ -342,7 +353,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 
 | Method | Path | Purpose | Success | Problem types (besides 400/404) |
 |---|---|---|---|---|
-| `GET` | `/api/status` | Backend health, shown by the frontend | 200 | — |
+| `GET` | `/api/status` | Backend health, shown by the frontend, and the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner | 200 | — |
 | `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details | 200 | — |
 | `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
@@ -370,6 +381,16 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/transactions/{id}/not-transfer` | Mark a txn not a transfer: removes its link (rejecting a MATCHED pair), excludes it from detection, and clears a rule or AI category of Transfer kind (a category you set stays) | 200 `{txnId, transferExcluded, removedLinkId}` | — |
 | `DELETE` | `/api/transactions/{id}/not-transfer` | Undo it; the next detection run may link the txn, and the next rules pass may categorize it | 204 | — |
 | `GET` | `/api/review-queue` | Everything waiting for the user, across accounts; `?kind=`, `?accountId=` filter. See [Review queue](#review-queue) | 200 | — |
+| `GET` | `/api/transactions` | List txns, newest first, paged (`?page=`, `?size=` up to 200); filters `accountId`, `categoryId`, `uncategorized`, `source=RULE\|AI\|USER`, `isTransfer`, `from`, `to`, `merchant` | 200 `{items, page, size, total}` | — |
+| `GET` | `/api/transactions/{id}` | One txn: merchant, category (`id`, `name`, `kind`), `categorySource`, the rule behind a RULE category, the model and confidence behind an AI one, `aiReviewReason`, `isTransfer`, `transferExcluded` | 200 | — |
+| `PUT` | `/api/transactions/{id}/category` | `{categoryId, applyToMerchant}`: set your category (USER). By default also creates or updates a correction rule for the merchant and direction, so its other txns follow (CAT-04) | 200 `{txn, ruleId, ruleAction, otherTxnsUpdated, otherTxnsKeptUser, otherTxnsKeptOtherRule}` | `category-invalid` |
+| `DELETE` | `/api/transactions/{id}/category` | Clear your category; the rules run for the txn. `?removeRule=true` also deletes the merchant's correction rule and re-runs its rules | 200 `{txn, ruleId, ruleAction, otherTxnsUpdated}` | — |
+| `GET` | `/api/categorization/rules` | Rules in winning order; `?source=SEED\|USER\|USER_CORRECTION`, `?active=`, `?categoryId=` filter | 200 | — |
+| `GET` | `/api/categorization/rules/{id}` | One rule | 200 | — |
+| `POST` | `/api/categorization/rules` | Create a USER rule, applied at once; `matchCount`, `winCount` and `shadowedBy` say what it does | 201, `Location` | `rule-invalid`, `category-invalid`, `rule-exists` |
+| `PATCH` | `/api/categorization/rules/{id}` | Change a user rule; a seeded rule accepts only `active` | 200 | `rule-invalid`, `category-invalid`, `rule-exists`, `rule-seeded` |
+| `DELETE` | `/api/categorization/rules/{id}` | Delete a user rule; its txns are re-evaluated | 204 | `rule-seeded` |
+| `POST` | `/api/categorization/run` | Run every stage now. `?reclean=true` re-cleans merchants first, `?ai=false` skips the AI, `?force=true` asks the AI again for txns it answered or left for review | 200: rules-stage counts and an `ai` block (`status` `OFF` when AI is off) | — |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
   decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
@@ -429,6 +450,10 @@ returned.
 | 409 | `already-resolved` | Dismissing an unparsed upload that is already RESOLVED or DISMISSED; `detail` names the state | Nothing to do |
 | 422 | `transfer-invalid` | A transfer action breaks a link rule: same account, wrong signs (out must be negative, in positive), amounts not equal and opposite, or no side given. `detail` names the rule, never an amount | Pick the right pair; amounts must match to the cent |
 | 409 | `transfer-conflict` | A txn is already on a link (`linkId` names it), or a join names a link that is no longer one-sided with that side | Unlink first (`DELETE /api/transfers/{linkId}`); nothing is replaced silently. For a join, re-read the review queue |
+| 422 | `rule-invalid` | A rule pattern is empty or over 200 characters once normalized, or a REGEX that doesn't compile. `field` names it; the pattern is never echoed | Fix the pattern |
+| 422 | `category-invalid` | A correction or a rule names a category that doesn't exist | Pick one from `GET /api/categories` |
+| 409 | `rule-exists` | An active user rule with the same field, match type, pattern and direction exists; `ruleId` names it | Change that rule instead |
+| 409 | `rule-seeded` | Deleting a seeded rule, or changing anything on it but `active` | Deactivate it (`PATCH {"active": false}`), or write a user rule, which outranks every seed |
 | 500 | — | Unexpected error; generic `detail` | Check the server log (it holds no statement data) and report it |
 
 ## Importing statements
@@ -728,15 +753,14 @@ columns, and the header signature.
 - **Descriptions may contain identifiers.** Descriptions are stored exactly as printed (they feed
   the fingerprint), so a full account number in an OFX `NAME`/`MEMO`, a masked number in a
   transfer description or a person's name in a Zelle payment stays in `raw_description`. They are
-  never logged or returned in errors, and no AI runs yet; SEC-08 redacts them before any cloud
-  call in Phase 4.
+  never logged or returned in errors, and redacted before any cloud call (SEC-08, see
+  [What leaves the machine](#what-leaves-the-machine)).
 - **File bytes are discarded** after parsing until encrypted storage (SEC-04, Phase 8). Only the
   hash, the file name and each row's source line are kept, so a statement can't be re-parsed or
   downloaded later; import the original file again instead.
 - **Deleting a statement doesn't re-run its successor's continuity check**, which may have used it as
   the predecessor; the successor keeps its stored result.
-- **Not yet:** PDF statement parsing (Phase 3b, paused), merchant cleaning and categorization
-  (Phase 4), non-USD statements. Transfer limitations are listed under
+- **Not yet:** PDF statement parsing (Phase 3b, paused), non-USD statements. Transfer limitations are listed under
   [Transfers](#transfer-limitations).
 
 ## Transfers and the review queue
@@ -824,7 +848,8 @@ it can't go stale; nothing is stored.
 ```json
 {
   "counts": { "statements": 1, "unparsedUploads": 0, "transferCandidates": 1,
-              "competingCandidates": 0, "possibleMatches": 0 },
+              "competingCandidates": 0, "possibleMatches": 0, "suggestedOneSidedTransfers": 0,
+              "aiCategoryReviews": 0, "notTransferUncategorized": 0 },
   "items": [
     { "kind": "TRANSFER_CANDIDATES", "key": "txn-81",
       "txns": [ { "id": 81, "accountName": "Checking", "amount": "-200.00", "rawDescription": "…", "…": "…" }, "…" ],
@@ -840,13 +865,16 @@ it can't go stale; nothing is stored.
   that touch that account on any side (counts too); an unknown id gives an empty queue.
 - Transfer items carry the txns as in `GET /api/transfers`, descriptions included.
 
-| `kind` | Listed when | Resolve it with |
-|---|---|---|
-| `STATEMENT` | A NEEDS_REVIEW statement not yet reviewed | `POST /api/statements/{id}/review` (accept: status and warnings are kept), or `DELETE /api/statements/{id}` |
-| `UNPARSED_UPLOAD` | A PDF no parser recognized, still open | `POST /api/unparsed-uploads/{id}/dismiss`, or upload it again once a parser exists |
-| `TRANSFER_CANDIDATES` | A candidate group detection couldn't resolve (`pairs` lists the possible pairs) | Link the right pair (`POST /api/transfers`), or mark a txn not a transfer or one-sided |
-| `COMPETING_CANDIDATE` | An unconfirmed AUTO link whose txn another, later txn would also match (`competitors`) | Confirm the link, or unlink it and run detection so the freed txn re-resolves, or mark the competitor not a transfer |
-| `POSSIBLE_MATCH` | Two one-sided links, money out and money in, equal and opposite, in different accounts and within the window, not rejected | `POST /api/transfers/join` (one confirmed link replaces both) or `POST /api/transfers/join/dismiss` (the pair is rejected; both links stay) |
+| `kind` | Phase | Listed when | Resolve it with |
+|---|---|---|---|
+| `STATEMENT` | 3 | A NEEDS_REVIEW statement not yet reviewed | `POST /api/statements/{id}/review` (accept: status and warnings are kept), or `DELETE /api/statements/{id}` |
+| `UNPARSED_UPLOAD` | 3 | A PDF no parser recognized, still open | `POST /api/unparsed-uploads/{id}/dismiss`, or upload it again once a parser exists |
+| `TRANSFER_CANDIDATES` | 3 | A candidate group detection couldn't resolve (`pairs` lists the possible pairs) | Link the right pair (`POST /api/transfers`), or mark a txn not a transfer or one-sided |
+| `COMPETING_CANDIDATE` | 3 | An unconfirmed AUTO link whose txn another, later txn would also match (`competitors`) | Confirm the link, or unlink it and run detection so the freed txn re-resolves, or mark the competitor not a transfer |
+| `POSSIBLE_MATCH` | 3 | Two one-sided links, money out and money in, equal and opposite, in different accounts and within the window, not rejected | `POST /api/transfers/join` (one confirmed link replaces both) or `POST /api/transfers/join/dismiss` (the pair is rejected; both links stay) |
+| `SUGGESTED_ONE_SIDED_TRANSFER` | 4 | A txn in a Transfer-kind category (from a rule, the AI or you) with no transfer link (CAT-08) | Mark it one-sided (`POST /api/transfers` with one side), link it, mark it not a transfer, or correct its category |
+| `AI_CATEGORY_REVIEW` | 4 | The AI looked at the txn and left it uncategorized: `reason` is `LOW_CONFIDENCE` (below 0.80) or `INVALID_ANSWER` (CAT-02) | Give it a category (`PUT /api/transactions/{id}/category`) |
+| `NOT_TRANSFER_UNCATEGORIZED` | 4 | A txn you marked not a transfer that has no category; no Transfer-kind rule or AI answer applies to it any more | Give it a category (that correction makes no merchant rule), or undo the mark |
 
 Unconfirmed AUTO links are not queue items by themselves (every month's card payments would flood
 it); list them with `GET /api/transfers?confirmed=false`. **Deleting a statement** removes its rows
@@ -858,7 +886,8 @@ RESOLVED.
 ### Transfer limitations
 
 - **One-sided transfers count as spending until you mark them.** Detection doesn't read
-  descriptions; from Phase 4, categorization suggests them in the review queue (CAT-08).
+  descriptions; categorization suggests them in the review queue (`SUGGESTED_ONE_SIDED_TRANSFER`,
+  CAT-08).
 - **Coincidental pairs are linked.** A −42.00 purchase on checking and an unrelated +42.00 refund
   on a card within the window pass every rule. The link is AUTO and unconfirmed; unlinking it once
   rejects the pair for good.
@@ -871,6 +900,91 @@ RESOLVED.
   be linked yet; that needs split transactions (ACC-02).
 - An unparsed upload whose resolving statement was deleted before V11 reads as DISMISSED (it can't
   be told apart).
+
+## Categorization
+
+Requirements CAT-01 to CAT-05, CAT-08, SEC-01, SEC-02, SEC-08, AI-01, AI-03 and AI-06; the design is in
+[docs/plans/phase-4.md](docs/plans/phase-4.md).
+
+### How categorization works
+
+Every txn goes through these stages in order. Stages 1–3 are plain Java and SQL and run synchronously
+after each import (after transfer detection), so the import's response already has merchants and rule
+categories. An import never fails because of categorization.
+
+1. **Merchant cleaning.** The raw description is kept exactly as printed (it feeds the fingerprint);
+   a cleaned copy goes to `txn.merchant`: processor prefixes, store numbers and reference tokens
+   removed, upper case. Person-to-person payments also get a `counterparty`. The patterns are data in
+   `merchant-cleaning.yml`, not code.
+2. **Rules.** Merchant patterns (EXACT, PREFIX, CONTAINS or REGEX, optionally by direction) assign a
+   category. Your rules and corrections outrank every seeded rule. Rules are recomputed on every
+   pass, and a category you set (`USER`) is never overwritten.
+3. **Merchant memory.** An uncategorized txn whose merchant and direction already have an AI answer
+   reuses it, so a merchant goes to the model once.
+4. **AI, only for what is left** (when AI is on). Each remaining merchant and direction becomes one
+   item: the cleaned merchant and the latest amount, nothing else. The **redactor** strips account
+   numbers, last fours, reference and confirmation numbers, emails, phone numbers, account and
+   institution names and location tails; person-to-person payments are never sent. The **payload
+   guard** then checks every outgoing string against an allowlist and drops anything that fails (fails
+   closed, counted as `redactionBlocked`). Merchants go inside a delimited block as JSON-escaped data,
+   never as instructions, and the answer must be a category from the list, for a key that was asked.
+   Txns on a transfer link and txns you marked not a transfer are never sent.
+5. **Review.** An answer at or above `min-confidence` (0.80) is applied as `AI`, with its model,
+   confidence and prompt version. Below it, or after two invalid answers, the txn stays uncategorized
+   and goes to the review queue (`AI_CATEGORY_REVIEW`). Your correction (`PUT …/category`) wins, and
+   by default becomes a rule for the merchant, so its other txns follow.
+
+Categorization also feeds the review queue with Transfer-kind txns that have no link
+(`SUGGESTED_ONE_SIDED_TRANSFER`), and with txns you marked not a transfer that have no category
+(`NOT_TRANSFER_UNCATEGORIZED`).
+
+### Turning on cloud AI
+
+AI is **off by default**: with no profile, stages 1–3 run, the AI stage does nothing, and
+`GET /api/status` returns `"ai": {"mode": "OFF"}`. Cloud AI through Amazon Bedrock is enabled only
+explicitly, with the `aws` profile:
+
+```sh
+cd backend && SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
+```
+
+- Credentials come from the AWS CLI profile `finalysis` (override with `FINALYSIS_AWS_PROFILE`), in
+  `~/.aws`, never in the repo or `.env`. Region `us-east-1`; models in
+  `backend/src/main/resources/application-aws.yml` (Claude Haiku 4.5 for categorization, Titan Text
+  Embeddings V2 for similar merchants).
+- **The UI shows a banner** while cloud AI is on.
+- **No call happens by itself.** `run-after-import` is false: run the AI with
+  `POST /api/categorization/run`. Each run is capped (`max-items-per-run`, `max-embeddings-per-run`),
+  and every call logs its token counts.
+
+### What leaves the machine
+
+In cloud mode, only the redacted cleaned merchant and the amount, per item, plus the category names;
+when similar-merchant examples apply, their redacted merchants and categories; and to the embedding
+model, the redacted merchant alone. Never the raw description, account names or numbers, counterparties, dates, balances or file contents.
+`OutboundPayloadTest` captures every request a fake model receives and checks it field by field;
+`PromptBuilderTest` and `AiCategorizerTest` check that a hostile description stays inert data and that a
+model "obeying" it is rejected.
+
+### Accuracy
+
+Measured on synthetic sets with a frozen holdout (CAT-05). On the **holdout** (150 rows, evaluated
+once): rules only **44.7%**; rules + AI **93.3%** overall, **97.9%** of the categorized rows right,
+3 wrong and 7 left for review, for about $0.01. Details, the dev-set numbers and the method:
+[Phase 4 categorization accuracy](docs/eval/phase-4-accuracy.md).
+
+### Categorization limitations
+
+- **A confident mistake isn't caught.** The 3 wrong holdout rows (a phone bill as Subscriptions
+  instead of Utilities) were answered at 0.85–0.92; only your correction fixes them, and an AI answer
+  is never revisited automatically.
+- **Similar-merchant examples and direct assignment are unmeasured.** No eval item had an example
+  above the similarity floor.
+- **Merchant cleaning is US-shaped** (state codes, ACH formats); other countries need data in the YAML.
+- **A rule matches by merchant, not amount**, and bank-provided categories are ignored.
+- **An unlinked Transfer-kind txn counts as spending** until you resolve its review item; how totals
+  treat categories is Phase 5.
+- Titan embeddings use the AWS SDK's default retries, one merchant per call.
 
 ## Security
 
@@ -906,7 +1020,9 @@ Don't raise `org.springframework.web` or `org.hibernate` logging to DEBUG or TRA
 statements: the framework then logs request and response bodies and SQL bind values. The app's
 own packages (`com.finalysis`) are safe at DEBUG. These rules are covered by
 `SensitiveDataLeakTest`, `UploadHardeningTest`, `MultipartDiskTest` and `ExposureTest`.
-`SensitiveDataLeakTest` also covers every transfer, review and review-queue error path.
+`SensitiveDataLeakTest` also covers every transfer, review and review-queue error path, and the
+transaction and rules error paths. What cloud AI may receive is under
+[What leaves the machine](#what-leaves-the-machine).
 
 ## Sample data
 

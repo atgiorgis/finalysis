@@ -1,6 +1,6 @@
 # Phase 4 plan: categorization
 
-Status: **approved** (2026-10-14), with the answers under "Decisions at approval" (§15), which
+Status: **complete** (2026-10-19; step 10 notes). Approved 2026-10-14, with the answers under "Decisions at approval" (§15), which
 override anything older in this file. Branch `v1`, starting after tag `phase-3c-done` and the V12
 duplicate-account fix (`c851365`). Requirements as of `docs/requirements.md` v1.32.
 
@@ -777,7 +777,7 @@ moves before AI wiring. Reasons:
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Done: "Phase 4 step 8: embeddings and similar-merchant examples" (notes below) |
 | 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Done: 9a "Phase 4 step 9a: accuracy evaluation harness"; 9c "Phase 4 step 9c: eval diagnostics and min-confidence 0.80"; dev and holdout results committed; 9d "Phase 4 step 9d: accuracy report and the not-transfer category fix" (notes below; report `docs/eval/phase-4-accuracy.md`) |
-| 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
+| 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Done: "Phase 4 step 10: close-out" (notes below). The tag `phase-4-done` is yours, after your newman run |
 
 ### Step 1 notes
 
@@ -1758,6 +1758,46 @@ Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman.
 
 Backend tests 2,181 → 2,198 (+17); frontend 4.
 
+### Step 10 notes
+
+Built from the step 10 prompt. **No live call was made, and newman was not run** (you run it on a reset database);
+nothing touched the dev database.
+
+**Postman.**
+- New **8. Categorization**, part of the newman run: status shows `ai: {mode: OFF}`; runs with `ai=false`,
+  `ai=true` and `force=true`, each asserting `ai.status` `OFF`, 0 items, calls, retries and tokens, and embeddings
+  `OFF` with 0 calls (the second run also asserts the rules pass is idempotent); **Corrections**: a txn's category
+  fields, a correction with its rule, the merchant's other txns following it, and the full undo
+  (`removeRule=true`) with the rule gone; **Not a transfer**: a CAT-08 suggestion marked not a transfer (category
+  cleared, listed as `NOT_TRANSFER_UNCATEGORIZED`, still uncategorized after a rules run), undone (no longer listed,
+  a rules run makes it a suggestion again), another suggestion resolved as one-sided, and `AI_CATEGORY_REVIEW` empty;
+  **Rules**: list seeds, create (normalized pattern, `matchCount` 0), `409 rule-exists`, deactivate, delete.
+- **Ids and expected counts come from the API**, not from descriptions: the correction picks the first merchant by
+  name with two or more rule-categorized purchases on the Apex card, and counts the others the rule will move
+  before correcting; the not-transfer requests take the two lowest-id suggestions.
+- **6. Errors** gains a **Categorization** subfolder: unknown txn and rule (404), bad `source`, `size` 201, a
+  correction without `categoryId` and a bad `removeRule` (400), `category-invalid` (correction and rule),
+  `rule-invalid` (bad regex), `rule-seeded` (delete and pattern change), a bad `ai` (400). Requests that need an id
+  fetch it in a pre-request script; none writes anything.
+- **Folder 4's exact review-queue counts** now include `notTransferUncategorized: 0` (four checks). Since step 9d
+  added the count, they would have failed.
+- **8. Lookups** is now **9. Lookups**. New manual **10. Live AI (aws profile)**: status and one live run, logging
+  counts only, asserting nothing. 7, 9 and 10 are outside the newman run; the collection description and the README
+  say so and how (leave out their `--folder`, or untick them in the Collection Runner).
+- Every script was syntax-checked with Node (170 scripts) and every JSON body parsed; the folder itself is unrun
+  until your newman run.
+
+**Docs.** README: the Postman section (new folder, AI-off rule, the newman command with `--folder
+"8. Categorization"`), the API table (transactions, rules, run, the status `ai` block), the error catalogue
+(`rule-invalid`, `category-invalid`, `rule-exists`, `rule-seeded`), every review-queue kind with its phase, and a
+**Categorization** section: how it works (cleaning → rules → merchant memory → AI with redaction and the guard →
+review), turning on cloud AI, what leaves the machine, the holdout headline linked to
+`docs/eval/phase-4-accuracy.md`, and limitations. Requirements v1.45: CAT-01 to CAT-05, CAT-08, SEC-01 and SEC-08
+Done with their evidence; AI-01, AI-03, AI-06 and SEC-02 keep Planned with their Phase 4 part noted done, since
+their remaining parts belong to Phases 6, 8 and 10 (as ING-02 and SEC-11 were handled in Phase 3).
+
+Backend tests 2,198 (unchanged; no Java change); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1817,6 +1857,24 @@ At approval, requirements v1.32 records:
   the holdout). Whether they help is unmeasured.*
 - **Titan embeds one merchant per call.** A first import with many new merchants takes longer in the
   background.
+
+---
+
+## Backlog (after Phase 4)
+
+Open items at close-out, for a later phase to pick up:
+
+- **Utilities vs Subscriptions for phone and internet bills.** The holdout's only errors (3 rows, one merchant,
+  0.85–0.92). A seed rule or prompt change can be tuned on dev, but re-measuring needs a **new holdout set**: the
+  current one has been evaluated and is spent.
+- **Examples and direct assignment are unproven.** No item on dev or the holdout had an example above the 0.65
+  floor, because the synthetic sets give each merchant distinct names. Measuring them needs an eval set with
+  real-style merchant variants (the same business under several descriptors).
+- **Titan embeddings use the AWS SDK's default retries**, not the chat client's strategy (step 8 notes).
+- **Real-data review rate of about 32% at 0.80** (the owner's informal spot check): a lot of manual review. Worth
+  revisiting once corrections accumulate, with a labelled sample rather than the holdout.
+- **One real statement failed reconciliation**; the cause is not yet reported. Needs a synthetic reproduction
+  before any fix, since real statements never enter the repo.
 
 ---
 
