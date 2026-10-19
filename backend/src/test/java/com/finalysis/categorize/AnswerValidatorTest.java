@@ -156,7 +156,7 @@ class AnswerValidatorTest {
     void theDefaultSettingsAndTheirLimits() {
         AiCategorizationProperties defaults = new Binder(new MapConfigurationPropertySource(Map.of()))
                 .bindOrCreate("finalysis.ai.categorization", AiCategorizationProperties.class);
-        assertThat(defaults).isEqualTo(new AiCategorizationProperties(25, 500, new BigDecimal("0.70"), false));
+        assertThat(defaults).isEqualTo(new AiCategorizationProperties(25, 500, new BigDecimal("0.80"), false));
         assertThat(defaults.runAfterImport()).as("off unless configured").isFalse();
 
         for (Runnable invalid : List.<Runnable>of(

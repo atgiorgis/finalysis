@@ -3,6 +3,7 @@ package com.finalysis.support;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,6 +15,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.env.PropertySource;
+import org.springframework.core.io.ClassPathResource;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -80,6 +84,25 @@ class EvalExclusionTest {
         EnabledIfSystemProperty enabled = eval.getAnnotation(EnabledIfSystemProperty.class);
         assertThat(enabled.named()).isEqualTo(NoCloudAiGuard.EVAL_PROPERTY);
         assertThat(enabled.matches()).isEqualTo("true");
+    }
+
+    /**
+     * Step 9c: min-confidence is 0.80 in application.yml, in the properties record's default, and in the eval's
+     * default (the record's default is checked in AnswerValidatorTest), so a dev rerun with no -D measures what the
+     * app does. Direct assignment stays off, its threshold at 0.97.
+     */
+    @Test
+    void theEvalDefaultsAreTheAppsSettings() throws IOException {
+        Element properties = child(pom.getDocumentElement(), "properties");
+        PropertySource<?> yml = new YamlPropertySourceLoader().load("application.yml",
+                new ClassPathResource("application.yml")).getFirst();
+
+        assertThat(new BigDecimal(text(properties, "eval.min-confidence"))).isEqualByComparingTo("0.80");
+        assertThat(new BigDecimal(yml.getProperty("finalysis.ai.categorization.min-confidence").toString()))
+                .isEqualByComparingTo("0.80");
+        assertThat(yml.getProperty("finalysis.ai.examples.direct-assignment")).isEqualTo(false);
+        assertThat(Double.parseDouble(text(properties, "eval.direct-min-similarity"))).isEqualTo(0.97);
+        assertThat(yml.getProperty("finalysis.ai.examples.direct-min-similarity")).isEqualTo(0.97);
     }
 
     /** No other test class carries the eval tag, so no other test is lifted out of {@link NoCloudAiGuard}. */

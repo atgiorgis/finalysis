@@ -2,6 +2,7 @@ package com.finalysis.categorize.eval;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import com.finalysis.categorize.CategorizationPromptBuilder;
 import com.finalysis.categorize.MerchantCleaner;
@@ -15,6 +16,8 @@ import com.finalysis.categorize.eval.EvalRunner.EvalInputs;
 import com.finalysis.categorize.eval.EvalRunner.EvalResult;
 import com.finalysis.categorize.eval.EvalRunner.Variant;
 import com.finalysis.categorize.eval.EvalRunner.VariantResult;
+import com.finalysis.categorize.eval.ExampleDiagnostics.FloorCount;
+import com.finalysis.categorize.eval.ExampleDiagnostics.ItemNeighbours;
 import com.finalysis.support.AiIntegrationTest;
 import com.finalysis.support.FakeChatModel;
 import com.finalysis.support.FakeEmbeddingModel;
@@ -244,6 +247,46 @@ class EvalRunnerTest {
                 .as("an empty block is still a few characters").isLessThan(c.examples().estimatedSharePct());
     }
 
+    /**
+     * Step 9c diagnostics: C and D scan the embeddings they left. The money-out items see the deli (RULE, Dining) as
+     * eligible: VELLICOTT at 0.98, ORRISWICK at 0.80; BRISKWATER and MOSSGRAVE only at the fake's hashed, near-zero
+     * similarities. The payroll (money in) and the Zelle payment (never embedded) are never eligible for them.
+     */
+    @Test
+    void theNearestExampleOfEachItemIsScannedInCAndD() {
+        EvalResult result = runner.run(set, INPUTS, PRICES);
+        int calls = chat.prompts().size();
+
+        assertThat(variant(result, Variant.A).neighbours()).isNull();
+        assertThat(variant(result, Variant.B).neighbours()).as("B has no embeddings").isNull();
+        for (Variant variant : List.of(Variant.C, Variant.D)) {
+            ExampleDiagnostics n = variant(result, variant).neighbours();
+            assertThat(n.floor()).as(variant.name()).isEqualByComparingTo("0.65");
+            assertThat(n.items()).as("every item sent or assigned directly").isEqualTo(4);
+            assertThat(n.withoutExample()).isZero();
+            assertThat(nearest(n, "VELLICOTT").doubleValue()).isCloseTo(0.98, within(0.001));
+            assertThat(nearest(n, "ORRISWICK").doubleValue()).isCloseTo(0.80, within(0.001));
+            assertThat(nearest(n, "BRISKWATER").doubleValue()).isLessThan(0.5);
+            assertThat(nearest(n, "MOSSGRAVE").doubleValue()).isLessThan(0.5);
+            assertThat(n.perItem()).allSatisfy(item -> assertThat(item.direction()).isEqualTo(-1));
+            assertThat(n.floorCounts()).extracting(FloorCount::items).containsExactly(2, 2, 2, 2);
+            assertThat(n.floorCounts().getLast().items()).as("at the configured floor, what the app counted (in D, "
+                    + "VELLICOTT is direct, not an item with examples)").isEqualTo(variant(result, variant).usage()
+                    .itemsWithExamples() + variant(result, variant).usage().itemsDirect());
+            assertThat(n.histogram().get(19).items()).as("VELLICOTT at 0.98").isOne();
+            assertThat(n.histogram().get(16).items()).as("ORRISWICK at 0.8000 as reported").isOne();
+        }
+        assertThat(variant(result, Variant.D).neighbours().perItem())
+                .filteredOn(item -> item.merchant().contains("VELLICOTT")).extracting(ItemNeighbours::outcome)
+                .containsExactly("DIRECT");
+        assertThat(chat.prompts()).as("the scan makes no call").hasSize(calls);
+    }
+
+    private static BigDecimal nearest(ExampleDiagnostics diagnostics, String word) {
+        return diagnostics.perItem().stream().filter(item -> item.merchant().contains(word)).findFirst()
+                .orElseThrow().nearestSimilarity();
+    }
+
     @Test
     void anUnpricedModelHasNoCostRatherThanAGuess() {
         EvalResult result = runner.run(set, INPUTS, new EvalPrices("none", Map.of()));
@@ -334,12 +377,19 @@ class EvalRunnerTest {
                 .isEqualTo("0.97");
         assertThat(written.get("result").get("variants")).hasSize(4);
         assertThat(written.get("result").get("variants").get(1).get("rows")).hasSize(9);
+        JsonNode neighbours = written.get("result").get("variants").get(2).get("neighbours");
+        assertThat(neighbours.get("perItem")).hasSize(4);
+        assertThat(neighbours.get("perItem").get(0).has("nearestSimilarity")).isTrue();
+        assertThat(neighbours.get("perItem").get(0).has("examplesAboveFloor")).isTrue();
+        assertThat(neighbours.get("floorCounts")).hasSize(4);
+        assertThat(written.get("result").get("variants").get(1).get("neighbours").isNull()).isTrue();
         assertThat(written.get("result").get("variants").get(1).get("rows").get(6).get("confidence").decimalValue())
                 .as("MOSSGRAVE's confidence is saved although it wasn't applied").isEqualByComparingTo("0.55");
 
         String markdown = Files.readString(files.get(1));
         assertThat(markdown).contains("# Categorization eval: harness", "## Summary", "## Confidence",
-                "## Threshold sweep", "## Examples", "## Settings", "B: rules + AI, no examples",
+                "## Threshold sweep", "## Examples", "## Nearest examples", "| 0.65-0.70 |", "| 0.50 | 2 | 2 |",
+                "Diagnostics of the examples feature, not accuracy", "## Settings", "B: rules + AI, no examples",
                 "D: rules + AI + examples + direct assignment", "0.0007");
         assertThat(report.consoleSummary()).contains("| Variant | Status | Coverage", "Sweep, B");
         assertThatThrownBy(() -> report.write(dir)).isInstanceOf(IllegalStateException.class)

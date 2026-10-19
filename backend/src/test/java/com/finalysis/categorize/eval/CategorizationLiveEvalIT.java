@@ -26,7 +26,7 @@ import org.springframework.test.context.ActiveProfiles;
  * {@code -D}{@value NoCloudAiGuard#EVAL_PROPERTY}{@code =true}, the only switch that lifts {@link NoCloudAiGuard} for
  * this class.
  * <pre>
- * cd backend &amp;&amp; ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.70 \
+ * cd backend &amp;&amp; ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.80 \
  *     -Deval.direct-min-similarity=0.97
  * cd backend &amp;&amp; ./mvnw test -Pai-eval -Deval.set=holdout -Deval.holdout.confirm=true \
  *     -Deval.min-confidence=&lt;chosen on dev&gt; -Deval.direct-min-similarity=&lt;chosen on dev&gt;

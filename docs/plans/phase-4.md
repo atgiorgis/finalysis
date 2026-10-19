@@ -773,7 +773,7 @@ moves before AI wiring. Reasons:
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Done: "Phase 4 step 8: embeddings and similar-merchant examples" (notes below) |
-| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | In progress: 9a "Phase 4 step 9a: accuracy evaluation harness" (notes below); live runs and settings next |
+| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | In progress: 9a "Phase 4 step 9a: accuracy evaluation harness"; 9c "Phase 4 step 9c: eval diagnostics and min-confidence 0.80" (notes below); dev rerun, holdout and `CategorizationAccuracyTest` next |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
 
 ### Step 1 notes
@@ -1349,7 +1349,8 @@ provenance with the category.
   reviewed txns aren't selected again.
 - **`min-confidence` 0.70**, proposed: the prompt asks for a value below 0.5 when the name doesn't say what the
   business sells, so 0.70 leaves out unsure answers and the band just above them. Model confidences aren't
-  calibrated; step 9 should set it from the dev set (accuracy above and below the threshold).
+  calibrated; step 9 should set it from the dev set (accuracy above and below the threshold). *Step 9c: set to
+  0.80 from the dev run (step 9c notes).*
 
 **Retries (AWS SDK only).** Spring AI's Bedrock Converse model uses a `BedrockRuntimeClient` bean when one exists.
 `BedrockClientConfiguration` (active only when `spring.ai.model.chat=bedrock-converse`) builds it as Spring AI would
@@ -1458,8 +1459,7 @@ embedding call stopped by `NoCloudAiGuard` before it is signed. No ArchUnit chan
 `com.finalysis.ai.bedrock` could send through the shared client, inside the existing exemption.
 
 *Step 8 review:* accepted as a known limitation, with no subclass: embedding calls keep the AWS SDK's default
-retries. The local model replaces this path (the review said Phase 8; this plan's scope note puts the `local`
-profile in Phase 10). See §13.
+retries. The local model replaces this path in Phase 10 (the `local` profile, per this plan's scope note). See §13.
 
 **Direct assignment (off).** `finalysis.ai.examples.direct-assignment` (false) and `direct-min-similarity` (0.97): an
 item whose nearest example is at least that similar takes its category without a chat call. Such a row is an AI
@@ -1629,6 +1629,65 @@ Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman, dev or h
 
 Backend tests 2,139 → 2,173 (+34); frontend 4.
 
+### Step 9c notes
+
+Built from the step 9c prompt: eval diagnostics and the threshold decision, after your dev run at `88f37ee`. **No live
+call was made and no accuracy was computed**; the numbers below are from your run. Step 9 stays in progress.
+
+**The dev run (yours, at `88f37ee`).** Rules only: 87.2% overall. B, C and D identical: 97.3% overall, 3 wrong AI
+answers (confidence 0.70 to 0.75), 1 in review, 19 answered rows. Items with examples was 0 in C and D, so neither
+tested the examples feature, and direct assignment had nothing to assign. Its result files were not committed and are
+deleted here; you rerun dev on this commit.
+
+**Decisions (from the prompt).**
+
+| Setting | Was | Now | Why | Where |
+|---|---|---|---|---|
+| `finalysis.ai.categorization.min-confidence` | 0.70 | **0.80** | Every dev mistake was at 0.70 to 0.75. In the run's sweep, 0.80 has 0 wrong and 6 in review (overall 95.9%, against 97.3% at 0.70): it gives up 2 right answers to drop 3 wrong ones. A txn in review costs one correction, which becomes a rule; a wrong category is silent and goes into totals. Review is preferred over a wrong category | `application.yml`, the `AiCategorizationProperties` default, the pom's `eval.min-confidence` default |
+| Direct assignment | off, 0.97 | unchanged | The dev run had no examples at all, so it measured nothing | — |
+| The `local` profile | "Phase 8" in the step 8 note | Phase 10, as the scope note says | Corrected | step 8 notes |
+
+**How much 0.80 rests on.** 19 AI answers, one run, one model, temperature 0; the 0.70 to 0.80 band held 5 of them.
+That is too few to call the threshold calibrated: it is a first setting chosen from the direction of the mistakes,
+and the holdout run reports it without moving it (choosing it there would be tuning on the holdout). It goes on the
+§13 list.
+
+**Diagnostics (`ExampleDiagnostics`, eval harness only).** C and D sent no examples, and the run could not say why.
+After each of C and D, before the next variant clears the embeddings, the harness scans what the variant left: for
+every item sent to the model or assigned directly (outcomes applied, low confidence, invalid, direct), the similarity
+of every **eligible example** (same embedding model, not the item's own merchant, a USER or RULE category in the item's
+direction, as the app's query requires). The scan is exact (`ELIGIBLE_SIMILARITIES_SQL`, no `ORDER BY ... LIMIT`, so
+no index), so it can only see as much as the app or more: the app asks the HNSW index for the 40 nearest. Per item,
+the JSON gains `nearestSimilarity` (4 places; null with no eligible example), `eligibleExamples` and
+`examplesAboveFloor` (at or above the configured `min-similarity`, `>=` as the app does). The Markdown gains "Nearest
+examples": items, items with no eligible example, items and examples at or above the floor; a histogram of the
+nearest similarity in 20 bands of 0.05 (below 0 in the first, 1.0 in the last, on the reported value so an item shown
+as 0.8000 is in 0.80-0.85); and how many items would get at least one example at floors 0.50, 0.55, 0.60 and 0.65.
+At the configured floor that count equals the run's own `itemsWithExamples` plus `itemsDirect` (tested). Nothing in
+`categorize` changed; the scan is read-only and makes no call.
+
+**Scenario run: skipped.** The prompt asked for `-Deval.set=similar` on
+`sample-data/edge-cases/ai-categorization/similar-merchant-cases.csv` only if it has expected categories. It has none
+for its items: the three `item*` rows have an empty `category`; that column labels only the neighbours (the seeded
+USER, RULE and AI categories the step 8 tests place around them). Labels were not invented, so there is no `similar`
+set, and `CategorizationLiveEvalIT` still accepts only `dev` and `holdout`. The holdout guards are unchanged.
+
+**Tests** (fakes only; `NoCloudAiGuard` in force):
+- `ExampleDiagnosticsTest` (6, new): nearest and count above the floor per item worked out by hand, the inclusive
+  floor, the 20 bands and their labels, band edges (0.65 in 0.65-0.70, below 0 in the first, 1.0 in the last), the
+  floor counts at 0.50 to 0.65, an empty run.
+- `EvalRunnerTest` (+1): A and B have no diagnostics; C and D scan four items each, with VELLICOTT at 0.98 and
+  ORRISWICK at 0.80 from the deli and the other two far; the floor counts; at the configured floor, the app's own
+  count; D's direct item; no extra call. The JSON and Markdown test also checks the new fields and section.
+- `EvalExclusionTest` (+1): `min-confidence` is 0.80 in `application.yml` and in the pom's eval default; direct
+  assignment off and 0.97 in both.
+- `AnswerValidatorTest` (the default bound from nothing is 0.80) and `AiCategorizerTest` (the threshold test now at
+  0.79, not applied, and 0.80, applied).
+
+Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman, any accuracy.
+
+Backend tests 2,173 → 2,181 (+8); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1643,7 +1702,7 @@ Backend tests 2,139 → 2,173 (+34); frontend 4.
 | AI-06 | 6, 7 | token log assertions |
 | CAT-02 | 7 | `AiCategorizerTest` |
 | CAT-03, DAT-06 | 8 | `EmbeddingStageTest` |
-| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report; 9a: `EvalRunnerTest`, `EvalMetricsTest`, `EvalGuardsTest`, `EvalExclusionTest` |
+| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report; 9a: `EvalRunnerTest`, `EvalMetricsTest`, `EvalGuardsTest`, `EvalExclusionTest`; 9c: `ExampleDiagnosticsTest` |
 
 At approval, requirements v1.32 records:
 - AI-01 gains the categorization role (four roles);
@@ -1675,6 +1734,8 @@ At approval, requirements v1.32 records:
   chat client's strategy (step 8 notes). A failed embedding only leaves items without examples. Accepted at the step 8
   review, no subclass; the local model replaces this path.*
 - *Step 8: the AI no longer runs after an import unless `run-after-import` is turned on.*
+- *Step 9c: `min-confidence` 0.80 rests on 19 AI answers from one dev run (step 9c notes); it is a first setting,
+  not a calibration.*
 - **Titan embeds one merchant per call.** A first import with many new merchants takes longer in the
   background.
 

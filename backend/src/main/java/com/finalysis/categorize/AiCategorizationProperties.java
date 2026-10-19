@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * Stage 5 settings ({@code finalysis.ai.categorization.*}, docs/plans/phase-4.md §4.5). They matter only when AI is
- * on; the defaults are argued in the step 7 notes.
+ * on; the defaults are argued in the step 7 notes, and {@code minConfidence} in the step 9c notes.
  *
  * @param batchSize      items (distinct merchants and directions) per model call
  * @param maxItemsPerRun items sent per run, all batches together; the rest wait for the next run (cost guard)
@@ -16,7 +16,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("finalysis.ai.categorization")
 public record AiCategorizationProperties(@DefaultValue("25") int batchSize, @DefaultValue("500") int maxItemsPerRun,
-                                         @DefaultValue("0.70") BigDecimal minConfidence,
+                                         @DefaultValue("0.80") BigDecimal minConfidence,
                                          @DefaultValue("false") boolean runAfterImport) {
 
     /** The prompt's keys are {@code i1}… and 25 answers fit well inside the 2,000 output tokens; 50 still would. */

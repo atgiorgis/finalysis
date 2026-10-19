@@ -91,6 +91,10 @@ record EvalReport(String commit, boolean dirty, String startedAt, EvalResult res
                 .append(pct(result.measuredExamplesSharePct()))
                 .append(". Needs both variants to report usage for every call and to make the same number of calls."
                         + "\n\n");
+        String neighbours = neighboursTables();
+        if (!neighbours.isEmpty()) {
+            md.append("## Nearest examples\n\n").append(neighbours);
+        }
         md.append("## Confidence\n\n").append(confidenceTable()).append("\n");
         String sweep = sweepTables();
         if (!sweep.isEmpty()) {
@@ -174,6 +178,56 @@ record EvalReport(String commit, boolean dirty, String startedAt, EvalResult res
                     .append(" | ").append(pct(examples.estimatedSharePct())).append(" |\n");
         }
         return table.toString();
+    }
+
+    /**
+     * The examples diagnostics of the variants with embeddings: per variant, the nearest-example histogram and the
+     * items that would get examples at each floor. Empty when no variant has them.
+     */
+    private String neighboursTables() {
+        List<VariantResult> scanned = result.variants().stream().filter(variant -> variant.neighbours() != null)
+                .toList();
+        if (scanned.isEmpty()) {
+            return "";
+        }
+        ExampleDiagnostics first = scanned.getFirst().neighbours();
+        StringBuilder md = new StringBuilder("Diagnostics of the examples feature, not accuracy. For each item sent to "
+                + "the model or assigned directly: the highest similarity to any eligible example (same embedding "
+                + "model, not its own merchant, a USER or RULE category in its direction), from an exact scan of the "
+                + "embeddings the variant left. The app itself asks the index for the 40 nearest only. Configured "
+                + "floor (`min-similarity`): ").append(first.floor().toPlainString()).append(".\n\n");
+        md.append("| Variant | Items | No eligible example | Items at or above the floor "
+                + "| Eligible examples at or above the floor |\n|---|---:|---:|---:|---:|\n");
+        for (VariantResult variant : scanned) {
+            ExampleDiagnostics n = variant.neighbours();
+            md.append("| ").append(variant.variant()).append(" | ").append(n.items()).append(" | ")
+                    .append(n.withoutExample()).append(" | ")
+                    .append(n.perItem().stream().filter(item -> item.examplesAboveFloor() > 0).count()).append(" | ")
+                    .append(n.perItem().stream().mapToInt(ExampleDiagnostics.ItemNeighbours::examplesAboveFloor)
+                            .sum()).append(" |\n");
+        }
+        md.append("\nNearest-example similarity (below 0 counts in the first band; 1.0 in the last; items with no "
+                + "eligible example are not in the table)\n\n| Similarity |");
+        scanned.forEach(variant -> md.append(" ").append(variant.variant()).append(" items |"));
+        md.append("\n|---|").append("---:|".repeat(scanned.size())).append("\n");
+        for (int band = 0; band < ExampleDiagnostics.BAND_COUNT; band++) {
+            md.append("| ").append(first.histogram().get(band).range()).append(" |");
+            for (VariantResult variant : scanned) {
+                md.append(" ").append(variant.neighbours().histogram().get(band).items()).append(" |");
+            }
+            md.append("\n");
+        }
+        md.append("\nItems that would get at least one example at each floor (nearest at or above it)\n\n| Floor |");
+        scanned.forEach(variant -> md.append(" ").append(variant.variant()).append(" items |"));
+        md.append("\n|---:|").append("---:|".repeat(scanned.size())).append("\n");
+        for (int i = 0; i < ExampleDiagnostics.FLOORS.size(); i++) {
+            md.append("| ").append(first.floorCounts().get(i).floor().toPlainString()).append(" |");
+            for (VariantResult variant : scanned) {
+                md.append(" ").append(variant.neighbours().floorCounts().get(i).items()).append(" |");
+            }
+            md.append("\n");
+        }
+        return md.append("\n").toString();
     }
 
     private String confidenceTable() {

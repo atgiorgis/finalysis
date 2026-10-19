@@ -35,7 +35,7 @@
         <finalysis.ai-eval>false</finalysis.ai-eval>
         <!-- Inputs of the accuracy evaluation (ai-eval profile); override with -D. No set: it refuses to run. -->
         <eval.set></eval.set>
-        <eval.min-confidence>0.70</eval.min-confidence>
+        <eval.min-confidence>0.80</eval.min-confidence>
         <eval.direct-min-similarity>0.97</eval.direct-min-similarity>
         <eval.holdout.confirm>false</eval.holdout.confirm>
     </properties>
@@ -180,7 +180,7 @@
         </profile>
         <!-- Opt-in accuracy evaluation against the cloud models (CategorizationLiveEvalIT; docs/plans/phase-4.md,
              step 9a notes): the dev or holdout set through four variants, results in docs/eval/.
-               cd backend && ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.70 \
+               cd backend && ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.80 \
                    -Deval.direct-min-similarity=0.97
              A holdout run also needs -Deval.holdout.confirm=true, a clean working tree and no earlier holdout
              results. Needs Docker (Testcontainers) and the AWS CLI profile named in application-aws.yml. -->

@@ -6,6 +6,7 @@ import com.finalysis.categorize.AiCategorizationProperties;
 import com.finalysis.categorize.AiCategorizer;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.AiRunObserver.ItemDecision;
+import com.finalysis.categorize.AiRunObserver.Outcome;
 import com.finalysis.categorize.CategorizationLock;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.categorize.CategorizationPromptBuilder;
@@ -21,14 +22,17 @@ import com.finalysis.categorize.eval.EvalMetrics.SweepPoint;
 import com.finalysis.categorize.eval.EvalMetrics.VariantMetrics;
 import com.finalysis.categorize.eval.EvalRecorder.Batch;
 import com.finalysis.categorize.eval.EvalSeeder.Seeded;
+import com.finalysis.categorize.eval.ExampleDiagnostics.ItemSimilarities;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
@@ -51,7 +55,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Before B, C and D the AI's work is undone (AI categories, review marks, embeddings), and the database must then be
  * exactly as after A, so each variant starts from the same state and pays for its own embeddings. Each AI variant
  * runs {@link AiCategorizer} as built by the app, with the run's {@code min-confidence}; an {@link EvalRecorder} keeps
- * every answer's confidence, so the sweep needs no further call.
+ * every answer's confidence, so the sweep needs no further call. After C and D, an exact scan of the embeddings they
+ * left gives each item's nearest eligible example ({@link ExampleDiagnostics}, step 9c notes).
  *
  * <p>Imported into a test context with {@code @Import}; never component-scanned.
  */
@@ -106,9 +111,12 @@ public class EvalRunner {
                          BigDecimal estimatedSharePct) {
     }
 
+    /**
+     * @param neighbours how near each item came to an eligible example (C and D only; null otherwise)
+     */
     record VariantResult(Variant variant, String description, String status, Map<String, String> settings,
                          long wallMillis, VariantMetrics metrics, List<SweepPoint> sweep, Usage usage,
-                         ExamplesStats examples, List<ScoredRow> rows) {
+                         ExamplesStats examples, ExampleDiagnostics neighbours, List<ScoredRow> rows) {
     }
 
     /**
@@ -119,6 +127,23 @@ public class EvalRunner {
                       String pricesSource, long seedMillis, List<VariantResult> variants,
                       BigDecimal measuredExamplesSharePct) {
     }
+
+    /** Outcomes of items that reached the examples: sent to the model, or assigned directly. */
+    private static final Set<Outcome> NEAR_EXAMPLES = EnumSet.of(Outcome.APPLIED, Outcome.LOW_CONFIDENCE,
+            Outcome.INVALID, Outcome.DIRECT);
+
+    // Every eligible example's similarity to one item, by an exact scan (no ORDER BY ... LIMIT, so no index): the
+    // same model, not the item's own merchant, with a USER or RULE category in the item's direction, as the app's
+    // labeled-neighbour query requires.
+    static final String ELIGIBLE_SIMILARITIES_SQL = """
+            SELECT 1 - (e.embedding <=> q.embedding) AS similarity
+            FROM merchant_embedding q
+            JOIN merchant_embedding e ON e.model = q.model AND e.merchant <> q.merchant
+            WHERE q.merchant = ? AND q.model = ?
+              AND EXISTS (SELECT 1 FROM txn t
+                          WHERE t.merchant = e.merchant AND t.category_source IN ('USER', 'RULE')
+                            AND sign(t.amount) = ?)
+            """;
 
     /** Settings read from the environment as configured; nothing that names credentials or a profile. */
     static final List<String> ENVIRONMENT_SETTINGS = List.of(
@@ -186,7 +211,8 @@ public class EvalRunner {
         requireState(seeded.accountId(), afterRules, "A second rules pass changed a txn");
         List<ScoredRow> rulesOnly = score(set, seeded, new EvalRecorder());
         variants.add(new VariantResult(Variant.A, Variant.A.description, "DONE", Map.of(), rulesMillis,
-                EvalMetrics.of(rulesOnly), null, Usage.none(), examplesStats(new EvalRecorder(), 0), rulesOnly));
+                EvalMetrics.of(rulesOnly), null, Usage.none(), examplesStats(new EvalRecorder(), 0), null,
+                rulesOnly));
 
         for (Variant variant : List.of(Variant.B, Variant.C, Variant.D)) {
             undoAi();
@@ -208,7 +234,8 @@ public class EvalRunner {
             variants.add(new VariantResult(variant, variant.description, result.status().name(),
                     variantSettings(settings, exampleSettings, variant), millis, EvalMetrics.of(rows),
                     inputs.sweep() ? EvalMetrics.sweep(rows) : null, usage(result, prices),
-                    examplesStats(recorder, exampleSettings.maxExamplesPerBatch()), rows));
+                    examplesStats(recorder, exampleSettings.maxExamplesPerBatch()),
+                    variant == Variant.B ? null : neighbours(recorder, exampleSettings), rows));
         }
         return new EvalResult(set.name(), set.sha256(), set.rows().size(), inputs, settings(inputs), prices.source(),
                 seeded.millis(), List.copyOf(variants),
@@ -254,6 +281,20 @@ public class EvalRunner {
                     decision == null ? null : decision.category(), decision == null ? null : decision.confidence()));
         }, seeded.accountId());
         return List.copyOf(scored.values());
+    }
+
+    /**
+     * For every item that reached the examples, the similarity of each eligible example, read from the embeddings
+     * this variant left; diagnostics only, the run itself is not touched.
+     */
+    private ExampleDiagnostics neighbours(EvalRecorder recorder, SimilarMerchantProperties exampleSettings) {
+        List<ItemSimilarities> items = recorder.decisions().stream()
+                .filter(decision -> NEAR_EXAMPLES.contains(decision.outcome()))
+                .map(decision -> new ItemSimilarities(decision.merchant(), decision.direction(),
+                        decision.outcome().name(), jdbc.queryForList(ELIGIBLE_SIMILARITIES_SQL, Double.class,
+                        decision.merchant(), embedder.modelId(), decision.direction())))
+                .toList();
+        return ExampleDiagnostics.of(items, BigDecimal.valueOf(exampleSettings.minSimilarity()));
     }
 
     private Usage usage(AiRunResult result, EvalPrices prices) {

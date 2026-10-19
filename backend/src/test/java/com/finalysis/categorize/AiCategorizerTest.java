@@ -490,7 +490,7 @@ class AiCategorizerTest {
         insert("tearoom", "toolworks", "paper");
         model.answering(prompt -> ModelAnswers.json(ModelAnswers.items(prompt).stream()
                 .map(item -> ModelAnswers.answer(item.key(), category(item),
-                        item.merchant().contains("TEAROOM") ? 0.69 : item.merchant().contains("PAPER") ? 0.70 : 0.4))
+                        item.merchant().contains("TEAROOM") ? 0.79 : item.merchant().contains("PAPER") ? 0.80 : 0.4))
                 .toList()), 300, 40);
 
         AiRunResult result = categorizer.run(false);
@@ -500,7 +500,8 @@ class AiCategorizerTest {
         assertThat(result.txnsCategorized()).isEqualTo(1);
         assertThat(storedWithoutTime("tearoom")).isEqualTo(review("LOW_CONFIDENCE"));
         assertThat(storedWithoutTime("toolworks")).isEqualTo(review("LOW_CONFIDENCE"));
-        assertThat(storedWithoutTime("paper")).as("the threshold itself is applied").isEqualTo(ai("Shopping", "0.700"));
+        assertThat(storedWithoutTime("paper")).as("the default threshold, 0.80, is applied")
+                .isEqualTo(ai("Shopping", "0.800"));
     }
 
     @Test
