@@ -159,7 +159,8 @@ public class TransferService {
 
     /**
      * Marks a txn not a transfer: removes its link, if any (remembering a MATCHED pair), and excludes
-     * it from detection.
+     * it from detection. The API calls it through {@code TransactionService}, which also clears a Transfer-kind
+     * category in the same transaction (Phase 4 step 9d).
      */
     @Transactional
     public NotTransferResponse markNotTransfer(long txnId) {

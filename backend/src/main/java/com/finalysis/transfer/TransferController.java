@@ -15,7 +15,8 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
  * Transfer actions over the API (ING-05, docs/plans/phase-3c.md §3, §4.5). User actions only: chatbot tools
- * never call these (SEC-03).
+ * never call these (SEC-03). "Not a transfer" ({@code /api/transactions/{id}/not-transfer}) is served by
+ * {@code TransactionController} since Phase 4 step 9d, as it also clears a Transfer-kind category.
  *
  * <p>Link ids are digits only in the paths, so {@code /api/transfers/detect} never matches
  * {@code /api/transfers/{id}}: a GET there is a 405, not a failed id conversion.
@@ -78,18 +79,6 @@ public class TransferController {
     @DeleteMapping("/api/transfers/{id:\\d+}")
     public ResponseEntity<Void> unlink(@PathVariable long id) {
         transfers.unlink(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/api/transactions/{id}/not-transfer")
-    public NotTransferResponse markNotTransfer(@PathVariable long id) {
-        return transfers.markNotTransfer(id);
-    }
-
-    /** Clears "not a transfer"; the txn is eligible again at the next detection run. */
-    @DeleteMapping("/api/transactions/{id}/not-transfer")
-    public ResponseEntity<Void> undoNotTransfer(@PathVariable long id) {
-        transfers.undoNotTransfer(id);
         return ResponseEntity.noContent().build();
     }
 

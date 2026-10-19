@@ -367,8 +367,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/transfers/join` | `{outLinkId, inLinkId}`: join two one-sided links into one confirmed link | 201, `Location` | `transfer-invalid`, `transfer-conflict` |
 | `POST` | `/api/transfers/join/dismiss` | `{outLinkId, inLinkId}`: dismiss that possible match (records the pair as rejected) | 204 | `transfer-invalid`, `transfer-conflict` |
 | `POST` | `/api/transfers/detect` | Run detection now | 200 `{linksCreated, unmatchedCompleted, groupsForReview}` | — |
-| `POST` | `/api/transactions/{id}/not-transfer` | Mark a txn not a transfer: removes its link (rejecting a MATCHED pair) and excludes it from detection | 200 `{txnId, transferExcluded, removedLinkId}` | — |
-| `DELETE` | `/api/transactions/{id}/not-transfer` | Undo it; the next detection run may link the txn | 204 | — |
+| `POST` | `/api/transactions/{id}/not-transfer` | Mark a txn not a transfer: removes its link (rejecting a MATCHED pair), excludes it from detection, and clears a rule or AI category of Transfer kind (a category you set stays) | 200 `{txnId, transferExcluded, removedLinkId}` | — |
+| `DELETE` | `/api/transactions/{id}/not-transfer` | Undo it; the next detection run may link the txn, and the next rules pass may categorize it | 204 | — |
 | `GET` | `/api/review-queue` | Everything waiting for the user, across accounts; `?kind=`, `?accountId=` filter. See [Review queue](#review-queue) | 200 | — |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
@@ -812,7 +812,7 @@ the review queue lists them as a possible match.
 |---|---|
 | `POST /api/transfers/{id}/confirm` | Marks a link as looked at |
 | `DELETE /api/transfers/{id}` | Unlinks; a MATCHED pair goes into `transfer_rejection`, so detection never proposes it again (either txn can still match something else) |
-| `POST /api/transactions/{id}/not-transfer` | Removes the txn's link (rejecting a MATCHED pair) and excludes it from detection; `DELETE` on the same path undoes it, and the next detection run may link it |
+| `POST /api/transactions/{id}/not-transfer` | Removes the txn's link (rejecting a MATCHED pair) and excludes it from detection. A rule or AI category of Transfer kind is cleared, and no Transfer rule or AI answer is applied to it again: it waits in the review queue (`NOT_TRANSFER_UNCATEGORIZED`) for your category, and that correction makes no merchant rule, since such descriptions are generic. `DELETE` on the same path undoes it, and the next detection run may link it |
 | `POST /api/transfers` `{outTxnId, inTxnId}` | Links two txns by hand: different accounts, equal and opposite amounts, no window or account-type rule. It clears both txns' exclusion and the pair's rejection, since the explicit action wins. A txn already on a link is `409 transfer-conflict`: unlink first |
 
 ### Review queue
@@ -950,7 +950,8 @@ card descriptors (`SQ *BLUE BEAN CAFE 4412`, `AMZN MKTP US*2K4L91`) so categoriz
   seed rules, cleaning patterns and prompts are tuned against the answer key and `dev.csv` only,
   never against the holdout. Its SHA-256 is pinned by `CategorizationSetsTest` (and recorded in
   `docs/plans/phase-4.md`), so any edit fails the build. The same author wrote the holdout and the
-  seed rules, so this is procedural protection backed by tests, not a blind evaluation.
+  seed rules, so this is procedural protection backed by tests, not a blind evaluation. Results:
+  [Phase 4 categorization accuracy](docs/eval/phase-4-accuracy.md).
 
 **Planted anomalies**
 

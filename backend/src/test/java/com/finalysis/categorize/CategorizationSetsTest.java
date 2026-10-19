@@ -40,11 +40,12 @@ class CategorizationSetsTest {
 
     /**
      * The only classes allowed to name the holdout: this test, the category check, the seed leakage check (names
-     * only, step 2), the CAT-05 reports (step 9), and the live evaluation's guard (hash, confirmation, earlier
-     * results; step 9a) with its tests, which read nothing but the file's hash.
+     * only, step 2), the live evaluation (step 9) and its guard (hash, confirmation, earlier results; step 9a) with
+     * its tests, which read nothing but the file's hash. The in-suite {@code CategorizationAccuracyTest} reads the
+     * dev set only (step 9d), so it is not one of them.
      */
     private static final Set<String> HOLDOUT_READERS = Set.of("CategorizationSetsTest.java", "CategorySeedTest.java",
-            "SeedRulesTest.java", "CategorizationAccuracyTest.java", "CategorizationLiveEvalIT.java",
+            "SeedRulesTest.java", "CategorizationLiveEvalIT.java",
             "EvalGuards.java", "EvalGuardsTest.java");
 
     private static final Pattern WORD = Pattern.compile("[A-Z]{3,}");

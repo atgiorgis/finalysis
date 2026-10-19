@@ -39,7 +39,8 @@ public class MerchantEmbeddingRepository {
     // the inner ORDER BY <distance expression> ... LIMIT; the model and self filters apply to what it returns, and
     // labels are looked up for those candidates only. A label is the category of the merchant's newest txn in the
     // item's direction whose category came from the user or a rule: never from the AI, so the model never learns
-    // from its own answers.
+    // from its own answers. A txn marked not a transfer gives no label: its description is often generic, so its
+    // category says nothing about similar merchants (step 9d notes).
     static final String NEAREST_SQL = """
             SELECT merchant, embedding <=> :embedding AS distance
             FROM merchant_embedding
@@ -56,6 +57,7 @@ public class MerchantEmbeddingRepository {
                 FROM txn t JOIN category c ON c.id = t.category_id
                 WHERE t.merchant = n.merchant
                   AND t.category_source IN ('USER', 'RULE')
+                  AND NOT t.transfer_excluded
                   AND sign(t.amount) = :direction
                 ORDER BY t.txn_date DESC, t.id DESC
                 LIMIT 1

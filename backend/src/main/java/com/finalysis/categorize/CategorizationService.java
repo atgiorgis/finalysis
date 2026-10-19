@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,6 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
  * sets RULE (replacing AI or an older rule), and a RULE txn that no longer matches is cleared. An AI txn
  * that no rule matches keeps its category. Only rows whose values change are written, so a second pass
  * writes nothing. Every write is conditional on the source, so a user's category is never overwritten.
+ *
+ * <p>A txn the user marked not a transfer ({@code transfer_excluded}) is never given a Transfer-kind category by a
+ * rule or by merchant memory: Transfer-kind rules skip it (a lower-ranked rule of another kind may still win), a
+ * RULE or AI category of Transfer kind is cleared, and it is left for the user (step 9d notes). Its descriptions are
+ * often generic ({@code ONLINE BANKING TRANSFER TO CHK}), so nothing but the user can say what it is.
  *
  * <p>Each pass takes the {@link CategorizationLock}. {@link #categorizeStatement} runs in a transaction of
  * its own, for the after-import listener; the others join the caller's, so a rule change and the pass it
@@ -56,8 +62,10 @@ public class CategorizationService {
      * @param ruleCategorized txns given a rule category, or a different one
      * @param ruleCleared     RULE txns that no rule matches any more, now uncategorized
      * @param memoryApplied   uncategorized txns given their merchant's earlier AI category
+     * @param aiTransferCleared txns marked not a transfer whose AI category of Transfer kind was cleared
      */
-    public record RulesResult(int examined, int ruleCategorized, int ruleCleared, int memoryApplied) {}
+    public record RulesResult(int examined, int ruleCategorized, int ruleCleared, int memoryApplied,
+                              int aiTransferCleared) {}
 
     /**
      * Body of {@code POST /api/categorization/run}. AI stages are added in Phase 4 steps 7 and 8.
@@ -87,7 +95,7 @@ public class CategorizationService {
         return pass("AND t.merchant = ?", merchant);
     }
 
-    /** Stages 2–3 for one txn: after the user clears its category. */
+    /** Stages 2–3 for one txn: after the user clears its category, or marks it not a transfer. */
     @Transactional
     public RulesResult categorizeTxn(long txnId) {
         lock.acquire();
@@ -123,11 +131,16 @@ public class CategorizationService {
 
     private RulesResult pass(String scope, Object... args) {
         RuleEngine engine = new RuleEngine(activeRules());
+        Set<Long> transferCategories = Set.copyOf(
+                jdbc.queryForList("SELECT id FROM category WHERE kind = 'TRANSFER'", Long.class));
+        Predicate<Rule> notTransfer = rule -> !transferCategories.contains(rule.categoryId());
         List<Object[]> categorize = new ArrayList<>();
         List<Object[]> clear = new ArrayList<>();
+        List<Object[]> clearAi = new ArrayList<>();
         int[] examined = {0};
         jdbc.query("""
-                SELECT t.id, t.merchant, t.raw_description, t.amount, t.category_id, t.category_source, t.category_rule_id
+                SELECT t.id, t.merchant, t.raw_description, t.amount, t.category_id, t.category_source, t.category_rule_id,
+                       t.transfer_excluded
                 FROM txn t
                 WHERE t.category_source IS DISTINCT FROM 'USER'
                 """ + scope + " ORDER BY t.id", rs -> {
@@ -135,8 +148,14 @@ public class CategorizationService {
             String source = rs.getString("category_source");
             Current current = new Current(rs.getLong("id"), rs.getObject("category_id", Long.class),
                     source == null ? null : CategorySource.valueOf(source), rs.getObject("category_rule_id", Long.class));
-            Optional<Rule> winner = engine.winner(
-                    Subject.of(rs.getString("merchant"), rs.getString("raw_description"), rs.getBigDecimal("amount")));
+            boolean excluded = rs.getBoolean("transfer_excluded");
+            Subject subject = Subject.of(rs.getString("merchant"), rs.getString("raw_description"),
+                    rs.getBigDecimal("amount"));
+            Optional<Rule> winner = excluded ? engine.winner(subject, notTransfer) : engine.winner(subject);
+            if (excluded && current.source() == CategorySource.AI && transferCategories.contains(current.categoryId())
+                    && winner.isEmpty()) {
+                clearAi.add(new Object[] {current.id()});
+            }
             if (winner.isPresent()) {
                 Rule rule = winner.get();
                 boolean unchanged = current.source() == CategorySource.RULE
@@ -158,16 +177,20 @@ public class CategorizationService {
                 UPDATE txn
                 SET category_id = NULL, category_source = NULL, category_rule_id = NULL, categorized_at = NULL
                 WHERE id = ? AND category_source = 'RULE'""", clear);
+        int aiCleared = update("""
+                UPDATE txn
+                SET category_id = NULL, category_source = NULL, category_rule_id = NULL, categorized_at = NULL, %s
+                WHERE id = ? AND category_source = 'AI' AND transfer_excluded""".formatted(CLEAR_AI_COLUMNS), clearAi);
         int memory = applyMemory(scope, args);
         warnAbout(engine.invalidRules(), "don't compile and were skipped");
         warnAbout(engine.timedOutRules(), "ran past the regex deadline and were skipped on some txns");
-        return new RulesResult(examined[0], categorized, cleared, memory);
+        return new RulesResult(examined[0], categorized, cleared, memory, aiCleared);
     }
 
     /**
      * Stage 3: an uncategorized txn takes the latest AI category of its exact merchant in the same
-     * direction, so a merchant goes to the model once. Linked txns are left out, as the AI leaves them out
-     * (§1.1). Copies from AI txns only, so a user's decision always comes through a rule. The model, confidence
+     * direction, so a merchant goes to the model once. Linked txns and txns marked not a transfer are left out, as the
+     * AI leaves them out (§1.1, step 9d notes). Copies from AI txns only, so a user's decision always comes through a rule. The model, confidence
      * and prompt version are copied with the category, so the txn says where its category came from; a txn waiting
      * for review gets its merchant's answer as well.
      */
@@ -186,6 +209,7 @@ public class CategorizationService {
                 ) m
                 WHERE t.category_source IS NULL
                   AND NOT t.is_transfer
+                  AND NOT t.transfer_excluded
                   AND t.merchant = m.merchant
                   AND sign(t.amount) = m.direction
                 """ + scope, args);

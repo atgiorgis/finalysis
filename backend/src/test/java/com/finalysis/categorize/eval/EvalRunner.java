@@ -142,7 +142,7 @@ public class EvalRunner {
             WHERE q.merchant = ? AND q.model = ?
               AND EXISTS (SELECT 1 FROM txn t
                           WHERE t.merchant = e.merchant AND t.category_source IN ('USER', 'RULE')
-                            AND sign(t.amount) = ?)
+                            AND NOT t.transfer_excluded AND sign(t.amount) = ?)
             """;
 
     /** Settings read from the environment as configured; nothing that names credentials or a profile. */

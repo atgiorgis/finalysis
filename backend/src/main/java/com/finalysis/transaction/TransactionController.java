@@ -1,12 +1,15 @@
 package com.finalysis.transaction;
 
 import com.finalysis.categorize.CategorySource;
+import com.finalysis.transfer.NotTransferResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,8 +17,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Listing txns and correcting their categories (CAT-04; docs/plans/phase-4.md §9.2). User actions only:
- * chatbot tools never call the corrections (SEC-03).
+ * Listing txns, correcting their categories (CAT-04; docs/plans/phase-4.md §9.2), and marking one not a transfer
+ * (ING-05; here since step 9d, same paths, because it also clears a Transfer-kind category). User actions only:
+ * chatbot tools never call the corrections or "not a transfer" (SEC-03).
  */
 @RestController
 @RequestMapping("/api/transactions")
@@ -62,5 +66,21 @@ public class TransactionController {
     public UndoResponse clearCorrection(@PathVariable long id,
                                         @RequestParam(defaultValue = "false") boolean removeRule) {
         return transactions.clearCorrection(id, removeRule);
+    }
+
+    /**
+     * Marks the txn not a transfer: removes its link (rejecting a MATCHED pair), excludes it from detection, and clears
+     * a RULE or AI category of Transfer kind.
+     */
+    @PostMapping("/{id}/not-transfer")
+    public NotTransferResponse markNotTransfer(@PathVariable long id) {
+        return transactions.markNotTransfer(id);
+    }
+
+    /** Clears "not a transfer"; the txn is eligible again at the next detection run and rules pass. */
+    @DeleteMapping("/{id}/not-transfer")
+    public ResponseEntity<Void> undoNotTransfer(@PathVariable long id) {
+        transactions.undoNotTransfer(id);
+        return ResponseEntity.noContent().build();
     }
 }

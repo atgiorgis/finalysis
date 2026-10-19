@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 /**
  * One thing waiting for the user (ING-07, docs/plans/phase-3c.md §4.1). Sealed, with the kind written as
  * {@code kind}; Phase 4 added {@code SUGGESTED_ONE_SIDED_TRANSFER} (CAT-08) and
- * {@code AI_CATEGORY_REVIEW} (CAT-02) as more records. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
+ * {@code AI_CATEGORY_REVIEW} (CAT-02) and {@code NOT_TRANSFER_UNCATEGORIZED} (step 9d) as more records. Transfer items carry {@link TxnSummary}s, descriptions included: the user needs them to
  * decide (§3).
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
@@ -28,7 +28,8 @@ import java.util.stream.Stream;
         @JsonSubTypes.Type(ReviewItem.CompetingCandidateItem.class),
         @JsonSubTypes.Type(ReviewItem.PossibleMatchItem.class),
         @JsonSubTypes.Type(ReviewItem.SuggestedOneSidedTransferItem.class),
-        @JsonSubTypes.Type(ReviewItem.AiCategoryReviewItem.class)})
+        @JsonSubTypes.Type(ReviewItem.AiCategoryReviewItem.class),
+        @JsonSubTypes.Type(ReviewItem.NotTransferUncategorizedItem.class)})
 public sealed interface ReviewItem {
 
     /** When the item appeared; the queue lists the newest first. */
@@ -146,6 +147,23 @@ public sealed interface ReviewItem {
     @JsonTypeName("AI_CATEGORY_REVIEW")
     record AiCategoryReviewItem(String key, TxnSummary txn, String reason, OffsetDateTime since)
             implements ReviewItem {
+
+        @Override
+        public Set<Long> accountIds() {
+            return Set.of(txn.accountId());
+        }
+    }
+
+    /**
+     * A txn the user marked not a transfer that has no category (docs/plans/phase-4.md, step 9d notes). No Transfer-kind
+     * rule and no AI categorizes it, so it waits for the user's correction ({@code PUT /api/transactions/{id}/category},
+     * which makes no rule for it), which removes the item. Undoing "not a transfer" removes it too.
+     *
+     * @param key   {@code txn-<id>}
+     * @param since when the txn was imported
+     */
+    @JsonTypeName("NOT_TRANSFER_UNCATEGORIZED")
+    record NotTransferUncategorizedItem(String key, TxnSummary txn, OffsetDateTime since) implements ReviewItem {
 
         @Override
         public Set<Long> accountIds() {

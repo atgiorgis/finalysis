@@ -274,7 +274,8 @@ categorization only *suggests*.
 | true | TRANSFER | — | Consistent |
 | true | other or null | — | Linked; GR-04 excludes it by `is_transfer`. Could be the §2.7 coincidental pair; no Phase 4 action (limitation) |
 | false | TRANSFER | false | **CAT-08 suggested one-sided transfer** (§8) |
-| false | TRANSFER | true | The user said "not a transfer". Not suggested. The category is left as is; the user corrects it if needed |
+| false | TRANSFER | true | The user said "not a transfer". Not suggested. *Step 9d:* only a USER category can be here; a RULE or AI one is cleared when the txn is marked, and Transfer-kind rules skip it |
+| false | null | true | *Step 9d:* waits in the review queue (`NOT_TRANSFER_UNCATEGORIZED`) for the user's category; the AI never sees it, and its correction makes no rule |
 | false | other | — | Ordinary spending or income |
 
 How Phase 5 totals treat an unlinked TRANSFER-kind txn is Phase 5's decision; it's noted there.
@@ -683,7 +684,9 @@ New runnable folder **"8. Categorization"** (AI off; newman never calls Bedrock)
 
   The same author writes the sets and the seeds, so this is procedural protection backed by those
   tests, not a blind evaluation. That is noted in the holdout file's header and in the README.
-- **In-suite eval** (`CategorizationAccuracyTest`, step 9, no AI):
+- **In-suite eval** (`CategorizationAccuracyTest`, step 9, no AI). *Step 9d built it smaller, as its prompt asked:
+  rules only, the dev set only, pinned at 129/148 with 0 wrong; it never reads the holdout and writes no report.
+  The original design:*
   - imports the full sample set and runs rules only;
   - compares each answer-key row's category (a linked txn with no category counts as Transfer, §1.1);
   - asserts **no wrong rule answer** on the answer key and the dev set, and a coverage floor set
@@ -773,7 +776,7 @@ moves before AI wiring. Reasons:
 | 6 | AI wiring | Spring AI starters; `application.yml` model `none`; `application-aws.yml`; `AiProperties`, `AiMode`; `/api/status` `ai` block; frontend banner; token-logging wrapper; logger levels; ArchUnit provider rule. **Needs §11.2 done** | `AwsProfileWiringTest`, `AiModeTest` (OFF by default, both profiles fail), `StatusControllerTest`, `PackageDependencyTest`, `App.test.tsx` banner, `ExposureWithProfilesTest` | Done: "Phase 4 step 6: AI wiring" (notes below) |
 | 7 | AI categorization | V16; stage 5 (batching, validation, LOW handling, conditional writes, async executor, failure handling) | `AiCategorizerTest` (FakeChatModel: applied, LOW skipped, off-list, missing and duplicate keys, parse failure + retry, timeout, AI off no-op, linked txns skipped, correction during call wins), `OutboundPayloadTest` (§4.6), `PromptInjectionTest`, `ImportNeverFailsTest` (model throws, import still 201), token log line asserted | Done: "Phase 4 step 7: AI categorization" (notes below) |
 | 8 | Embeddings + examples | Stage 4; model filter on similarity; dimension check; stale re-embed; example selection | `EmbeddingStageTest` (FakeEmbeddingModel: new and stale merchants, model filter, trusted labels only, threshold, 3 max, embedding text redacted), `MerchantEmbeddingRepositoryTest` (extended, EXPLAIN uses HNSW), wrong-dimension startup failure | Done: "Phase 4 step 8: embeddings and similar-merchant examples" (notes below) |
-| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | In progress: 9a "Phase 4 step 9a: accuracy evaluation harness"; 9c "Phase 4 step 9c: eval diagnostics and min-confidence 0.80" (notes below); dev rerun, holdout and `CategorizationAccuracyTest` next |
+| 9 | Accuracy eval | `CategorizationAccuracyTest`; `CategorizationLiveEvalIT`, Maven profile `ai-eval`; run it once live and record results (answer key, dev and holdout separately; rules-only vs rules + AI); set `max-distance` and the coverage floor from the dev set | the eval tests themselves | Done: 9a "Phase 4 step 9a: accuracy evaluation harness"; 9c "Phase 4 step 9c: eval diagnostics and min-confidence 0.80"; dev and holdout results committed; 9d "Phase 4 step 9d: accuracy report and the not-transfer category fix" (notes below; report `docs/eval/phase-4-accuracy.md`) |
 | 10 | Docs, Postman, tag | README (categorization, data boundary, AI setup, endpoints, errors, limitations); Postman folder 8; requirement statuses and change log; phase summary here; tag `phase-4-done` | newman against a reset database | Planned |
 
 ### Step 1 notes
@@ -1688,6 +1691,73 @@ Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman, any accu
 
 Backend tests 2,173 → 2,181 (+8); frontend 4.
 
+### Step 9d notes
+
+Built from the step 9d prompt: the accuracy report, the in-suite regression test, and a fix found in your real-data
+test. **No live call was made**, and the holdout was not run again (it never will be).
+
+**The report** is [`docs/eval/phase-4-accuracy.md`](../eval/phase-4-accuracy.md), linked from the README and
+`docs/eval/README.md`. Holdout, the headline: rules only 44.7%; rules + AI 93.3% overall, 97.9% on categorized,
+3 wrong (one merchant, 0.85–0.92), 7 in review, about $0.01; answers in 0.70–0.80 were right for 1 row of 7, so the
+0.80 threshold chosen on dev held. Dev (tuned on it): rules 87.2%; rules + AI 95.9%, 0 wrong. Examples and direct
+assignment were not exercised: no item had an example at or above the 0.65 floor. Your real-data spot check is
+reported as counts, informal and unlabeled. The holdout ran at `94ee19a`, whose only changes from the dev run's
+`fab8a1c` are `.gitignore`, `docs/eval/README.md` and the Postman collection. `docs/eval/README.md` said result files
+were git-ignored; since `4e7f0db` they are committed, and it now says so.
+
+**`CategorizationAccuracyTest`** (`categorize.eval`, Testcontainers, no AI): the dev set seeded through
+`EvalSeeder`, as the live harness seeds it, then scored with `EvalMetrics`: exactly 129 of 148 right, 0 wrong (each
+wrong row named on failure), 19 uncategorized, nothing in review, RULE the only source. Dev only: it was on
+`CategorizationSetsTest`'s list of classes allowed to read the holdout, and is now off it, so the build fails if it
+ever names the holdout. Smaller than §10's design, as the prompt asked (no answer key, no report file).
+
+**The not-transfer fix.** After `POST /api/transactions/{id}/not-transfer`, a RULE category of Transfer kind stayed,
+and the next rules pass would have set it again.
+
+| Rule (from the prompt) | How | Where |
+|---|---|---|
+| Marking clears a RULE or AI category of Transfer kind, never USER | The mark is followed, in the same transaction, by the rules pass for that txn, which now clears a RULE Transfer category no other rule matches (as for any RULE txn no rule matches) and an AI Transfer category on a marked txn, with its AI provenance. USER rows are never read by the pass. A lower-ranked rule of another kind still applies (e.g. `RENT` → Housing) | `CategorizationService.pass`, `TransactionService.markNotTransfer` |
+| Transfer-kind rules skip marked txns | `RuleEngine.winner(subject, eligible)`; for a marked txn, rules whose category is of Transfer kind are not eligible. Merchant memory skips marked txns too, or it could copy an AI Transfer answer back | `RuleEngine`, `CategorizationService` |
+| They go to the review queue for your category, never to the AI | New kind `NOT_TRANSFER_UNCATEGORIZED` (`key`, `txn`, `since`), count `notTransferUncategorized`: marked and uncategorized. The AI's selection, its write and its review mark all require `NOT transfer_excluded`, so a mark made during a call wins. `AI_CATEGORY_REVIEW` leaves marked txns out, so none is listed twice | `NotTransferUncategorizedQuery`, `ReviewQueueService`, `AiCategorizer`, `AiCategoryReviewQuery` |
+| Correcting a marked txn creates no rule | `ruleAction` `NONE`, `ruleId` null, whatever `applyToMerchant` says | `CorrectionService.correct` |
+| Undo (`DELETE`) restores eligibility as today | Unchanged: the flag is cleared and nothing runs; detection, the next rules pass and the AI may pick it up. A cleared category is not restored | `TransactionService.undoNotTransfer` |
+
+No migration was needed: everything reads the existing `transfer_excluded` and `category.kind`. Existing data heals
+itself: the startup rules pass clears a RULE or AI Transfer category already on a marked txn.
+
+**Choices beyond the prompt:**
+- **The endpoints moved to `TransactionController`, same paths and bodies.** `PackageDependencyTest` forbids
+  `transfer` → `categorize` (detection stays AI-free). The `transaction` package already calls `categorize` and
+  nothing depends on it, so `TransactionService` joins `TransferService.markNotTransfer` and the rules pass in one
+  transaction.
+- **Lock order.** It is the one place both advisory locks are held: transfer, then categorization, both taken before
+  any row is written. Categorization never takes the transfer lock, and no categorization pass can wait on a row
+  this transaction holds, so they can't deadlock. The comments on both locks say so.
+- **A full undo (`DELETE …/category?removeRule=true`) on a marked txn deletes no rule**: its correction made none,
+  and a rule the merchant has from another txn's correction is not its to delete. It behaves as a plain clear.
+- **A marked txn gives no example label** (`MerchantEmbeddingRepository`, `MerchantEmbeddingStage`, and the
+  harness's diagnostic scan): for the same reason it gives no rule, its USER category says nothing about similar
+  merchants.
+- **`RulesResult` gains `aiTransferCleared`** (an internal count; `RunResult` and the API are unchanged).
+- **`since`** on the new item is the txn's import time: the time of the mark is not stored, and adding a column
+  for it was not needed.
+
+**Tests** (Testcontainers, synthetic rows; fakes only):
+- `NotTransferCategoryTest` (11, new): a RULE Transfer category cleared and the txn listed with its count; an AI
+  one cleared with its provenance; USER and a non-Transfer AI category kept; a lower-ranked RENT rule applies; the
+  link removed and the category cleared together; no later pass, run or merchant memory brings Transfer back; a pass
+  heals a contradiction from before the fix; an AI review mark listed once; a correction makes no rule (the real
+  transfer of the same merchant keeps its category); a full undo deletes no rule; undo restores eligibility only.
+- `AiCategorizerTest` (+3): never sent, even forced; a mark during the call wins; no review mark on a marked txn.
+- `MerchantEmbeddingRepositoryTest` (+1), `RuleEngineTest` (+1), `CategorizationAccuracyTest` (1, new).
+- `ReviewQueueApiTest`: the new count; dismissing as not a transfer now clears the RULE category and lists the
+  txn, and undo plus a rules pass suggest it again; a competitor marked not a transfer is listed for a category.
+- `CategorizationSetsTest`: `CategorizationAccuracyTest` is no longer an allowed holdout reader.
+
+Not done here, as the prompt said: `-Pai-eval`, the smoke test, newman.
+
+Backend tests 2,181 → 2,198 (+17); frontend 4.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1702,7 +1772,8 @@ Backend tests 2,173 → 2,181 (+8); frontend 4.
 | AI-06 | 6, 7 | token log assertions |
 | CAT-02 | 7 | `AiCategorizerTest` |
 | CAT-03, DAT-06 | 8 | `EmbeddingStageTest` |
-| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report; 9a: `EvalRunnerTest`, `EvalMetricsTest`, `EvalGuardsTest`, `EvalExclusionTest`; 9c: `ExampleDiagnosticsTest` |
+| CAT-05 | 9 | `CategorizationAccuracyTest`, live eval report (`docs/eval/phase-4-accuracy.md`); 9a: `EvalRunnerTest`, `EvalMetricsTest`, `EvalGuardsTest`, `EvalExclusionTest`; 9c: `ExampleDiagnosticsTest` |
+| ING-05, CAT-08, CAT-04 (not a transfer) | 9d | `NotTransferCategoryTest`, `AiCategorizerTest`, `MerchantEmbeddingRepositoryTest`, `ReviewQueueApiTest`, `RuleEngineTest` |
 
 At approval, requirements v1.32 records:
 - AI-01 gains the categorization role (four roles);
@@ -1736,6 +1807,14 @@ At approval, requirements v1.32 records:
 - *Step 8: the AI no longer runs after an import unless `run-after-import` is turned on.*
 - *Step 9c: `min-confidence` 0.80 rests on 19 AI answers from one dev run (step 9c notes); it is a first setting,
   not a calibration.*
+- *Step 9d: a txn marked not a transfer gets no Transfer-kind category from a rule, merchant memory or the AI, and
+  its correction makes no rule (step 9d notes). Undoing the mark restores eligibility only: nothing runs, and the
+  next rules pass or AI run categorizes it. Its review item's `since` is the import time, since the time of the
+  mark is not stored.*
+- *Step 9d: the 3 wrong holdout rows were applied at 0.85–0.92. The threshold does not catch a confident mistake;
+  only the user's correction does (`docs/eval/phase-4-accuracy.md`).*
+- *Step 9d: examples and direct assignment were never exercised by the eval (no item above the 0.65 floor on dev or
+  the holdout). Whether they help is unmeasured.*
 - **Titan embeds one merchant per call.** A first import with many new merchants takes longer in the
   background.
 

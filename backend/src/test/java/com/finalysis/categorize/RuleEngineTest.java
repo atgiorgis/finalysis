@@ -145,6 +145,19 @@ class RuleEngineTest {
         assertThat(engine.winner(Subject.of("ZELLE", "ZELLE PAYMENT FROM X", IN))).contains(in);
     }
 
+    /** An ineligible rule is skipped, so the next one down wins (how Transfer-kind rules skip a "not a transfer" txn). */
+    @Test
+    void anIneligibleRuleIsSkippedAndTheNextOneWins() {
+        Rule better = rule(RuleField.MERCHANT, RuleMatchType.EXACT, "BLUE BEAN CAFE", RuleDirection.ANY, 100,
+                RuleSource.SEED);
+        Rule worse = rule(RuleField.MERCHANT, RuleMatchType.CONTAINS, "CAFE", RuleDirection.ANY, 10, RuleSource.SEED);
+        RuleEngine engine = new RuleEngine(List.of(better, worse));
+
+        assertThat(engine.winner(merchant("BLUE BEAN CAFE"), rule -> rule != better)).contains(worse);
+        assertThat(engine.winner(merchant("BLUE BEAN CAFE"), rule -> false)).isEmpty();
+        assertThat(engine.winner(merchant("BLUE BEAN CAFE"), rule -> true)).contains(better);
+    }
+
     // ------------------------------------------------------------------ winning order
 
     /** Two rules that both match "BLUE BEAN CAFE"; {@code better} must win, in either input order. */

@@ -9,7 +9,9 @@ files per run:
   and the min-confidence sweep for dev runs). "Nearest examples" (step 9c) is a diagnostic of the examples feature,
   not an accuracy measure.
 
-Synthetic data only (`sample-data/categorization/`). The result files are git-ignored: they stay on this machine
-and never make the working tree dirty. The holdout is evaluated once: a holdout run refuses to start while any
-`holdout-*` file exists here, so don't delete one. The holdout also needs a clean working tree (ignored files don't
-count).
+The Phase 4 summary is [phase-4-accuracy.md](phase-4-accuracy.md).
+
+Synthetic data only (`sample-data/categorization/`). Result files are committed as evidence (the dev and holdout
+runs of Phase 4 step 9 are), so a new run leaves the working tree dirty until its files are committed or deleted.
+The holdout is evaluated once: a holdout run refuses to start while any `holdout-*` file exists here, and both
+holdout files are committed, so it can't run again.

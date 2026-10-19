@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component;
  * Finds txns the AI left uncategorized for the user (CAT-02, docs/plans/phase-4.md step 7 notes): its answer was below
  * the confidence threshold, or invalid twice. Plain SQL on {@code txn.ai_review_reason}, so the review queue depends
  * on no categorization class. A category of any source clears the reason, so a listed txn is always uncategorized;
- * linked txns are left out, as the AI leaves them out. Read-only; ids, reasons and times only, never a text column.
+ * linked txns and txns marked not a transfer are left out, as the AI leaves them out (a txn marked not a transfer is
+ * listed as {@code NOT_TRANSFER_UNCATEGORIZED} instead). Read-only; ids, reasons and times only, never a text column.
  */
 @Component
 public class AiCategoryReviewQuery {
@@ -20,6 +21,7 @@ public class AiCategoryReviewQuery {
             WHERE t.ai_review_reason IS NOT NULL
               AND t.category_id IS NULL
               AND NOT t.is_transfer
+              AND NOT t.transfer_excluded
             ORDER BY t.id
             """;
 

@@ -443,7 +443,9 @@ class ReviewQueueApiTest {
 
         mockMvc.perform(post("/api/transactions/{id}/not-transfer", cardIn)).andExpect(status().isOk());
 
-        assertThat(queue(Map.of("accountId", a.card())).get("items").size()).isZero();
+        assertThat(kinds(queue(Map.of("accountId", a.card()))))
+                .as("no longer competing; uncategorized, so it waits for a category")
+                .containsExactly("NOT_TRANSFER_UNCATEGORIZED");
         assertThat(rows.isTransfer(out)).isTrue();
     }
 
@@ -676,7 +678,10 @@ class ReviewQueueApiTest {
         assertThat(rows.isTransfer(out)).isTrue();
     }
 
-    /** Dismissing (not a transfer) is remembered and keeps the category; undoing the exclusion lists it again. */
+    /**
+     * Dismissing (not a transfer) is remembered: the RULE Transfer category is cleared and the txn waits for the
+     * user's category (step 9d). Undoing the exclusion and the next rules pass list it again.
+     */
     @Test
     @Transactional
     void dismissingAsNotATransferIsRemembered() throws Exception {
@@ -689,10 +694,11 @@ class ReviewQueueApiTest {
         categorization.categorizeTxn(out);
 
         assertThat(suggestedIds(a.checking())).isEmpty();
-        assertThat(jdbc.queryForObject("SELECT c.kind FROM txn t JOIN category c ON c.id = t.category_id WHERE t.id = ?",
-                String.class, out)).isEqualTo("TRANSFER");
+        assertThat(jdbc.queryForObject("SELECT category_id FROM txn WHERE id = ?", Long.class, out)).isNull();
+        assertThat(kinds(queue(Map.of("accountId", a.checking())))).containsExactly("NOT_TRANSFER_UNCATEGORIZED");
 
         mockMvc.perform(delete("/api/transactions/{id}/not-transfer", out)).andExpect(status().isNoContent());
+        categorization.categorizeTxn(out);
         assertThat(suggestedIds(a.checking())).containsExactly(out);
     }
 
@@ -795,7 +801,7 @@ class ReviewQueueApiTest {
                             int suggested) {
         return jsonMapper.valueToTree(Map.of("statements", statements, "unparsedUploads", uploads,
                 "transferCandidates", groups, "competingCandidates", competing, "possibleMatches", possibleMatches,
-                "suggestedOneSidedTransfers", suggested, "aiCategoryReviews", 0));
+                "suggestedOneSidedTransfers", suggested, "aiCategoryReviews", 0, "notTransferUncategorized", 0));
     }
 
     /** Gives the txn a description a seeded Transfer rule matches, and runs the rules for it. */

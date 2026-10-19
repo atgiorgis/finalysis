@@ -20,6 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
  * one rule's category ({@code uq_categorization_rule_user_pattern}). Then the rules run for that merchant, so
  * its other txns follow unless the user set them or a higher-ranked user rule wins.
  *
+ * <p>A txn the user marked not a transfer ({@code transfer_excluded}) gets its category and nothing else: no rule is
+ * made, changed or deleted for it, whatever {@code applyToMerchant} says. Its description is typically generic
+ * ({@code ONLINE BANKING TRANSFER TO CHK}), so a merchant rule would recategorize the real transfers that share it
+ * (step 9d notes).
+ *
  * <p>Part of the categorization code, so the txn's category columns keep a single writer (step 2 notes):
  * SQL only, under the categorization lock, in the caller's transaction.
  */
@@ -51,7 +56,10 @@ public class CorrectionService {
         UNCHANGED,
         /** Undo only: the merchant's correction rule was deleted. */
         REMOVED,
-        /** No rule: {@code applyToMerchant} was false, the txn has no merchant, or (undo) no correction rule. */
+        /**
+         * No rule: {@code applyToMerchant} was false, the txn has no merchant or is marked not a transfer, or (undo) no
+         * correction rule.
+         */
         NONE
     }
 
@@ -88,7 +96,7 @@ public class CorrectionService {
                 WHERE id = ?""".formatted(CategorizationService.CLEAR_AI_COLUMNS), categoryId, txnId);
 
         String merchant = (String) txn.get("merchant");
-        if (!applyToMerchant || merchant == null) {
+        if (!applyToMerchant || merchant == null || excluded(txn)) {
             return new Correction(txnId, null, RuleAction.NONE, 0, 0, 0);
         }
         RuleDirection direction = direction((BigDecimal) txn.get("amount"));
@@ -154,7 +162,8 @@ public class CorrectionService {
      * for the txn's merchant and direction, then runs the rules for the merchant's txns, which go back to the
      * seeds, another rule, or uncategorized. Only a {@code USER_CORRECTION} rule is deleted: a rule the user made
      * through the rules API ({@code USER}) or a seed is kept, and {@code ruleAction} is {@code NONE}. The rule is
-     * deleted even if the txn's category was already cleared, so the two-call undo can be finished here.
+     * deleted even if the txn's category was already cleared, so the two-call undo can be finished here. For a txn
+     * marked not a transfer, whose correction made no rule, it is {@link #clear}: no rule is deleted.
      */
     @Transactional
     public Undo undo(long txnId) {
@@ -166,7 +175,7 @@ public class CorrectionService {
                 WHERE id = ? AND category_source = 'USER'""", txnId);
 
         String merchant = (String) txn.get("merchant");
-        if (merchant == null) {
+        if (merchant == null || excluded(txn)) {
             categorization.categorizeTxn(txnId);
             return new Undo(txnId, null, RuleAction.NONE, 0);
         }
@@ -201,9 +210,14 @@ public class CorrectionService {
         };
     }
 
-    /** The txn's merchant and amount, its row locked against a concurrent statement delete. */
+    private static boolean excluded(Map<String, Object> txn) {
+        return (Boolean) txn.get("transfer_excluded");
+    }
+
+    /** The txn's merchant, amount and "not a transfer" mark, its row locked against a concurrent statement delete. */
     private Map<String, Object> txn(long txnId) {
-        return jdbc.queryForList("SELECT merchant, amount FROM txn WHERE id = ? FOR UPDATE", txnId).stream()
+        return jdbc.queryForList("SELECT merchant, amount, transfer_excluded FROM txn WHERE id = ? FOR UPDATE", txnId)
+                .stream()
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("Transaction", txnId));
     }

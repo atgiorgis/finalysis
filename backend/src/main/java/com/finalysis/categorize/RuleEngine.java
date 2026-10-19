@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -106,8 +107,16 @@ public final class RuleEngine {
 
     /** The highest-ranked rule that matches, if any. */
     public Optional<Rule> winner(Subject subject) {
+        return winner(subject, rule -> true);
+    }
+
+    /**
+     * The highest-ranked rule that matches among those {@code eligible} accepts; the others are skipped, so the next
+     * one down can win.
+     */
+    public Optional<Rule> winner(Subject subject, Predicate<Rule> eligible) {
         for (Compiled compiled : rules) {
-            if (matches(compiled, subject)) {
+            if (eligible.test(compiled.rule()) && matches(compiled, subject)) {
                 return Optional.of(compiled.rule());
             }
         }

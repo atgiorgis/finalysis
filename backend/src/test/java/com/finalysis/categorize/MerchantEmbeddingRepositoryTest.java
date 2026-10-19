@@ -173,6 +173,23 @@ class MerchantEmbeddingRepositoryTest {
                 .extracting(s -> s.merchant() + "=" + s.category()).containsExactly("MIXED=Dining");
     }
 
+    /** A txn marked not a transfer gives no label (step 9d): its generic description says nothing about neighbours. */
+    @Test
+    void aTxnMarkedNotATransferGivesNoLabel() {
+        embeddings.upsert("ONLINE BANKING TRANSFER", MODEL, HASH, unit(0));
+        embeddings.upsert("MIXED", MODEL, HASH, blend(unit(0), unit(1), 0.1f));
+        long excluded = rows.txn("ONLINE BANKING TRANSFER", "-1.00");
+        rows.categorize(excluded, "Housing", "USER");
+        rows.categorize(rows.txn("MIXED", "-1.00", "2026-04-01"), "Groceries", "USER");
+        long newer = rows.txn("MIXED", "-1.00", "2026-04-20");
+        rows.categorize(newer, "Dining", "USER");
+        jdbc.sql("UPDATE txn SET transfer_excluded = true WHERE id IN (:excluded, :newer)")
+                .param("excluded", excluded).param("newer", newer).update();
+
+        assertThat(embeddings.findNearestLabeled(unit(0), MODEL, "ITEM", -1, 0.0, 40, 5))
+                .extracting(s -> s.merchant() + "=" + s.category()).containsExactly("MIXED=Groceries");
+    }
+
     @Test
     void theLabelIsInTheItemsDirection() {
         embeddings.upsert("STORE", MODEL, HASH, unit(0));

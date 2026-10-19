@@ -8,9 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The lock every categorization write pass takes (docs/plans/phase-4.md §1.3): the after-import
  * listener, the startup backfill and, from step 2, the on-demand run never interleave. A
- * transaction-level advisory lock like {@code TransferLock}, with its own key; the two are never
- * nested in either order, since categorization never takes the transfer lock and transfer code never
- * takes this one.
+ * transaction-level advisory lock like {@code TransferLock}, with its own key. Categorization never takes the
+ * transfer lock; the only nesting is "not a transfer" ({@code TransactionService.markNotTransfer}), which takes the
+ * transfer lock and then this one, before writing any row (step 9d notes).
  */
 @Component
 public class CategorizationLock {

@@ -31,8 +31,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Stage 5 of the pipeline (CAT-02, docs/plans/phase-4.md §1.1, §4): the AI categorizes what the rules and merchant
  * memory left uncategorized.
  *
- * <p><b>What it sees.</b> Uncategorized txns with a merchant that are on no transfer link, one item per distinct
- * merchant and direction (§4.1). A txn the user categorized is never selected; neither is a RULE txn. AI txns and
+ * <p><b>What it sees.</b> Uncategorized txns with a merchant that are on no transfer link and not marked not a
+ * transfer, one item per distinct merchant and direction (§4.1). A txn marked not a transfer waits for the user: the
+ * model can't know whose account the money went to (step 9d notes). A txn the user categorized is never selected; neither is a RULE txn. AI txns and
  * txns already left for review are skipped too, so a second run makes no call, unless {@code force} asks again for
  * them (AI txns may then get a new AI answer; USER and RULE txns still never change). Every batch goes through
  * {@link CategorizationPromptBuilder}: cleaned merchant, {@link Redactor}, {@link OutboundPayloadGuard}, per-batch
@@ -55,7 +56,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p><b>Writes.</b> Candidates are read in one short transaction; the model is called with no transaction open; each
  * batch's answers are written in a transaction of their own under the {@link CategorizationLock}, with SQL that
- * re-checks the txn: still uncategorized (or still AI, when forced), same merchant, not linked. So a correction or
+ * re-checks the txn: still uncategorized (or still AI, when forced), same merchant, not linked, not marked not a
+ * transfer. So a correction or
  * a rule that lands while a call is in flight wins. An applied answer saves {@code source=AI}, the model id, the
  * confidence and {@link CategorizationPromptBuilder#PROMPT_VERSION}.
  *
@@ -71,7 +73,10 @@ public class AiCategorizer {
     private static final Logger log = LoggerFactory.getLogger(AiCategorizer.class);
     static final int ATTEMPTS = 2;
 
-    /** Writes an AI category, re-checking the txn: uncategorized (or AI, when forced), same merchant, unlinked. */
+    /**
+     * Writes an AI category, re-checking the txn: uncategorized (or AI, when forced), same merchant, unlinked, not
+     * marked not a transfer.
+     */
     private static final String APPLY_SQL = """
             UPDATE txn
             SET category_id = ?, category_source = 'AI', category_rule_id = NULL, categorized_at = now(),
@@ -80,6 +85,7 @@ public class AiCategorizer {
             WHERE id = ?
               AND merchant = ?
               AND NOT is_transfer
+              AND NOT transfer_excluded
               AND (category_source IS NULL OR (? AND category_source = 'AI'))""";
 
     private final AiProperties ai;
@@ -358,6 +364,7 @@ public class AiCategorizer {
                 FROM txn t
                 WHERE t.merchant IS NOT NULL
                   AND NOT t.is_transfer
+                  AND NOT t.transfer_excluded
                   AND (t.category_source IS NULL OR (? AND t.category_source = 'AI'))
                   AND (t.ai_review_reason IS NULL OR ?)
                 ORDER BY t.merchant, direction, t.txn_date DESC, t.id DESC""", force, force)
@@ -449,7 +456,7 @@ public class AiCategorizer {
             jdbc.batchUpdate("""
                     UPDATE txn
                     SET ai_review_reason = ?, ai_review_at = now()
-                    WHERE id = ? AND category_id IS NULL AND NOT is_transfer""", review);
+                    WHERE id = ? AND category_id IS NULL AND NOT is_transfer AND NOT transfer_excluded""", review);
         });
     }
 

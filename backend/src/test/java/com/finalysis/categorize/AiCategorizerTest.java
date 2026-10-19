@@ -582,6 +582,54 @@ class AiCategorizerTest {
         assertThat(storedWithoutTime("stitchery")).isEqualTo(UNTOUCHED);
     }
 
+    /**
+     * A txn the user marked not a transfer waits for the user: the model can't know whose account it is (step 9d). It
+     * is never sent, even forced, and gets no review mark.
+     */
+    @Test
+    void aTxnMarkedNotATransferIsNeverSentEvenWhenForced() {
+        insert("toolworks", "stitchery");
+        jdbc.update("UPDATE txn SET transfer_excluded = true WHERE id = ?", txn("stitchery"));
+        model.answering(sensible(SURE), 300, 40);
+
+        AiRunResult first = categorizer.run(false);
+        categorizer.run(true);
+
+        assertThat(first.itemsSelected()).isEqualTo(1);
+        assertThat(sentItems()).extracting(Sent::merchant).containsOnly("GANTRYWELL TOOLWORKS");
+        assertThat(storedWithoutTime("stitchery")).isEqualTo(UNTOUCHED);
+    }
+
+    /** The write re-checks the mark: "not a transfer" made while the call is in flight wins. */
+    @Test
+    void notATransferMarkedWhileTheCallIsInFlightWins() {
+        insert("tearoom", "toolworks");
+        model.answering(prompt -> {
+            jdbc.update("UPDATE txn SET transfer_excluded = true WHERE id = ?", txn("tearoom"));
+            return sensible(SURE).apply(prompt);
+        }, 300, 40);
+
+        AiRunResult result = categorizer.run(false);
+
+        assertThat(result.txnsCategorized()).isEqualTo(1);
+        assertThat(storedWithoutTime("tearoom")).isEqualTo(UNTOUCHED);
+        assertThat(storedWithoutTime("toolworks")).isEqualTo(ai("Shopping", "0.920"));
+    }
+
+    /** A low-confidence answer for a txn marked meanwhile leaves no review mark: it is listed as not a transfer. */
+    @Test
+    void aReviewMarkIsNotSetOnATxnMarkedNotATransfer() {
+        insert("tearoom");
+        model.answering(prompt -> {
+            jdbc.update("UPDATE txn SET transfer_excluded = true WHERE id = ?", txn("tearoom"));
+            return sensible(0.10).apply(prompt);
+        }, 300, 40);
+
+        categorizer.run(false);
+
+        assertThat(storedWithoutTime("tearoom")).isEqualTo(UNTOUCHED);
+    }
+
     // ------------------------------------------------------------------ idempotence and force
 
     @Test

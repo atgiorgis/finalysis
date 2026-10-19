@@ -36,7 +36,8 @@ import org.springframework.stereotype.Component;
  *
  * <p><b>Examples.</b> For an item's vector: the nearest merchants of the same model, the item's own merchant excluded,
  * each with the category of its newest USER or RULE txn in the item's direction, at least {@code min-similarity},
- * at most {@code k}. AI categories never make an example, so the model never learns from its own answers.
+ * at most {@code k}. AI categories never make an example, so the model never learns from its own answers; nor does
+ * a txn marked not a transfer, whose generic description says nothing about similar merchants (step 9d notes).
  *
  * <p>Logs counts and exception class names only, never a merchant.
  */
@@ -130,7 +131,7 @@ public class MerchantEmbeddingStage {
                 FROM txn
                 WHERE merchant IS NOT NULL
                 GROUP BY merchant
-                HAVING bool_or(category_source IN ('USER', 'RULE'))
+                HAVING bool_or(category_source IN ('USER', 'RULE') AND NOT transfer_excluded)
                 ORDER BY merchant""", rs -> {
             String merchant = rs.getString("merchant");
             if (!textByMerchant.containsKey(merchant)) {
