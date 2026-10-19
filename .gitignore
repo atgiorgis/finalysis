@@ -24,6 +24,10 @@ private-data/
 *.tiff
 !sample-data/**
 
+# Categorization eval results stay local; only the README is committed.
+docs/eval/*
+!docs/eval/README.md
+
 # Model files (local LLM weights, OCR language data)
 *.gguf
 *.safetensors

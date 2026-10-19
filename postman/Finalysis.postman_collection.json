@@ -3305,6 +3305,287 @@
           ]
         }
       ]
+    },
+    {
+      "name": "8. Lookups",
+      "description": "Manual lookups: fill in the id and send. Nothing is asserted. Not part of the newman run.",
+      "item": [
+        {
+          "name": "Get transaction by id",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.request.url.variables.get('id');",
+                  "if (!/^\\d+$/.test(id || '')) {",
+                  "    throw new Error('Enter a transaction id (digits only) in Params → Path Variables → id.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code !== 200) {",
+                  "    console.log('Get transaction:', pm.response.code, pm.response.text());",
+                  "    return;",
+                  "}",
+                  "const t = pm.response.json();",
+                  "const baseUrl = pm.variables.get('baseUrl');",
+                  "const sources = { RULE: 'Rule', AI: 'AI', USER: 'You (correction)' };",
+                  "const orDash = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));",
+                  "",
+                  "function show(categoriesById, rule) {",
+                  "    const c = t.category;",
+                  "    const parent = c && c.parentId != null ? categoriesById[c.parentId] : null;",
+                  "    const rows = [",
+                  "        ['Transaction', 'Id', t.id],",
+                  "        ['Transaction', 'Date', t.postDate && t.postDate !== t.txnDate ? `${t.txnDate} (posted ${t.postDate})` : t.txnDate],",
+                  "        ['Transaction', 'Amount', `${t.amount} (${String(t.amount).startsWith('-') ? 'money out' : 'money in'})`],",
+                  "        ['Transaction', 'Account', `${t.accountName} (${t.accountType}, id ${t.accountId})`],",
+                  "        ['Transaction', 'Statement id', t.statementId],",
+                  "        ['Transaction', 'Section', t.sourceSection],",
+                  "        ['Transaction', 'Raw description', t.rawDescription],",
+                  "        ['Transaction', 'Merchant', t.merchant],",
+                  "        ['Transaction', 'Counterparty', t.counterparty],",
+                  "        ['Category', 'Category', c ? c.name : 'Uncategorized'],",
+                  "        ['Category', 'Parent', c ? (parent ? parent.name : (c.parentId == null ? 'none (top level)' : `id ${c.parentId}`)) : null],",
+                  "        ['Category', 'Kind', c ? c.kind : null],",
+                  "        ['Category', 'Set by', t.categorySource ? sources[t.categorySource] || t.categorySource : null],",
+                  "        ['Category', 'Set at', t.categorizedAt],",
+                  "    ];",
+                  "    if (t.ruleId != null) {",
+                  "        rows.push(['Rule', 'Rule', rule",
+                  "            ? `#${rule.id}: ${rule.field} ${rule.matchType} \"${rule.pattern}\"`",
+                  "            : `#${t.ruleId} (couldn't load it)`]);",
+                  "        if (rule) {",
+                  "            rows.push(['Rule', 'Rule details', `${rule.source} rule, direction ${rule.direction}, priority ${rule.priority}${rule.active ? '' : ', inactive'}`]);",
+                  "        }",
+                  "    }",
+                  "    if (t.categorySource === 'AI') {",
+                  "        rows.push(['AI', 'Model', t.categoryModel]);",
+                  "        rows.push(['AI', 'Confidence', t.categoryConfidence == null ? null : `${Math.round(Number(t.categoryConfidence) * 100)}%`]);",
+                  "        rows.push(['AI', 'Prompt version', t.categoryPromptVersion]);",
+                  "    }",
+                  "    if (t.aiReviewReason) {",
+                  "        rows.push(['AI', 'Left for review', t.aiReviewReason]);",
+                  "    }",
+                  "    rows.push(['Transfer', 'On a transfer link', t.isTransfer ? 'yes (excluded from spending)' : 'no']);",
+                  "    rows.push(['Transfer', 'Marked not a transfer', t.transferExcluded ? 'yes' : 'no']);",
+                  "",
+                  "    const template = `",
+                  "        <style>",
+                  "            body { font-family: -apple-system, sans-serif; font-size: 13px; }",
+                  "            table { border-collapse: collapse; width: 100%; }",
+                  "            td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }",
+                  "            td.section { color: #888; white-space: nowrap; }",
+                  "            td.label { font-weight: 600; white-space: nowrap; }",
+                  "        </style>",
+                  "        <table>",
+                  "            {{#each rows}}",
+                  "            <tr><td class=\"section\">{{this.[0]}}</td><td class=\"label\">{{this.[1]}}</td><td>{{this.[2]}}</td></tr>",
+                  "            {{/each}}",
+                  "        </table>`;",
+                  "    pm.visualizer.set(template, { rows: rows.map(([s, l, v]) => [s, l, orDash(v)]) });",
+                  "    // Only ids and the category in the console: no amounts or descriptions.",
+                  "    console.log(`Transaction ${t.id}: ${c ? c.name : 'Uncategorized'} (${orDash(t.categorySource)})`);",
+                  "}",
+                  "",
+                  "pm.sendRequest(`${baseUrl}/api/categories`, (err, res) => {",
+                  "    const categories = !err && res.code === 200 ? res.json() : [];",
+                  "    const categoriesById = Object.fromEntries(categories.map((c) => [c.id, c]));",
+                  "    if (t.ruleId == null) {",
+                  "        show(categoriesById, null);",
+                  "        return;",
+                  "    }",
+                  "    pm.sendRequest(`${baseUrl}/api/categorization/rules/${t.ruleId}`, (ruleErr, ruleRes) => {",
+                  "        show(categoriesById, !ruleErr && ruleRes.code === 200 ? ruleRes.json() : null);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "The transaction id, e.g. `txn.id` from a review-queue item."
+                }
+              ]
+            },
+            "description": "One transaction with its categorization. Enter the id in **Params → Path Variables**, send, then open the **Visualize** tab of the response for a readable table: the category by name with its parent and kind, who set it (rule, AI or you), the rule's pattern for a rule category, and the model and confidence for an AI category. The script makes two more GET calls (`/api/categories`, and `/api/categorization/rules/{id}` for a rule category) to turn ids into names. The console logs only the id and the category."
+          }
+        },
+        {
+          "name": "List transactions: total",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) {",
+                  "    return;",
+                  "}",
+                  "const total = pm.response.json().total;",
+                  "pm.collectionVariables.set('txnTotal', total);",
+                  "const template = `",
+                  "    <style>",
+                  "        body { font-family: -apple-system, sans-serif; font-size: 13px; }",
+                  "        table { border-collapse: collapse; }",
+                  "        td { padding: 4px 12px 4px 0; border-bottom: 1px solid #ddd; }",
+                  "        td.label { font-weight: 600; }",
+                  "        td.num { text-align: right; font-variant-numeric: tabular-nums; }",
+                  "        p { color: #888; }",
+                  "    </style>",
+                  "    <table>",
+                  "        {{#each rows}}<tr><td class=\"label\">{{this.[0]}}</td><td class=\"num\">{{this.[1]}}</td></tr>{{/each}}",
+                  "    </table>",
+                  "    {{#if note}}<p>{{note}}</p>{{/if}}`;",
+                  "pm.visualizer.set(template, { rows: [['Transactions', total]], note: 'Saved as txnTotal.' });",
+                  "console.log('Transactions:', total);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions?size=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "1",
+                  "description": "Page size only; `total` counts every matching txn whatever the size. Raise it (max 200) to see rows."
+                }
+              ]
+            },
+            "description": "Every transaction, no filters. The count is `total` in the response; the **Visualize** tab shows it, and it is saved as the `txnTotal` collection variable."
+          }
+        },
+        {
+          "name": "List uncategorized transactions: coverage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) {",
+                  "    return;",
+                  "}",
+                  "const uncategorized = pm.response.json().total;",
+                  "const baseUrl = pm.variables.get('baseUrl');",
+                  "// Counts are integers from the API; the percentages are for display only.",
+                  "const pct = (n, d) => (d === 0 ? 'n/a' : `${(100 * n / d).toFixed(1)}%`);",
+                  "const count = (query, callback) => pm.sendRequest(`${baseUrl}/api/transactions?size=1&${query}`,",
+                  "    (err, res) => callback(!err && res.code === 200 ? res.json().total : null));",
+                  "const template = `",
+                  "    <style>",
+                  "        body { font-family: -apple-system, sans-serif; font-size: 13px; }",
+                  "        table { border-collapse: collapse; }",
+                  "        td { padding: 4px 12px 4px 0; border-bottom: 1px solid #ddd; }",
+                  "        td.label { font-weight: 600; }",
+                  "        td.num { text-align: right; font-variant-numeric: tabular-nums; }",
+                  "        p { color: #888; }",
+                  "    </style>",
+                  "    <table>",
+                  "        {{#each rows}}<tr><td class=\"label\">{{this.[0]}}</td><td class=\"num\">{{this.[1]}}</td></tr>{{/each}}",
+                  "    </table>",
+                  "    {{#if note}}<p>{{note}}</p>{{/if}}`;",
+                  "",
+                  "// Fetches the total itself, so this request doesn't depend on the one above having run.",
+                  "count('', (total) => {",
+                  "    count('source=RULE', (rule) => {",
+                  "        count('source=AI', (ai) => {",
+                  "            count('source=USER', (user) => {",
+                  "                if (total === null) {",
+                  "                    pm.visualizer.set(template, { rows: [['Uncategorized', uncategorized]], note: \"Couldn't load the total.\" });",
+                  "                    return;",
+                  "                }",
+                  "                pm.collectionVariables.set('txnTotal', total);",
+                  "                pm.collectionVariables.set('txnUncategorized', uncategorized);",
+                  "                const show = (n) => (n === null ? '?' : n);",
+                  "                const rows = [",
+                  "                    ['Transactions', total],",
+                  "                    ['Uncategorized', uncategorized],",
+                  "                    ['Categorized', total - uncategorized],",
+                  "                    ['  by rule', show(rule)],",
+                  "                    ['  by AI', show(ai)],",
+                  "                    ['  by you (corrections)', show(user)],",
+                  "                    ['Coverage: (total − uncategorized) ÷ total', pct(total - uncategorized, total)],",
+                  "                    ['Rules only: rule ÷ total', rule === null ? '?' : pct(rule, total)],",
+                  "                ];",
+                  "                const note = ai > 0",
+                  "                    ? 'Some categories came from the AI, so coverage is more than rules coverage. Use \"Rules only\" for rules coverage.'",
+                  "                    : '';",
+                  "                pm.visualizer.set(template, { rows, note });",
+                  "                console.log(`Coverage: ${total - uncategorized} / ${total} = ${pct(total - uncategorized, total)}`);",
+                  "            });",
+                  "        });",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions?uncategorized=true&size=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "uncategorized",
+                  "value": "true",
+                  "description": "Only txns without a category."
+                },
+                {
+                  "key": "size",
+                  "value": "1",
+                  "description": "Page size only; `total` counts every matching txn whatever the size. Raise it (max 200) to see rows."
+                }
+              ]
+            },
+            "description": "Transactions without a category; the count is `total`. The **Visualize** tab computes coverage = (total − uncategorized) ÷ total, and splits the categorized ones by source (rule, AI, you) with four more GET calls (`source=RULE`, `AI`, `USER`, and no filter for the total). If the AI has categorized anything, coverage is more than rules coverage: the **Rules only** row is rule ÷ total."
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -3426,6 +3707,14 @@
     },
     {
       "key": "summitLinkId",
+      "value": ""
+    },
+    {
+      "key": "txnTotal",
+      "value": ""
+    },
+    {
+      "key": "txnUncategorized",
       "value": ""
     }
   ]
