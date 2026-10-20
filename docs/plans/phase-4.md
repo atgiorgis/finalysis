@@ -1798,6 +1798,21 @@ their remaining parts belong to Phases 6, 8 and 10 (as ING-02 and SEC-11 were ha
 
 Backend tests 2,198 (unchanged; no Java change); frontend 4.
 
+**Fix after your first newman run** (folders 1–6 passed; 37 failures, all in folder 8):
+- *`_.minBy` doesn't exist in the Postman sandbox*, whose global `_` is Lodash 3. The Corrections pick crashed,
+  saved no id, and every later Corrections request failed. Now plain JavaScript; every other `_` call in the
+  collection (`omit`, `pick`, `sortBy`) was checked against Lodash 3.10.1, and the collection description says so.
+- *Rules borrowed the Corrections folder's `newCategoryId`*; empty, its bodies were invalid JSON (400), and the 409,
+  deactivate and delete checks followed. Rules now picks its own category (`ruleCategoryId`, Shopping).
+- *A failed pick cascaded.* Each subfolder of folder 8 has a pre-request guard: its first request arms a flag, each
+  pick asserts what it found with a clear message and clears the flag when it fails, and the subfolder's later
+  requests are then skipped (`pm.execution.skipRequest`, newman 6.1+). The error requests' id lookups in folder 6
+  fail with a message too.
+- "The merchant's other purchases follow the rule" now counts money-out rows other than the corrected txn, so a
+  purchase already in the target category or a money-in row can't skew it.
+- Checked by running the changed scripts and guards in Node with Lodash 3.10.1 and a stub `pm` (success and failed
+  pick); newman not run here.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6 and **8. Categorization**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **9. Lookups**: manual lookups by id.\n- **10. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6 and **8. Categorization**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **9. Lookups**: manual lookups by id.\n- **10. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.\n\n**Scripts.** The Postman sandbox's global `_` is **Lodash 3**: functions added in Lodash 4 (`minBy`, `maxBy`, `sumBy`, …) don't exist there, so scripts use plain JavaScript or Lodash 3 only. In **8. Categorization**, each subfolder's first request arms a flag and every pick checks what it found; after a failed pick the subfolder's later requests are skipped (`pm.execution.skipRequest`, newman 6.1 or later), so one bad pick is one failure, not a cascade.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -2943,7 +2943,11 @@
                     "exec": [
                       "// Any txn: the request fails before anything is written.",
                       "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
-                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "    const items = !err && res.code === 200 ? res.json().items : [];",
+                      "    if (!items.length) {",
+                      "        throw new Error('No transaction to send this error request for: run 1. Setup first.');",
+                      "    }",
+                      "    pm.collectionVariables.set('errTxnId', items[0].id);",
                       "});"
                     ]
                   }
@@ -2985,7 +2989,11 @@
                     "exec": [
                       "// Any txn: the request fails before anything is written.",
                       "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
-                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "    const items = !err && res.code === 200 ? res.json().items : [];",
+                      "    if (!items.length) {",
+                      "        throw new Error('No transaction to send this error request for: run 1. Setup first.');",
+                      "    }",
+                      "    pm.collectionVariables.set('errTxnId', items[0].id);",
                       "});"
                     ]
                   }
@@ -3018,7 +3026,11 @@
                     "exec": [
                       "// Any txn: the request fails before anything is written.",
                       "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/transactions?size=1`, (err, res) => {",
-                      "    pm.collectionVariables.set('errTxnId', res.json().items[0].id);",
+                      "    const items = !err && res.code === 200 ? res.json().items : [];",
+                      "    if (!items.length) {",
+                      "        throw new Error('No transaction to send this error request for: run 1. Setup first.');",
+                      "    }",
+                      "    pm.collectionVariables.set('errTxnId', items[0].id);",
                       "});"
                     ]
                   }
@@ -3109,7 +3121,11 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/categorization/rules?source=SEED`, (err, res) => {",
-                      "    pm.collectionVariables.set('seedRuleId', res.json()[0].id);",
+                      "    const seeds = !err && res.code === 200 ? res.json() : [];",
+                      "    if (!seeds.length) {",
+                      "        throw new Error('No seeded rule found: is V15 applied?');",
+                      "    }",
+                      "    pm.collectionVariables.set('seedRuleId', seeds[0].id);",
                       "});"
                     ]
                   }
@@ -3150,7 +3166,11 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.sendRequest(`${pm.variables.get('baseUrl')}/api/categorization/rules?source=SEED`, (err, res) => {",
-                      "    pm.collectionVariables.set('seedRuleId', res.json()[0].id);",
+                      "    const seeds = !err && res.code === 200 ? res.json() : [];",
+                      "    if (!seeds.length) {",
+                      "        throw new Error('No seeded rule found: is V15 applied?');",
+                      "    }",
+                      "    pm.collectionVariables.set('seedRuleId', seeds[0].id);",
                       "});"
                     ]
                   }
@@ -3774,17 +3794,24 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
+                      "    return;",
+                      "}",
                       "const body = pm.response.json();",
                       "pm.test('one page holds them all', () => pm.expect(body.total).to.be.at.most(200));",
                       "pm.test('RULE txns carry their rule', () => body.items.forEach(t => { pm.expect(t.categorySource).to.eql('RULE'); pm.expect(t.ruleId).to.be.a('number'); }));",
-                      "const purchases = body.items.filter(t => t.merchant && t.amount.startsWith('-') && t.category.kind === 'EXPENSE');",
-                      "const byMerchant = _.groupBy(purchases, 'merchant');",
+                      "// Plain JavaScript: the sandbox's global _ is Lodash 3 (no minBy, maxBy, sumBy…).",
+                      "const purchases = body.items.filter(t => t.merchant && t.amount.startsWith('-') && t.category && t.category.kind === 'EXPENSE');",
+                      "const byMerchant = {};",
+                      "purchases.forEach(t => (byMerchant[t.merchant] = byMerchant[t.merchant] || []).push(t));",
                       "const merchant = Object.keys(byMerchant).sort().find(m => byMerchant[m].length >= 2);",
-                      "pm.test('a merchant with at least two purchases', () => pm.expect(merchant).to.be.a('string'));",
+                      "pm.test('picked a merchant with two or more rule-categorized purchases', () => pm.expect(merchant, 'no Apex merchant has two RULE purchases of EXPENSE kind; the rest of Corrections is skipped').to.be.a('string'));",
                       "if (!merchant) {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
                       "    return;",
                       "}",
-                      "const txn = _.minBy(byMerchant[merchant], 'id');",
+                      "const txn = byMerchant[merchant].reduce((lowest, t) => (t.id < lowest.id ? t : lowest));",
                       "pm.collectionVariables.set('correctTxnId', txn.id);",
                       "pm.collectionVariables.set('correctMerchant', merchant);",
                       "pm.collectionVariables.set('correctMerchantQuery', encodeURIComponent(merchant));",
@@ -3809,10 +3836,19 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                      "const categories = pm.response.json();",
+                      "const categories = pm.response.code === 200 ? pm.response.json() : [];",
                       "const original = categories.find(cat => cat.id === Number(pm.collectionVariables.get('originalCategoryId')));",
-                      "const target = categories.find(cat => cat.name === (original.name === 'Shopping' ? 'Dining' : 'Shopping'));",
-                      "pm.test('an expense category other than the current one', () => { pm.expect(target.kind).to.eql('EXPENSE'); pm.expect(target.id).to.not.eql(original.id); });",
+                      "const target = original && categories.find(cat => cat.name === (original.name === 'Shopping' ? 'Dining' : 'Shopping'));",
+                      "pm.test('picked an expense category other than the current one', () => {",
+                      "    pm.expect(original, 'the picked txn\\'s category is not in /api/categories').to.be.an('object');",
+                      "    pm.expect(target, 'no Shopping or Dining category').to.be.an('object');",
+                      "    pm.expect(target.kind).to.eql('EXPENSE');",
+                      "    pm.expect(target.id).to.not.eql(original.id);",
+                      "});",
+                      "if (!target) {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
+                      "    return;",
+                      "}",
                       "pm.collectionVariables.set('newCategoryId', target.id);"
                     ]
                   }
@@ -3833,14 +3869,24 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
+                      "    return;",
+                      "}",
                       "const body = pm.response.json();",
                       "pm.test('only that merchant', () => body.items.forEach(t => pm.expect(t.merchant).to.eql(pm.collectionVariables.get('correctMerchant'))));",
                       "const id = Number(pm.collectionVariables.get('correctTxnId'));",
                       "const newId = Number(pm.collectionVariables.get('newCategoryId'));",
                       "// The correction rule covers the merchant's other money-out txns; a category you set (USER) is kept.",
-                      "const expected = body.items.filter(t => t.id !== id && t.amount.startsWith('-') && t.categorySource !== 'USER' && (!t.category || t.category.id !== newId)).length;",
-                      "pm.test('at least one other purchase will follow', () => pm.expect(expected).to.be.at.least(1));",
-                      "pm.collectionVariables.set('expectedOthersUpdated', expected);"
+                      "const following = body.items.filter(t => t.id !== id && t.amount.startsWith('-') && t.categorySource !== 'USER');",
+                      "const expected = following.filter(t => !t.category || t.category.id !== newId).length;",
+                      "pm.test('picked at least one other purchase that will follow', () => pm.expect(expected, 'the merchant has no other purchase to move; the rest of Corrections is skipped').to.be.at.least(1));",
+                      "if (expected < 1) {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('expectedOthersUpdated', expected);",
+                      "pm.collectionVariables.set('expectedFollowing', following.length);"
                     ]
                   }
                 }
@@ -3900,6 +3946,10 @@
                       "pm.test('USER category on the txn, no rule on it', () => { pm.expect(body.txn.categorySource).to.eql('USER'); pm.expect(body.txn.category.id).to.eql(Number(pm.collectionVariables.get('newCategoryId'))); pm.expect(body.txn.ruleId).to.eql(null); });",
                       "pm.test('a correction rule was created', () => { pm.expect(body.ruleAction).to.eql('CREATED'); pm.expect(body.ruleId).to.be.a('number'); });",
                       "pm.test('the merchant\\'s other purchases followed', () => pm.expect(_.pick(body, ['otherTxnsUpdated', 'otherTxnsKeptUser', 'otherTxnsKeptOtherRule'])).to.eql({otherTxnsUpdated: Number(pm.collectionVariables.get('expectedOthersUpdated')), otherTxnsKeptUser: 0, otherTxnsKeptOtherRule: 0}));",
+                      "if (typeof body.ruleId !== 'number') {",
+                      "    pm.collectionVariables.set('correctionsReady', 'false');",
+                      "    return;",
+                      "}",
                       "pm.collectionVariables.set('correctionRuleId', body.ruleId);"
                     ]
                   }
@@ -3943,8 +3993,11 @@
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const body = pm.response.json();",
-                      "pm.test('as many as the correction said', () => pm.expect(body.total).to.eql(Number(pm.collectionVariables.get('expectedOthersUpdated'))));",
-                      "pm.test('each by the correction rule', () => body.items.forEach(t => pm.expect(t.ruleId).to.eql(Number(pm.collectionVariables.get('correctionRuleId')))));"
+                      "const id = Number(pm.collectionVariables.get('correctTxnId'));",
+                      "// Money out only, the corrected txn left out: the rule's direction is OUT.",
+                      "const others = body.items.filter(t => t.id !== id && t.amount.startsWith('-'));",
+                      "pm.test('every other purchase follows', () => pm.expect(others.length).to.eql(Number(pm.collectionVariables.get('expectedFollowing'))));",
+                      "pm.test('each by the correction rule', () => others.forEach(t => pm.expect(t.ruleId).to.eql(Number(pm.collectionVariables.get('correctionRuleId')))));"
                     ]
                   }
                 }
@@ -3993,7 +4046,30 @@
                 }
               ]
             }
-          ]
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Pick an Apex purchase categorized by a rule' sets correctionsReady; a pick that fails clears it,",
+                  "// and the folder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'correctionsReady';",
+                  "if (pm.info.requestName === \"Pick an Apex purchase categorized by a rule\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Corrections failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Corrections failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Each pick checks what it found; if one fails, the folder's later requests are skipped (see the collection description)."
         },
         {
           "name": "Not a transfer",
@@ -4013,13 +4089,19 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set('notTransferReady', 'false');",
+                      "    return;",
+                      "}",
                       "const body = pm.response.json();",
                       "pm.test('only that kind, counted', () => { body.items.forEach(i => pm.expect(i.kind).to.eql('SUGGESTED_ONE_SIDED_TRANSFER')); pm.expect(body.counts.suggestedOneSidedTransfers).to.eql(body.items.length); });",
                       "pm.test('at least two', () => pm.expect(body.items.length).to.be.at.least(2));",
                       "pm.test('nothing marked, no AI reviews', () => { pm.expect(body.counts.notTransferUncategorized).to.eql(0); pm.expect(body.counts.aiCategoryReviews).to.eql(0); });",
                       "pm.test('each from a rule, keyed by txn', () => body.items.forEach(i => { pm.expect(i.categorySource).to.eql('RULE'); pm.expect(i.ruleId).to.be.a('number'); pm.expect(i.key).to.eql('txn-' + i.txn.id); }));",
                       "const items = _.sortBy(body.items, i => i.txn.id);",
+                      "pm.test('picked two suggestions', () => pm.expect(items.length, 'fewer than two CAT-08 suggestions; the rest of Not a transfer is skipped').to.be.at.least(2));",
                       "if (items.length < 2) {",
+                      "    pm.collectionVariables.set('notTransferReady', 'false');",
                       "    return;",
                       "}",
                       "pm.collectionVariables.set('suggestedCount', items.length);",
@@ -4300,11 +4382,61 @@
                 }
               ]
             }
-          ]
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Review queue: CAT-08 suggestions' sets notTransferReady; a pick that fails clears it,",
+                  "// and the folder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'notTransferReady';",
+                  "if (pm.info.requestName === \"Review queue: CAT-08 suggestions\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": the suggestion pick failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": the suggestion pick failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "If the suggestion pick fails, the folder's later requests are skipped."
         },
         {
           "name": "Rules",
           "item": [
+            {
+              "name": "Pick the rule's category",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/categories"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const categories = pm.response.code === 200 ? pm.response.json() : [];",
+                      "const shopping = categories.find(cat => cat.name === 'Shopping');",
+                      "pm.test('picked the Shopping category', () => pm.expect(shopping, 'no Shopping category; the rest of Rules is skipped').to.be.an('object'));",
+                      "if (!shopping) {",
+                      "    pm.collectionVariables.set('rulesReady', 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('ruleCategoryId', shopping.id);"
+                    ]
+                  }
+                }
+              ]
+            },
             {
               "name": "List seeded rules",
               "request": {
@@ -4334,7 +4466,7 @@
                 "url": "{{baseUrl}}/api/categorization/rules",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"  zz postman   test \", \"categoryId\": {{newCategoryId}}}",
+                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"  zz postman   test \", \"categoryId\": {{ruleCategoryId}}}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -4350,9 +4482,14 @@
                     "exec": [
                       "pm.test('201 Created', () => pm.response.to.have.status(201));",
                       "const body = pm.response.json();",
+                      "pm.test('category as picked', () => pm.expect(body.rule && body.rule.category.id).to.eql(Number(pm.collectionVariables.get('ruleCategoryId'))));",
                       "pm.test('a USER rule with the defaults, pattern normalized', () => pm.expect(_.pick(body.rule, ['source', 'field', 'matchType', 'pattern', 'direction', 'priority', 'active'])).to.eql({source: 'USER', field: 'MERCHANT', matchType: 'CONTAINS', pattern: 'ZZ POSTMAN TEST', direction: 'ANY', priority: 0, active: true}));",
                       "pm.test('matches nothing yet', () => pm.expect(_.pick(body, ['matchCount', 'winCount', 'shadowedBy'])).to.eql({matchCount: 0, winCount: 0, shadowedBy: null}));",
                       "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp('/api/categorization/rules/' + body.rule.id + '$')));",
+                      "if (!body.rule || typeof body.rule.id !== 'number') {",
+                      "    pm.collectionVariables.set('rulesReady', 'false');",
+                      "    return;",
+                      "}",
                       "pm.collectionVariables.set('userRuleId', body.rule.id);"
                     ]
                   }
@@ -4367,7 +4504,7 @@
                 "url": "{{baseUrl}}/api/categorization/rules",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"ZZ POSTMAN TEST\", \"categoryId\": {{newCategoryId}}}",
+                  "raw": "{\"matchType\": \"CONTAINS\", \"pattern\": \"ZZ POSTMAN TEST\", \"categoryId\": {{ruleCategoryId}}}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -4458,7 +4595,30 @@
                 }
               ]
             }
-          ]
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: \"Pick the rule's category\" sets rulesReady; a pick that fails clears it,",
+                  "// and the folder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'rulesReady';",
+                  "if (pm.info.requestName === \"Pick the rule's category\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Rules failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Rules failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Picks its own category, so it doesn't depend on Corrections. A failed pick skips the rest."
         }
       ]
     },
@@ -4986,6 +5146,26 @@
     },
     {
       "key": "seedRuleId",
+      "value": ""
+    },
+    {
+      "key": "expectedFollowing",
+      "value": ""
+    },
+    {
+      "key": "ruleCategoryId",
+      "value": ""
+    },
+    {
+      "key": "correctionsReady",
+      "value": ""
+    },
+    {
+      "key": "notTransferReady",
+      "value": ""
+    },
+    {
+      "key": "rulesReady",
       "value": ""
     }
   ]
