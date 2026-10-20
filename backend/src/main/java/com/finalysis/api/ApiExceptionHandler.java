@@ -15,6 +15,7 @@ import com.finalysis.transfer.TransferInvalidException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -90,6 +91,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             message = "must be one of " + enumValues(type);
         } else if (type == LocalDate.class) {
             message = "must be a date (yyyy-MM-dd)";
+        } else if (type == YearMonth.class) {
+            message = "must be a month (yyyy-MM)";
         } else if (type == Boolean.class || type == boolean.class) {
             message = "must be true or false";
         } else if (type != null && (Number.class.isAssignableFrom(type) || type.isPrimitive())) {

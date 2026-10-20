@@ -103,7 +103,9 @@ unchanged, so the savings rate's denominator doesn't grow.
 | 2026-01 | −120.00 | 0.00 | −120.00 | −120.00 |
 | 2026-02 | 0.00 | 120.00 | 120.00 | +120.00 |
 
-Over both months, Shopping nets to 0.00. February's spending is 120.00 lower than its purchases alone.
+Over both months, Shopping nets to 0.00. February's spending is 120.00 lower than its purchases alone. *(Step 2: the table shows
+the Target rows only. In the fixture, January's Shopping row also has the bookshop's −25.00 on 2026-01-18, so it reads
+`moneyOut` −145.00; February's is as shown.)*
 
 ### 1.3 Uncategorized and review-pending
 
@@ -391,6 +393,7 @@ record MonthTotals(YearMonth month, Coverage coverage,
                    @ApiPercent BigDecimal savingsRatePercent,           // null when income ≤ 0
                    MoneyFlow refunds,                                   // already in spending
                    MoneyFlow uncategorized, MoneyFlow unlinkedTransfers, MoneyFlow linkedTransfers,
+                   @ApiMoney BigDecimal netChange,                      // step 2: every amount, transfers included
                    int txnCount, DataQuality dataQuality)
 record DataQuality(int countedTxns, int uncategorizedCount, int reviewPendingCount, int unlinkedTransferCount,
                    @ApiPercent BigDecimal uncategorizedPercentOfCount,
@@ -923,6 +926,82 @@ and was renamed.
 **Found on the way.** A first targeted run failed with V18 as the only migration on the classpath. `target/classes`
 was stale, most likely from the editor's incremental Java build, which writes to the same `target/`. `clean`
 fixed it; it is not a code issue.
+
+### Step 2 notes
+
+Done: "Phase 5 step 2: monthly totals, coverage and data quality". Backend 2,306 tests (Maven summary;
+2,233 + 73), 0 failures, 0 skipped; frontend 4. Requirements v1.47. No migration.
+
+**Built** (package `analytics`, plain SQL over `JdbcClient`, no entity graph)
+- **One query.** `BucketTotalsQuery` sums and counts per month, account, category and bucket, selecting
+  `TxnBucketSql.BUCKET`; every total of this step is added up in Java from its cells. Month by `txn_date`, as a
+  half-open range. `reviewPending` is counted in SQL (uncategorized, and `ai_review_reason` set or marked not a
+  transfer) and read from the Uncategorized bucket only.
+- **Services** (`MonthlyTotalsService`, `CategoryTotalsService`, `AccountTotalsService`, `CoverageService`), each
+  method `@Transactional(readOnly = true, isolation = REPEATABLE_READ)`; `AnalyticsController` only maps HTTP onto
+  them. Endpoints: `GET /api/analytics/months`, `/categories`, `/accounts`, `/coverage` (§5.2).
+- **Coverage.** `CoverageQuery` reads each account's periods merged by `range_agg`; `CoverageMap` (plain Java) gives
+  household and per-account status, the partial accounts, gaps, `latestMonth` and `latestCompleteMonth`.
+- **Data quality and flags** (§1.7) in every household and per-account month: `RECONCILIATION_FAILED` and
+  `BALANCE_UNVERIFIED` for each flagged statement overlapping the month (with its id and `reviewedAt`), then
+  `PARTIAL_COVERAGE` per account.
+- **Units.** `@ApiPercent` (`api`): a string with one decimal, never rounded at serialization. Percents are computed
+  once, in `Arithmetic.percent` (multiply, then one `HALF_EVEN` division). A malformed month is a 400 "must be a month
+  (yyyy-MM)", without echoing the value.
+- **Settings.** `finalysis.analytics.max-months` (24) and `default-months` (6), validated at startup. The merchants
+  limit comes with step 3.
+
+**Tests** (expected figures from `expected-month-totals.csv` and the plan's worked examples, as literals)
+- **`MonthlyTotalsTest`:** all 15 rows of `expected-month-totals.csv`, every column, formatted as the file is and
+  compared line by line; the accounts endpoint equals the account filter; one named test per §9.1 scenario (refund in
+  an expense category, Refunds & Rebates, uncategorized with review-pending, unlinked and linked transfers, both
+  not-transfer cases, month by `txn_date`), the category filters and the row order.
+- **`UnlinkedTransferActionsTest`:** §1.4's table through the API: marked one-sided → linked; marked not a transfer →
+  uncategorized and review-pending; corrected to an expense → spending.
+- **`DataQualityTest`:** §1.7's February (18.2 / 9.1 / 3.8), a refund kept out of the denominator, the failed March
+  statement's flag and its `reviewedAt` after review, an unverified card cycle flagging both months it overlaps, the
+  partial December, and null percents when nothing is counted.
+- **`CoverageTest`** (fixture: December and April partial, January to March complete; spans, gaps, flagged
+  statements; a deleted statement opening a gap) and **`CoverageMapTest`** (§1.6's sample-data example, gaps in one
+  account or all, leap February, no statements).
+- **`AnalyticsInvariantsTest`** (§9.2) on the fixture and the sample data, both imported for real: buckets = plain
+  SQL sum and count in every month for the household and each account, and the category rows too; `netChange` =
+  `closing − opening` for every PASSED statement spanning one calendar month (3 in the fixture, 18 in the sample
+  data); household `linkedTransfers.net` = 0.00 in every month whose links are matched with both sides in it.
+- **`AnalyticsRandomizedTest`:** 2,000 seeded rows (every category kind, the offset one and none; zero amounts;
+  links, not-transfer marks, review reasons) against `BucketOracle`, for the household and each account over 24 months.
+- **`AnalyticsApiTest`** and **`AnalyticsEmptyDatabaseTest`:** defaults, JSON units, nulls, flags, every 400 with its
+  field, 404s, the 24-month bound, no statements.
+- **`AnalyticsPerformanceTest`** (§9.6): 50,000 rows over ten years; the household query's plan uses `ix_txn_date`
+  and every endpoint (default and 24-month ranges) answers within 500 ms warm.
+- `MonthRangesTest`, `ArithmeticTest` (`HALF_EVEN` at x.x5), `PercentJsonTest`; `ReadOnlyQueriesTest` now asserts it
+  sees the four services and that each is REPEATABLE READ; `EnumCheckConstraintTest` covers analytics' `CategoryKind`.
+- A deliberate mutation (uncategorized money in counted as spending) failed the CSV test and the randomized test;
+  reverted. The invariant tests passed it, as they should: the money only moved between income and spending.
+
+**Decisions beyond the plan**
+- **Services take `Optional<YearMonth> from, to`**, not a `MonthRange`. The defaults depend on the data, so they are
+  resolved inside the service's transaction, the same for the API and Phase 6's tools; the resolved `MonthRange` is in
+  the response.
+- **`MonthTotals.netChange`** for every scope, not only per account (§5.3 updated). It is the invariant's right-hand
+  side, so a reader can check a month without a second call. The accounts response reuses `MonthTotals`.
+- **`COMPLETE` means every day of the month** for each account expected in it. Read literally, §1.6's "every expected
+  day" would make the fixture's December (card from the 15th) complete, against the plan's own examples.
+- **Category rows are keyed by bucket and category.** A Transfer category can so have an `UNLINKED_TRANSFER` row and,
+  for not-transfer txns, `EXPENSE`/`INCOME` rows; linked transfers are one row with no category. `categoryId` filters
+  txns (that category in every bucket, linked included); `uncategorized=true` keeps only the Uncategorized row, as
+  §5.1 says. Each row has a `total` over the range, and the response has each month's `coverage`.
+- **No statements:** `months` (and `rows`, `accounts[].months`) are empty even when `from`/`to` are given; the range
+  is echoed. With only `from`, `to` is the later of `from` and the latest month; a range that is then too long is a 400
+  on `from` that says where it ended.
+- **Analytics' own `CategoryKind`**: `PackageDependencyTest` forbids `categorize`; checked against `ck_category_kind`.
+- **Coverage lists are capped** at the latest 100 items per account (`truncated`), and account names are in the
+  accounts and coverage responses.
+- **Balance invariant** only for statements spanning exactly one calendar month: a card cycle (15th to 14th) can't be
+  compared with monthly figures.
+- **Not tested separately:** §1.4's "the other account is imported and detection links it". Its bucket move is the
+  one-sided link's, and detection itself links the fixture's four card payments.
+- **The randomized test calls the service**, not HTTP; the JSON layer is `AnalyticsApiTest`'s.
 
 ### Requirement mapping
 

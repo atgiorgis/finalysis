@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.finalysis.support.IntegrationTest;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -13,10 +14,14 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -31,8 +36,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * </ol>
  * The third, that no query service depends on {@code AlertDismissalService}, comes with that class in step 5.
  *
- * <p>Step 1 has no service yet, so the rule may check nothing until step 2's services exist; step 2 adds the
- * assertion that it sees them.
+ * <p>The rule allows an empty selection (step 1 had no service), so a test also checks that it sees the services that
+ * exist, and their public methods.
  */
 @IntegrationTest
 class ReadOnlyQueriesTest {
@@ -62,6 +67,29 @@ class ReadOnlyQueriesTest {
                 .importPackages("com.finalysis");
 
         QUERY_SERVICES_ARE_READ_ONLY.check(app);
+
+        List<String> services = app.stream()
+                .filter(c -> c.getPackageName().equals("com.finalysis.analytics"))
+                .filter(c -> c.getSimpleName().endsWith("Service"))
+                .map(JavaClass::getSimpleName).sorted().toList();
+        assertThat(services).as("the rule must see the step 2 services, or it checks nothing")
+                .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "MonthlyTotalsService");
+    }
+
+    /** Each step 2 query method is read-only and REPEATABLE READ, so one response is one snapshot (§2). */
+    @Test
+    void theQueryServicesReadOneSnapshot() throws NoSuchMethodException {
+        for (Method method : List.of(
+                MonthlyTotalsService.class.getMethod("months", Optional.class, Optional.class, Optional.class),
+                CategoryTotalsService.class.getMethod("categories", Optional.class, Optional.class, Optional.class,
+                        Optional.class, boolean.class),
+                AccountTotalsService.class.getMethod("accounts", Optional.class, Optional.class),
+                CoverageService.class.getMethod("coverage"))) {
+            Transactional transactional = method.getAnnotation(Transactional.class);
+            assertThat(transactional).as(method.getName()).isNotNull();
+            assertThat(transactional.readOnly()).as(method.getName()).isTrue();
+            assertThat(transactional.isolation()).as(method.getName()).isEqualTo(Isolation.REPEATABLE_READ);
+        }
     }
 
     /** The rule catches a writable method and a class-level annotation without {@code readOnly}. */

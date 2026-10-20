@@ -28,7 +28,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Every enum mapped with EnumType.STRING has exactly the values its CHECK constraint allows. */
+/**
+ * Every enum mapped with EnumType.STRING has exactly the values its CHECK constraint allows, and so does every enum
+ * read from such a column in plain SQL (analytics has its own {@code CategoryKind}, docs/plans/phase-5.md §3.2).
+ */
 @IntegrationTest
 class EnumCheckConstraintTest {
 
@@ -46,6 +49,7 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_statement_status", StatementStatus.class),
                 Arguments.of("ck_statement_balance_check", BalanceCheck.class),
                 Arguments.of("ck_category_kind", CategoryKind.class),
+                Arguments.of("ck_category_kind", com.finalysis.analytics.CategoryKind.class),
                 Arguments.of("ck_txn_source_section", SourceSection.class),
                 Arguments.of("ck_txn_category_source", CategorySource.class),
                 Arguments.of("ck_txn_ai_review_reason", AiCategorizer.ReviewReason.class),

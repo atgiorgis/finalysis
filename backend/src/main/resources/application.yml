@@ -98,3 +98,7 @@ finalysis:
       # Distinct examples per call at most; each item's nearest is kept before any item's second. 50 is two per item
       # in a full batch of 25 (k 5 could reach 125). The step 9 eval reports the examples' share of input tokens.
       max-examples-per-batch: 50
+  # Read-only analytics (docs/plans/phase-5.md §3.3); a bad value fails startup.
+  analytics:
+    max-months: 24      # longest from-to range per request: bounds every response
+    default-months: 6   # range when from is omitted, ending at to

@@ -127,6 +127,19 @@ final class AnalyticsFixture {
         return jsonMapper.readTree(body);
     }
 
+    /**
+     * The data lines of {@code expected-month-totals.csv}, as written by hand: one per scope ({@code ALL} or an account
+     * slug) and month, in the file's order.
+     */
+    static List<String> expectedMonthTotalLines() {
+        try {
+            return Files.readAllLines(DIR.resolve("expected-month-totals.csv")).stream().skip(1)
+                    .filter(l -> !l.isBlank()).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     static List<Statement> manifest() {
         List<Statement> statements = new ArrayList<>();
         for (String[] c : rows("manifest.csv")) {
