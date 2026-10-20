@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.48 · **Date:** 2026-10-20 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.49 · **Date:** 2026-10-20 · **Roadmap:** Finalysis Roadmap V4
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -97,7 +97,26 @@ Ingestion coverage has three layers:
 | ANA-07 | Recurring charges list: monthly series per account and merchant with typical and last amount, cadence, first and last date, next expected date and status (active or ended), read-only (`GET /api/analytics/recurring`). *Added at Phase 5 approval (v1.46).* | 5 · POC | Planned |
 | ANA-08 | Data quality per month, returned with that month's totals: uncategorized and review-pending shares (by count, and uncategorized by spending), unlinked transfers waiting in the review queue, and failed or unverified reconciliation and partial coverage flags. *Added at Phase 5 approval (v1.46).*<br>*Phase 5 step 2 (v1.47):* a `dataQuality` block in every household and per-account month; percents are strings with one decimal and null when nothing is counted; flags name the account, and the statement and its review time for the two reconciliation flags. | 5 · POC | Planned |
 
-## 5. Chatbot
+## 5. Goals
+
+Goals sit on top of the Phase 5 analytics: every figure a goal is judged on is an analytics total, and every gap is
+explained with the same bucket rule as the drill-down. Phase 7 builds them (placement to be confirmed in the Phase 7
+plan); drafting a goal in chat needs the Phase 6 chatbot.
+
+| ID | Requirement | Phase | Status |
+|---|---|---|---|
+| GOAL-01 | Goals are structured records of one of these types: category spending cap, total spending cap, savings rate, savings amount, category reduction against its average, and no new subscriptions. A goal is versioned by effective month, so a past month is always judged against the goal that applied then. | 7 · POC | Planned |
+| GOAL-02 | The chatbot may propose a goal as a draft built from the user's own numbers, shown as a "Proposed in chat · not saved" card with **Save** and **Not now**. Only the user's explicit save creates or changes a goal; chatbot tools stay read-only (SEC-03). *Needs the Phase 6 chatbot.* | 7 · POC | Planned |
+| GOAL-03 | Each goal is evaluated per month, deterministically in Java and SQL on the analytics totals (GR-01): `MET` or `MISSED`; for a partial month, `ON_TRACK` or `OFF_PACE` (projected by days elapsed), or `JUDGED_AT_MONTH_END` for goals a mid-month figure would mislead (savings rate: rent and pay land unevenly); `INSUFFICIENT_DATA` when the month's data quality (ANA-08) is below a threshold; `NOT_STARTED` before the goal's effective month. | 7 · POC | Planned |
+| GOAL-04 | Every result returns its gap and what caused it, computed with the same bucket rule as the drill-down (`GET /api/analytics/transactions`): for caps, the amount over and the top merchants with visit counts; for savings rate, the points and dollars short and the categories that rose most against their 3-month average; for no new subscriptions, the new recurring charge or charges (ANA-07). | 7 · POC | Planned |
+| GOAL-05 | A short advisor-style note per month, written only from GOAL-03 and GOAL-04's results, with every number grounded (CHT-04), and a template fallback when AI is off. Labelled "education and planning, not financial advice". *The written note needs the Phase 6 chatbot; the template fallback does not.* | 7 · POC | Planned |
+| GOAL-06 | Goals tab: a monthly report card ("2 of 4 met", with a segment bar), the advisor note, one card per goal (status, progress against the target, a one-line gap, Aug/Sep/Oct-style history dots), and a detail panel (status, progress, "What was missing" with its contributors, a since-start chart against a dashed target line, and the transactions behind a miss). | 7 · POC | Planned |
+
+**Open questions for the Phase 7 plan:**
+- A "partly met" status for a result near its target.
+- One overall score, or weighted goals.
+
+## 6. Chatbot
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -109,18 +128,20 @@ Ingestion coverage has three layers:
 | CHT-06 | Conversation memory, with older history summarized to keep context small. | 6 · POC | Planned |
 | CHT-07 | Questions about statement documents (RAG over PDF text chunks). | 8 | Planned |
 
-## 6. User interface
+## 7. User interface
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| UI-01 | Dashboard: month picker, category chart, alert cards. | 7 · POC | Planned |
+| UI-01 | Dashboard: month picker, category chart, alert cards.<br>*Approved mockup (v1.49):* KPI tiles (spending, income, net, savings rate, each against last month) and a data-quality tile (ANA-08); a clickable cash-flow bar chart (selecting a month; partial months striped); a spending donut of the top 6 categories plus Other and Uncategorized, with clickable legend rows; a details panel (total, against the 3-month average, a 6-month trend with its average line, top merchants, transactions); alerts showing their basis (ANA-04); the recurring-charges list (ANA-07); tabs Dashboard / Goals / Chat. | 7 · POC | Planned |
 | UI-02 | Upload page with account picker and review queue. | 7 · POC | Planned |
 | UI-03 | Chat panel. | 7 · POC | Planned |
-| UI-04 | Click any total or transaction to see its source statement line. | 7 · POC | Planned |
+| UI-04 | Click any total or transaction to see its source statement line.<br>*Approved mockup (v1.49):* every drill-down shows that its rows add up to the clicked total, using `GET /api/analytics/transactions` (ANA-01). | 7 · POC | Planned |
 | UI-05 | Visible banner whenever cloud AI (Bedrock) is active.<br>*Phase 4 step 6 (v1.39):* `GET /api/status` has an `ai` block (`{"mode": "OFF"}`, or mode, provider and the model per role; never a region, account or credential), and the app shows a persistent banner while `mode` is `CLOUD`. The full UI-05 stays Phase 7. | 7 · POC | Planned |
 | UI-06 | Notice when running the standard model tier ("explanations may be simplified"). | 10 | Planned |
+| UI-07 | Phone layout: one responsive codebase; details open as a bottom sheet; tap instead of hover; touch targets at least 44 px. | 7 · POC | Planned |
+| UI-08 | Mobile access: a local-first app needs login and HTTPS (on the LAN or over a private VPN) before any phone can reach the backend. The approach is decided in the Phase 7 plan. | 7 · POC | Planned |
 
-## 7. Investment education and scenario planning
+## 8. Investment education and scenario planning
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -132,7 +153,7 @@ Ingestion coverage has three layers:
 | INV-06 | Every answer includes the case for, case against, risks, dated sources, and flags publisher conflicts of interest. | 14 | Planned |
 | INV-07 | UI labels: "education and scenario planning, not financial advice" and "past returns don't guarantee future results." | 14 | Planned |
 
-## 8. Personal accountant
+## 9. Personal accountant
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -154,7 +175,7 @@ Ingestion coverage has three layers:
 | TAX-09 | Annual tax package export and lender-ready income/expense summaries. | 16 | Planned |
 | TAX-10 | UI label: "bookkeeping and tax-prep assistant, not a CPA." Tax documents and SSNs are never sent to Bedrock. | 16 | Planned |
 
-## 9. Integrations
+## 10. Integrations
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -162,7 +183,7 @@ Ingestion coverage has three layers:
 | INT-02 | Document which tool results leave the app and to whom. | 13 | Planned |
 | INT-03 | Optional "frontier assist" mode: send only anonymized summaries to a frontier model for the hardest tax and investment questions, opt-in with a visible banner. | — | Proposed |
 
-## 10. AI models and runtime
+## 11. AI models and runtime
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -174,7 +195,7 @@ Ingestion coverage has three layers:
 | AI-06 | Log token count for every model request.<br>*Phase 4 step 6 (v1.39):* every categorization call writes one INFO line, `ai call role= model= items= inputTokens= outputTokens= ms= outcome=` (`OK`, `INVALID_OUTPUT`, or `ERROR` with the exception's class name), never content or exception messages. Spring AI's loggers are off and the AWS SDK's and HTTP clients' are at WARN, since they can echo what was sent.<br>*Step 7 (v1.40):* token counts a provider doesn't report are logged as `n/a`, never 0, and each AI run counts its calls without usage (`callsWithoutUsage`).<br>*Step 8 (v1.41):* every embedding call writes `ai call role=embedding model= items=1 inputTokens= ms= outcome=` (no output tokens); the run's `ai.embeddings` block counts calls, calls without usage and input tokens.<br>*Phase 4 part done (v1.45): every categorization and embedding call is logged with its tokens: `AiCategorizerTest`, `CategorizationModelClientTest`, `EmbeddingStageTest`, `SpringAiTextEmbedderTest`. Stays Planned until chat calls exist and are logged (Phase 6).* | 4, 6 | Planned |
 | AI-07 | Benchmark at least one US-origin model alternative (e.g. Gemma, gpt-oss, Granite). | 9, 10 | Planned |
 
-## 11. Privacy and security
+## 12. Privacy and security
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -190,7 +211,7 @@ Ingestion coverage has three layers:
 | SEC-06 | Passphrase unlock (or OS keychain), recovery phrase, and encrypted backups. | 8 | Planned |
 | SEC-07 | README recommends full-disk encryption (FileVault, BitLocker). | 8 | Planned |
 
-## 12. Quality, evaluation, and portfolio
+## 13. Quality, evaluation, and portfolio
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -257,3 +278,4 @@ Ingestion coverage has three layers:
 | 1.46 | 2026-10-19 | Phase 5 plan approved (`docs/plans/phase-5.md`). ANA-01: the counting rules (buckets, refunds net in their category, Refunds & Rebates reduces spending rather than counting as income, uncategorized by sign on its own line, unlinked Transfer-category rows excluded and shown, month by `txn_date`, coverage and reconciliation flags). ANA-02: fixed vs. discretionary moves to Phase 7. ANA-03: trailing averages over complete months. ANA-04: five deterministic, explainable checks computed on demand, with only dismissals stored; missing and variable bills to the backlog. ANA-05 moves to Phase 6 (needs a model). ANA-06: hand-computed fixture plus an independent oracle over the answer key. Added ANA-07 (recurring charges list) and ANA-08 (data quality per month). |
 | 1.47 | 2026-10-20 | Phase 5 step 2: monthly totals, coverage and data quality. ANA-01: read-only `GET /api/analytics/months`, `/categories`, `/accounts` and `/coverage`, computed on demand from one bucket query in one REPEATABLE READ transaction; `from`/`to` (`yyyy-MM`) default to 6 months ending at the latest month and are at most 24; unknown ids are 404s. ANA-02: cash flow and savings rate per month. ANA-08: data quality and flags per month. Percents are JSON strings with one decimal (`@ApiPercent`). No migration. |
 | 1.48 | 2026-10-20 | Phase 5 step 3: merchants, trends, drill-down and closed accounts. ANA-01: merchant totals; a read-only transaction drill-down for any total cell (`GET /api/analytics/transactions`), using the same bucket rule; closed accounts (V19 `account.closed_on`) are no longer expected after they close. ANA-03: trends with month over month, year over year and trailing 3- and 6-month averages over complete months. Multiples are JSON strings with two decimals (`@ApiRatio`). |
+| 1.49 | 2026-10-20 | Requirements only, no code. New section 5, Goals (Phase 7; drafting in chat needs Phase 6): GOAL-01 structured goals versioned by effective month; GOAL-02 the chatbot proposes drafts and only the user's save creates or changes a goal; GOAL-03 deterministic monthly evaluation with partial-month and data-quality statuses; GOAL-04 every result's gap and its causes, by the drill-down's bucket rule; GOAL-05 a grounded advisor note with a template fallback; GOAL-06 the Goals tab. Open questions ("partly met", one score or weighted goals) carried into the Phase 7 plan. UI-01 and UI-04 get notes from the approved mockup; added UI-07 (phone layout) and UI-08 (login and HTTPS before mobile access, decided in the Phase 7 plan). Sections 5 to 12 are renumbered 6 to 13. Statuses unchanged. |
