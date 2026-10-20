@@ -997,9 +997,29 @@ cd backend && SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
 
 ### What leaves the machine
 
-In cloud mode, only the redacted cleaned merchant and the amount, per item, plus the category names;
-when similar-merchant examples apply, their redacted merchants and categories; and to the embedding
-model, the redacted merchant alone. Never the raw description, account names or numbers, counterparties, dates, balances or file contents.
+The rule is SEC-01: redact before every call, and send only these fields. A guard checks every
+outbound field and fails closed: a field it refuses is not sent, never repaired.
+
+**Categorization** (built): only the redacted cleaned merchant and the amount, per item, plus the
+category names; when similar-merchant examples apply, their redacted merchants and categories; and to
+the embedding model, the redacted merchant alone. Never the raw description, account names or numbers,
+counterparties, dates, balances or file contents.
+
+**Chat** (Phase 6, approved and being built; no chat code exists yet). A chat call may send:
+- your question, with account names, institutions and last fours replaced by an alias (`CARD-1`),
+  and emails, phone numbers, URLs, runs of 5+ digits, masked numbers and known person-to-person
+  names removed;
+- the recent questions and answers as shown, and a summary of older turns with every figure stripped;
+- tool results limited to amounts, totals, percents and counts; dates and months; category, bucket
+  and alert-type names; account aliases; and redacted merchants that pass the guard (others, and
+  names that read like instructions, are sent as `MERCHANT WITHHELD`);
+- for meaning-based search, the redacted search words to the embedding model.
+
+Chat never sends account balances, account names, institutions, numbers or last fours, person names
+the app knows, raw descriptions, statement line text, counterparties, check numbers, external ids,
+fingerprints, or any database id or alert key (it uses per-question references instead). Citations
+(the transactions and statement lines behind an answer) are resolved on your machine and never sent.
+Field by field: `docs/plans/phase-6.md` §12.
 `OutboundPayloadTest` captures every request a fake model receives and checks it field by field;
 `PromptBuilderTest` and `AiCategorizerTest` check that a hostile description stays inert data and that a
 model "obeying" it is rejected.

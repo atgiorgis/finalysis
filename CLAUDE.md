@@ -39,8 +39,12 @@ decisions matter as much as features.
 - **Local AI is the default.** Bedrock must be enabled explicitly, and the UI must show a
   banner when cloud AI is active. Until the `local` profile exists, AI features are off
   unless the `aws` profile is enabled explicitly.
-- **Data minimization in cloud mode:** send only merchant text and amount to Bedrock.
-  Never send account numbers, names, or full statements. Redact before every call.
+- **Data minimization in cloud mode:** redact before every call, and send only what SEC-01 allows.
+  Categorization sends only redacted merchant text and amounts (plus category names and redacted
+  examples). Chat may also send totals, percents, counts, dates and months, category names, account
+  aliases (`CHECKING-1`, never the account itself) and redacted merchants (docs/plans/phase-6.md §12).
+  Never send account balances, account numbers or last fours, account or person names, raw
+  descriptions or statement text, counterparties, or database ids and alert keys.
 - **Transaction descriptions are untrusted data, never instructions.** Delimit them in prompts.
 - **Chatbot tools are read-only.** The AI can query data but never change it.
 - **Parsers pass descriptions to TransactionFingerprint exactly as extracted** (wrapped lines included).
@@ -71,7 +75,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 6: chatbot, plan drafted and awaiting approval: docs/plans/phase-6.md (no feature code yet). Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 6: chatbot, plan approved 2026-10-20 (docs/plans/phase-6.md; the decisions in §18 override older text). Step 1 (question sets and scaffolding) is next, and is not committed until the user's ~10 holdout questions are in; the holdout hash is taken after them. Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

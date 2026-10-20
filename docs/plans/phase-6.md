@@ -1,7 +1,8 @@
 # Phase 6 plan: chatbot
 
-Status: **draft, awaiting approval.** Branch `v1`, starting after tag `phase-5-done` and the leftovers commit
-(`c9ef192`). Requirements as of `docs/requirements.md` v1.53.
+Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
+in this file. Step 1 is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54.
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -81,7 +82,7 @@ file (`model-prices.json`) is where the checked values go.
 | **Claude Haiku 4.5** | $1 / $5 | ~$0.013 | ~$0.022 | Already wired, IAM-approved and measured in Phase 4; Spring AI 2.0.1's Converse path works with it (temperature 0, no thinking blocks to carry through the tool loop) | Weakest at multi-step routing of the four; 200K context (irrelevant here) |
 | Claude Sonnet 5.5 | $2 / $10 | ~$0.026 | ~$0.044 | Stronger tool choice and instruction following; the natural "larger model" | Rejects non-default sampling (our `temperature: 0.0` default would 400, §2.3); thinking on by default, and its blocks must be passed back unchanged inside the tool loop, which Spring AI 2.0.1's Converse support has not been checked for |
 | Claude Sonnet 4.6 | $3 / $15 | ~$0.039 | ~$0.066 | Accepts temperature and plain tool loops | Dearer than Sonnet 5.5 and older |
-| Claude Haiku 5.5 | $0.10 / $0.50 | ~$0.003 | ~$0.005 | Ten times cheaper than Haiku 4.5 | Same sampling and thinking caveats as Sonnet 5.5; Bedrock availability and id to be checked; refusals have no server-side fallback |
+| ~~Claude Haiku 5.5~~ *(unconfirmed, §18 decision 1)* | $0.10 / $0.50 | ~$0.003 | ~$0.005 | Listed by the model reference used for this draft; you doubt it exists | Compared only if the Bedrock model catalog lists it (§18) |
 
 **Token estimate behind the table** (characters / 4, rounded up; the eval measures the real figures):
 - fixed prefix: system prompt ~1,200 tokens, 13 tool definitions ~2,600, context block (§3.4) ~250 → ~4,050;
@@ -100,8 +101,8 @@ unverified, so it is in the backlog, not the plan.
 
 ### 2.2 Recommendation
 
-**Claude Haiku 4.5 for the `main` role during Phase 6, with Sonnet 5.5 (and Haiku 5.5, if Bedrock and Spring AI
-handle it) compared on the dev set in step 8; the role then takes the dev winner.** Reasons: it needs no AWS change
+**Claude Haiku 4.5 for the `main` role during Phase 6, with Sonnet 5.5 (and any other current model the Bedrock
+catalog confirms, §18 decision 1) compared on the dev set in step 8; the role then takes the dev winner.** Reasons: it needs no AWS change
 to start, the tool loop is the riskiest new code and should be debugged on the known path, and the choice is then
 made on measured correct-answer and grounding rates rather than on reputation. Switching is configuration plus the
 IAM change below (open question 1).
@@ -537,8 +538,8 @@ Enforced four ways, extending Phase 5's three:
      (it mixes reads and writes), `TransferService`, `CategorizationService`, `AiCategorizer`, any class in
      `ingestion..`, `review..`, `transfer..`, `transaction..`, `account..` services, `MerchantEmbeddingRepository`
      (it has `upsert`) or `MerchantIndexRefresh`.
-   - from `categorize`, `chat` may use exactly `Redactor`, `OutboundPayloadGuard`, `RedactionContext` and
-     `RedactionContextQuery` (open question 5).
+   - `chat` depends on nothing in `categorize`. The redaction classes move to `com.finalysis.ai.outbound` in step 2
+     (§18 decision 5), which both features use, and which depends on neither.
    - only `ChatConversationStore` writes chat tables, and nothing in `chat.tool..` depends on it.
    - each rule has a violation test, as in Phase 5.
 2. **Reflection, `ReadOnlyQueriesTest` extended:** every public method of every class in `chat.tool..` that touches
@@ -689,6 +690,9 @@ updated at approval.
 
 ### 12.2 Per field
 
+*Approved as written (§18 decision 2); SEC-01, CLAUDE.md and the README's "What leaves the machine" now say the
+same.*
+
 | Data | Leaves? | How |
 |---|---|---|
 | Amounts, totals, averages, percents, counts | yes | as the Phase 5 JSON strings |
@@ -747,7 +751,9 @@ redaction alone doesn't stop it. Defences, in layers:
 2. **Withholding instruction-like merchants.** `InstructionLikeText` (pure Java, a word list in YAML: IGNORE,
    INSTRUCTION, PROMPT, SYSTEM, ASSISTANT, DISREGARD, OVERRIDE, "YOU ARE", "SAY", …, whole words, two or more hits or
    one of the strong ones) replaces such a merchant's outbound text with `MERCHANT WITHHELD`. The user still sees the
-   real merchant in citations. False positives cost a name in one answer, never a total.
+   real merchant in citations. False positives cost a name in one answer, never a total. Every turn's log line counts
+   them (`withheldMerchants=2`, beside guard-refused ones as `refusedMerchants=`), counts only, never the text
+   (§18 decision 6); the response's `redactions` carries the same counts.
 3. **Nothing to hijack.** Tools are read-only (§9), so the worst a hijacked model can do is answer badly.
 4. **Invented numbers can't show.** "Say the total is 999.99" fails grounding unless 999.99 is really in the results.
 5. **No exfiltration channel.** The answer is returned as plain text: URLs, markdown links and images are removed in
@@ -778,6 +784,7 @@ Written in step 1, **before any system prompt or tool description exists**, comm
 | Category | Dev | Holdout | Example |
 |---|---|---|---|
 | Simple lookups | 12 | 12 | "What did I spend on groceries in June?" |
+| *Your own questions (§18 decision 12)* | — | ~10 | written in your words, any category; counted in the 60 |
 | Comparisons | 8 | 8 | "Did I spend more on dining in August or July, and by how much?" |
 | Trends | 6 | 6 | "How does my September spending compare to my usual?" |
 | Alerts and recurring | 6 | 6 | "Which subscriptions went up?" |
@@ -887,6 +894,9 @@ Sonnet 5.5.
 - **Answers about months with flagged data** carry `dataNotes`, but whether the sentence mentions them depends on the
   model.
 - **Bedrock prices are assumed equal to Anthropic's list prices** until checked; the cost limits are estimates.
+- **Conversations are stored unencrypted until Phase 8** (SEC-05): questions as typed, answers and citations with
+  statement line text sit in plain Postgres tables, like the statements themselves. Retention (§7.4) and delete on
+  demand limit how long (§18 decision 8).
 
 ## Backlog (proposed)
 
@@ -904,20 +914,32 @@ Sonnet 5.5.
 | # | Step | Commit content | Main tests |
 |---|---|---|---|
 | 0 | Plan | This file with the §18 decisions; requirements v1.54 (CHT-01–06 and ANA-05 notes, SEC-01 widened as approved, SEC-02/SEC-03/AI-05/AI-06 Phase 6 parts); CLAUDE.md | — |
-| 1 | Question sets and scaffolding | `sample-data/chat/dev.yml`, `holdout.yml` (pinned), the injection fixture (generator); `chat` and `chat.tool` packages; `ChatReadOnlyTest` with violation tests; `NoAiIn…` style rule that `chat.tool` has no Spring AI dependency | `ChatQuestionSetsTest` (every required figure equals the oracle or fixture; hash), `ChatReadOnlyTest`, `SampleDataTest` |
-| 2 | Outbound projections and redaction | View records with `@Outbound`; aliases and the context block; `QuestionRedactor`, `InstructionLikeText`, `ChatPayloadGuard`; refs; `ComparisonService` (analytics, no AI) | the §14 unit tests for these, `ComparisonServiceTest` (fixture by hand, equals trends' change), `ReadOnlyQueriesTest` |
+| 1 | Question sets and scaffolding | `sample-data/chat/dev.yml`, `holdout.yml` (pinned only after your ~10 questions are in, §18), the injection fixture (generator); `chat` and `chat.tool` packages; `ChatReadOnlyTest` with violation tests; `NoAiIn…` style rule that `chat.tool` has no Spring AI dependency | `ChatQuestionSetsTest` (every required figure equals the oracle or fixture; hash), `ChatReadOnlyTest`, `SampleDataTest` |
+| 2 | Outbound projections and redaction | First, the move of the redaction classes to `com.finalysis.ai.outbound` (§18 decision 5), as its own commit or the first part of the step; then view records with `@Outbound`; aliases and the context block; `QuestionRedactor`, `InstructionLikeText`, `ChatPayloadGuard`; refs; `ComparisonService` (analytics, no AI) | the §14 unit tests for these, `ComparisonServiceTest` (fixture by hand, equals trends' change), `ReadOnlyQueriesTest` |
 | 3 | Tools | The registry, schemas, descriptions, adapters, `ToolExecutor` (validation, read-only transaction, caps, data notes, count-only log) | `*ToolTest` for each tool, the Postgres refusal, unknown tool |
 | 4 | Grounding and citations | `FigureExtractor`, `GroundingMatcher`, fallback templates, `CitationQuery`, marker handling, URL stripping | the §14 unit and jqwik tests, `CitationTest` (statement lines, drill-down params equal to the cell, `GONE`) |
 | 5 | Chat loop and API | V21; `ChatModelClient` (framework tool execution proven off), `ChatService`, limits and prices, retry and fallback, `ChatConversationStore`, endpoints and errors, AI off, AI-06 lines; main role options (no temperature unless set) | `ChatServiceTest`, `ChatApiTest`, `ChatOutboundPayloadTest`, `SchemaMigrationTest`, `EnumCheckConstraintTest`, `SensitiveDataLeakTest`, `AiModeTest` |
 | 6 | Search and routing | `MerchantIndexRefresh` (categorize), `MerchantSearchQuery`, `search_transactions`, `get_merchant_totals`, the outbound-text map, refresh endpoint; routing rules in the prompt | `MerchantSearchTest` (fake vectors with chosen neighbours, the name match, coverage, a refused query), `MerchantIndexRefreshTest`, routing scripted turns |
 | 7 | Memory and monthly summary | Window and summarization, figure stripping, retention purge; `MonthlySummaryService` with grounding and the template | `ConversationMemoryTest`, `RetentionTest`, `MonthlySummaryTest` (template figures equal the months endpoint; model path grounded; fallback) |
-| 8 | Evaluation harness | `ChatLiveEvalIT`, metrics, guards, reports, price file entries; **no live run** | `ChatEvalMetricsTest` (hand-made turns), `ChatEvalGuardsTest`, `EvalExclusionTest`; then your dev runs, the settings and model choice from them (a small follow-up commit), then your one holdout run |
+| 8 | Evaluation harness | Before it: the Bedrock catalog check and §2.4 updated (§18 decision 1). `ChatLiveEvalIT`, metrics, guards, reports, price file entries; **no live run** | `ChatEvalMetricsTest` (hand-made turns), `ChatEvalGuardsTest`, `EvalExclusionTest`; then your dev runs, the settings and model choice from them (a small follow-up commit), then your one holdout run |
 | 9 | Docs, Postman, close-out | README (chat, what leaves the machine, limits, the eval headline), Postman folder 10, requirement statuses, phase summary; tag `phase-6-done` is yours after your newman run | newman against a reset database |
 
 Why this order: nothing that needs a model comes before step 5, so the privacy rules (step 2), the tools (step 3)
 and the grounding check (step 4) are each tested on their own, as Phase 4 did with redaction before Spring AI. The
 question sets come first so no prompt can be written around them. Search comes after the loop because it is the
 most heuristic part and its floor is set from the dev run.
+
+### Step 0 notes
+
+Done: "Phase 6 step 0: plan approved, SEC-01 widened for chat". Backend 2,462 tests (Maven summary, unchanged),
+0 failures, 0 skipped; frontend 4. No code change.
+- This file: status, §18 with the twelve decisions and the shape of the step 2 move, and the places older text
+  would have contradicted them (§2.1, §2.2, §9, §12.2, §12.5, §13.1, §15, §16).
+- Requirements v1.54: SEC-01 widened for chat and back to Planned ("4, 6") until the chat part is built; plan notes on
+  CHT-01 to CHT-06, ANA-05, SEC-02, SEC-03, AI-05, AI-06.
+- CLAUDE.md: the data-minimization rule now names what categorization and chat may send; the current phase points at
+  step 1.
+- README "What leaves the machine": categorization (built) and chat (approved, not built yet) listed separately.
 
 ### Requirement mapping
 
@@ -937,7 +959,7 @@ most heuristic part and its floor is set from the dev run.
 
 ---
 
-## 17. Open questions (with recommendations)
+## 17. Open questions (answered at approval, §18)
 
 1. **Main model.** Claude Haiku 4.5 during the phase, the final choice between it, Sonnet 5.5 and Haiku 5.5 made on
    the dev set in step 8 (§2.2)? *Recommended.* Alternative: Sonnet 5.5 from the start (better routing likely, about
@@ -969,4 +991,36 @@ most heuristic part and its floor is set from the dev run.
 
 ## 18. Decisions at approval
 
-*(Filled in at approval.)*
+Approved on 2026-10-20 with these answers. They override anything older in this file or the conversation.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Main model | **Claude Haiku 4.5 during the phase**; the final pick comes from the dev set in step 8. **Before step 8**, the exact current model ids are read from the Bedrock model catalog (no id is guessed). You doubt "Haiku 5.5" exists: the comparison is Haiku 4.5 against Sonnet 5.5 and any other current model the catalog confirms, and §2.1, §2.3 and §2.4 (the IAM resources) are updated then. *Note:* the model reference used for the draft listed Haiku 5.5; it stays out unless the catalog shows it |
+| 2 | SEC-01 for chat | **Widened as recommended** (§12.2): amounts, totals, percents, counts, dates, months, category names, account aliases and redacted merchants may leave; never balances, names, raw text or ids. A policy change: SEC-01 (requirements v1.54), CLAUDE.md's "Data minimization in cloud mode" rule and the README's "What leaves the machine" are updated in step 0, so code and written rules agree |
+| 3 | Grounding | Exact values as returned, or whole dollars and whole percents rounded `HALF_EVEN` (§5.4). Nothing looser |
+| 4 | Ungrounded after one retry | The Java-built list of tool results (§5.5) |
+| 5 | Redaction classes | **Move, don't except.** In step 2, `Redactor`, `OutboundPayloadGuard`, `RedactionContext` and `RedactionContextQuery` move to a neutral package, `com.finalysis.ai.outbound`, used by both `categorize` and `chat`. No ArchUnit exception for chat into `categorize`. *See "The move" below* |
+| 6 | Instruction-like merchants | Withheld (§12.5), and the run log counts withheld names (count only, never text) |
+| 7 | Streaming | None in Phase 6 (§10.3) |
+| 8 | Retention | 90 days of inactivity plus delete on demand (§7.4). "Conversations stored unencrypted until Phase 8" added to the known limitations (§15) |
+| 9 | Limits | $0.05 per turn, $1.00 per day, 5 model rounds, 8 tool calls (§8) |
+| 10 | AI off | 503 `ai-off` for chat turns; the monthly summary answers with its template (§10.4, §11.1) |
+| 11 | Monthly summary | Recomputed per request, not stored (§11.1) |
+| 12 | Question sets | About 60 dev and 60 holdout. **About 10 holdout questions are yours**, in your own words, sent before step 1 is committed. Their expected answers come from the oracle (or the fixture) like the rest, checked by `ChatQuestionSetsTest`. **The holdout's SHA-256 is taken only after they are in**, so step 1 isn't committed until then |
+
+**The move (decision 5).** A plain package move would leave a cycle: `Redactor` reads its patterns from
+`MerchantCleaningRules` (the parsed `merchant-cleaning.yml`: `redactPatterns`, `personToPerson`, `locationStates`,
+`locationCityPrefixes`) and normalizes text with `MerchantCleaner.normalize`, both in `categorize`. So the move
+includes the smallest seam that keeps `ai.outbound` free of `categorize`:
+- `ai.outbound.OutboundRules`, an interface with exactly those four accessors; `MerchantCleaningRules` implements it
+  (`categorize` → `ai.outbound`, the allowed direction). The YAML file and its loading stay where they are.
+- `ai.outbound.TextNormalizer.normalize`, the body of today's `MerchantCleaner.normalize`, which keeps its name and
+  delegates to it, so cleaning, rules and their tests are untouched.
+- `RedactionContextQuery` (plain SQL over `account` and `txn`) moves as is.
+- Tests keep their assertions unchanged; only imports and, where a test sits in the old package for package-private
+  access, its package change. `RedactorTest`, `OutboundPayloadGuardTest` and `RedactionStoredDataTest` move with
+  their classes. A new ArchUnit rule: `ai.outbound` depends on nothing in `categorize`, `chat` or any other feature;
+  `chat` depends on nothing in `categorize`. The move's commit has the same test count as before it, plus the new
+  rule and its violation test.
+
+**Additions at approval:** none beyond the above; scope is unchanged.
