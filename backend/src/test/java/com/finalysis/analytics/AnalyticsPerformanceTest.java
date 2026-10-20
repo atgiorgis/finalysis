@@ -62,10 +62,12 @@ class AnalyticsPerformanceTest {
                     VALUES (?, ?, ?, 'perf.csv', 'perf-hash-' || ?, 'csv') RETURNING id
                     """, Long.class, account, FIRST, LAST, lastFour);
             // Half the rows each, spread over every day of the ten years, every category kind and none, both signs.
+            // Four in five have one of 200 merchants, so the recurring list and checks read a busy history.
             jdbc.update("""
-                    INSERT INTO txn (account_id, statement_id, txn_date, raw_description, amount, source_section,
-                                     category_id, category_source, fingerprint)
+                    INSERT INTO txn (account_id, statement_id, txn_date, raw_description, merchant, amount,
+                                     source_section, category_id, category_source, fingerprint)
                     SELECT ?, ?, ?::date + (g * 37 % (?::date - ?::date + 1)), 'PERF CASE',
+                           CASE WHEN g % 5 <> 0 THEN 'PERF MERCHANT ' || (g % 200) END,
                            ((g * 7919 % 100001) - 50000) / 100.00, 'OTHER', c.id,
                            CASE WHEN c.id IS NULL THEN NULL ELSE 'USER' END, 'perf-' || g
                     FROM generate_series(?, ?) g
@@ -117,6 +119,7 @@ class AnalyticsPerformanceTest {
                 "/api/analytics/trends?month=2026-12",
                 "/api/analytics/transactions?from=2025-01&to=2026-12&measure=SPENT&size=200",
                 "/api/analytics/transactions?from=2025-01&to=2026-12&page=40",
+                "/api/analytics/recurring?status=ALL&limit=100",
                 "/api/alerts",
                 "/api/alerts?from=2025-01&to=2026-12&includeDismissed=true");
         for (String request : requests) {

@@ -204,6 +204,26 @@ class TrendsTest {
         assertThat(septemberDining.sameMonthLastYear()).as("2025-09 is NONE").isNull();
     }
 
+    /**
+     * The range overload the category spike check uses (one bucket query for every month) gives each month exactly the
+     * per-month answer: on the fixture from two months before its data to two after, and on an empty database.
+     */
+    @Test
+    void theRangeOverloadEqualsEachMonthsTrends() throws Exception {
+        MonthRange range = new MonthRange(YearMonth.of(2025, 10), YearMonth.of(2026, 6));
+        assertThat(trends.trends(range)).extracting(TrendsResponse::month).containsExactlyElementsOf(range.months());
+        assertThat(trends.trends(range)).allSatisfy(r -> assertThat(r.rows()).isEmpty());
+
+        load();
+        List<TrendsResponse> all = trends.trends(range);
+
+        assertThat(all).hasSize(9);
+        for (TrendsResponse month : all) {
+            assertThat(month).as(month.month().toString()).isEqualTo(household(month.month()));
+        }
+        assertThat(all.get(6).rows()).as("April has rows").isNotEmpty();
+    }
+
     private Loaded load() throws Exception {
         assertThat(support.count("SELECT count(*) FROM statement")).isZero();
         return new AnalyticsFixture(support, jdbc, jsonMapper).load();

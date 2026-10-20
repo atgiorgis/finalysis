@@ -9,12 +9,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * fails startup. The defaults were checked against the synthetic answer key only (§11); every one is configurable
  * so real data can be tuned.
  *
+ * <p>The two recurring checks also use the monthly series settings, {@code finalysis.analytics.recurring.*}
+ * ({@code min-gap-days}, {@code max-gap-days}, {@code min-occurrences}, {@code stable-count}, {@code active-days}),
+ * shared with the recurring charges list so the list and the alerts see the same series.
+ *
  * @param maxResults the longest alert list one request may ask for (and the default), 1 to {@value #MAX_MAX_RESULTS}
  */
 @ConfigurationProperties("finalysis.alerts")
 public record AlertProperties(@DefaultValue("100") int maxResults, @DefaultValue CategorySpike categorySpike,
                               @DefaultValue LargeTransaction largeTransaction,
-                              @DefaultValue PossibleDuplicate possibleDuplicate) {
+                              @DefaultValue PossibleDuplicate possibleDuplicate,
+                              @DefaultValue RecurringPriceIncrease recurringPriceIncrease,
+                              @DefaultValue NewRecurring newRecurring) {
 
     public static final int MAX_MAX_RESULTS = 500;
 
@@ -27,6 +33,12 @@ public record AlertProperties(@DefaultValue("100") int maxResults, @DefaultValue
         }
         if (possibleDuplicate == null) {
             possibleDuplicate = new PossibleDuplicate(1);
+        }
+        if (recurringPriceIncrease == null) {
+            recurringPriceIncrease = new RecurringPriceIncrease(null);
+        }
+        if (newRecurring == null) {
+            newRecurring = new NewRecurring(null, 45);
         }
         if (maxResults < 1 || maxResults > MAX_MAX_RESULTS) {
             throw new IllegalArgumentException("finalysis.alerts.max-results must be between 1 and " + MAX_MAX_RESULTS
@@ -94,6 +106,45 @@ public record AlertProperties(@DefaultValue("100") int maxResults, @DefaultValue
 
         public PossibleDuplicate {
             requireRange("possible-duplicate.window-days", windowDays, 0, 7);
+        }
+    }
+
+    /**
+     * {@code recurring-price-increase}: in a monthly series, a charge at least {@code min-increase-amount} above the
+     * {@code stable-count} equal charges before it ({@code finalysis.analytics.recurring.stable-count}).
+     *
+     * @param minIncreaseAmount 0.01 to 1,000,000.00, at most two decimals (default 0.50)
+     */
+    public record RecurringPriceIncrease(@DefaultValue("0.50") BigDecimal minIncreaseAmount) {
+
+        public RecurringPriceIncrease {
+            minIncreaseAmount = minIncreaseAmount == null ? new BigDecimal("0.50") : minIncreaseAmount;
+            requireDecimal("recurring-price-increase.min-increase-amount", minIncreaseAmount, 2,
+                    new BigDecimal("1000000"));
+            if (minIncreaseAmount.signum() <= 0) {
+                throw new IllegalArgumentException(
+                        "finalysis.alerts.recurring-price-increase.min-increase-amount must be positive");
+            }
+        }
+    }
+
+    /**
+     * {@code new-recurring}: a monthly series that reached {@code min-occurrences} charges
+     * ({@code finalysis.analytics.recurring.min-occurrences}), all within {@code amount-tolerance-percent} of their
+     * median, whose first charge came at least {@code min-prior-days} after its account's first covered day, and whose
+     * last charge is within {@code finalysis.analytics.recurring.active-days} of the account's last covered day.
+     *
+     * @param amountTolerancePercent 0 to 100, at most one decimal (default 20)
+     * @param minPriorDays           0 to 3650 (default 45, more than {@code max-gap-days}: a series that began before
+     *                               the data can first show up to a full gap, plus billing drift, after its start)
+     */
+    public record NewRecurring(@DefaultValue("20") BigDecimal amountTolerancePercent,
+                               @DefaultValue("45") int minPriorDays) {
+
+        public NewRecurring {
+            amountTolerancePercent = amountTolerancePercent == null ? new BigDecimal("20") : amountTolerancePercent;
+            requireDecimal("new-recurring.amount-tolerance-percent", amountTolerancePercent, 1, new BigDecimal("100"));
+            requireRange("new-recurring.min-prior-days", minPriorDays, 0, 3650);
         }
     }
 

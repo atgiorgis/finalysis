@@ -9,18 +9,21 @@ import com.finalysis.api.ApiMoney;
 import com.finalysis.api.ApiPercent;
 import com.finalysis.api.ApiRatio;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
  * What each check says about its alert (docs/plans/phase-5.md §6.3), beside the common {@link AlertBasis}. Sealed,
  * with the check written as {@code type}, the {@code ReviewItem} idiom. Amounts are magnitudes (§4): positive = money
- * out. Step 6 adds the two recurring checks' records.
+ * out.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
         @JsonSubTypes.Type(AlertDetails.CategorySpike.class),
         @JsonSubTypes.Type(AlertDetails.LargeTransaction.class),
-        @JsonSubTypes.Type(AlertDetails.PossibleDuplicate.class)})
+        @JsonSubTypes.Type(AlertDetails.PossibleDuplicate.class),
+        @JsonSubTypes.Type(AlertDetails.RecurringPriceIncrease.class),
+        @JsonSubTypes.Type(AlertDetails.NewRecurring.class)})
 public sealed interface AlertDetails {
 
     /**
@@ -56,6 +59,35 @@ public sealed interface AlertDetails {
     @JsonTypeName("POSSIBLE_DUPLICATE")
     record PossibleDuplicate(List<DuplicateReason> reasons, @ApiMoney BigDecimal amount, String merchant)
             implements AlertDetails {
+    }
+
+    /**
+     * @param merchant        the series' cleaned merchant
+     * @param accountId       the series' account
+     * @param previousAmount  the stable price: the {@code stable-count} equal charges before the new one
+     * @param newAmount       the first charge at the new price
+     * @param increaseAmount  {@code newAmount − previousAmount}
+     * @param increasePercent {@code increaseAmount / previousAmount × 100}, one decimal
+     */
+    @JsonTypeName("RECURRING_PRICE_INCREASE")
+    record RecurringPriceIncrease(String merchant, long accountId, @ApiMoney BigDecimal previousAmount,
+                                  @ApiMoney BigDecimal newAmount, @ApiMoney BigDecimal increaseAmount,
+                                  @ApiPercent BigDecimal increasePercent) implements AlertDetails {
+    }
+
+    /**
+     * The series as it stood at the end of the alert's month.
+     *
+     * @param merchant      the series' cleaned merchant
+     * @param accountId     the series' account
+     * @param typicalAmount the median charge ({@code percentile_disc(0.5)}, an actual charge)
+     * @param occurrences   its charges up to the end of the month
+     * @param firstDate     its first charge
+     * @param lastDate      its last charge up to the end of the month
+     */
+    @JsonTypeName("NEW_RECURRING")
+    record NewRecurring(String merchant, long accountId, @ApiMoney BigDecimal typicalAmount, int occurrences,
+                        LocalDate firstDate, LocalDate lastDate) implements AlertDetails {
     }
 
     /** Why two txns look like one charge twice. */

@@ -62,6 +62,10 @@ class AnalyticsEmptyDatabaseTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0))
                 .andExpect(jsonPath("$.total.count").value(0));
+        mockMvc.perform(get("/api/analytics/recurring").param("status", "ALL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.truncated").value(false));
         mockMvc.perform(get("/api/analytics/months").param("from", "2026-03").param("to", "2026-01"))
                 .andExpect(status().isBadRequest());
     }

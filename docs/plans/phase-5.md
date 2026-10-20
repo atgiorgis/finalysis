@@ -314,6 +314,7 @@ does):
 | `finalysis.analytics.max-months` | 24 | Longest `from`–`to` range per request |
 | `finalysis.analytics.default-months` | 6 | Range when `from` is omitted |
 | `finalysis.analytics.merchants.max-limit` | 50 | Largest merchant list |
+| `finalysis.analytics.recurring.*` | §6.4 | The monthly series (gaps 25–35 days, `min-occurrences` 3, `stable-count` 2, `active-days` 45) and the recurring list's `max-limit` (100), shared by the list and the two recurring alerts (step 6) |
 | `finalysis.alerts.max-results` | 100 | Largest alert list (`truncated: true` beyond it) |
 | `finalysis.alerts.*` | §6 | One block per check |
 
@@ -572,11 +573,13 @@ series of §6.4.
   `amount-tolerance-percent` of the series median, whose first charge comes at least `min-prior-days` after
   the account's first covered day (it started while we were watching, rather than at the start of the data),
   and whose last charge is within `active-days` of the account's last covered day.
-  Defaults: `min-occurrences` 3, `amount-tolerance-percent` 20, `min-prior-days` 30, `active-days` 45.
+  Defaults: `min-occurrences` 3, `amount-tolerance-percent` 20, `min-prior-days` ~~30~~ **45** (step 6), `active-days` 45.
   - Details: `merchant`, `accountId`, `typicalAmount` (median), `occurrences`, `firstDate`, `lastDate`.
-  - *Worked example.* Sample data: every series (Netflix, Spotify, Google One, rent, utilities) starts in
-    the first statement month → no alert. Fixture: a card subscription first charged 2026-02-09, 56 days
-    after the card's first covered day, then 03-09 and 04-09 → alert for 2026-04.
+  - *Worked example.* Sample data: Netflix, Spotify, rent and the utilities start within 28 days of their
+    account's first covered day. Google One's first charge (2026-04-20) is 36 days after Apex Visa's (2026-03-15),
+    because the synthetic Apex data begins on 04-01; at 45 days it is not new (step 6 notes) → no alert. Fixture: a
+    card subscription first charged 2026-02-09, 56 days after the card's first covered day, then 03-09 and 04-09 →
+    alert for 2026-04.
 
 ### 6.4 Monthly series (the recurrence detector)
 
@@ -588,6 +591,8 @@ series of §6.4.
 - Monthly cadence only.
 - Plain Java over rows from one SQL query (it is sequence logic, not arithmetic), unit-tested on its own.
 - A merchant's latest run is its series. An earlier run that a long gap ended is not reported separately.
+- *Step 6:* the gaps, `min-occurrences`, `stable-count` and `active-days` are `finalysis.analytics.recurring.*`, one
+  block that the list and both recurring alerts read (analytics can't depend on `finalysis.alerts`).
 
 ### 6.5 Recurring charges endpoint (ANA-07)
 
@@ -1227,6 +1232,93 @@ Done: "Phase 5 step 5: alert framework, spike, large transaction, possible dupli
 - **Leak test:** a problem's `instance` is the request path, so malformed keys in the path are plain text, not markers;
   the markers are in the query parameters, the note and the rows.
 
+### Step 6 notes
+
+Done: "Phase 5 step 6: recurring series, price increase, new recurring, recurring endpoint". Backend 2,460 tests
+(Maven summary; 2,413 + 47), 0 failures, 0 skipped; frontend 4. Requirements v1.52 (ANA-06 Done). No migration.
+
+**Built**
+- **`MonthlySeries`** (`analytics`, plain Java, §6.4): charges grouped by account and cleaned merchant, ordered by date,
+  then amount, fingerprint and id (so the input's order never matters and the order survives a re-import); a gap
+  outside 25–35 days ends a run; `latestRuns` keeps each key's last run. A run depends only on the gaps inside it, so
+  the runs of the history up to any day are prefixes of the full runs: what lets a check look only up to its month.
+- **`RecurringSeriesQuery`:** money out with a merchant, outside both transfer buckets (`TxnBucketSql.BUCKET`), as
+  magnitudes; never a raw description. `runs(since, dayAfter)` for the checks, the whole history for the list.
+- **`RecurringChargesService`** and **`GET /api/analytics/recurring?accountId=&status=&limit=`** (§6.5): each latest
+  run of at least `min-occurrences`; `typicalAmount` the lower middle charge, `fixedPrice` the last `stable-count` + 1
+  equal, `status` against the account's own last covered day; newest last charge first; limit default 50, at most
+  `max-limit` (100), `truncated`; 404 for an unknown account. Read-only, REPEATABLE READ.
+- **`RecurringPriceIncreaseCheck`** and **`NewRecurringCheck`** (`alert`, §6.3), with their `AlertDetails` records and
+  keys (the new charge's fingerprint; the series' first charge's fingerprint).
+- **Settings:** `finalysis.analytics.recurring.*` (`min-gap-days` 25, `max-gap-days` 35, `min-occurrences` 3,
+  `stable-count` 2, `active-days` 45, `max-limit` 100); `finalysis.alerts.recurring-price-increase.min-increase-amount`
+  0.50; `finalysis.alerts.new-recurring.amount-tolerance-percent` 20 and `min-prior-days` 45. Validated at startup.
+- **`TrendsService.trends(MonthRange)`**: every month's trends from one bucket query over `from − 12 … to`, each month
+  equal to the per-month call; `CategorySpikeCheck` uses it.
+- **`CoverageService.coveredDays(notAfter)`** and `CoveredDays`: each account's first covered day and last covered day
+  by a date.
+
+**Tests** (expected figures written by hand, as literals or in the fixture's CSVs)
+- **`MonthlySeriesTest`:** gaps of 24, 25, 30, 35 and 36 days; same-day and weekly charges; a long gap and the latest
+  run; per account and merchant; month ends (01-31, 02-28, 03-31); prefixes; the median of even and odd counts;
+  shuffled input. **`MonthlySeriesPropertiesTest`** (jqwik): gaps inside runs and between them, every charge in exactly
+  one run, order independence, prefix stability at any cut.
+- **`RecurringPriceIncreaseTest`:** 10.48, 10.49, 10.50 after 9.99 twice, basis and details to the cent; one or two
+  unequal charges before; a variable bill; only the first charge at a new price, and a second increase later; a
+  decrease; a 36-day gap; linked and Transfer-category charges; months, accounts and the key.
+- **`NewRecurringTest`:** the first charge 44, 45 and 46 days in; the tolerance at 12.00 / 12.01 and 8.00 / 7.99 around a
+  10.00 median; two charges; a fourth charge leaves the alert in the third's month with three occurrences, in a wide and
+  a narrow range and by key; a series from the start of the data; money in; another account's own coverage;
+  `active-days` with the check built by hand (11 days fires, 10 doesn't).
+- **`RecurringChargesApiTest`:** the fixture equals `expected-recurring.csv` column by column; defaults and JSON; account
+  and status filters, and rent `ENDED` once a later statement without it is added; limits, `truncated`, every 400 and
+  the 404. **`RecurringSampleDataTest`:** exactly the plan's eight series, Skywave `ENDED`.
+- **Updated:** `AlertSampleDataTest` (exactly five, Spotify to the cent), `AlertFixtureTest` (all six rows of
+  `expected-alerts.csv`, and the new alerts' data flags), `AlertKeyTest` (the price-increase and new-recurring keys and
+  their dismissals survive re-importing the card's March and April), `AlertApiTest` (six alerts, the new details' JSON),
+  `TrendsTest` (the range overload equals each month's call), `ReadOnlyQueriesTest`, `AnalyticsEmptyDatabaseTest`,
+  `AnalyticsPerformanceTest` (the recurring endpoint; four in five rows now have a merchant), `SensitiveDataLeakTest`
+  (the recurring list and its 400s), `AlertSettingsTest`, `RecurringSettingsTest`.
+- **`PackageDependencyTest`:** `alert` may depend on `analytics`, never the reverse (the step 1 rule, now with a
+  violation check), and a new rule: the analytics classes public for the alerts (`Arithmetic`, `MonthRanges`,
+  `ReferenceQuery`, `TxnBucketSql`, `MonthlySeries`, `RecurringSeriesQuery`, `CoveredDays`) and the service methods
+  public for them (`CoverageService.latestMonth`, `householdFlags`, `coveredDays`, `TrendsService.trends(MonthRange)`)
+  are used by `alert` alone; each rule catches a deliberate violation, and a class using the query services passes.
+
+**Decisions beyond the plan**
+- **`new-recurring.min-prior-days` is 45, not 30** (asked during the step). At 30 the sample data raised a sixth alert:
+  Google One's first charge is 36 days after Apex Visa's first covered day (the synthetic Apex data starts on 04-01, its
+  statement on 03-15). A value under `max-gap-days` contradicts the detector: a series that began before the data can
+  first show up a whole gap after it, plus billing drift. §6.3 updated.
+- **One bucket query for the spikes** (asked during the step). `/api/alerts` over 24 months on 50,000 rows took about
+  550 ms against §9.6's 500 ms: the spike check called `TrendsService` once per month (about 380 ms), and the step 5
+  checks alone were near the bound. With `trends(MonthRange)` the spike check takes about 50 ms and the 24-month list
+  about 220 ms. The per-month results are unchanged (`TrendsTest`, the spike tests).
+- **The series settings are `finalysis.analytics.recurring.*`**, not under the two alert blocks as §6.3 lists them:
+  the list and the alerts must see the same series, and analytics can't read `finalysis.alerts`. The alerts' basis
+  names them by their property names.
+- **A new recurring charge is judged as of its month's end:** the series' charges and the account's coverage up to
+  then (§6.1: no check looks past its month). `active-days` can then only fail with a setting under a month; it stays,
+  shown in the basis.
+- **Every run is checked, not only the latest:** an earlier run's alerts stay in their months, where that run was the
+  latest. The recurring list shows only the latest run, as §6.4 says.
+- **Bounded reads for the checks:** price increase reads from `stable-count × max-gap-days` before the range, new
+  recurring from `min-occurrences × max-gap-days` before it and skips a run whose first charge read is within a gap of
+  that start (it may have begun earlier). Both are exact for the range, and the cost follows the range, not the history.
+- **The median is chosen in Java** (the lower middle charge, as `percentile_disc(0.5)` would; no division), because runs
+  exist only in Java. Tolerance is `|charge − median| × 100 ≤ median × percent`, without dividing.
+- **Shapes:** `RecurringChargesResponse` also echoes `limit`; the request's `status` is `RecurringStatusFilter`
+  (`ACTIVE`, `ENDED`, `ALL`), a charge's is `RecurringStatus`. A price-increase alert shows the new charge only; a new
+  recurring alert shows the series' charges up to its month. A series' category counts "no category" as one.
+  `fixedPrice` is false with fewer than `stable-count` + 1 charges.
+- **Settings bounds:** gaps 1–365 (`max` ≥ `min`), `min-occurrences` 2–24, `stable-count` 2–12 (1 would make every
+  variable bill a fixed price), `active-days` 1–3650, `max-limit` 1–500, `min-increase-amount` 0.01–1,000,000.00,
+  tolerance 0–100 (one decimal), `min-prior-days` 0–3650.
+- **Performance data:** merchants are set in the generated rows' INSERT. A first attempt with an UPDATE left 40,000 dead
+  rows and slowed every query (the spike to 1.1 s); `ANALYZE` doesn't vacuum.
+- **ANA-04 and ANA-07 stay Planned** until step 7's close-out sets the phase's statuses; ANA-06 is Done now, as its
+  report is complete.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1234,13 +1326,13 @@ Done: "Phase 5 step 5: alert framework, spike, large transaction, possible dupli
 | ANA-01 | 1, 2, 3 | `TxnBucketTest`, `MonthlyTotalsTest`, `MerchantTotalsTest`, `DrillDownTest`, `DrillDownSampleDataTest` |
 | ANA-02 (cash flow, savings rate) | 2 | `MonthlyTotalsTest` |
 | ANA-03 | 3 | `TrendsTest` |
-| ANA-04 | 5, 6 | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest`, `AlertKeyTest`, `AlertApiTest`, `AlertFixtureTest`, `AlertSampleDataTest` (step 5); the recurring tests (step 6) |
-| ANA-06 | 2, 3, 4 | `MonthlyTotalsTest`, `DrillDownTest`, `AnalyticsSampleDataTest`, `DrillDownSampleDataTest`, `docs/eval/phase-5-totals.md` |
-| ANA-07 | 6 | `MonthlySeriesTest`, `RecurringChargesApiTest` |
+| ANA-04 | 5, 6 | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest`, `AlertKeyTest`, `AlertApiTest`, `AlertFixtureTest`, `AlertSampleDataTest` (step 5); `RecurringPriceIncreaseTest`, `NewRecurringTest` (step 6) |
+| ANA-06 | 2, 3, 4, 5, 6 | `MonthlyTotalsTest`, `DrillDownTest`, `AnalyticsSampleDataTest`, `DrillDownSampleDataTest`, `AlertSampleDataTest`, `RecurringSampleDataTest`, `AlertFixtureTest`, `RecurringChargesApiTest`, `docs/eval/phase-5-totals.md` |
+| ANA-07 | 6 | `MonthlySeriesTest`, `MonthlySeriesPropertiesTest`, `RecurringChargesApiTest`, `RecurringSampleDataTest` |
 | ANA-08 | 2 | `DataQualityTest` |
 | GR-01, GR-02 | all | SQL source test, rounding tests |
 | GR-04 | 1, 2 | `TxnBucketTest`, invariants |
-| SEC-03 (prepared for Phase 6) | 1, 5 | read-only tests, ArchUnit (`ReadOnlyQueriesTest`: only `AlertController` uses `AlertDismissalService`) |
+| SEC-03 (prepared for Phase 6) | 1, 5, 6 | read-only tests, ArchUnit (`ReadOnlyQueriesTest`: only `AlertController` uses `AlertDismissalService`; `PackageDependencyTest`: the alert-only analytics classes and methods are used by `alert` alone) |
 
 ---
 

@@ -104,6 +104,14 @@ finalysis:
     default-months: 6   # range when from is omitted, ending at to
     merchants:
       max-limit: 50     # longest merchant list per request (default 10)
+    # Monthly series (§6.4), shared by the recurring charges list and the two recurring alerts.
+    recurring:
+      min-gap-days: 25    # a run's charges are 25 to 35 days apart; any other gap ends the run
+      max-gap-days: 35
+      min-occurrences: 3  # charges a run needs to be a series
+      stable-count: 2     # equal charges that make a fixed price
+      active-days: 45     # ACTIVE while the last charge is at most this many days before the account's last covered day
+      max-limit: 100      # longest recurring list per request (default 50)
   # Rule-based alerts (docs/plans/phase-5.md §6.3); a bad value fails startup. Checked against the synthetic answer key
   # only, so real data may need tuning.
   alerts:
@@ -119,3 +127,9 @@ finalysis:
       min-history: 5      # charges the median needs, or no alert
     possible-duplicate:
       window-days: 1      # same account, amount and merchant at most this many days apart
+    recurring-price-increase:
+      min-increase-amount: 0.50  # a series charge at least this above the stable-count equal charges before it
+    new-recurring:
+      amount-tolerance-percent: 20  # every charge within 20% of the series' median ...
+      min-prior-days: 45            # ... the first at least 45 days after the account's first covered day: more than
+                                    # max-gap-days, since an older series can first show up a whole gap after it

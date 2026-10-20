@@ -7,6 +7,7 @@ import com.finalysis.analytics.CategoryKind;
 import com.finalysis.analytics.MonthRange;
 import com.finalysis.analytics.TrendLine;
 import com.finalysis.analytics.TrendRow;
+import com.finalysis.analytics.TrendsResponse;
 import com.finalysis.analytics.TrendsService;
 import com.finalysis.analytics.TxnBucket;
 import java.math.BigDecimal;
@@ -56,11 +57,12 @@ class CategorySpikeCheck implements AlertCheck {
     @Override
     public List<Finding> find(MonthRange range) {
         List<Finding> findings = new ArrayList<>();
-        for (YearMonth month : range.months()) {
-            for (TrendRow row : trends.trends(Optional.of(month), Optional.empty(), Optional.empty()).rows()) {
+        // One bucket query for the whole range; each month's rows are those of GET /api/analytics/trends?month=.
+        for (TrendsResponse month : trends.trends(range)) {
+            for (TrendRow row : month.rows()) {
                 if (row.line() == TrendLine.CATEGORY && row.bucket() == TxnBucket.EXPENSE
                         && row.category().kind() == CategoryKind.EXPENSE) {
-                    evaluate(month, row).ifPresent(findings::add);
+                    evaluate(month.month(), row).ifPresent(findings::add);
                 }
             }
         }

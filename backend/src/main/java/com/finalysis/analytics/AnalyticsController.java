@@ -22,10 +22,12 @@ public class AnalyticsController {
     private final MerchantTotalsService merchants;
     private final TrendsService trends;
     private final DrillDownService drillDown;
+    private final RecurringChargesService recurring;
 
     public AnalyticsController(MonthlyTotalsService months, CategoryTotalsService categories,
                                AccountTotalsService accounts, CoverageService coverage,
-                               MerchantTotalsService merchants, TrendsService trends, DrillDownService drillDown) {
+                               MerchantTotalsService merchants, TrendsService trends, DrillDownService drillDown,
+                               RecurringChargesService recurring) {
         this.months = months;
         this.categories = categories;
         this.accounts = accounts;
@@ -33,6 +35,7 @@ public class AnalyticsController {
         this.merchants = merchants;
         this.trends = trends;
         this.drillDown = drillDown;
+        this.recurring = recurring;
     }
 
     @GetMapping("/months")
@@ -99,5 +102,13 @@ public class AnalyticsController {
                 Optional.ofNullable(to), Optional.ofNullable(bucket), Optional.ofNullable(measure),
                 Optional.ofNullable(accountId), Optional.ofNullable(categoryId), Optional.ofNullable(merchant),
                 noMerchant, page, size));
+    }
+
+    @GetMapping("/recurring")
+    public RecurringChargesResponse recurring(@RequestParam(required = false) Long accountId,
+                                              @RequestParam(defaultValue = "ACTIVE") RecurringStatusFilter status,
+                                              @RequestParam(defaultValue = "" + RecurringChargesService.DEFAULT_LIMIT)
+                                              int limit) {
+        return recurring.recurring(Optional.ofNullable(accountId), status, limit);
     }
 }

@@ -26,7 +26,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * The alert endpoints (docs/plans/phase-5.md §5.2, §9.5) on the fixture: defaults, JSON units, filters, bounds, every
  * 400 with its field, the 404s, and dismissal (idempotent, hidden unless asked for, only for a current alert). The
- * fixture's step 5 alerts: two spikes and a large charge in April, a duplicate in March, all on the card.
+ * fixture's alerts: two spikes, a large charge and a new recurring charge in April, a duplicate and a recurring price
+ * increase in March, all on the card.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -71,14 +72,16 @@ class AlertApiTest {
 
         assertThat(body.get("range").get("from").asString()).isEqualTo("2026-02");
         assertThat(body.get("range").get("to").asString()).isEqualTo("2026-04");
-        assertThat(body.get("items")).hasSize(4);
+        assertThat(body.get("items")).hasSize(6);
         assertThat(body.get("items").valueStream().map(i -> i.get("month").asString() + " " + i.get("type").asString())
                 .toList()).as("newest month first, then by type").containsExactly(
                 "2026-04 CATEGORY_SPIKE", "2026-04 CATEGORY_SPIKE", "2026-04 LARGE_TRANSACTION",
-                "2026-03 POSSIBLE_DUPLICATE");
+                "2026-04 NEW_RECURRING", "2026-03 POSSIBLE_DUPLICATE", "2026-03 RECURRING_PRICE_INCREASE");
         assertThat(body.get("counts").get("CATEGORY_SPIKE").asInt()).isEqualTo(2);
         assertThat(body.get("counts").get("LARGE_TRANSACTION").asInt()).isEqualTo(1);
         assertThat(body.get("counts").get("POSSIBLE_DUPLICATE").asInt()).isEqualTo(1);
+        assertThat(body.get("counts").get("RECURRING_PRICE_INCREASE").asInt()).isEqualTo(1);
+        assertThat(body.get("counts").get("NEW_RECURRING").asInt()).isEqualTo(1);
 
         JsonNode large = body.get("items").get(2);
         assertThat(large.get("key").asString()).matches("large-transaction\\.2026-04\\.[0-9a-f]{16}");
@@ -99,6 +102,28 @@ class AlertApiTest {
         assertThat(spike.get("details").get("baseline").get("monthsUsed").asInt()).isEqualTo(3);
         assertThat(spike.get("basis").get("settings").get(0).get("name").asString()).isEqualTo("min-increase-percent");
         assertThat(spike.get("basis").get("settings").get(0).get("value").get("value").asString()).isEqualTo("50.0");
+
+        JsonNode recurring = body.get("items").get(3);
+        assertThat(recurring.get("key").asString()).matches("new-recurring\\.2026-04\\.[0-9a-f]{16}");
+        assertThat(recurring.get("details").get("type").asString()).isEqualTo("NEW_RECURRING");
+        assertThat(recurring.get("details").get("merchant").asString()).isEqualTo("CLOUDBOX STORAGE");
+        assertThat(recurring.get("details").get("typicalAmount").asString()).isEqualTo("4.99");
+        assertThat(recurring.get("details").get("occurrences").asInt()).isEqualTo(3);
+        assertThat(recurring.get("details").get("firstDate").asString()).isEqualTo("2026-02-09");
+        assertThat(recurring.get("basis").get("observed").get("unit").asString()).isEqualTo("COUNT");
+        assertThat(recurring.get("basis").get("baseline").isNull()).as("a count has no baseline").isTrue();
+        assertThat(recurring.get("basis").get("settings").get(1).get("value").get("value").asString())
+                .as("amount-tolerance-percent").isEqualTo("20.0");
+        assertThat(recurring.get("txns")).hasSize(3);
+
+        JsonNode increase = body.get("items").get(5);
+        assertThat(increase.get("key").asString()).matches("recurring-price-increase\\.2026-03\\.[0-9a-f]{16}");
+        assertThat(increase.get("details").get("type").asString()).isEqualTo("RECURRING_PRICE_INCREASE");
+        assertThat(increase.get("details").get("previousAmount").asString()).isEqualTo("9.99");
+        assertThat(increase.get("details").get("newAmount").asString()).isEqualTo("11.49");
+        assertThat(increase.get("details").get("increaseAmount").asString()).isEqualTo("1.50");
+        assertThat(increase.get("details").get("increasePercent").asString()).isEqualTo("15.0");
+        assertThat(increase.get("txns").get(0).get("amount").asString()).isEqualTo("-11.49");
     }
 
     @Test
@@ -112,18 +137,18 @@ class AlertApiTest {
                 .andExpect(jsonPath("$.type").value("POSSIBLE_DUPLICATE"))
                 .andExpect(jsonPath("$.counts.CATEGORY_SPIKE").value(0));
         mockMvc.perform(get("/api/alerts").param("type", "NEW_RECURRING"))
-                .andExpect(jsonPath("$.items.length()").value(0));
+                .andExpect(jsonPath("$.items.length()").value(1));
         mockMvc.perform(get("/api/alerts").param("accountId", String.valueOf(card)))
-                .andExpect(jsonPath("$.items.length()").value(4));
+                .andExpect(jsonPath("$.items.length()").value(6));
         mockMvc.perform(get("/api/alerts").param("accountId", String.valueOf(checking)))
                 .andExpect(jsonPath("$.items.length()").value(0));
         mockMvc.perform(get("/api/alerts").param("from", "2026-03").param("to", "2026-03"))
-                .andExpect(jsonPath("$.items.length()").value(1));
+                .andExpect(jsonPath("$.items.length()").value(2));
         mockMvc.perform(get("/api/alerts").param("limit", "1"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.truncated").value(true))
                 .andExpect(jsonPath("$.counts.CATEGORY_SPIKE").value(2));
-        mockMvc.perform(get("/api/alerts").param("limit", "4")).andExpect(jsonPath("$.truncated").value(false));
+        mockMvc.perform(get("/api/alerts").param("limit", "6")).andExpect(jsonPath("$.truncated").value(false));
 
         invalid(get("/api/alerts").param("limit", "0"), "limit");
         invalid(get("/api/alerts").param("limit", "101"), "limit");
@@ -174,17 +199,17 @@ class AlertApiTest {
                 key)).isEqualTo("LARGE_TRANSACTION");
 
         mockMvc.perform(get("/api/alerts"))
-                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items.length()").value(5))
                 .andExpect(jsonPath("$.counts.LARGE_TRANSACTION").value(0));
         mockMvc.perform(get("/api/alerts").param("includeDismissed", "true"))
-                .andExpect(jsonPath("$.items.length()").value(4))
+                .andExpect(jsonPath("$.items.length()").value(6))
                 .andExpect(jsonPath("$.items[2].dismissed").value(true))
                 .andExpect(jsonPath("$.items[2].note").value("work laptop"));
         mockMvc.perform(get("/api/alerts/{key}", key)).andExpect(jsonPath("$.dismissed").value(true));
 
         mockMvc.perform(delete("/api/alerts/{key}/dismissal", key)).andExpect(status().isNoContent());
         mockMvc.perform(delete("/api/alerts/{key}/dismissal", key)).andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/alerts")).andExpect(jsonPath("$.items.length()").value(4));
+        mockMvc.perform(get("/api/alerts")).andExpect(jsonPath("$.items.length()").value(6));
         mockMvc.perform(get("/api/alerts/{key}", key))
                 .andExpect(jsonPath("$.dismissed").value(false))
                 .andExpect(jsonPath("$.dismissedAt").doesNotExist());

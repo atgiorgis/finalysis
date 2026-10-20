@@ -4,16 +4,34 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.ai.AiProperties;
+import com.finalysis.alert.AlertQueryService;
+import com.finalysis.analytics.Arithmetic;
+import com.finalysis.analytics.CoverageService;
+import com.finalysis.analytics.CoveredDays;
+import com.finalysis.analytics.MonthRange;
+import com.finalysis.analytics.MonthRanges;
+import com.finalysis.analytics.MonthlySeries;
+import com.finalysis.analytics.RecurringChargesService;
+import com.finalysis.analytics.RecurringSeriesQuery;
+import com.finalysis.analytics.RecurringStatusFilter;
+import com.finalysis.analytics.ReferenceQuery;
+import com.finalysis.analytics.TrendsService;
 import com.finalysis.analytics.TxnBucketSql;
+import com.finalysis.analytics.UsesAlert;
 import com.finalysis.ai.bedrock.BedrockClientConfiguration;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
 import com.finalysis.transfer.TransferDetector;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaAccess;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
+import java.time.YearMonth;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +44,8 @@ import org.junit.jupiter.api.Test;
  * so the category columns keep the categorization code as their one writer (phase-4.md, step 2 notes). No code names
  * a model provider (phase-4.md §7). Phase 5's {@code analytics} and {@code alert} read the other features' tables in
  * SQL and depend on none of their classes, and {@code analytics} knows nothing of {@code alert} (phase-5.md §3.2).
+ * The analytics classes made public only so the alerts can use them (step 5, and the recurring series of step 6) are
+ * used by {@code alert} alone; everything else, Phase 6's chat tools included, goes through the query services.
  */
 class PackageDependencyTest {
 
@@ -63,6 +83,38 @@ class PackageDependencyTest {
             .that().resideInAPackage("com.finalysis.analytics..")
             .should().dependOnClassesThat().resideInAPackage("com.finalysis.alert..")
             .because("alerts are built on analytics figures, not the other way round");
+
+    /**
+     * Service methods public for the alerts, which validate no range or bound of their own: three of
+     * {@code CoverageService} (its {@code coverage()} is the endpoint's) and the range overload of {@code TrendsService}
+     * (the category spike check's one bucket query; {@code trends(month, accountId, categoryId)} is the endpoint's).
+     */
+    static final Set<String> ALERT_ONLY_METHODS = Set.of(
+            "com.finalysis.analytics.CoverageService.latestMonth()",
+            "com.finalysis.analytics.CoverageService.householdFlags(com.finalysis.analytics.MonthRange)",
+            "com.finalysis.analytics.CoverageService.coveredDays(java.time.LocalDate)",
+            "com.finalysis.analytics.TrendsService.trends(com.finalysis.analytics.MonthRange)");
+
+    /**
+     * Public in {@code analytics} only for {@code alert}: the helpers made public in step 5 ({@code Arithmetic},
+     * {@code MonthRanges}, {@code ReferenceQuery}, three {@code CoverageService} methods), those of step 6
+     * ({@code MonthlySeries}, {@code RecurringSeriesQuery}, {@code CoveredDays}, {@code TrendsService}'s range
+     * overload) and the bucket SQL. They are building
+     * blocks, without the services' validation, bounds and read-only transactions.
+     */
+    static final ArchRule ANALYTICS_INTERNALS_ONLY_FOR_ALERTS = noClasses()
+            .that().resideOutsideOfPackages("com.finalysis.analytics..", "com.finalysis.alert..")
+            .should().dependOnClassesThat().belongToAnyOf(Arithmetic.class, MonthRanges.class, ReferenceQuery.class,
+                    TxnBucketSql.class, MonthlySeries.class, RecurringSeriesQuery.class, CoveredDays.class)
+            .orShould().accessTargetWhere(new DescribedPredicate<JavaAccess<?>>(
+                    "a service method public for the alerts " + ALERT_ONLY_METHODS) {
+                @Override
+                public boolean test(JavaAccess<?> access) {
+                    return ALERT_ONLY_METHODS.contains(access.getTarget().getFullName());
+                }
+            })
+            .because("they are public for the alerts only; other code (Phase 6's chat tools included) uses the "
+                    + "read-only, bounded query services");
 
     /**
      * AI-03 and the local profile to come: code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only, so
@@ -129,7 +181,33 @@ class PackageDependencyTest {
     @Test
     void analyticsAndAlertsUseNoOtherFeaturesCode() {
         ANALYTICS_READS_TABLES_NOT_FEATURES.check(app);
+    }
+
+    /** Alerts may depend on analytics, never the reverse; analytics' alert-only classes are used by alerts alone. */
+    @Test
+    void alertsDependOnAnalyticsNeverTheReverse() {
+        assertThat(app.contain(AlertQueryService.class)).isTrue();
+        assertThat(app.contain(MonthlySeries.class)).isTrue();
+
         ANALYTICS_KNOWS_NO_ALERTS.check(app);
+        ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.check(app);
+    }
+
+    /** Both rules catch a violation: analytics using an alert class; other code using an alert-only helper. */
+    @Test
+    void theAnalyticsRulesFailOnAViolation() {
+        JavaClasses analyticsUsesAlert = new ClassFileImporter().importClasses(UsesAlert.class);
+        JavaClasses helper = new ClassFileImporter().importClasses(UsesAlertOnlyHelper.class);
+        JavaClasses coverageCall = new ClassFileImporter().importClasses(CallsAlertOnlyCoverage.class);
+        JavaClasses trendsCall = new ClassFileImporter().importClasses(CallsTheTrendsRangeOverload.class);
+        JavaClasses service = new ClassFileImporter().importClasses(UsesTheQueryService.class);
+
+        assertThat(ANALYTICS_KNOWS_NO_ALERTS.evaluate(analyticsUsesAlert).hasViolation()).isTrue();
+        assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(helper).hasViolation()).isTrue();
+        assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(coverageCall).hasViolation()).isTrue();
+        assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(trendsCall).hasViolation()).isTrue();
+        assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(service).hasViolation())
+                .as("the services are the public contract").isFalse();
     }
 
     /** The rules catch a violation. */
@@ -149,6 +227,31 @@ class PackageDependencyTest {
         assertThat(NO_PROVIDER_IN_CODE.evaluate(bedrock).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(sdk).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(springAi).hasViolation()).isFalse();
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesAlertOnlyHelper {
+        private MonthlySeries series;
+    }
+
+    static class CallsAlertOnlyCoverage {
+        Object latest(CoverageService coverage) {
+            return coverage.latestMonth();
+        }
+    }
+
+    static class CallsTheTrendsRangeOverload {
+        Object trends(TrendsService trends) {
+            return trends.trends(new MonthRange(YearMonth.of(2026, 1), YearMonth.of(2026, 3)));
+        }
+    }
+
+    static class UsesTheQueryService {
+        Object recurring(RecurringChargesService recurring, CoverageService coverage, TrendsService trends) {
+            coverage.coverage();
+            trends.trends(Optional.empty(), Optional.empty(), Optional.empty());
+            return recurring.recurring(Optional.empty(), RecurringStatusFilter.ALL, 10);
+        }
     }
 
     @SuppressWarnings("unused")

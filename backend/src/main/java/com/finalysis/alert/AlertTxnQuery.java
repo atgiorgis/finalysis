@@ -1,5 +1,6 @@
 package com.finalysis.alert;
 
+import com.finalysis.analytics.MonthlySeries.Charge;
 import com.finalysis.analytics.TxnBucketSql;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -60,6 +61,12 @@ class AlertTxnQuery {
         }
         return jdbc.sql(BY_ID_SQL).param("ids", ids).query((rs, n) -> row(rs)).list().stream()
                 .collect(Collectors.toMap(r -> r.ref().id(), Function.identity()));
+    }
+
+    /** A series charge as the txn it is: its amount signed again, money out negative (GR-03). */
+    static TxnRef ref(Charge charge) {
+        return new TxnRef(charge.txnId(), charge.accountId(), charge.date(), charge.amount().negate(),
+                charge.merchant());
     }
 
     static Row row(ResultSet rs) throws SQLException {

@@ -26,10 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The step 5 checks on the sample data, with the answer key's categories (docs/plans/phase-5.md §9.3): exactly the
- * plan's expected alerts of these three types, each basis to the cent, and nothing else from March to October 2026.
- * The figures are the plan's hand-worked examples (§6.3, §6.6), never the code's. The recurring price increase
- * (Spotify) is step 6's.
+ * Every check on the sample data, with the answer key's categories (docs/plans/phase-5.md §9.3): exactly the plan's
+ * five expected alerts, each basis to the cent, and nothing else from March to October 2026. The figures are the
+ * plan's hand-worked examples (§6.3, §6.6), never the code's.
  *
  * <p>The result's counts are written to {@code target/phase-5-alerts/} for {@code docs/eval/phase-5-totals.md}.
  */
@@ -59,7 +58,7 @@ class AlertSampleDataTest {
     }
 
     @Test
-    void exactlyThePlansAlertsOfTheseThreeChecks() throws Exception {
+    void exactlyThePlansFiveAlerts() throws Exception {
         SampleDataImport sample = new SampleDataImport(support, jsonMapper);
         Map<String, Long> accounts = sample.load();
         sample.applyAnswerKey(jdbc, accounts);
@@ -72,6 +71,7 @@ class AlertSampleDataTest {
                 tuple(AlertType.CATEGORY_SPIKE, YearMonth.of(2026, 8), "Dining"),
                 tuple(AlertType.CATEGORY_SPIKE, YearMonth.of(2026, 8), "Shopping"),
                 tuple(AlertType.LARGE_TRANSACTION, YearMonth.of(2026, 8), "BEST BUY"),
+                tuple(AlertType.RECURRING_PRICE_INCREASE, YearMonth.of(2026, 7), "SPOTIFY"),
                 tuple(AlertType.POSSIBLE_DUPLICATE, YearMonth.of(2026, 6), "SAFEWAY"));
 
         // Shopping 2026-08: (282.51 + 226.66 + 224.10) / 3 = 244.42; max(366.63, 344.42) = 366.63.
@@ -123,6 +123,24 @@ class AlertSampleDataTest {
             assertThat(t.amount()).isEqualTo(new BigDecimal("-84.12"));
         });
 
+        // Spotify on Apex Visa: 11.99 on 05-12 and 06-12 (the two before it), then 12.99 on 07-12: +1.00, +8.3%.
+        Alert spotify = find(found, AlertType.RECURRING_PRICE_INCREASE, "SPOTIFY");
+        assertThat(spotify.basis()).isEqualTo(basis(money("12.99"), money("11.99"), money("12.49"),
+                "2026-05-12", "2026-07-12", List.of(
+                        new AlertSetting("stable-count", new Quantity(QuantityUnit.COUNT, "2")),
+                        new AlertSetting("min-increase-amount", money("0.50")))));
+        AlertDetails.RecurringPriceIncrease increase = (AlertDetails.RecurringPriceIncrease) spotify.details();
+        assertThat(increase.accountId()).isEqualTo(apexVisa);
+        assertThat(increase.previousAmount()).isEqualTo(new BigDecimal("11.99"));
+        assertThat(increase.newAmount()).isEqualTo(new BigDecimal("12.99"));
+        assertThat(increase.increaseAmount()).isEqualTo(new BigDecimal("1.00"));
+        assertThat(increase.increasePercent()).isEqualTo(new BigDecimal("8.3"));
+        assertThat(spotify.txns()).singleElement().satisfies(t -> {
+            assertThat(t.accountId()).isEqualTo(apexVisa);
+            assertThat(t.txnDate()).isEqualTo(LocalDate.of(2026, 7, 12));
+            assertThat(t.amount()).isEqualTo(new BigDecimal("-12.99"));
+        });
+
         assertThat(found).allSatisfy(a -> assertThat(a.dismissed()).isFalse());
         writeReport(found);
     }
@@ -134,6 +152,8 @@ class AlertSampleDataTest {
             case AlertDetails.LargeTransaction large -> large.txn().merchant().split(" ")[0] + " "
                     + large.txn().merchant().split(" ")[1];
             case AlertDetails.PossibleDuplicate duplicate -> duplicate.merchant().split(" ")[0];
+            case AlertDetails.RecurringPriceIncrease increase -> increase.merchant().split(" ")[0];
+            case AlertDetails.NewRecurring recurring -> recurring.merchant().split(" ")[0];
         };
     }
 

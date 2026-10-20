@@ -158,6 +158,7 @@ class SensitiveDataLeakTest {
         exerciseTransferAndReviewEndpoints(checking, card);
         exerciseTransactionEndpoints(checking);
         exerciseAlertEndpoints(checking);
+        exerciseRecurringEndpoint();
         databaseErrorsCarryNoRowValues();
 
         assertThat(problems).hasSizeGreaterThanOrEqualTo(20);
@@ -552,6 +553,25 @@ class SensitiveDataLeakTest {
         for (String problem : problems.subList(before, problems.size())) {
             assertThat(problem).as("SEC-10: no amount in a problem").doesNotContain("73.19");
         }
+    }
+
+    // ------------------------------------------------------------------ recurring charges (Phase 5 step 6)
+
+    /**
+     * The recurring list and its errors: the marked rows (no merchant) are in no series, and no list, problem or log
+     * line carries a marker, whatever is put in the query.
+     */
+    private void exerciseRecurringEndpoint() throws Exception {
+        int before = problems.size();
+
+        assertNoMarkers(mockMvc.perform(get("/api/analytics/recurring").param("status", "ALL"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        problem(mockMvc.perform(get("/api/analytics/recurring").param("status", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/analytics/recurring").param("limit", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/analytics/recurring").param("accountId", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/analytics/recurring").param("limit", "0")), 400, null);
+
+        assertThat(problems.size() - before).isEqualTo(4);
     }
 
     private long markedTxn(long accountId, String amount, String section) {

@@ -2,7 +2,7 @@ package com.finalysis.alert;
 
 /**
  * The checks (ANA-04, docs/plans/phase-5.md §6.1, §6.3), each with the slug that starts its alert keys. The values
- * match V20's {@code ck_alert_dismissal_type}. Step 5 builds the first three; step 6 the recurring two.
+ * match V20's {@code ck_alert_dismissal_type}.
  */
 public enum AlertType {
 
@@ -15,10 +15,10 @@ public enum AlertType {
     /** Charges in one account that look like the same one twice. */
     POSSIBLE_DUPLICATE("possible-duplicate"),
 
-    /** A fixed-price recurring charge whose price went up (step 6). */
+    /** A fixed-price recurring charge whose price went up. */
     RECURRING_PRICE_INCREASE("recurring-price-increase"),
 
-    /** A recurring charge that started while the data was being watched (step 6). */
+    /** A recurring charge that started while the data was being watched. */
     NEW_RECURRING("new-recurring");
 
     private final String slug;

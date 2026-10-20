@@ -57,13 +57,47 @@ public class TrendsService {
         }
 
         YearMonth target = m.get();
+        List<Cell> cells = buckets.find(new MonthRange(target.minusMonths(YEAR), target), accountId, categoryId);
+        return response(target, cells, accountId, categoryId, references.categories(), map);
+    }
+
+    /**
+     * The household trends of every month of {@code range}, oldest first, from one bucket query over
+     * {@code from − 12 … to}: each month's response is exactly what {@link #trends(Optional, Optional, Optional)}
+     * returns for it. For the category spike check, which judges every month of an alert range (§6.3); without
+     * statements, each month has no rows.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public List<TrendsResponse> trends(MonthRange range) {
+        CoverageMap map = coverage.load();
+        List<TrendsResponse> responses = new ArrayList<>();
+        if (map.isEmpty()) {
+            range.months().forEach(month -> responses.add(new TrendsResponse(month, null, null, List.of())));
+            return responses;
+        }
         Map<Long, CategoryRef> categories = references.categories();
+        List<Cell> cells = buckets.find(new MonthRange(range.from().minusMonths(YEAR), range.to()), Optional.empty(),
+                Optional.empty());
+        for (YearMonth target : range.months()) {
+            YearMonth first = target.minusMonths(YEAR);
+            List<Cell> window = cells.stream()
+                    .filter(c -> !c.month().isBefore(first) && !c.month().isAfter(target))
+                    .toList();
+            responses.add(response(target, window, Optional.empty(), Optional.empty(), categories, map));
+        }
+        return responses;
+    }
+
+    /** The rows of month {@code target} from the cells of {@code target − 12 … target}. */
+    private static TrendsResponse response(YearMonth target, List<Cell> cells, Optional<Long> accountId,
+                                           Optional<Long> categoryId, Map<Long, CategoryRef> categories,
+                                           CoverageMap map) {
         Map<RowKey, Map<YearMonth, BigDecimal>> amounts = new LinkedHashMap<>();
         if (categoryId.isEmpty()) {
             amounts.put(RowKey.TOTAL_SPENDING, new HashMap<>());
             amounts.put(RowKey.TOTAL_INCOME, new HashMap<>());
         }
-        for (Cell cell : buckets.find(new MonthRange(target.minusMonths(YEAR), target), accountId, categoryId)) {
+        for (Cell cell : cells) {
             CategoryRef category = cell.categoryId() == null ? null : categories.get(cell.categoryId());
             switch (cell.bucket()) {
                 case EXPENSE -> add(amounts, RowKey.category(TxnBucket.EXPENSE, category), cell, cell.net().negate());

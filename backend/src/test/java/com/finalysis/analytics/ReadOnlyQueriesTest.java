@@ -18,6 +18,7 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.lang.reflect.Method;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,7 @@ class ReadOnlyQueriesTest {
                 .map(JavaClass::getSimpleName).sorted().toList();
         assertThat(services).as("the rule must see the query services, or it checks nothing")
                 .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "DrillDownService",
-                        "MerchantTotalsService", "MonthlyTotalsService", "TrendsService");
+                        "MerchantTotalsService", "MonthlyTotalsService", "RecurringChargesService", "TrendsService");
         assertThat(app.contain(AlertQueryService.class)).isTrue();
         assertThat(QUERY_SERVICES_ARE_READ_ONLY.evaluate(new ClassFileImporter().importClasses(
                 AlertQueryService.class)).hasViolation()).isFalse();
@@ -120,9 +121,13 @@ class ReadOnlyQueriesTest {
                 MerchantTotalsService.class.getMethod("merchants", Optional.class, Optional.class, Optional.class,
                         Optional.class, int.class),
                 TrendsService.class.getMethod("trends", Optional.class, Optional.class, Optional.class),
+                TrendsService.class.getMethod("trends", MonthRange.class),
                 DrillDownService.class.getMethod("transactions", DrillDownFilter.class),
                 CoverageService.class.getMethod("latestMonth"),
                 CoverageService.class.getMethod("householdFlags", MonthRange.class),
+                CoverageService.class.getMethod("coveredDays", LocalDate.class),
+                RecurringChargesService.class.getMethod("recurring", Optional.class, RecurringStatusFilter.class,
+                        int.class),
                 AlertQueryService.class.getMethod("alerts", Optional.class, Optional.class, Optional.class,
                         Optional.class, boolean.class, int.class),
                 AlertQueryService.class.getMethod("alert", String.class))) {

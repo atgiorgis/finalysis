@@ -61,9 +61,11 @@ class AlertKeyTest {
     }
 
     /**
-     * The card's March statement holds the duplicate pair, April's the large charge and most of April's spikes. Each is
-     * deleted and imported again (categories re-applied from the key, as the user's would be kept by their rules): every
-     * key is the same as before, and the dismissed duplicate is still dismissed with its note.
+     * The card's March statement holds the duplicate pair, April's the large charge, most of April's spikes and the
+     * Streamco price increase; both hold Cloudbox charges of the new recurring series. Each is deleted and imported
+     * again (categories re-applied from the key, as the user's would be kept by their rules): every key is the same as
+     * before, and the dismissed duplicate, price increase and new recurring charge are still dismissed, with their
+     * notes.
      */
     @Test
     void keysAndDismissalsSurviveDeletingAndReimportingAStatement() throws Exception {
@@ -73,9 +75,16 @@ class AlertKeyTest {
         assertThat(before.get(AlertType.POSSIBLE_DUPLICATE)).hasSize(1);
         assertThat(before.get(AlertType.LARGE_TRANSACTION)).hasSize(1);
         assertThat(before.get(AlertType.CATEGORY_SPIKE)).hasSize(2);
+        assertThat(before.get(AlertType.RECURRING_PRICE_INCREASE)).hasSize(1);
+        assertThat(before.get(AlertType.NEW_RECURRING)).hasSize(1);
         String duplicate = before.get(AlertType.POSSIBLE_DUPLICATE).getFirst();
         Alert dismissed = dismissals.dismiss(duplicate, "same receipt, two cards");
         assertThat(dismissed.dismissed()).isTrue();
+        // The new price (03-20) and the series' last two charges (03-09, 04-09) are in the two re-imported files.
+        String priceIncrease = before.get(AlertType.RECURRING_PRICE_INCREASE).getFirst();
+        String newRecurring = before.get(AlertType.NEW_RECURRING).getFirst();
+        Alert priceDismissed = dismissals.dismiss(priceIncrease, "told about it by email");
+        dismissals.dismiss(newRecurring, null);
 
         for (String file : List.of("fixture-card_2026-03.csv", "fixture-card_2026-04.csv")) {
             mockMvc.perform(delete("/api/statements/{id}", loaded.statements().get(file))).andExpect(status().isOk());
@@ -91,6 +100,13 @@ class AlertKeyTest {
         assertThat(again.dismissed()).isTrue();
         assertThat(again.note()).isEqualTo("same receipt, two cards");
         assertThat(again.dismissedAt()).isEqualTo(dismissed.dismissedAt());
+        Alert priceAgain = alerts.alert(priceIncrease);
+        assertThat(priceAgain.dismissed()).isTrue();
+        assertThat(priceAgain.note()).isEqualTo("told about it by email");
+        assertThat(priceAgain.dismissedAt()).isEqualTo(priceDismissed.dismissedAt());
+        assertThat(alerts.alert(newRecurring).dismissed()).isTrue();
+        assertThat(alerts.alerts(Optional.of(DEC), Optional.of(APR), Optional.empty(), Optional.empty(), false, 100)
+                .items()).extracting(Alert::key).doesNotContain(duplicate, priceIncrease, newRecurring);
     }
 
     /** A statement deleted for good takes its alerts with it; the dismissal stays, harmless, and isn't listed. */

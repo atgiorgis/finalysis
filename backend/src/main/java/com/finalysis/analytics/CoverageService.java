@@ -4,6 +4,7 @@ import com.finalysis.analytics.CoverageQuery.Flagged;
 import com.finalysis.analytics.CoverageResponse.AccountCoverage;
 import com.finalysis.analytics.CoverageResponse.DateSpan;
 import com.finalysis.analytics.CoverageResponse.FlaggedStatement;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,6 +75,24 @@ public class CoverageService {
             flags.put(month, MonthTotalsReader.flags(month, Optional.empty(), flagged, map));
         }
         return flags;
+    }
+
+    /**
+     * Each account's first covered day, and its last covered day on or before {@code notAfter}, by id; accounts that
+     * covered nothing by then are left out. The new recurring check judges a month by what was covered up to its end
+     * (§6.3), so a later statement never changes it.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Map<Long, CoveredDays> coveredDays(LocalDate notAfter) {
+        CoverageMap map = coverage.load();
+        Map<Long, CoveredDays> days = new LinkedHashMap<>();
+        for (Long account : references.accounts().keySet()) {
+            LocalDate last = map.lastCoveredDay(account, notAfter);
+            if (last != null) {
+                days.put(account, new CoveredDays(map.firstDay(account), last));
+            }
+        }
+        return days;
     }
 
     private static <T> List<T> latest(List<T> items) {

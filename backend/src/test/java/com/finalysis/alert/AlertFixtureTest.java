@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -24,15 +23,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The step 5 checks on the Phase 5 fixture, imported for real: exactly the rows of the hand-written
- * {@code expected-alerts.csv} for these three types (docs/plans/phase-5.md §9.1), every basis column compared with the
- * file as text, and the txns it names. The recurring rows are step 6's.
+ * Every check on the Phase 5 fixture, imported for real: exactly the rows of the hand-written {@code expected-alerts.csv}
+ * (docs/plans/phase-5.md §9.1), every basis column compared with the file as text, and the txns it names. Step 5 wrote
+ * the spike, large and duplicate rows; step 6 the Streamco price increase and the Cloudbox new recurring charge.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
 class AlertFixtureTest {
-
-    private static final Set<String> STEP_5 = Set.of("CATEGORY_SPIKE", "LARGE_TRANSACTION", "POSSIBLE_DUPLICATE");
 
     private final ImportTestSupport support;
     private final JdbcTemplate jdbc;
@@ -53,7 +50,7 @@ class AlertFixtureTest {
     }
 
     @Test
-    void exactlyTheExpectedAlertsOfTheseThreeChecks() throws Exception {
+    void exactlyTheExpectedAlerts() throws Exception {
         Loaded loaded = new AnalyticsFixture(support, jdbc, jsonMapper).load();
 
         List<Alert> found = alerts.alerts(Optional.of(YearMonth.of(2025, 12)), Optional.of(YearMonth.of(2026, 4)),
@@ -61,20 +58,20 @@ class AlertFixtureTest {
 
         List<String> expected = new ArrayList<>();
         for (String[] c : AnalyticsFixture.rows("expected-alerts.csv")) {
-            if (STEP_5.contains(c[0])) {
-                String txns = c[9].isEmpty() ? "" : String.join(";", Arrays.stream(c[9].split(";"))
-                        .map(ref -> loaded.txns().get(ref).toString()).toList());
-                expected.add(String.join(",", c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], txns));
-            }
+            String txns = c[9].isEmpty() ? "" : String.join(";", Arrays.stream(c[9].split(";"))
+                    .map(ref -> loaded.txns().get(ref).toString()).toList());
+            expected.add(String.join(",", c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], txns));
         }
         List<String> actual = found.stream().map(AlertFixtureTest::line).toList();
+        assertThat(expected).hasSize(6);
         assertThat(actual).containsExactlyInAnyOrderElementsOf(expected);
     }
 
     /**
      * Each alert carries the flags of the months its figures used (§6.1): the March checking statement failed its
      * balance check, the card's April and December are partial. The spike used January to April, the duplicate
-     * March, the large charge October to April (its 180-day history).
+     * March, the large charge October to April (its 180-day history), the price increase its stable charges and the
+     * new one (January to March), the new recurring charge its series (February to April).
      */
     @Test
     void eachAlertCarriesTheFlagsOfItsMonths() throws Exception {
@@ -95,6 +92,10 @@ class AlertFixtureTest {
         assertThat(found).filteredOn(a -> a.type() == AlertType.LARGE_TRANSACTION).singleElement()
                 .satisfies(a -> assertThat(a.dataFlags()).as("December's partial card, once").containsExactly(partial,
                         failed));
+        assertThat(found).filteredOn(a -> a.type() == AlertType.RECURRING_PRICE_INCREASE).singleElement()
+                .satisfies(a -> assertThat(a.dataFlags()).as("January to March").containsExactly(failed));
+        assertThat(found).filteredOn(a -> a.type() == AlertType.NEW_RECURRING).singleElement()
+                .satisfies(a -> assertThat(a.dataFlags()).as("February to April").containsExactly(failed, partial));
     }
 
     /** The file's columns: type, month, subject, unit, observed, baseline, threshold, period, txn ids. */
@@ -104,6 +105,8 @@ class AlertFixtureTest {
             case AlertDetails.CategorySpike spike -> spike.category().name();
             case AlertDetails.LargeTransaction large -> large.category().name();
             case AlertDetails.PossibleDuplicate duplicate -> duplicate.merchant();
+            case AlertDetails.RecurringPriceIncrease increase -> increase.merchant();
+            case AlertDetails.NewRecurring recurring -> recurring.merchant();
         };
         String txns = alert.type() == AlertType.CATEGORY_SPIKE ? ""
                 : String.join(";", alert.txns().stream().map(t -> Long.toString(t.id())).toList());

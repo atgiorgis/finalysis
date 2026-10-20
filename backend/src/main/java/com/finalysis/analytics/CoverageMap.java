@@ -119,6 +119,20 @@ final class CoverageMap {
         return spans == null ? null : spans.getFirst().start();
     }
 
+    /**
+     * The account's last covered day on or before {@code notAfter}: what it had covered by then. Null when it covered
+     * nothing by then.
+     */
+    LocalDate lastCoveredDay(long accountId, LocalDate notAfter) {
+        LocalDate last = null;
+        for (DateSpan span : covered(accountId)) {
+            if (!span.start().isAfter(notAfter)) {
+                last = span.end().isAfter(notAfter) ? notAfter : span.end();
+            }
+        }
+        return last;
+    }
+
     List<DateSpan> covered(long accountId) {
         return covered.getOrDefault(accountId, List.of());
     }
