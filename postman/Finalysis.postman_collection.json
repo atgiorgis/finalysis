@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6 and **8. Categorization**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **9. Lookups**: manual lookups by id.\n- **10. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.\n\n**Scripts.** The Postman sandbox's global `_` is **Lodash 3**: functions added in Lodash 4 (`minBy`, `maxBy`, `sumBy`, …) don't exist there, so scripts use plain JavaScript or Lodash 3 only. In **8. Categorization**, each subfolder's first request arms a flag and every pick checks what it found; after a failed pick the subfolder's later requests are skipped (`pm.execution.skipRequest`, newman 6.1 or later), so one bad pick is one failure, not a cascade.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6, **8. Categorization** and **9. Analytics**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **10. Lookups**: manual lookups by id.\n- **11. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.\n\n**Scripts.** The Postman sandbox's global `_` is **Lodash 3**: functions added in Lodash 4 (`minBy`, `maxBy`, `sumBy`, …) don't exist there, so scripts use plain JavaScript or Lodash 3 only. In **8. Categorization**, and in **9. Analytics** after its imports, each subfolder's first request arms a flag and every pick checks what it found; after a failed pick the subfolder's later requests are skipped (`pm.execution.skipRequest`, newman 6.1 or later), so one bad pick is one failure, not a cascade.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1897,6 +1897,85 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "Close without closedOn → 400",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/closure",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names closedOn', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('closedOn'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Close an unknown account → 404",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/999999/closure",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"closedOn\": \"2026-04-30\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reopen an unknown account → 404",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/999999/closure"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         },
@@ -3227,6 +3306,411 @@
               ]
             }
           ]
+        },
+        {
+          "name": "Analytics",
+          "item": [
+            {
+              "name": "Months of an unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months?accountId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Categories of an unknown category → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/categories?categoryId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Merchants of an unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/merchants?accountId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Trends of an unknown category → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/trends?categoryId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down of an unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?accountId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring of an unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?accountId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts of an unknown account → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?accountId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown alert → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/possible-duplicate.2026-03.0123456789abcdef"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss an unknown alert → 404",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/possible-duplicate.2026-03.0123456789abcdef/dismissal",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Malformed alert key → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/not-a-key"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names key', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('key'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Months over 24 months → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months?from=2024-04&to=2026-04"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names to', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'to', message: \"the range must be at most 24 months, both ends included\"}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down over 24 months → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?from=2024-04&to=2026-04"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names to', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('to'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts over 24 months → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from=2024-04&to=2026-04"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names to', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('to'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "to before from → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/categories?from=2026-05&to=2026-04"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names to', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'to', message: \"must not be before from\"}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: month with from → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?month=2026-05&from=2026-04"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names month', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'month', message: \"can't be combined with from or to\"}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: a category in the Uncategorized bucket → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?bucket=UNCATEGORIZED&categoryId=999999"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names categoryId', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'categoryId', message: \"can't be combined with bucket UNCATEGORIZED\"}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: merchant with noMerchant → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?merchant=TARGET&noMerchant=true"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names noMerchant', () => pm.expect(pm.response.json().errors).to.deep.include({field: 'noMerchant', message: \"can't be combined with merchant\"}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring with an unknown status → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=SOMETIMES"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names status', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('status'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring over its limit → 400",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?limit=101"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                      "pm.test('ProblemDetail', () => pm.response.to.have.header('Content-Type', 'application/problem+json'));",
+                      "pm.test('names limit', () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include('limit'));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "The analytics endpoints' 400s and 404s. Validation comes before any lookup, so the contradictory drill-down filters are refused even with an unknown category."
         }
       ],
       "description": "Every request here is refused, and nothing is written (except the confirmed mapping change, which is restored)."
@@ -4623,7 +5107,2175 @@
       ]
     },
     {
-      "name": "9. Lookups",
+      "name": "9. Analytics",
+      "item": [
+        {
+          "name": "Load the sample months",
+          "item": [
+            {
+              "name": "Import Apex Visa May (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-05.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-04-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-05-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-242.32",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-1050.29",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-04-15'); pm.expect(body.periodEnd).to.eql('2026-05-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Apex Visa June (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-06.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-05-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-06-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-1050.29",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-1032.19",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-05-15'); pm.expect(body.periodEnd).to.eql('2026-06-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Apex Visa July (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-07.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-06-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-07-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-1032.19",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-1260.11",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "description": "The Safeway charge of 2026-06-13 was posted twice, the second time on 06-15, in this statement: the row is dated before the period, so the statement waits for review (its balances pass). Folder 9's alerts find the pair."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-06-15'); pm.expect(body.periodEnd).to.eql('2026-07-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('the balances pass, but a row is dated before the period: NEEDS_REVIEW', () => { pm.expect(body.balanceCheck).to.eql('PASSED'); pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.warnings.some(w => w.includes('dated outside the statement period'))).to.be.true; });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Apex Visa August (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-08.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-07-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-08-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-1260.11",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-935.70",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-07-15'); pm.expect(body.periodEnd).to.eql('2026-08-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Apex Visa September (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-09.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-08-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-09-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-935.70",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-1725.28",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-08-15'); pm.expect(body.periodEnd).to.eql('2026-09-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Apex Visa October (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{apexId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/apex-visa_2026-10.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-09-15",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-10-14",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-1725.28",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-2398.55",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-09-15'); pm.expect(body.periodEnd).to.eql('2026-10-14'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Summit May (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-05.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-05-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-05-31",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-285.62",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-325.27",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-05-01'); pm.expect(body.periodEnd).to.eql('2026-05-31'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Summit June (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-06.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-06-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-06-30",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-325.27",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-328.02",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-06-01'); pm.expect(body.periodEnd).to.eql('2026-06-30'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Summit July (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-07.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-07-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-07-31",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-328.02",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-364.93",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-07-01'); pm.expect(body.periodEnd).to.eql('2026-07-31'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Summit August (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-08.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-08-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-08-31",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-364.93",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-467.76",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-08-01'); pm.expect(body.periodEnd).to.eql('2026-08-31'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import Summit September (CSV, period and balances)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{summitId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/statements/summit-card_2026-09.csv"
+                    },
+                    {
+                      "key": "periodStart",
+                      "value": "2026-09-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "periodEnd",
+                      "value": "2026-09-30",
+                      "type": "text"
+                    },
+                    {
+                      "key": "openingBalance",
+                      "value": "-467.76",
+                      "type": "text"
+                    },
+                    {
+                      "key": "closingBalance",
+                      "value": "-491.02",
+                      "type": "text"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
+                      "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-09-01'); pm.expect(body.periodEnd).to.eql('2026-09-30'); });",
+                      "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
+                      "pm.test('balances reconcile', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import checking June (OFX)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-06.ofx"
+                    }
+                  ]
+                },
+                "description": "Setup imported May with a wrong `LEDGERBAL` (10.00 too high), so June's continuity check fails too. Left for review: its month carries the flag."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                      "pm.test('a calendar month', () => { pm.expect(body.periodStart).to.eql('2026-06-01'); pm.expect(body.periodEnd.slice(0, 7)).to.eql('2026-06'); });",
+                      "pm.test('every row inserted', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted).to.equal(body.parsed); });",
+                      "pm.test('June continues May, whose closing balance is 10.00 too high: FAILED', () => { pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.balanceCheck).to.eql('FAILED'); });",
+                      "pm.collectionVariables.set('anaJuneStatementId', body.statementId);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import checking July (OFX)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-07.ofx"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                      "pm.test('a calendar month', () => { pm.expect(body.periodStart).to.eql('2026-07-01'); pm.expect(body.periodEnd.slice(0, 7)).to.eql('2026-07'); });",
+                      "pm.test('every row inserted', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted).to.equal(body.parsed); });",
+                      "pm.test('continues the month before', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import checking August (OFX)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-08.ofx"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                      "pm.test('a calendar month', () => { pm.expect(body.periodStart).to.eql('2026-08-01'); pm.expect(body.periodEnd.slice(0, 7)).to.eql('2026-08'); });",
+                      "pm.test('every row inserted', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted).to.equal(body.parsed); });",
+                      "pm.test('continues the month before', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import checking September (OFX)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/imports",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "sample-data/ofx/northfield-checking_2026-09.ofx"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.code === 201 ? pm.response.json() : {};",
+                      "pm.test('read by the OFX parser', () => pm.expect(body.parser).to.eql('ofx'));",
+                      "pm.test('a calendar month', () => { pm.expect(body.periodStart).to.eql('2026-09-01'); pm.expect(body.periodEnd.slice(0, 7)).to.eql('2026-09'); });",
+                      "pm.test('every row inserted', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted).to.equal(body.parsed); });",
+                      "pm.test('continues the month before', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Run the rules (ai=false)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/categorization/run?ai=false",
+                "description": "The imports already ran the rules; this makes sure, with AI off."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
+                      "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
+                      "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "The rest of the sample statements, so trends, recurring charges and alerts have months to work on: Apex Visa May to October and Summit Card May to September as CSVs with the period and balances of `statements-manifest.csv`, and Northfield Checking June to September as OFX. Savings stays without statements, so its transfers from checking stay unlinked."
+        },
+        {
+          "name": "Coverage and closure",
+          "item": [
+            {
+              "name": "Coverage: the copy of checking leaves gaps",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/coverage",
+                "description": "Setup's second checking account holds one copy of the April statement. Open, it is expected up to the last day any statement covers, so every month after April is partial."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaCoverageReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const byId = {};",
+                      "body.accounts.forEach(a => (byId[a.accountId] = a));",
+                      "pm.test('every account, by id', () => {",
+                      "    ['checkingId', 'savingsId', 'apexId', 'summitId', 'duplicateId'].forEach(name => pm.expect(byId[id(name)], name).to.be.an('object'));",
+                      "    const ids = body.accounts.map(a => a.accountId);",
+                      "    pm.expect(ids).to.eql(ids.slice().sort((a, b) => a - b));",
+                      "});",
+                      "const ends = body.accounts.filter(a => a.covered.length > 0).map(a => a.covered[a.covered.length - 1].end).sort();",
+                      "pm.test('lastCoveredDay is the last day any statement covers', () => {",
+                      "    pm.expect(body.lastCoveredDay).to.eql(ends[ends.length - 1]);",
+                      "    pm.expect(body.latestMonth).to.eql(body.lastCoveredDay.slice(0, 7));",
+                      "});",
+                      "pm.test('savings has no statement, so none of its days is expected', () => {",
+                      "    const savings = byId[id('savingsId')];",
+                      "    pm.expect(savings.firstDay).to.eql(null);",
+                      "    pm.expect(savings.covered).to.eql([]);",
+                      "    pm.expect(savings.gaps).to.eql([]);",
+                      "});",
+                      "pm.test('gaps lie between an account\\'s first day and lastCoveredDay', () => body.accounts.forEach(a => a.gaps.forEach(g => {",
+                      "    pm.expect(g.start <= g.end, `${a.accountId} ${g.start}`).to.be.true;",
+                      "    pm.expect(g.start > a.firstDay && g.end <= body.lastCoveredDay, `${a.accountId} ${g.start}`).to.be.true;",
+                      "})));",
+                      "pm.test('checking: May and June failed their balance checks; only May was accepted', () => {",
+                      "    const flagged = byId[id('checkingId')].flaggedStatements;",
+                      "    const may = flagged.find(s => s.statementId === id('reviewStatementId'));",
+                      "    const june = flagged.find(s => s.statementId === id('anaJuneStatementId'));",
+                      "    pm.expect(may, 'May').to.be.an('object');",
+                      "    pm.expect(may.flag).to.eql('RECONCILIATION_FAILED');",
+                      "    pm.expect(may.reviewedAt).to.be.a('string');",
+                      "    pm.expect(june, 'June').to.be.an('object');",
+                      "    pm.expect(june.flag).to.eql('RECONCILIATION_FAILED');",
+                      "    pm.expect(june.reviewedAt).to.eql(null);",
+                      "});",
+                      "const copy = byId[id('duplicateId')];",
+                      "const lastCovered = copy && copy.covered.length === 1 ? copy.covered[0].end : null;",
+                      "pm.test('the copy of checking is open with one April statement, so every later day is a gap', () => {",
+                      "    pm.expect(lastCovered, 'the copy has no single statement; the rest of the subfolder is skipped').to.be.a('string');",
+                      "    pm.expect(copy.closedOn).to.eql(null);",
+                      "    pm.expect(copy.gaps.length).to.be.above(0);",
+                      "    pm.expect(copy.gaps[copy.gaps.length - 1].end).to.eql(body.lastCoveredDay);",
+                      "});",
+                      "if (!lastCovered || copy.gaps.length === 0) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaCopyClosedOn', lastCovered);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Months: while the copy is open, later months are partial",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const copyId = id('duplicateId');",
+                      "const closedMonth = pm.collectionVariables.get('anaCopyClosedOn').slice(0, 7);",
+                      "const later = body.months.filter(m => m.month > closedMonth);",
+                      "pm.test('months after the copy\\'s last covered day', () => pm.expect(later.length).to.be.above(0));",
+                      "pm.test('none is complete: the copy is expected in each, and missing', () => later.forEach(m => {",
+                      "    pm.expect(m.coverage, m.month).to.eql('PARTIAL');",
+                      "    pm.expect(m.dataQuality.flags.some(f => f.type === 'PARTIAL_COVERAGE' && f.accountId === copyId), m.month).to.be.true;",
+                      "}));",
+                      "pm.test('so the latest complete month is not after it', () => pm.expect(body.latestCompleteMonth === null || body.latestCompleteMonth <= closedMonth).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Close the copy on its last covered day",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/closure",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"closedOn\": \"{{anaCopyClosedOn}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('closed on its last covered day', () => { pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('duplicateId'))); pm.expect(body.closedOn).to.eql(pm.collectionVariables.get('anaCopyClosedOn')); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Coverage: no gap after the close",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/coverage"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const copy = body.accounts.find(a => a.accountId === id('duplicateId'));",
+                      "const closedOn = pm.collectionVariables.get('anaCopyClosedOn');",
+                      "pm.test('closedOn is shown', () => pm.expect(copy.closedOn).to.eql(closedOn));",
+                      "pm.test('no day after it is expected', () => copy.gaps.forEach(g => pm.expect(g.end <= closedOn, g.start).to.be.true));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Months: the months after the close can be complete",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const copyId = id('duplicateId');",
+                      "const closedMonth = pm.collectionVariables.get('anaCopyClosedOn').slice(0, 7);",
+                      "pm.test('no later month waits for the copy', () => body.months.filter(m => m.month > closedMonth).forEach(m => pm.expect(m.dataQuality.flags.some(f => f.type === 'PARTIAL_COVERAGE' && f.accountId === copyId), m.month).to.be.false));",
+                      "pm.test('a month after the close is complete', () => pm.expect(body.latestCompleteMonth > closedMonth, String(body.latestCompleteMonth)).to.be.true);",
+                      "pm.test('latestCompleteMonth is the last COMPLETE month listed', () => {",
+                      "    const complete = body.months.filter(m => m.coverage === 'COMPLETE').map(m => m.month);",
+                      "    pm.expect(body.latestCompleteMonth).to.eql(complete[complete.length - 1]);",
+                      "});",
+                      "pm.test('a PARTIAL month has a PARTIAL_COVERAGE flag; a COMPLETE one has none', () => body.months.filter(m => m.coverage !== 'NONE').forEach(m => pm.expect(m.dataQuality.flags.some(f => f.type === 'PARTIAL_COVERAGE'), m.month).to.eql(m.coverage === 'PARTIAL')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reopen the copy",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/closure"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('open again', () => pm.expect(pm.response.json().closedOn).to.eql(null));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Months: reopened, later months are partial again",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const copyId = id('duplicateId');",
+                      "const closedMonth = pm.collectionVariables.get('anaCopyClosedOn').slice(0, 7);",
+                      "const later = body.months.filter(m => m.month > closedMonth);",
+                      "pm.test('months after the copy\\'s last covered day', () => pm.expect(later.length).to.be.above(0));",
+                      "pm.test('none is complete: the copy is expected in each, and missing', () => later.forEach(m => {",
+                      "    pm.expect(m.coverage, m.month).to.eql('PARTIAL');",
+                      "    pm.expect(m.dataQuality.flags.some(f => f.type === 'PARTIAL_COVERAGE' && f.accountId === copyId), m.month).to.be.true;",
+                      "}));",
+                      "pm.test('so the latest complete month is not after it', () => pm.expect(body.latestCompleteMonth === null || body.latestCompleteMonth <= closedMonth).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Close the copy again, for the requests below",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{duplicateId}}/closure",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"closedOn\": \"{{anaCopyClosedOn}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('closed on its last covered day', () => { pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('duplicateId'))); pm.expect(body.closedOn).to.eql(pm.collectionVariables.get('anaCopyClosedOn')); });"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Coverage: the copy of checking leaves gaps' sets anaCoverageReady; a pick that fails clears it,",
+                  "// and the subfolder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'anaCoverageReady';",
+                  "if (pm.info.requestName === \"Coverage: the copy of checking leaves gaps\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Coverage and closure failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Coverage and closure failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Coverage, and closing and reopening an account: the copy of checking left by Setup makes every later month partial until it is closed. If the first pick fails, the rest is skipped."
+        },
+        {
+          "name": "Totals, drill-down and trends",
+          "item": [
+            {
+              "name": "Months: the default range",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months",
+                "description": "The default range: six months ending at the month of the last covered day. Saves the range, the latest complete month (M, for the requests below) and the months to compare with."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaTotalsReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const addMonths = (ym, k) => { const [y, m] = ym.split('-').map(Number); const t = y * 12 + m - 1 + k; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`; };",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "pm.test('six months ending at the latest month, oldest first', () => {",
+                      "    pm.expect(body.accountId).to.eql(null);",
+                      "    pm.expect(body.range.to).to.eql(body.latestMonth);",
+                      "    pm.expect(body.range.from).to.eql(addMonths(body.latestMonth, -5));",
+                      "    pm.expect(body.months.map(m => m.month)).to.eql([0, 1, 2, 3, 4, 5].map(k => addMonths(body.range.from, k)));",
+                      "});",
+                      "",
+                      "pm.test('each month: net = income + spending; netChange adds both transfer lines', () => body.months.forEach(m => {",
+                      "    pm.expect(cents(m.net), m.month).to.equal(cents(m.income) + cents(m.spending));",
+                      "    pm.expect(cents(m.netChange), m.month).to.equal(cents(m.income) + cents(m.spending) + cents(m.unlinkedTransfers.net) + cents(m.linkedTransfers.net));",
+                      "}));",
+                      "pm.test('each line: moneyOut ≤ 0 ≤ moneyIn, net their sum', () => body.months.forEach(m => ['refunds', 'uncategorized', 'unlinkedTransfers', 'linkedTransfers'].forEach(k => {",
+                      "    const f = m[k];",
+                      "    pm.expect(cents(f.moneyOut), `${m.month} ${k}`).to.be.at.most(0);",
+                      "    pm.expect(cents(f.moneyIn), `${m.month} ${k}`).to.be.at.least(0);",
+                      "    pm.expect(cents(f.net), `${m.month} ${k}`).to.equal(cents(f.moneyOut) + cents(f.moneyIn));",
+                      "})));",
+                      "pm.test('every txn counted once: counted + both transfer lines = txnCount', () => body.months.forEach(m => {",
+                      "    pm.expect(m.dataQuality.countedTxns + m.unlinkedTransfers.count + m.linkedTransfers.count, m.month).to.equal(m.txnCount);",
+                      "    pm.expect(m.dataQuality.uncategorizedCount, m.month).to.equal(m.uncategorized.count);",
+                      "}));",
+                      "pm.test('a savings rate only with income', () => body.months.forEach(m => pm.expect(m.savingsRatePercent === null, m.month).to.eql(cents(m.income) <= 0)));",
+                      "",
+                      "pm.test('the failed checking statements are flagged where they fall; only May\\'s was accepted', () => {",
+                      "    const flags = [].concat(...body.months.map(m => m.dataQuality.flags)).filter(f => f.type === 'RECONCILIATION_FAILED');",
+                      "    const may = flags.filter(f => f.statementId === id('reviewStatementId'));",
+                      "    const june = flags.filter(f => f.statementId === id('anaJuneStatementId'));",
+                      "    pm.expect(may.length, 'May').to.be.above(0);",
+                      "    pm.expect(june.length, 'June').to.be.above(0);",
+                      "    may.forEach(f => pm.expect(f.reviewedAt).to.be.a('string'));",
+                      "    june.forEach(f => pm.expect(f.reviewedAt).to.eql(null));",
+                      "});",
+                      "const latest = body.latestCompleteMonth;",
+                      "pm.test('a complete month in the range to look at', () => pm.expect(body.months.some(m => m.month === latest), 'no complete month in the range; the rest of Totals is skipped').to.be.true);",
+                      "if (!body.months.some(m => m.month === latest)) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaFrom', body.range.from);",
+                      "pm.collectionVariables.set('anaTo', body.range.to);",
+                      "pm.collectionVariables.set('anaMonth', latest);",
+                      "pm.collectionVariables.set('anaMonths', JSON.stringify(body.months));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Months: one account",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months?accountId={{checkingId}}&from={{anaFrom}}&to={{anaTo}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set('anaTotalsReady', 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "pm.test('checking only, same range', () => {",
+                      "    pm.expect(body.accountId).to.eql(Number(pm.collectionVariables.get('checkingId')));",
+                      "    pm.expect(body.range).to.eql({from: pm.collectionVariables.get('anaFrom'), to: pm.collectionVariables.get('anaTo')});",
+                      "});",
+                      "",
+                      "pm.test('each month: net = income + spending; netChange adds both transfer lines', () => body.months.forEach(m => {",
+                      "    pm.expect(cents(m.net), m.month).to.equal(cents(m.income) + cents(m.spending));",
+                      "    pm.expect(cents(m.netChange), m.month).to.equal(cents(m.income) + cents(m.spending) + cents(m.unlinkedTransfers.net) + cents(m.linkedTransfers.net));",
+                      "}));",
+                      "pm.test('each line: moneyOut ≤ 0 ≤ moneyIn, net their sum', () => body.months.forEach(m => ['refunds', 'uncategorized', 'unlinkedTransfers', 'linkedTransfers'].forEach(k => {",
+                      "    const f = m[k];",
+                      "    pm.expect(cents(f.moneyOut), `${m.month} ${k}`).to.be.at.most(0);",
+                      "    pm.expect(cents(f.moneyIn), `${m.month} ${k}`).to.be.at.least(0);",
+                      "    pm.expect(cents(f.net), `${m.month} ${k}`).to.equal(cents(f.moneyOut) + cents(f.moneyIn));",
+                      "})));",
+                      "pm.test('every txn counted once: counted + both transfer lines = txnCount', () => body.months.forEach(m => {",
+                      "    pm.expect(m.dataQuality.countedTxns + m.unlinkedTransfers.count + m.linkedTransfers.count, m.month).to.equal(m.txnCount);",
+                      "    pm.expect(m.dataQuality.uncategorizedCount, m.month).to.equal(m.uncategorized.count);",
+                      "}));",
+                      "pm.test('a savings rate only with income', () => body.months.forEach(m => pm.expect(m.savingsRatePercent === null, m.month).to.eql(cents(m.income) <= 0)));",
+                      "",
+                      "pm.collectionVariables.set('anaCheckingMonths', JSON.stringify(body.months));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Checking statements: netChange is the balance movement",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/accounts/{{checkingId}}/statements"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const months = JSON.parse(pm.collectionVariables.get('anaCheckingMonths'));",
+                      "const lastDay = ym => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };",
+                      "// Calendar-month statements with both balances: the month's netChange must be closing − opening.",
+                      "const whole = body.filter(s => s.openingBalance !== null && s.closingBalance !== null && s.periodStart.endsWith('-01')",
+                      "    && s.periodEnd.slice(0, 7) === s.periodStart.slice(0, 7) && Number(s.periodEnd.slice(8)) === lastDay(s.periodStart.slice(0, 7)));",
+                      "const compared = whole.filter(s => months.some(m => m.month === s.periodStart.slice(0, 7)));",
+                      "pm.test('at least one month to compare', () => pm.expect(compared.length).to.be.above(0));",
+                      "pm.test('netChange = closingBalance − openingBalance', () => compared.forEach(s => {",
+                      "    const m = months.find(x => x.month === s.periodStart.slice(0, 7));",
+                      "    pm.expect(cents(m.netChange), m.month).to.equal(cents(s.closingBalance) - cents(s.openingBalance));",
+                      "}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Accounts: the household is the sum of its accounts",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/accounts?from={{anaFrom}}&to={{anaTo}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const household = JSON.parse(pm.collectionVariables.get('anaMonths'));",
+                      "pm.test('every account, by id, over the same months', () => {",
+                      "    const ids = body.accounts.map(a => a.accountId);",
+                      "    pm.expect(ids).to.eql(ids.slice().sort((a, b) => a - b));",
+                      "    ['checkingId', 'savingsId', 'apexId', 'summitId', 'duplicateId'].forEach(name => pm.expect(ids, name).to.include(id(name)));",
+                      "    body.accounts.forEach(a => pm.expect(a.months.map(m => m.month), a.name).to.eql(household.map(m => m.month)));",
+                      "});",
+                      "pm.test('each month: the accounts add up to the household', () => household.forEach((h, i) => {",
+                      "    ['income', 'spending', 'netChange'].forEach(k => pm.expect(body.accounts.reduce((s, a) => s + cents(a.months[i][k]), 0), `${h.month} ${k}`).to.equal(cents(h[k])));",
+                      "    pm.expect(body.accounts.reduce((s, a) => s + a.months[i].txnCount, 0), `${h.month} txnCount`).to.equal(h.txnCount);",
+                      "}));",
+                      "pm.test('checking\\'s months are the months endpoint\\'s for checking', () => {",
+                      "    const checking = body.accounts.find(a => a.accountId === id('checkingId'));",
+                      "    const alone = JSON.parse(pm.collectionVariables.get('anaCheckingMonths'));",
+                      "    pm.expect(checking.months.map(m => _.pick(m, ['income', 'spending', 'net', 'savingsRatePercent', 'refunds', 'uncategorized', 'unlinkedTransfers', 'linkedTransfers', 'netChange', 'txnCount']))).to.eql(alone.map(m => _.pick(m, ['income', 'spending', 'net', 'savingsRatePercent', 'refunds', 'uncategorized', 'unlinkedTransfers', 'linkedTransfers', 'netChange', 'txnCount'])));",
+                      "});",
+                      "pm.test('savings: no statement, no txns', () => body.accounts.find(a => a.accountId === id('savingsId')).months.forEach(m => pm.expect(m.txnCount).to.equal(0)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Categories: the rows add up to each month",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/categories?from={{anaFrom}}&to={{anaTo}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaTotalsReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const household = JSON.parse(pm.collectionVariables.get('anaMonths'));",
+                      "const order = ['INCOME', 'EXPENSE', 'REFUND', 'UNCATEGORIZED', 'UNLINKED_TRANSFER', 'LINKED_TRANSFER'];",
+                      "pm.test('rows in bucket order, each listing every month', () => body.rows.forEach((r, i) => {",
+                      "    pm.expect(r.months.map(c => c.month)).to.eql(household.map(m => m.month));",
+                      "    if (i > 0) pm.expect(order.indexOf(r.bucket) >= order.indexOf(body.rows[i - 1].bucket), r.bucket).to.be.true;",
+                      "}));",
+                      "pm.test('a row\\'s total is the sum of its months', () => body.rows.forEach(r => {",
+                      "    pm.expect(cents(r.total.net), r.bucket).to.equal(r.months.reduce((s, c) => s + cents(c.flow.net), 0));",
+                      "    pm.expect(r.total.count, r.bucket).to.equal(r.months.reduce((s, c) => s + c.flow.count, 0));",
+                      "}));",
+                      "pm.test('no category only on the Uncategorized and linked transfer rows', () => body.rows.forEach(r => pm.expect(r.category === null, r.bucket).to.eql(r.bucket === 'UNCATEGORIZED' || r.bucket === 'LINKED_TRANSFER')));",
+                      "pm.test('only the Uncategorized row counts its review-pending txns', () => body.rows.forEach(r => r.months.forEach(c => {",
+                      "    if (r.bucket === 'UNCATEGORIZED') pm.expect(c.reviewPending).to.be.a('number'); else pm.expect(c.reviewPending).to.eql(null);",
+                      "})));",
+                      "pm.test('each month\\'s income, spending and transfer lines rebuilt from the rows', () => household.forEach((h, i) => {",
+                      "    const sum = (buckets, k) => body.rows.filter(r => buckets.includes(r.bucket)).reduce((s, r) => s + cents(r.months[i].flow[k]), 0);",
+                      "    pm.expect(sum(['INCOME'], 'net') + sum(['UNCATEGORIZED'], 'moneyIn'), `${h.month} income`).to.equal(cents(h.income));",
+                      "    pm.expect(sum(['EXPENSE', 'REFUND'], 'net') + sum(['UNCATEGORIZED'], 'moneyOut'), `${h.month} spending`).to.equal(cents(h.spending));",
+                      "    pm.expect(sum(['REFUND'], 'net'), `${h.month} refunds`).to.equal(cents(h.refunds.net));",
+                      "    pm.expect(sum(['UNLINKED_TRANSFER'], 'net'), `${h.month} unlinked`).to.equal(cents(h.unlinkedTransfers.net));",
+                      "    pm.expect(sum(['LINKED_TRANSFER'], 'net'), `${h.month} linked`).to.equal(cents(h.linkedTransfers.net));",
+                      "}));",
+                      "// Pick the expense category with the most money out in M, for the drill-down and trends below.",
+                      "const i = household.findIndex(h => h.month === pm.collectionVariables.get('anaMonth'));",
+                      "const spent = body.rows.filter(r => r.bucket === 'EXPENSE' && cents(r.months[i].flow.moneyOut) < 0);",
+                      "const top = spent.reduce((best, r) => (!best || cents(r.months[i].flow.moneyOut) < cents(best.months[i].flow.moneyOut) ? r : best), null);",
+                      "pm.test('picked the expense category with the most money out in M', () => pm.expect(top, 'no expense row in M; the rest of Totals is skipped').to.be.an('object'));",
+                      "if (!top) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaCategoryId', top.category.id);",
+                      "pm.collectionVariables.set('anaCategoryNet', top.months[i].flow.net);",
+                      "pm.collectionVariables.set('anaCategoryCount', top.months[i].flow.count);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: the picked category in M",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?month={{anaMonth}}&bucket=EXPENSE&categoryId={{anaCategoryId}}&size=200"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const v = name => pm.collectionVariables.get(name);",
+                      "pm.test('the range is M', () => pm.expect(body.range).to.eql({from: v('anaMonth'), to: v('anaMonth')}));",
+                      "pm.test('the total is the cell it drills into', () => {",
+                      "    pm.expect(body.total.net).to.eql(v('anaCategoryNet'));",
+                      "    pm.expect(body.total.count).to.equal(Number(v('anaCategoryCount')));",
+                      "});",
+                      "pm.test('one page holds them', () => {",
+                      "    pm.expect(body.items.length).to.equal(Math.min(body.total.count, 200));",
+                      "    pm.expect(body.totalPages).to.equal(Math.ceil(body.total.count / 200));",
+                      "});",
+                      "pm.test('only that category, bucket and month, newest first', () => body.items.forEach((t, i) => {",
+                      "    pm.expect(t.category.id).to.equal(Number(v('anaCategoryId')));",
+                      "    pm.expect(t.bucket).to.eql('EXPENSE');",
+                      "    pm.expect(t.txnDate.slice(0, 7)).to.eql(v('anaMonth'));",
+                      "    if (i > 0) pm.expect(t.txnDate <= body.items[i - 1].txnDate).to.be.true;",
+                      "}));",
+                      "pm.test('the cleaned merchant only: no description, counterparty or account number', () => body.items.forEach(t => pm.expect(t).to.have.all.keys('id', 'accountId', 'txnDate', 'amount', 'merchant', 'category', 'bucket')));",
+                      "pm.test('the page adds up to the total', () => pm.expect(body.items.reduce((s, t) => s + cents(t.amount), 0)).to.equal(cents(body.total.net)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: the month's spending",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?month={{anaMonth}}&measure=SPENT&size=1"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const m = JSON.parse(pm.collectionVariables.get('anaMonths')).find(x => x.month === pm.collectionVariables.get('anaMonth'));",
+                      "pm.test('the total is the month\\'s spending', () => pm.expect(cents(body.total.net)).to.equal(cents(m.spending)));",
+                      "pm.test('pages of one', () => { pm.expect(body.items.length).to.equal(Math.min(1, body.total.count)); pm.expect(body.totalPages).to.equal(body.total.count); });",
+                      "pm.test('a spending row', () => body.items.forEach(t => pm.expect(['EXPENSE', 'REFUND', 'UNCATEGORIZED']).to.include(t.bucket)));",
+                      "pm.collectionVariables.set('anaSpentCount', body.total.count);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Merchants: the list and the rest add up to the month's spending",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/merchants?from={{anaMonth}}&to={{anaMonth}}&limit=50"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaTotalsReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const m = JSON.parse(pm.collectionVariables.get('anaMonths')).find(x => x.month === pm.collectionVariables.get('anaMonth'));",
+                      "pm.test('totalSpent is −(the month\\'s spending)', () => pm.expect(cents(body.totalSpent)).to.equal(0 - cents(m.spending)));",
+                      "pm.test('the list plus the others is the total', () => {",
+                      "    pm.expect(body.items.reduce((s, x) => s + cents(x.spent), 0) + cents(body.othersSpent)).to.equal(cents(body.totalSpent));",
+                      "    pm.expect(body.items.reduce((s, x) => s + x.count, 0) + body.othersCount).to.equal(body.totalCount);",
+                      "});",
+                      "pm.test('as many rows as the spending drill-down', () => pm.expect(body.totalCount).to.equal(Number(pm.collectionVariables.get('anaSpentCount'))));",
+                      "pm.test('most spent first, at most the limit', () => {",
+                      "    pm.expect(body.limit).to.equal(50);",
+                      "    pm.expect(body.items.length).to.be.at.most(50);",
+                      "    body.items.forEach((x, i) => { if (i > 0) pm.expect(cents(x.spent) <= cents(body.items[i - 1].spent), x.merchant).to.be.true; });",
+                      "});",
+                      "const top = body.items.find(x => x.merchant !== null);",
+                      "pm.test('picked the top merchant', () => pm.expect(top, 'no merchant in M; the rest of Totals is skipped').to.be.an('object'));",
+                      "if (!top) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaMerchant', top.merchant);",
+                      "pm.collectionVariables.set('anaMerchantQuery', encodeURIComponent(top.merchant));",
+                      "pm.collectionVariables.set('anaMerchantJson', JSON.stringify(top));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: the top merchant in M",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?month={{anaMonth}}&merchant={{anaMerchantQuery}}&measure=SPENT&size=200"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const merchant = JSON.parse(pm.collectionVariables.get('anaMerchantJson'));",
+                      "pm.test('−total is the merchant\\'s spent, over as many rows', () => {",
+                      "    pm.expect(0 - cents(body.total.net)).to.equal(cents(merchant.spent));",
+                      "    pm.expect(body.total.count).to.equal(merchant.count);",
+                      "});",
+                      "pm.test('only that merchant, from its first to its last date', () => {",
+                      "    body.items.forEach(t => pm.expect(t.merchant).to.eql(merchant.merchant));",
+                      "    pm.expect(body.items[0].txnDate).to.eql(merchant.lastDate);",
+                      "    pm.expect(body.items[body.items.length - 1].txnDate).to.eql(merchant.firstDate);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Trends: the latest complete month",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/trends"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const addMonths = (ym, k) => { const [y, m] = ym.split('-').map(Number); const t = y * 12 + m - 1 + k; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`; };",
+                      "const v = name => pm.collectionVariables.get(name);",
+                      "const months = JSON.parse(v('anaMonths'));",
+                      "const at = ym => months.find(m => m.month === ym);",
+                      "const M = v('anaMonth');",
+                      "pm.test('M is the latest complete month, for the household', () => {",
+                      "    pm.expect(body.month).to.eql(M);",
+                      "    pm.expect(body.accountId).to.eql(null);",
+                      "    pm.expect(body.categoryId).to.eql(null);",
+                      "});",
+                      "const spending = body.rows.find(r => r.line === 'TOTAL_SPENDING');",
+                      "const income = body.rows.find(r => r.line === 'TOTAL_INCOME');",
+                      "pm.test('total spending comes first; total income is listed', () => {",
+                      "    pm.expect(body.rows[0].line).to.eql('TOTAL_SPENDING');",
+                      "    pm.expect(income).to.be.an('object');",
+                      "});",
+                      "pm.test('total spending is −(M\\'s spending); total income is M\\'s income', () => {",
+                      "    pm.expect(spending.measure).to.eql('SPENT');",
+                      "    pm.expect(cents(spending.amount)).to.equal(0 - cents(at(M).spending));",
+                      "    pm.expect(income.measure).to.eql('RECEIVED');",
+                      "    pm.expect(cents(income.amount)).to.equal(cents(at(M).income));",
+                      "});",
+                      "pm.test('month over month against M − 1', () => {",
+                      "    const previous = at(addMonths(M, -1));",
+                      "    if (!previous) return; // M − 1 is outside the six months read above",
+                      "    pm.expect(cents(spending.previousMonth)).to.equal(0 - cents(previous.spending));",
+                      "    pm.expect(cents(spending.changeAmount)).to.equal(cents(spending.amount) - cents(spending.previousMonth));",
+                      "});",
+                      "pm.test('trailing 3: the complete months among M − 1 … M − 3, to the cent', () => {",
+                      "    const window = [1, 2, 3].map(k => at(addMonths(M, -k)));",
+                      "    if (window.some(m => !m)) return; // part of the window is outside the six months read above",
+                      "    const used = window.filter(m => m.coverage === 'COMPLETE');",
+                      "    pm.expect(spending.trailing3.monthsWanted).to.equal(3);",
+                      "    pm.expect(spending.trailing3.monthsUsed).to.equal(used.length);",
+                      "    if (used.length > 0) {",
+                      "        const sum = used.reduce((s, m) => s - cents(m.spending), 0);",
+                      "        // A mean rounded to the cent is within half a cent of the exact one.",
+                      "        pm.expect(Math.abs(cents(spending.trailing3.amount) * used.length - sum) * 2).to.be.at.most(used.length);",
+                      "    }",
+                      "});",
+                      "pm.test('every row: windows of 3 and 6, M\\'s coverage, no data a year earlier', () => body.rows.forEach(r => {",
+                      "    pm.expect(r.trailing3.monthsWanted).to.equal(3);",
+                      "    pm.expect(r.trailing6.monthsWanted).to.equal(6);",
+                      "    pm.expect(r.trailing6.monthsUsed).to.be.at.most(6);",
+                      "    pm.expect(r.monthCoverage).to.eql(at(M).coverage);",
+                      "    pm.expect(r.sameMonthLastYear).to.eql(null);",
+                      "}));",
+                      "pm.test('category rows name their category and bucket', () => body.rows.filter(r => r.line === 'CATEGORY').forEach(r => {",
+                      "    pm.expect(r.category).to.be.an('object');",
+                      "    pm.expect(['EXPENSE', 'INCOME', 'REFUND']).to.include(r.bucket);",
+                      "}));",
+                      "pm.test('the picked category\\'s row is its cell', () => {",
+                      "    const row = body.rows.find(r => r.line === 'CATEGORY' && r.bucket === 'EXPENSE' && r.category.id === Number(v('anaCategoryId')));",
+                      "    pm.expect(row).to.be.an('object');",
+                      "    pm.expect(cents(row.amount)).to.equal(0 - cents(v('anaCategoryNet')));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Trends: one category",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/trends?categoryId={{anaCategoryId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const v = name => pm.collectionVariables.get(name);",
+                      "pm.test('M and the category echoed', () => { pm.expect(body.month).to.eql(v('anaMonth')); pm.expect(body.categoryId).to.equal(Number(v('anaCategoryId'))); });",
+                      "pm.test('only that category\\'s rows: no totals, no Uncategorized line', () => {",
+                      "    pm.expect(body.rows.length).to.be.above(0);",
+                      "    body.rows.forEach(r => { pm.expect(r.line).to.eql('CATEGORY'); pm.expect(r.category.id).to.equal(Number(v('anaCategoryId'))); });",
+                      "});",
+                      "pm.test('its expense row is its cell', () => pm.expect(cents(body.rows.find(r => r.bucket === 'EXPENSE').amount)).to.equal(0 - cents(v('anaCategoryNet'))));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Months: the default range' sets anaTotalsReady; a pick that fails clears it,",
+                  "// and the subfolder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'anaTotalsReady';",
+                  "if (pm.info.requestName === \"Months: the default range\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Totals, drill-down and trends failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Totals, drill-down and trends failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Every expected figure comes from another endpoint: the accounts add up to the household, the category rows to each month, a drill-down's total to the cell it opens, the merchants to the month's spending, and the trends to the months. Money is compared in whole cents. If a pick fails, the rest is skipped."
+        },
+        {
+          "name": "Recurring charges",
+          "item": [
+            {
+              "name": "Recurring: what is still being charged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaRecurringReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const plusMonth = d => { const [y, m, day] = d.split('-').map(Number); const t = y * 12 + m; const ny = Math.floor(t / 12), nm = t % 12 + 1; const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate(); return `${ny}-${String(nm).padStart(2, '0')}-${String(Math.min(day, last)).padStart(2, '0')}`; };",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "pm.test('ACTIVE by default, up to 50', () => {",
+                      "    pm.expect(body.status).to.eql('ACTIVE');",
+                      "    pm.expect(body.limit).to.equal(50);",
+                      "    pm.expect(body.truncated).to.eql(false);",
+                      "    pm.expect(body.accountId).to.eql(null);",
+                      "});",
+                      "pm.test('monthly series of three or more charges', () => body.items.forEach(c => {",
+                      "    pm.expect(c.status, c.merchant).to.eql('ACTIVE');",
+                      "    pm.expect(c.cadence).to.eql('MONTHLY');",
+                      "    pm.expect(c.occurrences).to.be.at.least(3);",
+                      "    pm.expect(cents(c.typicalAmount)).to.be.above(0);",
+                      "    pm.expect(cents(c.lastAmount)).to.be.above(0);",
+                      "    pm.expect(c.firstDate < c.lastDate).to.be.true;",
+                      "}));",
+                      "pm.test('next expected a calendar month after the last charge', () => body.items.forEach(c => pm.expect(c.nextExpectedDate, c.merchant).to.eql(plusMonth(c.lastDate))));",
+                      "pm.test('newest last charge first', () => body.items.forEach((c, i) => { if (i > 0) pm.expect(c.lastDate <= body.items[i - 1].lastDate).to.be.true; }));",
+                      "const spotify = body.items.find(c => c.accountId === id('apexId') && /SPOTIFY/i.test(c.merchant));",
+                      "pm.test('Spotify on the Apex card, at a fixed price', () => {",
+                      "    pm.expect(spotify, 'no Spotify series; the rest of Recurring is skipped').to.be.an('object');",
+                      "    pm.expect(spotify.fixedPrice).to.eql(true);",
+                      "});",
+                      "if (!spotify) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaRecJson', JSON.stringify(spotify));",
+                      "pm.collectionVariables.set('anaRecMerchantQuery', encodeURIComponent(spotify.merchant));",
+                      "pm.collectionVariables.set('anaRecFirstMonth', spotify.firstDate.slice(0, 7));",
+                      "pm.collectionVariables.set('anaRecLastMonth', spotify.lastDate.slice(0, 7));",
+                      "pm.collectionVariables.set('anaRecActive', body.items.length);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Drill-down: the series' charges",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?accountId={{apexId}}&merchant={{anaRecMerchantQuery}}&measure=SPENT&from={{anaRecFirstMonth}}&to={{anaRecLastMonth}}&size=200",
+                "description": "The series' merchant on its account, from its first month to its last: the same charges the detector saw."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const cents = s => { const neg = s.startsWith('-'); const [w, f] = s.replace('-', '').split('.'); return (neg ? -1 : 1) * (Number(w) * 100 + Number(((f || '') + '00').slice(0, 2))) + 0; };",
+                      "const series = JSON.parse(pm.collectionVariables.get('anaRecJson'));",
+                      "pm.test('one charge per occurrence', () => pm.expect(body.total.count).to.equal(series.occurrences));",
+                      "pm.test('from the first charge to the last', () => {",
+                      "    pm.expect(body.items[0].txnDate).to.eql(series.lastDate);",
+                      "    pm.expect(body.items[body.items.length - 1].txnDate).to.eql(series.firstDate);",
+                      "});",
+                      "pm.test('the last charge is lastAmount, as money out', () => pm.expect(0 - cents(body.items[0].amount)).to.equal(cents(series.lastAmount)));",
+                      "pm.test('typicalAmount is one of the charges', () => pm.expect(body.items.map(t => 0 - cents(t.amount))).to.include(cents(series.typicalAmount)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring: ended",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=ENDED"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('ENDED only', () => { pm.expect(body.status).to.eql('ENDED'); body.items.forEach(c => pm.expect(c.status, c.merchant).to.eql('ENDED')); });",
+                      "pm.collectionVariables.set('anaRecEnded', body.items.length);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring: all = active + ended",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=ALL"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const series = JSON.parse(pm.collectionVariables.get('anaRecJson'));",
+                      "pm.test('every series, either status', () => {",
+                      "    pm.expect(body.status).to.eql('ALL');",
+                      "    pm.expect(body.items.length).to.equal(Number(pm.collectionVariables.get('anaRecActive')) + Number(pm.collectionVariables.get('anaRecEnded')));",
+                      "    pm.expect(body.truncated).to.eql(false);",
+                      "});",
+                      "pm.test('the Spotify series among them, unchanged', () => pm.expect(body.items).to.deep.include(series));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring: one account",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?accountId={{apexId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const apex = Number(pm.collectionVariables.get('apexId'));",
+                      "pm.test('the Apex card only', () => { pm.expect(body.accountId).to.equal(apex); body.items.forEach(c => pm.expect(c.accountId).to.equal(apex)); });",
+                      "pm.test('Spotify among them', () => pm.expect(body.items).to.deep.include(JSON.parse(pm.collectionVariables.get('anaRecJson'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Recurring: limit=1",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=ALL&limit=1"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const all = Number(pm.collectionVariables.get('anaRecActive')) + Number(pm.collectionVariables.get('anaRecEnded'));",
+                      "pm.test('one series, truncated when there are more', () => {",
+                      "    pm.expect(body.limit).to.equal(1);",
+                      "    pm.expect(body.items.length).to.equal(Math.min(1, all));",
+                      "    pm.expect(body.truncated).to.eql(all > 1);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Recurring: what is still being charged' sets anaRecurringReady; a pick that fails clears it,",
+                  "// and the subfolder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'anaRecurringReady';",
+                  "if (pm.info.requestName === \"Recurring: what is still being charged\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Recurring charges failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Recurring charges failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "The monthly series (ANA-07). The pick is Spotify on the Apex card, a series the sample data always has; its drill-down shows the same charges. If the pick fails, the rest is skipped."
+        },
+        {
+          "name": "Alerts and dismissal",
+          "item": [
+            {
+              "name": "Alerts: the six months",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from={{anaFrom}}&to={{anaTo}}",
+                "description": "Every alert of the default months range, checked for its key, basis and details. The two the sample data always raises whatever the categories (the duplicate and the price increase) are checked to the cent; the duplicate is the one dismissed below."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const flag = 'anaAlertsReady';",
+                      "if (pm.response.code !== 200) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "const body = pm.response.json();",
+                      "const id = name => Number(pm.collectionVariables.get(name));",
+                      "const v = name => pm.collectionVariables.get(name);",
+                      "const slugs = {CATEGORY_SPIKE: 'category-spike', LARGE_TRANSACTION: 'large-transaction', POSSIBLE_DUPLICATE: 'possible-duplicate', RECURRING_PRICE_INCREASE: 'recurring-price-increase', NEW_RECURRING: 'new-recurring'};",
+                      "const types = Object.keys(slugs);",
+                      "pm.test('the range asked for, nothing dismissed shown, not truncated', () => {",
+                      "    pm.expect(body.range).to.eql({from: v('anaFrom'), to: v('anaTo')});",
+                      "    pm.expect(body.includeDismissed).to.eql(false);",
+                      "    pm.expect(body.limit).to.equal(100);",
+                      "    pm.expect(body.truncated).to.eql(false);",
+                      "});",
+                      "pm.test('counts list every type and add up to the items', () => {",
+                      "    pm.expect(Object.keys(body.counts).sort()).to.eql(types.slice().sort());",
+                      "    pm.expect(types.reduce((s, t) => s + body.counts[t], 0)).to.equal(body.items.length);",
+                      "});",
+                      "pm.test('newest month first, each in the range', () => body.items.forEach((a, i) => {",
+                      "    pm.expect(a.month >= v('anaFrom') && a.month <= v('anaTo'), a.key).to.be.true;",
+                      "    if (i > 0) pm.expect(a.month <= body.items[i - 1].month, a.key).to.be.true;",
+                      "}));",
+                      "pm.test('a key is its check and month plus a hash; details are typed by the check', () => body.items.forEach(a => {",
+                      "    pm.expect(a.key).to.match(new RegExp(`^${slugs[a.type]}\\\\.${a.month}\\\\.[0-9a-f]{16}$`));",
+                      "    pm.expect(a.details.type).to.eql(a.type);",
+                      "}));",
+                      "pm.test('the basis explains the decision: observed ≥ threshold, in one unit, with its settings', () => body.items.forEach(a => {",
+                      "    pm.expect(a.basis.observed.unit, a.key).to.eql(a.basis.threshold.unit);",
+                      "    pm.expect(Number(a.basis.observed.value) >= Number(a.basis.threshold.value), a.key).to.be.true;",
+                      "    pm.expect(a.basis.periodStart <= a.basis.periodEnd, a.key).to.be.true;",
+                      "    pm.expect(a.basis.settings.length, a.key).to.be.above(0);",
+                      "}));",
+                      "pm.test('none dismissed yet', () => body.items.forEach(a => { pm.expect(a.dismissed).to.eql(false); pm.expect(a.dismissedAt).to.eql(null); pm.expect(a.note).to.eql(null); }));",
+                      "pm.test('at most 10 txns each, with the cleaned merchant only', () => body.items.forEach(a => {",
+                      "    pm.expect(a.txns.length).to.be.at.most(10);",
+                      "    a.txns.forEach(t => pm.expect(t).to.have.all.keys('id', 'accountId', 'txnDate', 'amount', 'merchant'));",
+                      "}));",
+                      "pm.test('Spotify on the Apex card went from 11.99 to 12.99 in 2026-07 (the answer key\\'s price_increase)', () => {",
+                      "    const a = body.items.find(x => x.type === 'RECURRING_PRICE_INCREASE' && x.details.accountId === id('apexId') && /SPOTIFY/i.test(x.details.merchant));",
+                      "    pm.expect(a).to.be.an('object');",
+                      "    pm.expect(a.month).to.eql('2026-07');",
+                      "    pm.expect(_.pick(a.details, ['previousAmount', 'newAmount', 'increaseAmount'])).to.eql({previousAmount: '11.99', newAmount: '12.99', increaseAmount: '1.00'});",
+                      "    if (v('anaRecJson')) pm.expect(a.details.merchant).to.eql(JSON.parse(v('anaRecJson')).merchant);",
+                      "});",
+                      "const dup = body.items.find(a => a.type === 'POSSIBLE_DUPLICATE' && a.txns.length > 0 && a.txns.every(t => t.accountId === id('apexId')) && /SAFEWAY/i.test(a.details.merchant || ''));",
+                      "pm.test('the Safeway charge of 2026-06-13, twice on the Apex card (the answer key\\'s duplicate)', () => {",
+                      "    pm.expect(dup, 'no Safeway duplicate; the rest of Alerts is skipped').to.be.an('object');",
+                      "    pm.expect(dup.month).to.eql('2026-06');",
+                      "    pm.expect(dup.txns.map(t => t.txnDate + ' ' + t.amount)).to.eql(['2026-06-13 -84.12', '2026-06-13 -84.12']);",
+                      "    pm.expect(dup.details.amount).to.eql('84.12');",
+                      "    pm.expect(dup.details.reasons).to.include('SAME_MERCHANT_AMOUNT_DATE');",
+                      "});",
+                      "if (!dup) {",
+                      "    pm.collectionVariables.set(flag, 'false');",
+                      "    return;",
+                      "}",
+                      "pm.collectionVariables.set('anaAlertKey', dup.key);",
+                      "pm.collectionVariables.set('anaAlertJson', JSON.stringify(dup));",
+                      "pm.collectionVariables.set('anaAlertTotal', body.items.length);",
+                      "pm.collectionVariables.set('anaAlertDuplicates', body.counts.POSSIBLE_DUPLICATE);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "One alert by key",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('the alert listed', () => pm.expect(pm.response.json()).to.eql(JSON.parse(pm.collectionVariables.get('anaAlertJson'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts: one type, one account",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from={{anaFrom}}&to={{anaTo}}&type=POSSIBLE_DUPLICATE&accountId={{apexId}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the filters echoed', () => { pm.expect(body.type).to.eql('POSSIBLE_DUPLICATE'); pm.expect(body.accountId).to.equal(Number(pm.collectionVariables.get('apexId'))); });",
+                      "pm.test('duplicates only, the Safeway one among them', () => {",
+                      "    body.items.forEach(a => pm.expect(a.type).to.eql('POSSIBLE_DUPLICATE'));",
+                      "    pm.expect(body.items.map(a => a.key)).to.include(pm.collectionVariables.get('anaAlertKey'));",
+                      "});",
+                      "pm.test('no other type counted', () => Object.keys(body.counts).filter(t => t !== 'POSSIBLE_DUPLICATE').forEach(t => pm.expect(body.counts[t], t).to.equal(0)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss it, with a note",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}/dismissal",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"note\": \"Asked the bank about it\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "The only write in Phase 5's analytics. Stored by key, so it survives a re-import."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('dismissed, with the note and when', () => {",
+                      "    pm.expect(body.key).to.eql(pm.collectionVariables.get('anaAlertKey'));",
+                      "    pm.expect(body.dismissed).to.eql(true);",
+                      "    pm.expect(body.note).to.eql('Asked the bank about it');",
+                      "    pm.expect(body.dismissedAt).to.be.a('string');",
+                      "});",
+                      "pm.collectionVariables.set('anaDismissedAt', body.dismissedAt);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dismiss it again: the note is replaced, the time kept",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}/dismissal",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"note\": \"The bank is refunding one\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('idempotent', () => {",
+                      "    pm.expect(body.dismissed).to.eql(true);",
+                      "    pm.expect(body.dismissedAt).to.eql(pm.collectionVariables.get('anaDismissedAt'));",
+                      "    pm.expect(body.note).to.eql('The bank is refunding one');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts: hidden once dismissed",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from={{anaFrom}}&to={{anaTo}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('one fewer, not listed or counted', () => {",
+                      "    pm.expect(body.items.map(a => a.key)).to.not.include(pm.collectionVariables.get('anaAlertKey'));",
+                      "    pm.expect(body.items.length).to.equal(Number(pm.collectionVariables.get('anaAlertTotal')) - 1);",
+                      "    pm.expect(body.counts.POSSIBLE_DUPLICATE).to.equal(Number(pm.collectionVariables.get('anaAlertDuplicates')) - 1);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts: includeDismissed shows it",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from={{anaFrom}}&to={{anaTo}}&includeDismissed=true"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "const key = pm.collectionVariables.get('anaAlertKey');",
+                      "pm.test('every alert, the dismissed one marked', () => {",
+                      "    pm.expect(body.includeDismissed).to.eql(true);",
+                      "    pm.expect(body.items.length).to.equal(Number(pm.collectionVariables.get('anaAlertTotal')));",
+                      "    const a = body.items.find(x => x.key === key);",
+                      "    pm.expect(a).to.be.an('object');",
+                      "    pm.expect(a.dismissed).to.eql(true);",
+                      "    pm.expect(a.note).to.eql('The bank is refunding one');",
+                      "    body.items.filter(x => x.key !== key).forEach(x => pm.expect(x.dismissed, x.key).to.eql(false));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Undo the dismissal",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}/dismissal"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Undo it again: idempotent",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}/dismissal"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The alert is as before",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts/{{anaAlertKey}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('not dismissed, no note or time: exactly as first listed', () => pm.expect(pm.response.json()).to.eql(JSON.parse(pm.collectionVariables.get('anaAlertJson'))));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Alerts: listed again",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?from={{anaFrom}}&to={{anaTo}}"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('all of them again', () => {",
+                      "    pm.expect(body.items.length).to.equal(Number(pm.collectionVariables.get('anaAlertTotal')));",
+                      "    pm.expect(body.items.map(a => a.key)).to.include(pm.collectionVariables.get('anaAlertKey'));",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// One failed pick is one failure, not a cascade: 'Alerts: the six months' sets anaAlertsReady; a pick that fails clears it,",
+                  "// and the subfolder's later requests are then skipped (pm.execution.skipRequest, newman 6.1 or later).",
+                  "const flag = 'anaAlertsReady';",
+                  "if (pm.info.requestName === \"Alerts: the six months\") {",
+                  "    pm.collectionVariables.set(flag, 'true');",
+                  "} else if (pm.collectionVariables.get(flag) !== 'true') {",
+                  "    if (!pm.execution || typeof pm.execution.skipRequest !== 'function') {",
+                  "        throw new Error(`Skipped \"${pm.info.requestName}\": an earlier pick in Alerts and dismissal failed. (Update newman to 6.1+ to skip instead of failing.)`);",
+                  "    }",
+                  "    console.log(`Skipped \"${pm.info.requestName}\": an earlier pick in Alerts and dismissal failed.`);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Alerts with their basis (ANA-04), and dismissal with its undo. The pick is the Safeway duplicate on the Apex card. If it fails, the rest is skipped."
+        }
+      ],
+      "description": "Phase 5 over the API, with AI **off** (no `aws` profile): it runs after folders 1–6 and 8 on a freshly reset database, imports the rest of the sample months, and reads every analytics endpoint. Ids and expected figures are read from the API, never hard-coded; the only sample-data facts written in are the two alerts the answer key labels and the categories can't change (the Safeway duplicate and Spotify's price increase). Each subfolder after the imports arms a flag on its first request, and a failed pick skips the rest of that subfolder."
+    },
+    {
+      "name": "10. Lookups",
       "description": "Manual lookups: fill in the id and send. Nothing is asserted. Not part of the newman run.",
       "item": [
         {
@@ -4904,7 +7556,7 @@
       ]
     },
     {
-      "name": "10. Live AI (aws profile)",
+      "name": "11. Live AI (aws profile)",
       "description": "**Needs the `aws` profile and makes live Bedrock calls (they cost money).** Not part of the newman run: the README's command leaves this folder out, and in the Collection Runner untick it. Send by hand, after starting the backend with `SPRING_PROFILES_ACTIVE=aws`. Nothing is asserted; the console logs the mode and counts only, never merchants, descriptions or amounts.",
       "item": [
         {
@@ -5166,6 +7818,122 @@
     },
     {
       "key": "rulesReady",
+      "value": ""
+    },
+    {
+      "key": "anaJuneStatementId",
+      "value": ""
+    },
+    {
+      "key": "anaCopyClosedOn",
+      "value": ""
+    },
+    {
+      "key": "anaCoverageReady",
+      "value": ""
+    },
+    {
+      "key": "anaTotalsReady",
+      "value": ""
+    },
+    {
+      "key": "anaFrom",
+      "value": ""
+    },
+    {
+      "key": "anaTo",
+      "value": ""
+    },
+    {
+      "key": "anaMonth",
+      "value": ""
+    },
+    {
+      "key": "anaMonths",
+      "value": ""
+    },
+    {
+      "key": "anaCheckingMonths",
+      "value": ""
+    },
+    {
+      "key": "anaCategoryId",
+      "value": ""
+    },
+    {
+      "key": "anaCategoryNet",
+      "value": ""
+    },
+    {
+      "key": "anaCategoryCount",
+      "value": ""
+    },
+    {
+      "key": "anaSpentCount",
+      "value": ""
+    },
+    {
+      "key": "anaMerchant",
+      "value": ""
+    },
+    {
+      "key": "anaMerchantQuery",
+      "value": ""
+    },
+    {
+      "key": "anaMerchantJson",
+      "value": ""
+    },
+    {
+      "key": "anaRecurringReady",
+      "value": ""
+    },
+    {
+      "key": "anaRecJson",
+      "value": ""
+    },
+    {
+      "key": "anaRecMerchantQuery",
+      "value": ""
+    },
+    {
+      "key": "anaRecFirstMonth",
+      "value": ""
+    },
+    {
+      "key": "anaRecLastMonth",
+      "value": ""
+    },
+    {
+      "key": "anaRecActive",
+      "value": ""
+    },
+    {
+      "key": "anaRecEnded",
+      "value": ""
+    },
+    {
+      "key": "anaAlertsReady",
+      "value": ""
+    },
+    {
+      "key": "anaAlertKey",
+      "value": ""
+    },
+    {
+      "key": "anaAlertJson",
+      "value": ""
+    },
+    {
+      "key": "anaAlertTotal",
+      "value": ""
+    },
+    {
+      "key": "anaAlertDuplicates",
+      "value": ""
+    },
+    {
+      "key": "anaDismissedAt",
       "value": ""
     }
   ]

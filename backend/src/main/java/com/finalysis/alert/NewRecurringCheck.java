@@ -35,6 +35,9 @@ import org.springframework.stereotype.Component;
  * {@code min-occurrences} in the range began at most {@code (min-occurrences − 1) × max-gap-days} before it, so it is read
  * whole; a run whose first charge read is closer than {@code max-gap-days} to the window's start may have begun
  * earlier, reached {@code min-occurrences} before the range, and is skipped.
+ *
+ * <p>{@code min-prior-days} must be more than {@code max-gap-days}, checked here at startup because the two live in
+ * different blocks: a series that began before the data can first show up a whole gap after its start (§6.3).
  */
 @Component
 class NewRecurringCheck implements AlertCheck {
@@ -58,6 +61,11 @@ class NewRecurringCheck implements AlertCheck {
         this.activeDays = analytics.recurring().activeDays();
         this.tolerancePercent = properties.newRecurring().amountTolerancePercent();
         this.minPriorDays = properties.newRecurring().minPriorDays();
+        if (minPriorDays <= maxGapDays) {
+            throw new IllegalArgumentException("finalysis.alerts.new-recurring.min-prior-days (" + minPriorDays
+                    + ") must be more than finalysis.analytics.recurring.max-gap-days (" + maxGapDays
+                    + "): a series that began before the data can first show up a whole gap after its start");
+        }
     }
 
     @Override

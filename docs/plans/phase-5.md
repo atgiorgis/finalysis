@@ -1,7 +1,7 @@
 # Phase 5 plan: analytics
 
-Status: **approved** 2026-10-19, with the answers under "Decisions at approval" (§13), which override anything
-older in this file. Branch `v1`, starting after tag `phase-4-done`. Requirements as of `docs/requirements.md`
+Status: **complete** (2026-10-20; step 7 notes and the phase summary). Approved 2026-10-19, with the answers under
+"Decisions at approval" (§13), which override anything older in this file. Branch `v1`, starting after tag `phase-4-done`. Requirements as of `docs/requirements.md`
 v1.46.
 
 Scope: ANA-01 (monthly totals by category, account and merchant, by transaction date, transfers excluded),
@@ -574,6 +574,8 @@ series of §6.4.
   the account's first covered day (it started while we were watching, rather than at the start of the data),
   and whose last charge is within `active-days` of the account's last covered day.
   Defaults: `min-occurrences` 3, `amount-tolerance-percent` 20, `min-prior-days` ~~30~~ **45** (step 6), `active-days` 45.
+  *Step 7:* `min-prior-days` must be more than `max-gap-days`, or startup fails. A series that began before the data
+  can first show up a whole gap after the account's first covered day, so a smaller value would call it new.
   - Details: `merchant`, `accountId`, `typicalAmount` (median), `occurrences`, `firstDate`, `lastDate`.
   - *Worked example.* Sample data: Netflix, Spotify, rent and the utilities start within 28 days of their
     account's first covered day. Google One's first charge (2026-04-20) is 36 days after Apex Visa's (2026-03-15),
@@ -855,6 +857,9 @@ New runnable folder **"9. Analytics"** against the sample data: months (with dat
 accounts, merchants, trends, coverage, recurring charges, the five alerts with their basis, dismiss and
 undismiss. Folder 6 "Errors" gains the new 400s and 404s. The
 README's newman command gets `--folder "9. Analytics"`.
+*Step 7:* the newman database has the rules' categories, not the answer key's, and Setup's extra "wrong account"
+copy, so its alerts can't be the five above. Folder 9 checks every alert's basis and asserts only the two that don't
+depend on categories (the Safeway duplicate and Spotify's price increase); the five are `AlertSampleDataTest`'s job.
 
 ---
 
@@ -869,7 +874,7 @@ README's newman command gets `--folder "9. Analytics"`.
 | 4 | ANA-06 on the sample data | Oracle, `AnalyticsSampleDataTest`, broken-file variant, `docs/eval/phase-5-totals.md` | the test itself (100% match) |
 | 5 | Alerts: framework, spike, large, duplicate | V20; keys; `AlertBasis`; `AlertQueryService`, `AlertDismissalService`; the three checks; alert endpoints | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest` (boundaries, basis to the cent), `AlertKeyTest` (stable across re-import), `AlertApiTest` (dismissal) |
 | 6 | Recurring series, price increase, new recurring, recurring endpoint | `MonthlySeries`; the two checks; `RecurringChargesService` and `GET /api/analytics/recurring` | `MonthlySeriesTest` (unit), `RecurringPriceIncreaseTest`, `NewRecurringTest`, `RecurringChargesApiTest`, sample-data expected alerts (exactly five) and series (exactly eight) |
-| 7 | Docs, Postman, close-out | README (analytics, counting rules, alerts, endpoints, limitations); Postman folder 9; requirement statuses and change log; phase summary here; tag `phase-5-done` is yours, after your newman run | newman against a reset database |
+| 7 | Docs, Postman, close-out (**Done**) | README (analytics, counting rules, alerts, endpoints, limitations); Postman folder 9; requirement statuses and change log; phase summary here; tag `phase-5-done` is yours, after your newman run | newman against a reset database |
 
 Why this order: the counting rules (step 1) are the riskiest decisions and everything sums them, so they are
 pinned by tests before any endpoint exists. ANA-06 (step 4) proves the totals before any alert relies on
@@ -1319,6 +1324,82 @@ Done: "Phase 5 step 6: recurring series, price increase, new recurring, recurrin
 - **ANA-04 and ANA-07 stay Planned** until step 7's close-out sets the phase's statuses; ANA-06 is Done now, as its
   report is complete.
 
+### Step 7 notes
+
+Done: "Phase 5 step 7: docs, Postman and close-out". Backend 2,461 tests (Maven summary; 2,460 + 1), 0 failures,
+0 skipped; frontend 4. Requirements v1.53. No migration. **Newman was not run** (you run it on a reset database);
+nothing touched the dev database, and nothing called a model.
+
+**Step 6 loose end.** `new-recurring.min-prior-days` had only its 0–3650 range check. `NewRecurringCheck` now fails
+startup when it is not more than `finalysis.analytics.recurring.max-gap-days`, naming both properties and the reason
+(§6.3). The check sits in the bean that reads both blocks, because `AlertProperties` can't see the analytics settings
+(and analytics may not depend on `alert`). `AlertSettingsTest.minPriorDaysMustExceedTheLongestGap`: 35 against a
+35-day gap and the default 45 against a 50-day gap fail; 36 against 35 and the defaults pass.
+
+**Postman.**
+- New **9. Analytics**, in the newman run after folder 8, in five subfolders:
+  - *Load the sample months.* Apex Visa May to October and Summit May to September as CSVs with the manifest's
+    period and balances, checking June to September as OFX, then a rules run asserting AI `OFF` and 0 calls. The
+    expected outcomes are read from the code: Apex July is `NEEDS_REVIEW` with its balances `PASSED` (the second
+    Safeway charge is dated 06-13, before its 06-15 period); checking June is `NEEDS_REVIEW` and `FAILED` (it
+    continues Setup's May, whose closing balance is 10.00 too high); the rest are `RECONCILED`.
+  - *Coverage and closure.* Coverage per account: savings has no statement, so no expected day; checking's May and
+    June are flagged, and only May was reviewed. Setup's "wrong account" copy of checking leaves a gap up to the
+    last covered day, so every later month is `PARTIAL`. Closed on its last covered day, the gap goes and the later
+    months can be complete. Reopened, they are partial again. It is closed again for the subfolders below.
+  - *Totals, drill-down and trends.* The default range (6 months to the latest month) and the month invariants
+    (net, `netChange` with both transfer lines, counts, the savings rate's null); checking's `netChange` against
+    its calendar-month statements' balances; the accounts adding up to the household; the category rows rebuilding
+    each month's income, spending, refunds and transfer lines; the drill-downs of M's largest expense category and
+    of M's spending, each equal to its cell; the merchants adding up to M's spending, and the top merchant's
+    drill-down; the trends against the months (total spending and income, month over month, the trailing-3 count
+    and its rounding to the cent, the picked category's row), and one category's trends.
+  - *Recurring charges.* The active list (monthly, 3 or more charges, next expected date = last + 1 calendar month,
+    newest first), Spotify on the Apex card at a fixed price, and its drill-down (one charge per occurrence, from
+    the first date to the last, the newest equal to `lastAmount`); ended; all = active + ended; one account;
+    `limit=1` with `truncated`.
+  - *Alerts and dismissal.* Every alert in the range: counts add up, newest month first, key = check, month and
+    hash, details typed by the check, observed ≥ threshold in one unit, at most 10 txns with the cleaned merchant
+    only. Spotify's 11.99 → 12.99 in 2026-07 and the Safeway pair of 2026-06-13, to the cent. Then by key, by type
+    and account, dismissed with a note, dismissed again (time kept, note replaced), hidden, shown with
+    `includeDismissed`, undone twice (204), and finally exactly as first listed.
+- **Expected values come from the API.** Ids come from earlier folders, figures from other endpoints, compared in
+  whole cents: a `cents` helper parses the money strings, so no floating-point sum decides a test. The only
+  sample-data facts written in are the two alerts above, which don't depend on categories.
+- **Guards as in Phase 4.** Each subfolder after the imports arms a flag on its first request. Every pick asserts
+  what it found and clears the flag when it fails, and the subfolder's later requests are skipped. The only Lodash
+  call is `_.pick`, which Lodash 3 has.
+- **6. Errors.** A new **Analytics** subfolder: an unknown account or category on months, categories, merchants,
+  trends, the drill-down, recurring and alerts, an unknown alert and its dismissal (404); a malformed key, ranges
+  over 24 months on months, the drill-down and alerts, `to` before `from`, the three contradictory drill-down
+  filters, an unknown recurring status and a limit over 100 (400, each naming its field). **Accounts** gains closing
+  without `closedOn` (400) and closing or reopening an unknown account (404). None of them writes.
+- **Renumbered:** Lookups is now **10**, Live AI **11**; the collection description and the README say so.
+- **Exact counts:** the earlier folders' exact checks (accounts, statements, review queue, links, categories) all
+  run before folder 9 changes anything, so none needed updating.
+- All 252 scripts parse in Node, and the helpers (cents, month and date arithmetic) and the key pattern were checked
+  there. The folder itself is unrun until your newman run.
+
+**Docs.** README: the Postman section and newman command; the API table (analytics, alerts, closure); V18 to V20 in
+the data model and the migrations table; a new **Analytics** section (what each endpoint answers, the counting rules,
+coverage and data quality, alerts with their basis and dismissal, recurring charges, performance, limitations, with
+`docs/eval/phase-5-totals.md` as its headline); the categorization limitation that said an unlinked Transfer-kind
+txn counts as spending, which Phase 5 changed. Requirements v1.53. CLAUDE.md: Phase 6, not started.
+
+**Decisions beyond the plan**
+- **Folder 9 imports the rest of the sample months itself.** Folders 1 to 8 leave about one month per account: too
+  little for trends, a series or most alerts. The imports go in folder 9, so folders 1 to 8 and their exact counts are
+  unchanged.
+- **Folder 9 doesn't assert "the five alerts with their basis"** (§9.7): its categories are the rules', and Setup's
+  copy of checking doubles April. It checks every alert's basis and pins the two that don't depend on categories
+  (§9.7 note).
+- **The closure story uses Setup's copy of checking:** it is the account a user would close, and closing it is what
+  lets the later months be complete in the newman database.
+- **ANA-04 stays Planned,** with its Phase 5 part noted done: the requirement names missing and changed bills, which
+  are in the backlog with no phase. ANA-02 likewise, for fixed vs. discretionary (Phase 7).
+- **SEC-03 gets a note** of what Phase 5 prepared (read-only services, the one write fenced off), and stays Planned
+  for Phase 6.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1336,8 +1417,41 @@ Done: "Phase 5 step 6: recurring series, price increase, new recurring, recurrin
 
 ---
 
+## Phase summary
+
+Phase 5 built read-only analytics over the imported txns, computed on demand and with no AI anywhere.
+
+- **Counting rules (ANA-01, ANA-02).** One bucket per txn, in one SQL fragment that every total, drill-down, trend
+  and alert uses: linked transfers and unlinked Transfer-category rows are in no total; Refunds & Rebates reduces
+  spending on its own line (V18 `spending_offset`, decision 3); expense and income categories count whatever the
+  sign; uncategorized rows count by sign on their own line. Months by `txn_date`, with coverage
+  (`COMPLETE`/`PARTIAL`/`NONE`) from statement periods and closed accounts (V19).
+- **Endpoints.** Months, categories, accounts, merchants, trends (ANA-03), the drill-down behind any cell, coverage,
+  recurring charges (ANA-07) and alerts, each bounded, with 404s for unknown ids. Every month carries its data
+  quality (ANA-08).
+- **Alerts (ANA-04).** Five deterministic checks with configurable thresholds, an explainable basis (the decision
+  is made on the values shown), stable keys from fingerprints, and dismissal (V20), the one write, a user action
+  only.
+- **Verification (ANA-06).** Hand-computed fixture totals and alerts; on the sample data, 482 of 482 cells against
+  an independent oracle, 318 drill-down cells, exactly five alerts and exactly eight recurring series
+  (`docs/eval/phase-5-totals.md`); invariants on every month and account, 2,000 randomized rows against an oracle,
+  jqwik properties; 50,000 rows within 500 ms per endpoint.
+- **Ready for Phase 6.** The services are the contract (typed, bounded parameters; records whose Javadoc states
+  units and signs), read-only by annotation, by Postgres and by ArchUnit.
+- **Tests:** backend 2,198 at `phase-4-done` → 2,461; frontend 4.
+- **Changed along the way:** Refunds & Rebates is not income (approval); `account.closed_on` came forward from the
+  backlog (step 3); the series settings moved to `finalysis.analytics.recurring.*` (step 6); one bucket query for
+  every month's spikes (step 6); `new-recurring.min-prior-days` 45, more than `max-gap-days`, checked at startup
+  (steps 6 and 7).
+
 ## 11. Known limitations (expected at the end of Phase 5)
 
+*At the end of Phase 5, all of these stand, plus one found in step 7:*
+
+- **Coverage trusts statement periods.** A CSV imported without `periodStart` and `periodEnd` covers only its rows'
+  span, so the days between two such statements are gaps and their months `PARTIAL`. Postman's Setup imports the
+  April card CSVs that way, which is why April is partial in the newman database. Send the printed period with a
+  card CSV.
 - **One currency**, assumed. There is no currency column; mixed-currency accounts would sum incorrectly.
 - **Accounts close only when the user says so** (`closed_on`, step 3). Until then a closed account makes every
   later month `PARTIAL`, which is the safe reading of a missing statement.
@@ -1372,6 +1486,8 @@ Done: "Phase 5 step 6: recurring series, price increase, new recurring, recurrin
 - **Moved to other phases:** ANA-05 (monthly summary) to Phase 6; fixed vs discretionary (ANA-02) to Phase 7.
 - One real statement failed reconciliation in the owner's test (Phase 4 backlog). Its month will now show
   the flag; the cause still needs a synthetic reproduction.
+- *Step 7:* Postman's Setup could send the April card CSVs' printed periods, so April is complete in the newman
+  database too. Left as is in step 7, because folders 1 to 8's exact checks depend on Setup.
 
 ---
 

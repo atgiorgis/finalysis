@@ -3,6 +3,7 @@ package com.finalysis.alert;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.finalysis.analytics.AnalyticsProperties;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
@@ -52,5 +53,27 @@ class AlertSettingsTest {
         assertThatThrownBy(() -> new AlertProperties.NewRecurring(new BigDecimal("12.25"), 30))
                 .hasMessageContaining("amount-tolerance-percent");
         assertThatThrownBy(() -> new AlertProperties.NewRecurring(null, -1)).hasMessageContaining("min-prior-days");
+    }
+
+    /**
+     * {@code min-prior-days} must be more than {@code max-gap-days} (§6.3): a series that began before the data can first
+     * show up a whole gap after its start. The two are in different blocks, so the check that reads both enforces it.
+     */
+    @Test
+    void minPriorDaysMustExceedTheLongestGap() {
+        assertThatThrownBy(() -> newRecurringCheck(35, 35)).hasMessageContaining("min-prior-days (35)")
+                .hasMessageContaining("max-gap-days (35)");
+        assertThatThrownBy(() -> newRecurringCheck(50, 45)).as("a longer gap with the default")
+                .hasMessageContaining("min-prior-days (45)");
+        assertThat(newRecurringCheck(35, 36)).isNotNull();
+        assertThat(newRecurringCheck(35, 45)).as("the defaults").isNotNull();
+    }
+
+    private static NewRecurringCheck newRecurringCheck(int maxGapDays, int minPriorDays) {
+        AnalyticsProperties analytics = new AnalyticsProperties(24, 6, null,
+                new AnalyticsProperties.Recurring(25, maxGapDays, 3, 2, 45, 100));
+        AlertProperties alerts = new AlertProperties(100, null, null, null, null,
+                new AlertProperties.NewRecurring(null, minPriorDays));
+        return new NewRecurringCheck(null, null, analytics, alerts);
     }
 }

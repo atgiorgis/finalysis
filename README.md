@@ -64,13 +64,21 @@ each error the sample files can trigger. **8. Categorization** runs categorizati
 `ai` and with `force`, reads a txn's category fields, corrects a category and undoes it with its rule
 (`removeRule=true`), marks a CAT-08 suggestion not a transfer and undoes that, resolves another
 suggestion as one-sided, reads the review queue by kind, and creates, deactivates and deletes a rule.
-Its ids and expected counts come from the API, not from hard-coded descriptions.
+Its ids and expected counts come from the API, not from hard-coded descriptions. **9. Analytics**
+imports the rest of the sample months (Apex May to October and Summit May to September with their
+periods and balances, checking June to September as OFX), then reads coverage, closes, reopens and
+closes again the "wrong account" copy so the later months can be complete, and checks the totals
+against each other: the accounts add up to the household, the category rows to each month, every
+drill-down to the cell it opens, the merchants to the month's spending, the trends to the months, and
+each recurring series to its charges. It lists the alerts (every basis must satisfy observed ≥
+threshold), checks the Safeway duplicate and Spotify's price increase to the cent, and dismisses and
+restores the duplicate. Money is compared in whole cents.
 Setup is strict, so a second run without a reset fails.
 
 **Newman runs with AI off** (no `aws` profile). Every AI request in the run asserts `status: OFF`
 and 0 calls, so the run never reaches Bedrock. Three folders are manual and left out of the run:
-**7. Real-file test** (your own files, below), **9. Lookups** (a txn by id, coverage counts) and
-**10. Live AI (aws profile)**, which makes live Bedrock calls and needs the backend started with
+**7. Real-file test** (your own files, below), **10. Lookups** (a txn by id, coverage counts) and
+**11. Live AI (aws profile)**, which makes live Bedrock calls and needs the backend started with
 `SPRING_PROFILES_ACTIVE=aws`. In the Collection Runner, untick those three.
 
 ```sh
@@ -80,7 +88,7 @@ npx newman run postman/Finalysis.postman_collection.json \
     -e postman/Finalysis-Local.postman_environment.json --working-dir . \
     --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
     --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
-    --folder "8. Categorization"
+    --folder "8. Categorization" --folder "9. Analytics"
 ```
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
@@ -129,7 +137,7 @@ than localhost.
 
 Postgres 17 with pgvector. The schema is owned by Flyway (`backend/src/main/resources/db/migration`).
 Hibernate only validates it. Requirements: DAT-01 to DAT-08 in [docs/requirements.md](docs/requirements.md).
-Columns and tables added after V1 are marked with the migration that added them (V5 to V11).
+Columns and tables added after V1 are marked with the migration that added them (V5 to V20).
 
 ```mermaid
 erDiagram
@@ -153,6 +161,7 @@ erDiagram
         text institution
         text type "CHECKING, SAVINGS, CREDIT_CARD"
         char4 last_four
+        date closed_on "V19: last open day, null while open"
     }
     statement {
         bigint id PK
@@ -261,13 +270,19 @@ erDiagram
         vector1024 embedding
         text model
     }
+    alert_dismissal {
+        text alert_key PK "V20: no FK, survives a re-import"
+        text alert_type
+        text note
+        timestamptz dismissed_at
+    }
 ```
 
 | Table | Purpose |
 |---|---|
 | `account` | A checking, savings, or credit card account. Only the last four digits of the account number are stored. |
 | `statement` | One imported statement file for one account and period, with its opening and closing balances, printed section totals, status and balance-check outcome, and the parsed row count and total (duplicates included) that reconciliation uses. A file hash blocks importing the same file twice; a re-imported period is deduplicated row by row. `parser` records which parser read the file. |
-| `category` | Seeded spending and income categories, each with a kind. `TRANSFER` covers all movement between the user's own accounts. |
+| `category` | Seeded spending and income categories, each with a kind. `TRANSFER` covers all movement between the user's own accounts. `spending_offset` (V18, set for Refunds & Rebates only) makes analytics count the category in spending, as money back, instead of as income. |
 | `txn` | One statement row: dates, raw description, cleaned merchant, signed amount, category and who set it, and where it came from in the source file. |
 | `csv_mapping` | How to read one account's CSV exports: delimiter, encoding, table start, which columns hold the date, description, amount (single or debit/credit), balance and check number, and the sign. `used_at` is set by the first import that uses it, which locks the fields that feed fingerprints. |
 | `categorization_rule` | Merchant pattern → category rules. Rules run before any AI, and user corrections become new rules. |
@@ -275,6 +290,7 @@ erDiagram
 | `transfer_rejection` | A pair the user unlinked or dismissed: detection never proposes it again. |
 | `unparsed_upload` | A PDF that no layout parser recognized: account, file hash and name, reason, and how it was resolved. No bytes or text are kept. |
 | `merchant_embedding` | One embedding per cleaned merchant name, used to find similar merchants for categorization and search. |
+| `alert_dismissal` | Alerts the user dismissed, by stable alert key, with an optional note. Alerts themselves are computed on demand and never stored. See [Alerts](#alerts). |
 
 ### Design decisions
 
@@ -340,6 +356,9 @@ erDiagram
 | V10 `statement_review` | `statement.reviewed_at`, allowed only on NEEDS_REVIEW statements. |
 | V11 `unparsed_upload_resolution` | `unparsed_upload.resolution` (RESOLVED, DISMISSED), tied to `resolved_at`, backfilled from V8's rule. |
 | V12 `account_unique` | Unique index `uq_account_identity` on (lower(btrim(institution)), type, last_four). Fails, naming the account ids, if duplicates already exist. |
+| V18 `analytics` | `category.spending_offset`, set for Refunds & Rebates; `ix_txn_date` on `txn (txn_date)` for month-range totals across accounts. |
+| V19 `account_closed_on` | `account.closed_on`: the last day an account was open; coverage expects no statement after it. |
+| V20 `alert_dismissal` | `alert_dismissal`: dismissed alerts by key, with CHECK constraints on the key format, the alert type and a 1–200 character note. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -391,6 +410,20 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `PATCH` | `/api/categorization/rules/{id}` | Change a user rule; a seeded rule accepts only `active` | 200 | `rule-invalid`, `category-invalid`, `rule-exists`, `rule-seeded` |
 | `DELETE` | `/api/categorization/rules/{id}` | Delete a user rule; its txns are re-evaluated | 204 | `rule-seeded` |
 | `POST` | `/api/categorization/run` | Run every stage now. `?reclean=true` re-cleans merchants first, `?ai=false` skips the AI, `?force=true` asks the AI again for txns it answered or left for review | 200: rules-stage counts and an `ai` block (`status` `OFF` when AI is off) | — |
+| `PUT` | `/api/accounts/{id}/closure` | `{closedOn}`: the account's last open day; coverage expects no statement after it (idempotent) | 200 | — |
+| `DELETE` | `/api/accounts/{id}/closure` | Reopen the account (idempotent) | 200 | — |
+| `GET` | `/api/analytics/months` | Month totals with coverage and data quality; `?from=&to=` (`yyyy-MM`), `?accountId=`. See [Analytics](#analytics) | 200 | — |
+| `GET` | `/api/analytics/categories` | Money per bucket and category per month; `?from=&to=&accountId=&categoryId=&uncategorized=` | 200 | — |
+| `GET` | `/api/analytics/accounts` | Each account's month totals; `?from=&to=` | 200 | — |
+| `GET` | `/api/analytics/merchants` | Top merchants by `spent`, with the rest summed; `?from=&to=&accountId=&categoryId=&limit=` (10, at most 50) | 200 | — |
+| `GET` | `/api/analytics/trends` | Month over month, trailing 3 and 6 complete months, year over year; `?month=&accountId=&categoryId=` | 200 | — |
+| `GET` | `/api/analytics/transactions` | The txns behind any total, newest first, paged (`?size=` up to 200); `?month=` or `?from=&to=`, `bucket`, `measure=SPENT\|RECEIVED`, `accountId`, `categoryId`, `merchant`, `noMerchant` | 200 | — |
+| `GET` | `/api/analytics/coverage` | Covered spans, gaps and flagged statements per account | 200 | — |
+| `GET` | `/api/analytics/recurring` | Monthly recurring charges; `?status=ACTIVE\|ENDED\|ALL&accountId=&limit=` (50, at most 100) | 200 | — |
+| `GET` | `/api/alerts` | Alerts with their basis, newest month first; `?from=&to=` (default the last 3 months), `type`, `accountId`, `includeDismissed`, `limit` (at most 100) | 200 `{items, counts, truncated, …}` | — |
+| `GET` | `/api/alerts/{key}` | One alert, computed for its key's month | 200 | — |
+| `PUT` | `/api/alerts/{key}/dismissal` | `{note?}`: dismiss a current alert (idempotent; the first time is kept, the note replaced) | 200 with the alert | — |
+| `DELETE` | `/api/alerts/{key}/dismissal` | Undo a dismissal (idempotent) | 204 | — |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
   decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
@@ -982,9 +1015,167 @@ once): rules only **44.7%**; rules + AI **93.3%** overall, **97.9%** of the cate
   above the similarity floor.
 - **Merchant cleaning is US-shaped** (state codes, ACH formats); other countries need data in the YAML.
 - **A rule matches by merchant, not amount**, and bank-provided categories are ignored.
-- **An unlinked Transfer-kind txn counts as spending** until you resolve its review item; how totals
-  treat categories is Phase 5.
+- **A rule that wrongly gives a txn a Transfer category** takes it out of spending: analytics shows an
+  unlinked Transfer-kind txn on its own line, not as spending (see [Counting rules](#counting-rules)).
+  It is visible there and in the review queue until you resolve it.
 - Titan embeddings use the AWS SDK's default retries, one merchant per call.
+
+## Analytics
+
+Requirements ANA-01 to ANA-04 and ANA-06 to ANA-08; the design is in
+[docs/plans/phase-5.md](docs/plans/phase-5.md). **No AI anywhere:** SQL sums, Java divides
+(`BigDecimal`, `HALF_EVEN`), and an ArchUnit rule (`NoAiInAnalyticsTest`) keeps the `analytics` and
+`alert` packages away from Spring AI and the AI code.
+
+**Verified against hand-labelled data.** On the sample data with the answer key's categories, every
+analytics cell matches an independent oracle over `answer-key.csv`: **482 of 482 (100%)**, plus 318
+drill-down cells, exactly the five expected alerts and exactly the eight recurring series. Details:
+[Phase 5 totals against the answer key](docs/eval/phase-5-totals.md).
+
+### What each endpoint answers
+
+| Endpoint | Answers |
+|---|---|
+| `GET /api/analytics/months` | How much came in, went out and was saved each month? Income, spending, net, savings rate, the refunds, uncategorized and transfer lines, `netChange`, coverage and data quality. `?accountId=` for one account |
+| `GET /api/analytics/categories` | Where did it go? Money per bucket and category, per month |
+| `GET /api/analytics/accounts` | Which account? Each account's month totals; its `netChange` is its balance movement |
+| `GET /api/analytics/merchants` | Who got the most? Top merchants by `spent`, with the rest summed so the list adds up to total spending |
+| `GET /api/analytics/trends` | Is this month unusual? Per category and in total: the previous month, the change, the trailing 3 and 6 complete months, the same month last year |
+| `GET /api/analytics/transactions` | Which txns make up this number? The drill-down behind any cell, each txn with its bucket; `total` equals the cell |
+| `GET /api/analytics/coverage` | Which days do my statements cover? Covered spans, gaps and flagged statements per account |
+| `GET /api/analytics/recurring` | What am I subscribed to? Monthly charges per account and merchant |
+| `GET /api/alerts` | What looks wrong? Rule-based alerts, each with the numbers that triggered it |
+
+- **Ranges.** `from` and `to` are `yyyy-MM`. They default to the 6 months ending at the month of the
+  last covered day, and a range is at most 24 months (a longer one is a 400 naming the field). `month`
+  defaults to the latest complete month.
+- **Unknown ids are 404s,** never an empty total, so "0.00 spent on account 99" can't be read as an
+  answer. No statements at all is a 200 with nothing listed.
+- **Bounded and read-only.** Every list has a limit (`truncated` says when it cut). Everything is
+  computed on demand from `txn` in one read-only `REPEATABLE READ` transaction, so a month's figures
+  and its flags come from one snapshot and are never stale. Only alert dismissals are stored.
+- **Built for the chatbot.** The controllers only map HTTP onto services that take typed, bounded
+  parameters, so Phase 6's tools will call the same methods with the same validation. A reflection test
+  checks they're all `@Transactional(readOnly = true)`, and Postgres itself rejects a write inside one.
+- Responses carry the cleaned merchant, never a raw description, counterparty or account number.
+
+### Counting rules
+
+Every txn is in exactly one bucket, decided by one SQL fragment (`TxnBucketSql`) that every total,
+drill-down, trend and alert uses. The first rule that matches wins:
+
+1. **On a transfer link** (matched, or marked one-sided): a linked transfer, in no total (GR-04).
+2. **A Transfer category with no link:** an unlinked transfer. Also in no total: the money is still
+   yours, and the usual case is a payment to a card that isn't in the app. It has its own line and
+   waits in the review queue. Import the other account, mark it one-sided or correct its category,
+   and it moves.
+3. **Refunds & Rebates:** not income. It reduces spending and has its own `refunds` line, because the
+   purchase it refunds can't be known. Move a refund to its expense category to net it there. The rule
+   is data (V18's `category.spending_offset`), not a category name in code.
+4. **An expense category:** spending, whatever the sign. A refund categorized as Shopping reduces
+   Shopping, in the refund's own month; the purchase month is never restated.
+5. **An income category:** income, whatever the sign.
+6. **No category:** counted by sign, money out as spending and money in as income, on its own
+   Uncategorized line with the number waiting for review. Leaving them out would understate spending
+   by an amount nobody sees.
+
+A txn you marked not a transfer counts like any other. The month is the calendar month of `txn_date`,
+the purchase date: a card purchase on February 27 is February's even though it arrives with March's
+statement. `net` is income + spending; the savings rate is net / income, with one decimal, and null
+when income is 0 or less. Totals are signed (negative = money out); trends and alerts use positive
+magnitudes named `spent` and `received`. Tested for every month and account: income + spending + both
+transfer lines = the sum of every amount, so nothing can be dropped.
+
+### Coverage and data quality
+
+Each account is expected from the first day of its first statement to the last day any statement
+covers, or to its `closedOn` once you close it (`PUT /api/accounts/{id}/closure`). A month is
+`COMPLETE` when every expected account covers every day of it, `PARTIAL` when a day is missing, and
+`NONE` when nothing covers it. A partial month's figures can still grow, so they're labelled, trailing
+averages skip them, and trends default to the latest complete month.
+
+Every month, for the household and for each account, carries `dataQuality`: the counted txns, the
+uncategorized and review-pending counts and shares (by count, and uncategorized by spending), the
+unlinked transfers waiting for you, and the flags: `RECONCILIATION_FAILED` and `BALANCE_UNVERIFIED`
+with the statement and when you reviewed it, and `PARTIAL_COVERAGE` per account. A flag never changes
+a total: a month whose statement failed its balance check is counted, and says so.
+
+### Alerts
+
+Five deterministic checks, computed on demand. Their thresholds are under `finalysis.alerts.*` and
+`finalysis.analytics.recurring.*`, and a bad value fails startup.
+
+| Alert | Fires when (defaults) |
+|---|---|
+| Category spike | an expense category's month is at least 50% and 100.00 above its average over the 3 previous complete months |
+| Large transaction | a charge is at least 500.00 and 3 × the median of the category's charges in the 180 days before it (needs 5) |
+| Possible duplicate | two charges in one account have the same amount and merchant within 1 day, or the same OFX FITID |
+| Recurring price increase | a monthly charge is at least 0.50 above the 2 equal charges before it (only the first charge at the new price) |
+| New recurring | a monthly series reaches 3 charges, all within 20% of their median, the first at least 45 days into the account's data |
+
+- **Explainable.** Every alert has a `basis`: `observed`, `baseline` and `threshold`, each with its
+  unit, the period the baseline covered and the settings that applied. The check fires exactly when
+  observed ≥ threshold *on the values shown*, rounded once, so an explanation can never contradict
+  the decision. `details` adds each check's own fields; `dataFlags` lists the flags of the months its
+  figures used; `txns` lists up to 10 txns.
+- **Stable keys.** A key is `{type}.{yyyy-MM}.{16 hex}`, hashed from the category id or txn
+  fingerprints, never from txn ids. The same facts always give the same alert, never two, and a key
+  survives deleting and re-importing a statement. A check never looks past its month, so importing a
+  later month doesn't change an earlier alert.
+- **Dismissal.** `PUT /api/alerts/{key}/dismissal` with an optional note hides an alert; a second PUT
+  keeps the first time and replaces the note. `?includeDismissed=true` shows it, and `DELETE` brings it
+  back. Only a current alert can be dismissed, so no arbitrary key is stored. A dismissal is the only
+  write in analytics: a user action over the API, never a chatbot tool (an ArchUnit rule).
+- **On the sample data:** exactly the three labelled anomalies (the Safeway duplicate, the Best Buy
+  purchase, Spotify going from 11.99 to 12.99) plus spikes in Shopping and Dining in August.
+
+### Recurring charges
+
+`GET /api/analytics/recurring` lists the monthly series themselves, not only the alerts about them. Per
+account and cleaned merchant, charges 25 to 35 days apart form a run, and the latest run of at least 3
+is a series:
+
+- `typicalAmount`, the median charge (an actual charge, so it can lag a recent price change), and
+  `lastAmount`;
+- `fixedPrice` when the last 3 charges are equal (utilities are listed too, without it);
+- `occurrences`, `firstDate`, `lastDate`, and `nextExpectedDate`, a projection that nothing checks yet;
+- `status`: `ACTIVE` while the last charge is at most 45 days before the account's last covered day,
+  otherwise `ENDED`.
+
+The default is `ACTIVE`; `?status=ENDED|ALL`, `?accountId=` and `?limit=` (50, at most 100) filter. The
+sample data has eight series, and Skywave Internet is `ENDED`: its September bill never came.
+
+### Performance
+
+`AnalyticsPerformanceTest` loads 50,000 txns, about ten years of a busy household. The household
+month-range query uses `ix_txn_date` (V18; the test reads the plan with `EXPLAIN`), and every endpoint
+answers within 500 ms on a warm database, at its default range and at 24 months. The bound is there
+to catch a missing index, not to benchmark. The spike check reads every month's trends from one bucket
+query, which brought a 24-month alert list from about 550 ms to about 220 ms there.
+
+### Analytics limitations
+
+- **One currency,** assumed. There is no currency column, so accounts in different currencies would
+  sum incorrectly.
+- **Coverage trusts statement periods.** A CSV imported without `periodStart` and `periodEnd` covers
+  only its rows' span, so the days between two such statements are gaps and their months `PARTIAL`.
+  Send the printed period with a card CSV.
+- **A closed account must be marked closed.** Until then, its missing statements make every later month
+  `PARTIAL`, which is the safe reading.
+- **A refund never restates the purchase month,** and a refund in Refunds & Rebates lowers total
+  spending but no category, so that category's trend can look higher than its true net. Moving the
+  refund to the category fixes it.
+- **A rule that wrongly gives a txn a Transfer category** moves it out of spending into the unlinked
+  transfers line, where it stays visible until you resolve it.
+- **A dismissed spike stays dismissed** for its category and month, even if the amount grows later.
+- **No "first seen" or "new since your last visit"** for alerts, since they are computed, not stored.
+- **Monthly cadence only,** one series per account and merchant: two subscriptions at the same
+  merchant on one card break the run. No missing-bill or variable-bill alert yet.
+- **Alerts are household-wide.** `accountId` filters the list; there are no per-account spikes.
+- **Thresholds were checked against the synthetic answer key only.** Real data will need tuning, which
+  is why every threshold is configurable.
+- Fixed vs discretionary spending (ANA-02) comes with the Phase 7 UI; the plain-English monthly summary
+  (ANA-05) with the Phase 6 chatbot.
 
 ## Security
 
@@ -1021,7 +1212,8 @@ statements: the framework then logs request and response bodies and SQL bind val
 own packages (`com.finalysis`) are safe at DEBUG. These rules are covered by
 `SensitiveDataLeakTest`, `UploadHardeningTest`, `MultipartDiskTest` and `ExposureTest`.
 `SensitiveDataLeakTest` also covers every transfer, review and review-queue error path, and the
-transaction and rules error paths. What cloud AI may receive is under
+transaction and rules error paths, and the analytics, recurring and alert errors (no merchant or
+description in a response or log line). What cloud AI may receive is under
 [What leaves the machine](#what-leaves-the-machine).
 
 ## Sample data
