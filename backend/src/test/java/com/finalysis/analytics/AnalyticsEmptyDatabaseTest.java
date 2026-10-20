@@ -50,6 +50,18 @@ class AnalyticsEmptyDatabaseTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.lastCoveredDay").isEmpty())
                 .andExpect(jsonPath("$.latestCompleteMonth").isEmpty());
+        mockMvc.perform(get("/api/analytics/merchants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.totalSpent").value("0.00"));
+        mockMvc.perform(get("/api/analytics/trends"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.month").isEmpty())
+                .andExpect(jsonPath("$.rows.length()").value(0));
+        mockMvc.perform(get("/api/analytics/transactions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.total.count").value(0));
         mockMvc.perform(get("/api/analytics/months").param("from", "2026-03").param("to", "2026-01"))
                 .andExpect(status().isBadRequest());
     }

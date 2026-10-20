@@ -190,6 +190,59 @@ class AnalyticsApiTest {
                 .andExpect(jsonPath("$.accounts[0].truncated").value(false));
     }
 
+    @Test
+    void merchantsAsJson() throws Exception {
+        mockMvc.perform(get("/api/analytics/merchants").param("from", "2025-12").param("to", "2026-04")
+                        .param("limit", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limit").value(2))
+                .andExpect(jsonPath("$.items[0].merchant").value("FIXTURE PROPERTY RENT"))
+                .andExpect(jsonPath("$.items[0].spent").value("6000.00"))
+                .andExpect(jsonPath("$.items[0].firstDate").value("2026-01-03"))
+                .andExpect(jsonPath("$.items[0].category.name").value("Housing"))
+                .andExpect(jsonPath("$.items[1].spent").value("700.00"))
+                .andExpect(jsonPath("$.othersSpent").value("1157.43"))
+                .andExpect(jsonPath("$.totalSpent").value("7857.43"));
+        mockMvc.perform(get("/api/analytics/merchants")).andExpect(jsonPath("$.limit").value(10));
+        mockMvc.perform(get("/api/analytics/merchants").param("limit", "51"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("limit"))
+                .andExpect(jsonPath("$.errors[0].message").value("must be 1 to 50"));
+        mockMvc.perform(get("/api/analytics/merchants").param("limit", "0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/analytics/merchants").param("limit", "many"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].message").value("must be a whole number"));
+    }
+
+    @Test
+    void trendsAsJson() throws Exception {
+        mockMvc.perform(get("/api/analytics/trends").param("month", "2026-04"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.month").value("2026-04"))
+                .andExpect(jsonPath("$.rows[0].line").value("TOTAL_SPENDING"))
+                .andExpect(jsonPath("$.rows[0].measure").value("SPENT"))
+                .andExpect(jsonPath("$.rows[0].category").isEmpty())
+                .andExpect(jsonPath("$.rows[1].category.name").value("Dining"))
+                .andExpect(jsonPath("$.rows[1].bucket").value("EXPENSE"))
+                .andExpect(jsonPath("$.rows[1].amount").value("225.00"))
+                .andExpect(jsonPath("$.rows[1].changePercent").value("350.0"))
+                .andExpect(jsonPath("$.rows[1].trailing3.amount").value("66.67"))
+                .andExpect(jsonPath("$.rows[1].trailing3.monthsUsed").value(3))
+                .andExpect(jsonPath("$.rows[1].trailing6.monthsWanted").value(6))
+                .andExpect(jsonPath("$.rows[1].sameMonthLastYear").isEmpty())
+                .andExpect(jsonPath("$.rows[1].monthCoverage").value("PARTIAL"));
+        mockMvc.perform(get("/api/analytics/trends")).andExpect(jsonPath("$.month").value("2026-03"));
+        mockMvc.perform(get("/api/analytics/trends").param("month", "2026-3"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("month"));
+        long unknown = jdbc.queryForObject("SELECT max(id) + 1000 FROM account", Long.class);
+        mockMvc.perform(get("/api/analytics/trends").param("accountId", "" + unknown))
+                .andExpect(status().isNotFound());
+        long unknownCategory = jdbc.queryForObject("SELECT max(id) + 1000 FROM category", Long.class);
+        mockMvc.perform(get("/api/analytics/merchants").param("categoryId", "" + unknownCategory))
+                .andExpect(status().isNotFound());
+    }
+
     // ------------------------------------------------------------------ errors
 
     @Test

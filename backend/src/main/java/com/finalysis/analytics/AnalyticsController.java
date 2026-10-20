@@ -19,13 +19,20 @@ public class AnalyticsController {
     private final CategoryTotalsService categories;
     private final AccountTotalsService accounts;
     private final CoverageService coverage;
+    private final MerchantTotalsService merchants;
+    private final TrendsService trends;
+    private final DrillDownService drillDown;
 
     public AnalyticsController(MonthlyTotalsService months, CategoryTotalsService categories,
-                               AccountTotalsService accounts, CoverageService coverage) {
+                               AccountTotalsService accounts, CoverageService coverage,
+                               MerchantTotalsService merchants, TrendsService trends, DrillDownService drillDown) {
         this.months = months;
         this.categories = categories;
         this.accounts = accounts;
         this.coverage = coverage;
+        this.merchants = merchants;
+        this.trends = trends;
+        this.drillDown = drillDown;
     }
 
     @GetMapping("/months")
@@ -54,5 +61,43 @@ public class AnalyticsController {
     @GetMapping("/coverage")
     public CoverageResponse coverage() {
         return coverage.coverage();
+    }
+
+    @GetMapping("/merchants")
+    public MerchantTotalsResponse merchants(@RequestParam(required = false) YearMonth from,
+                                            @RequestParam(required = false) YearMonth to,
+                                            @RequestParam(required = false) Long accountId,
+                                            @RequestParam(required = false) Long categoryId,
+                                            @RequestParam(defaultValue = "" + MerchantTotalsService.DEFAULT_LIMIT)
+                                            int limit) {
+        return merchants.merchants(Optional.ofNullable(from), Optional.ofNullable(to),
+                Optional.ofNullable(accountId), Optional.ofNullable(categoryId), limit);
+    }
+
+    @GetMapping("/trends")
+    public TrendsResponse trends(@RequestParam(required = false) YearMonth month,
+                                 @RequestParam(required = false) Long accountId,
+                                 @RequestParam(required = false) Long categoryId) {
+        return trends.trends(Optional.ofNullable(month), Optional.ofNullable(accountId),
+                Optional.ofNullable(categoryId));
+    }
+
+    /** The txns behind a total; see {@link DrillDownFilter} for the filters. */
+    @GetMapping("/transactions")
+    public DrillDownResponse transactions(@RequestParam(required = false) YearMonth month,
+                                          @RequestParam(required = false) YearMonth from,
+                                          @RequestParam(required = false) YearMonth to,
+                                          @RequestParam(required = false) TxnBucket bucket,
+                                          @RequestParam(required = false) TrendMeasure measure,
+                                          @RequestParam(required = false) Long accountId,
+                                          @RequestParam(required = false) Long categoryId,
+                                          @RequestParam(required = false) String merchant,
+                                          @RequestParam(defaultValue = "false") boolean noMerchant,
+                                          @RequestParam(defaultValue = "0") int page,
+                                          @RequestParam(defaultValue = "" + DrillDownFilter.DEFAULT_SIZE) int size) {
+        return drillDown.transactions(new DrillDownFilter(Optional.ofNullable(month), Optional.ofNullable(from),
+                Optional.ofNullable(to), Optional.ofNullable(bucket), Optional.ofNullable(measure),
+                Optional.ofNullable(accountId), Optional.ofNullable(categoryId), Optional.ofNullable(merchant),
+                noMerchant, page, size));
     }
 }

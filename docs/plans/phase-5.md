@@ -190,6 +190,13 @@ only from the 15th → `PARTIAL`. April to September → `COMPLETE`. October: ev
 1st to the 14th, but only Apex covers those days → `PARTIAL`. So the latest complete month is 2026-09, which is
 the default for trends.
 
+**Closed accounts (step 3).** V19 adds `account.closed_on` (the last open day; null while open), set and cleared by
+the user with `PUT`/`DELETE /api/accounts/{id}/closure`, never inferred: a statement not imported yet looks the same
+as a closed account. A closed account is expected only up to `closed_on`, so the months after it are not `PARTIAL`
+because of it. Its closing month needs its days only up to `closed_on`: that date is known. An opening date is not (a
+first statement starting on the 15th doesn't prove nothing happened before), so the month an account starts in still
+needs every day, as above.
+
 **Reconciliation flags.** A month carries flags; its totals are never changed by them:
 
 | Flag | When | Detail |
@@ -265,7 +272,8 @@ stored, keyed by the alert's stable key (§6.2):
 | Version | Step | Content |
 |---|---|---|
 | V18 `analytics` | 1 | `category.spending_offset BOOLEAN NOT NULL DEFAULT false`, set true for Refunds & Rebates (§1.2). `CREATE INDEX ix_txn_date ON txn (txn_date)`: month-range queries without an account filter today scan `ix_txn_transfer_date`, whose leading column is the flag. The step 2 EXPLAIN test (§9.6) checks that the new index is used. No other index unless that test shows a need |
-| V19 `alert_dismissal` | 5 | The table below |
+| V19 `account_closed_on` | 3 | `account.closed_on DATE` (null = open), for coverage (§1.6). Added at step 3; it was a backlog item |
+| V20 `alert_dismissal` | 5 | The table below (was V19 before step 3) |
 
 ```sql
 CREATE TABLE alert_dismissal (
@@ -374,6 +382,8 @@ Errors, all in the existing problem format:
 | `GET /api/analytics/recurring?accountId=&status=ACTIVE\|ENDED\|ALL&limit=` | `RecurringChargesResponse`: the monthly series of §6.4 (§6.5), default `ACTIVE`, newest `lastDate` first, limit default 50, max 100, `truncated` | 400, 404 |
 | `GET /api/analytics/merchants?from=&to=&accountId=&categoryId=&limit=` | `MerchantTotalsResponse`: top merchants by `spent` over the range (default 10, max 50), each with `spent`, `count`, `firstDate`, `lastDate`, the category of most of its rows. Null merchants are grouped as `merchant: null`. `othersSpent` and `othersCount` cover the rest, so the list adds up to the total | 400, 404 |
 | `GET /api/analytics/trends?month=&accountId=&categoryId=` | `TrendsResponse`: per category, plus a total spending row and a total income row. Each row: `amount` in the month; previous month; change amount and percent; trailing 3- and 6-month averages; the same month a year earlier (§7) | 400, 404 |
+| `GET /api/analytics/transactions?month=\|from=&to=&bucket=&measure=&accountId=&categoryId=&merchant=&noMerchant=&page=&size=` | `DrillDownResponse` (step 3, for the Phase 7 drill-down): the txns behind any total, newest first, each with its bucket from `TxnBucketSql.BUCKET`; `total` over every matching txn; `size` default 50, max 200. `measure` `SPENT`/`RECEIVED` selects the spending or income rows, as the merchants and totals count them | 400, 404 |
+| `PUT`/`DELETE /api/accounts/{id}/closure` `{closedOn}` | The account, with `closedOn` set or cleared (step 3, §1.6). Idempotent; a user action, never a tool | 400, 404 |
 | `GET /api/analytics/coverage` | `CoverageResponse`: per account, its covered ranges, gaps (uncovered spans between its first and the last covered day) and flagged statements; `latestMonth`, `latestCompleteMonth` | — |
 | `GET /api/alerts?from=&to=&type=&accountId=&includeDismissed=false&limit=` | `AlertListResponse {items, truncated, counts by type}`: alerts whose month is in the range (default: the last 3 months to `latestMonth`), newest month first, then by type and key | 400, 404 |
 | `GET /api/alerts/{key}` | One `Alert` (computed for the key's month) | 400 malformed key, 404 |
@@ -412,7 +422,8 @@ record MonthlyTotalsResponse(MonthRange range, Long accountId, YearMonth latestM
                              YearMonth latestCompleteMonth, List<MonthTotals> months)
 
 record Average(@ApiMoney BigDecimal amount, int monthsUsed, int monthsWanted)   // null amount when monthsUsed = 0
-record TrendRow(CategoryRef category, TrendMeasure measure,                     // SPENT or RECEIVED
+record TrendRow(TrendLine line, TxnBucket bucket,  // step 3: CATEGORY, UNCATEGORIZED, TOTAL_SPENDING, TOTAL_INCOME
+                CategoryRef category, TrendMeasure measure,                     // SPENT or RECEIVED
                 @ApiMoney BigDecimal amount, @ApiMoney BigDecimal previousMonth,
                 @ApiMoney BigDecimal changeAmount, @ApiPercent BigDecimal changePercent,
                 Average trailing3, Average trailing6, @ApiMoney BigDecimal sameMonthLastYear,
@@ -429,6 +440,16 @@ record AlertBasis(Quantity observed, Quantity baseline, Quantity threshold,   //
 record Quantity(QuantityUnit unit, String value)  // MONEY (2 decimals), PERCENT (1), COUNT, DAYS; as JSON text
 record AlertSetting(String name, Quantity value)   // e.g. "min-increase-percent", PERCENT "50.0"
 record TxnRef(long id, long accountId, LocalDate txnDate, @ApiMoney BigDecimal amount, String merchant)
+
+// step 3
+record MerchantTotalsResponse(MonthRange range, Long accountId, Long categoryId, int limit, List<MerchantTotal> items,
+                              @ApiMoney BigDecimal othersSpent, int othersCount,
+                              @ApiMoney BigDecimal totalSpent, int totalCount)   // totalSpent = −(spending)
+record MerchantTotal(String merchant, @ApiMoney BigDecimal spent, int count, LocalDate firstDate, LocalDate lastDate,
+                     CategoryRef category)
+record DrillDownResponse(MonthRange range, MoneyFlow total, int page, int size, int totalPages, List<Item> items)
+record Item(long id, long accountId, LocalDate txnDate, @ApiMoney BigDecimal amount, String merchant,
+            CategoryRef category, TxnBucket bucket)                              // TxnRef plus category and bucket
 sealed interface AlertDetails permits CategorySpike, LargeTransaction, PossibleDuplicate,
         RecurringPriceIncrease, NewRecurring { }         // JSON discriminator "type", as ReviewItem
 ```
@@ -833,7 +854,7 @@ README's newman command gets `--folder "9. Analytics"`.
 | 2 | Monthly totals, coverage, data quality | Months, categories, accounts and coverage services and endpoints; `refunds` line; flags and `dataQuality`; `@ApiPercent` | `MonthlyTotalsTest` (fixture CSV), `DataQualityTest` (§1.7), invariants §9.2, `CoverageTest`, `AnalyticsApiTest`, EXPLAIN and performance §9.6 |
 | 3 | Merchants and trends | Merchant totals; trends (MoM, YoY, trailing 3/6); `@ApiRatio` | `MerchantTotalsTest`, `TrendsTest` (§7 worked example, skipped partial months, null cases), rounding |
 | 4 | ANA-06 on the sample data | Oracle, `AnalyticsSampleDataTest`, broken-file variant, `docs/eval/phase-5-totals.md` | the test itself (100% match) |
-| 5 | Alerts: framework, spike, large, duplicate | V19; keys; `AlertBasis`; `AlertQueryService`, `AlertDismissalService`; the three checks; alert endpoints | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest` (boundaries, basis to the cent), `AlertKeyTest` (stable across re-import), `AlertApiTest` (dismissal) |
+| 5 | Alerts: framework, spike, large, duplicate | V20; keys; `AlertBasis`; `AlertQueryService`, `AlertDismissalService`; the three checks; alert endpoints | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest` (boundaries, basis to the cent), `AlertKeyTest` (stable across re-import), `AlertApiTest` (dismissal) |
 | 6 | Recurring series, price increase, new recurring, recurring endpoint | `MonthlySeries`; the two checks; `RecurringChargesService` and `GET /api/analytics/recurring` | `MonthlySeriesTest` (unit), `RecurringPriceIncreaseTest`, `NewRecurringTest`, `RecurringChargesApiTest`, sample-data expected alerts (exactly five) and series (exactly eight) |
 | 7 | Docs, Postman, close-out | README (analytics, counting rules, alerts, endpoints, limitations); Postman folder 9; requirement statuses and change log; phase summary here; tag `phase-5-done` is yours, after your newman run | newman against a reset database |
 
@@ -1003,11 +1024,86 @@ Done: "Phase 5 step 2: monthly totals, coverage and data quality". Backend 2,306
   one-sided link's, and detection itself links the fixture's four card payments.
 - **The randomized test calls the service**, not HTTP; the JSON layer is `AnalyticsApiTest`'s.
 
+### Step 3 notes
+
+Done: "Phase 5 step 3: merchants, trends, drill-down and closed accounts". Backend 2,342 tests (Maven summary;
+2,306 + 36), 0 failures, 0 skipped; frontend 4. Requirements v1.48. Migration V19 (`account.closed_on`).
+
+**Built**
+- **Merchants** (`MerchantTotalsService`, `GET /api/analytics/merchants`): spending rows only (`SpendingRowsSql`:
+  expense and refund buckets, uncategorized money out), so `totalSpent` is −(the months' `spending`) and the list plus
+  `othersSpent` adds up to it. SQL sums per merchant and category; Java ranks and picks the category of most rows.
+- **Trends** (`TrendsService`, `GET /api/analytics/trends`, §7): one bucket query over M − 12 … M. Expense categories
+  and Uncategorized money out are `SPENT`, income categories and Refunds & Rebates `RECEIVED`, plus the two total
+  lines. Trailing averages over complete months only (`Arithmetic.average`, `HALF_EVEN`); with `accountId`, the
+  account's own coverage decides which months count.
+- **Drill-down** (`DrillDownService`, `GET /api/analytics/transactions`): the txns behind any total, each with its
+  bucket from `TxnBucketSql.BUCKET`, newest first, paged (max 200), with `total` over every match. Filters: `month` or
+  `from`/`to`, `bucket`, `measure`, `accountId`, `categoryId`, `merchant` or `noMerchant`.
+- **Closed accounts** (§1.6): V19 `account.closed_on`, `PUT`/`DELETE /api/accounts/{id}/closure`, `closedOn` in the
+  account and coverage responses; `CoverageMap` expects an account only up to it.
+- **`@ApiRatio`** (`api`), two-decimal strings for `times…` fields; first used by the alerts (step 5).
+- `finalysis.analytics.merchants.max-limit` (50), validated at startup.
+
+**"Expected accounts", confirmed.** An account is expected from the first day of its first statement to the
+household's last covered day, or to its `closed_on`.
+- *Opened mid-range* was already handled in step 2: the fixture's checking starts in January, and December is
+  partial only because of the card (`DataQualityTest.aPartialMonthNamesTheAccountMissingDays`,
+  `CoverageMapTest.thePlansSampleDataExample`). Now also `CoverageMapTest.anAccountOpenedOrClosedMidRangeIsExpectedOnlyInItsLife`.
+- *Closed mid-range* was not: every later month was `PARTIAL` (§11 said so). Fixed with V19, as chosen when asked
+  during the step. Tests: `CoverageMapTest.anAccountOpenedOrClosedMidRangeIsExpectedOnlyInItsLife` and
+  `theClosingMonthNeedsItsDaysUpToTheClosingDay`, and `CoverageTest.closingAnAccountEndsWhereItIsExpected` (the
+  fixture's card closed on 2026-04-14 through the API makes April complete; reopened, partial again).
+
+**Tests** (fixture figures hand-computed from `categories.csv` and `expected-month-totals.csv`, as literals)
+- **`TrendsTest`:** Dining in partial April (225.00 against March, trailing 66.67 over 3 of 3 and 3 of 6 months);
+  the default month; the first month (nothing to compare with, no complete month to average); Shopping negative in
+  February (refund); the totals with half-even averages (1768.985 → 1768.98, 3001.175 → 3001.18), Refunds & Rebates,
+  Uncategorized; row order; filters. On the sample data with the answer key's categories, §6.3 and §7's worked
+  examples exactly: Dining 2026-08 trailing 207.79; Shopping 2026-08 1183.67 against 244.42; Dining 2026-09 263.08,
+  and 222.49 over 5 of 6 months; no same month last year.
+- **`MerchantTotalsTest`:** the top three and the rest add up to 7857.43 over 35 rows; Target nets to 0.00; the return
+  credit is last at −15.00; uncategorized money out counts and money in doesn't; filters; the limit's bounds.
+- **`DrillDownTest`:** every money and count cell of `expected-month-totals.csv` (105) and every month × bucket ×
+  category cell of `categories.csv` (80), household and per account, read page by page (3 rows a page) and summed;
+  every merchant's `spent`; the null-merchant row; JSON; every 400 and 404.
+- **`DrillDownSampleDataTest`:** on the sample data with the answer key's categories, all 318 cells (every category
+  row × month for the household and each account, each month's income and spending, each merchant) equal their
+  drill-down rows. There is no hand-computed sample-data file before step 4, so these cells are the endpoints' own.
+- `ArithmeticTest` (averages: 222.495 → 222.50, 222.485 → 222.48), `RatioJsonTest`, `AccountControllerTest` (closure),
+  `SchemaMigrationTest` (V19), `AnalyticsApiTest` and `AnalyticsEmptyDatabaseTest` (new endpoints),
+  `AnalyticsPerformanceTest` (the new endpoints within 500 ms on 50,000 rows), `ReadOnlyQueriesTest` (the new
+  services).
+- A deliberate mutation (refunds left out of the spending rows) failed `DrillDownTest` and `MerchantTotalsTest`;
+  reverted.
+
+**Decisions beyond the plan**
+- **`account.closed_on`**, chosen when asked during the step over inferring closure from the last statement (which
+  would hide a statement not yet imported). The endpoints are a `PUT`/`DELETE` pair rather than a field on the rename
+  `PATCH`: a record can't tell an omitted `closedOn` from `null`, so reopening through `PATCH` would be ambiguous. V19 is
+  taken, so `alert_dismissal` becomes V20 (§3.1).
+- **The closing month needs its days only up to `closed_on`**; the opening month still needs every day (§1.6).
+- **Trend rows have a `line` and a `bucket`**, so the rows without a category can be told apart and a Transfer
+  category marked not a transfer can have a `SPENT` and a `RECEIVED` row. A category is listed if it has rows in
+  M − 12 … M. With `categoryId`, only that category's rows (no totals, no Uncategorized line).
+- **`previousMonth` is null when M − 1 is `NONE`**, with its change fields, as §7 does for `sameMonthLastYear`: a
+  month with no data isn't a 0.00 to compare with. The Uncategorized line is money out only; uncategorized money in is
+  in total income.
+- **The default trend month** is the latest complete month, or the latest month if none is complete.
+- **Merchants:** `totalSpent` and `totalCount` added; ties by merchant, the null merchant last; the category tie after
+  "the latest row's" is broken by id, so the answer is stable.
+- **Drill-down filters:** `merchant` matches the stored cleaned text exactly (analytics can't use categorization's
+  normalizer, and the merchants endpoint returns that text); `noMerchant=true` drills into the null row; `measure`
+  (`SPENT`, `RECEIVED`) selects spending or income rows, so merchant and total cells can be drilled into; `month` with
+  `from`/`to`, `categoryId` with `bucket=UNCATEGORIZED`, and `merchant` with `noMerchant` are 400s. Items follow
+  `TxnRef` (no raw description), plus category and bucket.
+- **`SampleDataImport.applyAnswerKey`** sets the answer key's categories as USER categories; step 4 will reuse it.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
-| ANA-01 | 1, 2, 3 | `TxnBucketTest`, `MonthlyTotalsTest`, `MerchantTotalsTest` |
+| ANA-01 | 1, 2, 3 | `TxnBucketTest`, `MonthlyTotalsTest`, `MerchantTotalsTest`, `DrillDownTest`, `DrillDownSampleDataTest` |
 | ANA-02 (cash flow, savings rate) | 2 | `MonthlyTotalsTest` |
 | ANA-03 | 3 | `TrendsTest` |
 | ANA-04 | 5, 6 | the alert tests, sample-data expected alerts |
@@ -1023,8 +1119,8 @@ Done: "Phase 5 step 2: monthly totals, coverage and data quality". Backend 2,306
 ## 11. Known limitations (expected at the end of Phase 5)
 
 - **One currency**, assumed. There is no currency column; mixed-currency accounts would sum incorrectly.
-- **Accounts never close.** An account closed in June makes every later month `PARTIAL`. Needs an
-  `account.closed_on` (backlog).
+- **Accounts close only when the user says so** (`closed_on`, step 3). Until then a closed account makes every
+  later month `PARTIAL`, which is the safe reading of a missing statement.
 - **A refund never restates the purchase month.** A purchase in January and its refund in February show as
   spending in January and a credit in February.
 - **Refunds & Rebates reduces total spending but belongs to no expense category.** A Target refund there
@@ -1052,7 +1148,7 @@ Done: "Phase 5 step 2: monthly totals, coverage and data quality". Backend 2,306
   (net worth, Phase 15). Until then, the account endpoint's `netChange` gives the movement.
 - **Category roll-ups by parent** (§13): once categories can have parents.
 - **Alert "first seen" and "new since last visit"** (for the Phase 7 UI).
-- **`account.closed_on`** for coverage.
+- ~~`account.closed_on` for coverage~~: done in step 3 (V19).
 - **Moved to other phases:** ANA-05 (monthly summary) to Phase 6; fixed vs discretionary (ANA-02) to Phase 7.
 - One real statement failed reconciliation in the owner's test (Phase 4 backlog). Its month will now show
   the flag; the cause still needs a synthetic reproduction.

@@ -102,3 +102,5 @@ finalysis:
   analytics:
     max-months: 24      # longest from-to range per request: bounds every response
     default-months: 6   # range when from is omitted, ending at to
+    merchants:
+      max-limit: 50     # longest merchant list per request (default 10)

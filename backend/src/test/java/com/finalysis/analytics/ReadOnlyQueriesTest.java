@@ -72,11 +72,12 @@ class ReadOnlyQueriesTest {
                 .filter(c -> c.getPackageName().equals("com.finalysis.analytics"))
                 .filter(c -> c.getSimpleName().endsWith("Service"))
                 .map(JavaClass::getSimpleName).sorted().toList();
-        assertThat(services).as("the rule must see the step 2 services, or it checks nothing")
-                .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "MonthlyTotalsService");
+        assertThat(services).as("the rule must see the query services, or it checks nothing")
+                .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "DrillDownService",
+                        "MerchantTotalsService", "MonthlyTotalsService", "TrendsService");
     }
 
-    /** Each step 2 query method is read-only and REPEATABLE READ, so one response is one snapshot (§2). */
+    /** Each query method is read-only and REPEATABLE READ, so one response is one snapshot (§2). */
     @Test
     void theQueryServicesReadOneSnapshot() throws NoSuchMethodException {
         for (Method method : List.of(
@@ -84,7 +85,11 @@ class ReadOnlyQueriesTest {
                 CategoryTotalsService.class.getMethod("categories", Optional.class, Optional.class, Optional.class,
                         Optional.class, boolean.class),
                 AccountTotalsService.class.getMethod("accounts", Optional.class, Optional.class),
-                CoverageService.class.getMethod("coverage"))) {
+                CoverageService.class.getMethod("coverage"),
+                MerchantTotalsService.class.getMethod("merchants", Optional.class, Optional.class, Optional.class,
+                        Optional.class, int.class),
+                TrendsService.class.getMethod("trends", Optional.class, Optional.class, Optional.class),
+                DrillDownService.class.getMethod("transactions", DrillDownFilter.class))) {
             Transactional transactional = method.getAnnotation(Transactional.class);
             assertThat(transactional).as(method.getName()).isNotNull();
             assertThat(transactional.readOnly()).as(method.getName()).isTrue();

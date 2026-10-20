@@ -1,6 +1,10 @@
 package com.finalysis.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.json.JsonMapper;
@@ -30,6 +35,7 @@ import tools.jackson.databind.json.JsonMapper;
 @AutoConfigureMockMvc
 class CoverageTest {
 
+    private final MockMvc mockMvc;
     private final ImportTestSupport support;
     private final AnalyticsFixture fixture;
     private final JdbcTemplate jdbc;
@@ -38,6 +44,7 @@ class CoverageTest {
 
     CoverageTest(MockMvc mockMvc, AccountRepository accounts, JdbcTemplate jdbc, JsonMapper jsonMapper,
                  CoverageService coverage, MonthlyTotalsService months) {
+        this.mockMvc = mockMvc;
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
         this.fixture = new AnalyticsFixture(support, jdbc, jsonMapper);
         this.jdbc = jdbc;
@@ -105,6 +112,37 @@ class CoverageTest {
                 Optional.empty()).months()).extracting(MonthTotals::coverage)
                 .containsExactly(Coverage.PARTIAL, Coverage.PARTIAL, Coverage.COMPLETE);
         assertThat(response.latestCompleteMonth()).isEqualTo(YearMonth.of(2026, 3));
+    }
+
+    /**
+     * The card's last statement ends on 2026-04-14. Marked closed that day, it is no longer expected after it, so
+     * April is complete; reopened, April is partial again (the card should have statements to the 30th).
+     */
+    @Test
+    void closingAnAccountEndsWhereItIsExpected() throws Exception {
+        Loaded loaded = fixture.load();
+        long card = loaded.accounts().get(AnalyticsFixture.CARD);
+        Optional<YearMonth> april = Optional.of(YearMonth.of(2026, 4));
+
+        mockMvc.perform(put("/api/accounts/{id}/closure", card).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"closedOn\":\"2026-04-14\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.closedOn").value("2026-04-14"));
+        assertThat(months.months(april, april, Optional.empty()).months().getFirst().coverage())
+                .isEqualTo(Coverage.COMPLETE);
+        assertThat(months.months(april, april, Optional.of(card)).months().getFirst().coverage())
+                .isEqualTo(Coverage.COMPLETE);
+        CoverageResponse closed = coverage.coverage();
+        assertThat(closed.latestCompleteMonth()).isEqualTo(YearMonth.of(2026, 4));
+        assertThat(closed.accounts().get(1).closedOn()).isEqualTo(LocalDate.parse("2026-04-14"));
+        assertThat(closed.accounts().get(1).gaps()).isEmpty();
+
+        mockMvc.perform(delete("/api/accounts/{id}/closure", card))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.closedOn").isEmpty());
+        assertThat(months.months(april, april, Optional.empty()).months().getFirst().coverage())
+                .isEqualTo(Coverage.PARTIAL);
+        assertThat(coverage.coverage().latestCompleteMonth()).isEqualTo(YearMonth.of(2026, 3));
     }
 
     @Test

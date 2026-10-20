@@ -89,6 +89,60 @@ class CoverageMapTest {
         assertThat(full.status(YearMonth.of(2028, 2))).isEqualTo(Coverage.COMPLETE);
     }
 
+    /**
+     * "Expected accounts" (step 3): an account is expected from its first statement to the last covered day, or to its
+     * closing day. Savings opens in April and checking closes on 2026-03-31: neither makes a month outside its life
+     * partial. Without the closing date, checking's missing April to June would make those months partial.
+     */
+    @Test
+    void anAccountOpenedOrClosedMidRangeIsExpectedOnlyInItsLife() {
+        Map<Long, List<DateSpan>> spans = Map.of(
+                CHECKING, List.of(span("2026-01-01", "2026-03-31")),
+                SAVINGS, List.of(span("2026-04-01", "2026-06-30")),
+                SUMMIT, List.of(span("2026-01-01", "2026-06-30")));
+        CoverageMap open = new CoverageMap(spans);
+        CoverageMap closed = new CoverageMap(spans, Map.of(CHECKING, LocalDate.parse("2026-03-31")));
+
+        for (int month = 1; month <= 3; month++) {
+            assertThat(closed.status(YearMonth.of(2026, month))).as("savings isn't expected before April")
+                    .isEqualTo(Coverage.COMPLETE);
+        }
+        for (int month = 4; month <= 6; month++) {
+            assertThat(open.status(YearMonth.of(2026, month))).as("still open: its missing months count")
+                    .isEqualTo(Coverage.PARTIAL);
+            assertThat(closed.status(YearMonth.of(2026, month))).as("closed: not expected after March")
+                    .isEqualTo(Coverage.COMPLETE);
+        }
+        assertThat(open.gaps(CHECKING)).containsExactly(span("2026-04-01", "2026-06-30"));
+        assertThat(closed.gaps(CHECKING)).isEmpty();
+        assertThat(closed.latestCompleteMonth()).contains(YearMonth.of(2026, 6));
+        assertThat(closed.status(YearMonth.of(2026, 4), CHECKING)).isEqualTo(Coverage.NONE);
+    }
+
+    /**
+     * Closed mid-month: the closing month needs its days only up to {@code closed_on}, because that date is known. A
+     * gap before it still counts. An opening date isn't known, so the month an account starts in needs every day.
+     */
+    @Test
+    void theClosingMonthNeedsItsDaysUpToTheClosingDay() {
+        Map<Long, List<DateSpan>> spans = Map.of(
+                CHECKING, List.of(span("2026-01-01", "2026-03-15")),
+                SUMMIT, List.of(span("2026-01-15", "2026-04-30")));
+
+        CoverageMap closedOnTheLastStatementDay = new CoverageMap(spans,
+                Map.of(CHECKING, LocalDate.parse("2026-03-15")));
+        assertThat(closedOnTheLastStatementDay.status(YearMonth.of(2026, 3))).isEqualTo(Coverage.COMPLETE);
+        assertThat(closedOnTheLastStatementDay.status(YearMonth.of(2026, 3), CHECKING)).isEqualTo(Coverage.COMPLETE);
+        assertThat(closedOnTheLastStatementDay.status(YearMonth.of(2026, 1))).as("the card opens on the 15th")
+                .isEqualTo(Coverage.PARTIAL);
+
+        CoverageMap closedLater = new CoverageMap(spans, Map.of(CHECKING, LocalDate.parse("2026-03-20")));
+        assertThat(closedLater.status(YearMonth.of(2026, 3))).as("the 16th to the 20th are missing")
+                .isEqualTo(Coverage.PARTIAL);
+        assertThat(closedLater.gaps(CHECKING)).containsExactly(span("2026-03-16", "2026-03-20"));
+        assertThat(closedLater.status(YearMonth.of(2026, 4))).isEqualTo(Coverage.COMPLETE);
+    }
+
     @Test
     void withoutStatementsThereIsNoLatestMonth() {
         CoverageMap empty = new CoverageMap(Map.of(CHECKING, List.of()));

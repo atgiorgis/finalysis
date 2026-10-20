@@ -7,7 +7,8 @@ import java.util.List;
 
 /**
  * {@code GET /api/analytics/coverage}: which days each account's statements cover (docs/plans/phase-5.md §1.6).
- * Every account is expected from the first day of its earliest statement to {@code lastCoveredDay}.
+ * Every account is expected from the first day of its earliest statement to {@code lastCoveredDay}, or to its
+ * {@code closedOn} if that is earlier.
  *
  * @param lastCoveredDay      the last day any statement of any account covers; null without statements
  * @param latestMonth         the month of {@code lastCoveredDay}
@@ -26,12 +27,13 @@ public record CoverageResponse(LocalDate lastCoveredDay, YearMonth latestMonth, 
      * says one was cut.
      *
      * @param firstDay          the first day of its earliest statement; null without statements
+     * @param closedOn          the last day it was open; null while open
      * @param covered           the days its statements cover, adjacent statements merged, oldest first
-     * @param gaps              days between {@code firstDay} and the household's {@code lastCoveredDay} that no
-     *                          statement covers, oldest first
+     * @param gaps              days of its expected range that no statement covers, oldest first
      * @param flaggedStatements statements whose balance check failed or couldn't run, oldest first
      */
-    public record AccountCoverage(long accountId, String name, LocalDate firstDay, List<DateSpan> covered,
+    public record AccountCoverage(long accountId, String name, LocalDate firstDay, LocalDate closedOn,
+                                  List<DateSpan> covered,
                                   List<DateSpan> gaps, List<FlaggedStatement> flaggedStatements, boolean truncated) {
     }
 

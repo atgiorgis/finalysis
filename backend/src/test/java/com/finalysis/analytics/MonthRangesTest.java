@@ -17,7 +17,7 @@ class MonthRangesTest {
     private static final Optional<YearMonth> NONE = Optional.empty();
     private static final Optional<YearMonth> LATEST = Optional.of(YearMonth.of(2026, 4));
 
-    private final MonthRanges ranges = new MonthRanges(new AnalyticsProperties(24, 6));
+    private final MonthRanges ranges = new MonthRanges(new AnalyticsProperties(24, 6, null));
 
     @Test
     void defaultsEndAtTheLatestMonth() {
@@ -61,11 +61,11 @@ class MonthRangesTest {
 
     @Test
     void badPropertiesFailStartup() {
-        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(0, 1));
-        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(121, 6));
-        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(24, 0));
-        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(6, 7));
-        assertThat(new AnalyticsProperties(120, 120).defaultMonths()).isEqualTo(120);
+        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(0, 1, null));
+        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(121, 6, null));
+        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(24, 0, null));
+        assertThatIllegalArgumentException().isThrownBy(() -> new AnalyticsProperties(6, 7, null));
+        assertThat(new AnalyticsProperties(120, 120, null).defaultMonths()).isEqualTo(120);
     }
 
     private static void assertInvalid(ThrowingCallable call, String field) {

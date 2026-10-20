@@ -46,6 +46,10 @@ class BucketTotalsQuery {
     record Cell(YearMonth month, long accountId, Long categoryId, TxnBucket bucket, BigDecimal moneyOut,
                 BigDecimal moneyIn, int count, int reviewPending) {
 
+        BigDecimal net() {
+            return moneyOut.add(moneyIn);
+        }
+
         MoneyFlow flow() {
             return MoneyFlow.of(moneyOut, moneyIn, count);
         }

@@ -169,6 +169,18 @@ class SchemaMigrationTest {
                 .as("the kind, which categorization reads, is unchanged").isEqualTo("INCOME");
     }
 
+    /** V19: accounts are open (null) until the user closes them; existing accounts stay open. */
+    @Test
+    void accountsAreOpenUntilClosed() {
+        assertThat(jdbc.queryForObject("""
+                SELECT is_nullable || ' ' || data_type FROM information_schema.columns
+                WHERE table_name = 'account' AND column_name = 'closed_on'""", String.class))
+                .isEqualTo("YES date");
+        jdbc.update("INSERT INTO account (name, institution, type, last_four) VALUES ('V19', 'V19 Bank', 'SAVINGS', '1919')");
+        assertThat(jdbc.queryForObject("SELECT closed_on FROM account WHERE name = 'V19'", java.sql.Date.class))
+                .isNull();
+    }
+
     @Test
     void activeUserRulesAreUniqueByPattern() {
         String definition = jdbc.queryForObject(

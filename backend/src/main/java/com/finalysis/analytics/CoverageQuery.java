@@ -47,13 +47,19 @@ class CoverageQuery {
         this.jdbc = jdbc;
     }
 
+    static final String CLOSED_SQL = "SELECT id, closed_on FROM account WHERE closed_on IS NOT NULL";
+
     CoverageMap load() {
         Map<Long, List<DateSpan>> spans = new LinkedHashMap<>();
         jdbc.sql(SPANS_SQL).query(rs -> {
             spans.computeIfAbsent(rs.getLong("account_id"), id -> new ArrayList<>()).add(
                     new DateSpan(rs.getObject("first_day", LocalDate.class), rs.getObject("last_day", LocalDate.class)));
         });
-        return new CoverageMap(spans);
+        Map<Long, LocalDate> closed = new LinkedHashMap<>();
+        jdbc.sql(CLOSED_SQL).query(rs -> {
+            closed.put(rs.getLong("id"), rs.getObject("closed_on", LocalDate.class));
+        });
+        return new CoverageMap(spans, closed);
     }
 
     /**

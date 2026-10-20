@@ -52,6 +52,25 @@ public class AccountService {
         return AccountResponse.from(account);
     }
 
+    /**
+     * Marks the account closed: analytics expects its statements only up to {@code closedOn} (V19). Idempotent; a new
+     * date replaces the old one.
+     */
+    @Transactional
+    public AccountResponse close(long id, CloseAccountRequest request) {
+        Account account = find(id);
+        account.closeOn(request.closedOn());
+        return AccountResponse.from(account);
+    }
+
+    /** Reopens the account; idempotent. */
+    @Transactional
+    public AccountResponse reopen(long id) {
+        Account account = find(id);
+        account.closeOn(null);
+        return AccountResponse.from(account);
+    }
+
     private Account find(long id) {
         return accounts.findById(id).orElseThrow(() -> new NotFoundException("Account", id));
     }

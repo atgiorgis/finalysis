@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -45,6 +46,9 @@ public class Account {
     @Generated
     private OffsetDateTime createdAt;
 
+    // The last day the account was open; null while open (V19).
+    private LocalDate closedOn;
+
     protected Account() {
     }
 
@@ -57,6 +61,11 @@ public class Account {
 
     public void rename(String name) {
         this.name = name;
+    }
+
+    /** Records the last day the account was open; null reopens it. */
+    public void closeOn(LocalDate closedOn) {
+        this.closedOn = closedOn;
     }
 
     public Long getId() {
@@ -81,5 +90,9 @@ public class Account {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public LocalDate getClosedOn() {
+        return closedOn;
     }
 }

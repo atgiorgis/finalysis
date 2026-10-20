@@ -111,7 +111,12 @@ class AnalyticsPerformanceTest {
                 "/api/analytics/categories?from=2025-01&to=2026-12",
                 "/api/analytics/accounts",
                 "/api/analytics/accounts?from=2025-01&to=2026-12",
-                "/api/analytics/coverage");
+                "/api/analytics/coverage",
+                "/api/analytics/merchants?from=2025-01&to=2026-12&limit=50",
+                "/api/analytics/trends",
+                "/api/analytics/trends?month=2026-12",
+                "/api/analytics/transactions?from=2025-01&to=2026-12&measure=SPENT&size=200",
+                "/api/analytics/transactions?from=2025-01&to=2026-12&page=40");
         for (String request : requests) {
             mockMvc.perform(get(request)).andExpect(status().isOk()); // warm up
         }

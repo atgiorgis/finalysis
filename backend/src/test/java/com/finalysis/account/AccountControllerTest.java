@@ -2,9 +2,11 @@ package com.finalysis.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,7 +34,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Transactional // each test's accounts roll back
 class AccountControllerTest {
 
-    private static final Set<String> DTO_FIELDS = Set.of("id", "name", "institution", "type", "lastFour", "createdAt");
+    private static final Set<String> DTO_FIELDS = Set.of("id", "name", "institution", "type", "lastFour", "createdAt",
+            "closedOn");
     private static final String LONG = "x".repeat(Account.NAME_MAX + 1);
 
     private final MockMvc mockMvc;
@@ -104,6 +107,43 @@ class AccountControllerTest {
 
         mockMvc.perform(get("/api/accounts/{id}", id))
                 .andExpect(jsonPath("$.name").value("New Name"));
+    }
+
+    /** Closing records the last open day (V19; coverage expects no statement after it); reopening clears it. */
+    @Test
+    void closeAndReopenAreIdempotent() throws Exception {
+        long id = save("Old Card", AccountType.CREDIT_CARD, "4321");
+        mockMvc.perform(get("/api/accounts/{id}", id)).andExpect(jsonPath("$.closedOn").isEmpty());
+
+        for (String day : List.of("2026-06-30", "2026-06-30", "2026-05-31")) {
+            mockMvc.perform(put("/api/accounts/{id}/closure", id).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"closedOn\":\"" + day + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.closedOn").value(day))
+                    .andExpect(jsonPath("$.name").value("Old Card"));
+        }
+        mockMvc.perform(get("/api/accounts/{id}", id)).andExpect(jsonPath("$.closedOn").value("2026-05-31"));
+
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(delete("/api/accounts/{id}/closure", id))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.closedOn").isEmpty());
+        }
+    }
+
+    @Test
+    void closeNeedsADateAndAnExistingAccount() throws Exception {
+        long id = save("Old Card", AccountType.CREDIT_CARD, "4321");
+
+        expectInvalidField(mockMvc.perform(put("/api/accounts/{id}/closure", id)
+                .contentType(MediaType.APPLICATION_JSON).content("{}")), "closedOn");
+        expectProblem(mockMvc.perform(put("/api/accounts/{id}/closure", id)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"closedOn\":\"June\"}")), 400);
+        expectProblem(mockMvc.perform(put("/api/accounts/{id}/closure", id)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"closedOn\":\"2026-06-30\",\"name\":\"x\"}")), 400);
+        expectProblem(mockMvc.perform(put("/api/accounts/{id}/closure", id + 1000)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"closedOn\":\"2026-06-30\"}")), 404);
+        expectProblem(mockMvc.perform(delete("/api/accounts/{id}/closure", id + 1000)), 404);
     }
 
     @ParameterizedTest

@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -48,6 +49,33 @@ final class SampleDataImport {
                     ImportTestSupport.sample(entry[0]), params).andExpect(status().isCreated());
         }
         return accounts;
+    }
+
+    /**
+     * Sets every imported txn's category to the answer key's ({@code expected_category}, as USER), replacing what the
+     * rules gave it, so analytics tests on the sample data depend on the counting rules only (§9.3). A row is matched by
+     * account, date, raw description and amount; genuine duplicates share all four and their category.
+     */
+    void applyAnswerKey(JdbcTemplate jdbc, Map<String, Long> accounts) {
+        try {
+            for (String[] c : Files.readAllLines(ImportTestSupport.SAMPLE_DATA.resolve("answer-key.csv")).stream()
+                    .skip(1).map(line -> line.split(",", -1)).toList()) {
+                int updated = jdbc.update("""
+                        UPDATE txn SET category_id = (SELECT id FROM category WHERE name = ?), category_source = 'USER',
+                                       category_rule_id = NULL, categorized_at = now()
+                        WHERE account_id = ? AND txn_date = ?::date AND raw_description = ? AND amount = ?::numeric
+                        """, c[5], accounts.get(c[1]), c[2], c[3], c[4]);
+                if (updated == 0) {
+                    throw new IllegalStateException("no imported txn for answer-key row " + c[0] + " " + c[2]);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        Integer left = jdbc.queryForObject("SELECT count(*) FROM txn WHERE category_id IS NULL", Integer.class);
+        if (left != 0) {
+            throw new IllegalStateException(left + " imported txns have no answer-key row");
+        }
     }
 
     private long account(String slug) throws Exception {

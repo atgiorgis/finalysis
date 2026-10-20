@@ -44,7 +44,8 @@ public class CoverageService {
                     List<FlaggedStatement> statements = flagged.getOrDefault(id, List.of());
                     boolean truncated = covered.size() > MAX_ITEMS || gaps.size() > MAX_ITEMS
                             || statements.size() > MAX_ITEMS;
-                    return new AccountCoverage(id, account.getValue(), map.firstDay(id), latest(covered),
+                    return new AccountCoverage(id, account.getValue(), map.firstDay(id), map.closedOn(id),
+                            latest(covered),
                             latest(gaps), latest(statements), truncated);
                 })
                 .toList();
