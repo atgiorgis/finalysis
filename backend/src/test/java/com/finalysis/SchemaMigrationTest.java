@@ -153,7 +153,20 @@ class SchemaMigrationTest {
 
         assertThat(indexes).contains(
                 "ix_txn_account_date", "ix_txn_category", "ix_txn_transfer_date", "ix_txn_statement_section",
-                "ix_txn_account_external_id", "ix_txn_merchant", "ix_txn_category_rule");
+                "ix_txn_account_external_id", "ix_txn_merchant", "ix_txn_category_rule", "ix_txn_date");
+    }
+
+    /** V18: only Refunds & Rebates offsets spending (docs/plans/phase-5.md §1.2); new categories default to false. */
+    @Test
+    void onlyRefundsAndRebatesOffsetsSpending() {
+        List<String> offsets = jdbc.queryForList("SELECT name FROM category WHERE spending_offset", String.class);
+        assertThat(offsets).containsExactly("Refunds & Rebates");
+
+        jdbc.update("INSERT INTO category (name, kind) VALUES ('V18 Probe', 'EXPENSE')");
+        assertThat(jdbc.queryForObject("SELECT spending_offset FROM category WHERE name = 'V18 Probe'", Boolean.class))
+                .isFalse();
+        assertThat(jdbc.queryForObject("SELECT kind FROM category WHERE name = 'Refunds & Rebates'", String.class))
+                .as("the kind, which categorization reads, is unchanged").isEqualTo("INCOME");
     }
 
     @Test

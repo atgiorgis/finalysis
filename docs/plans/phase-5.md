@@ -161,7 +161,7 @@ description when there is one, otherwise from the posting date (V1 comment). The
 of `txn_date`: queries use `txn_date >= first day AND txn_date < first day of next month`, so the index can be
 used. There are no time zones: `txn_date` is a `DATE`.
 
-*Worked example.* Card statement 2026-02-15 to 2026-03-14, row `DINER` dated 2026-02-27, −45.00 → February,
+*Worked example.* Card statement 2026-02-15 to 2026-03-14, row `FIXTURE DINER` dated 2026-02-27, −45.00 → February,
 although it arrives with the March statement. A checking row printed 2026-02-02 with `CHECKCARD 0131` in its
 description has `txn_date` 2026-01-31 → January.
 
@@ -219,11 +219,12 @@ can I trust" comes back with the figure, not from a second call.
 
 Percents have one decimal and are null when the denominator is 0.
 
-*Worked example (fixture, February, both accounts).* There are 9 counted txns (§9.1's table without the three
+*Worked example (fixture, February, both accounts).* There are 11 counted txns (§9.1's table without the three
 transfer rows). 2 are uncategorized, 1 of them review-pending. Money out of the spending rows is
-1500.00 + 100.00 + 80.00 + 45.00 + 68.00 = 1793.00.
-→ `uncategorizedPercentOfCount` 22.2, `reviewPendingPercentOfCount` 11.1, `uncategorizedPercentOfSpending`
-3.8 (68.00 / 1793.00), `unlinkedTransferCount` 1, `flags` [].
+1500.00 + 100.00 + 80.00 + 45.00 + 9.99 + 4.99 + 68.00 = 1807.98.
+→ `uncategorizedPercentOfCount` 18.2, `reviewPendingPercentOfCount` 9.1, `uncategorizedPercentOfSpending`
+3.8 (68.00 / 1807.98), `unlinkedTransferCount` 1, `flags` []. *(Step 1: figures updated for the two subscription
+charges the fixture needs in February; step 1 notes.)*
 
 ---
 
@@ -704,7 +705,7 @@ Scenarios, each a named test:
 |---|---|---|
 | Refund in an expense category, next month | §1.2 | Jan Shopping −120.00; Feb Shopping +120.00 |
 | Refund in Refunds & Rebates | card 03-06 +15.00 `ONLINE RETURN CREDIT` | March `refunds` +15.00, `spending` 15.00 less negative, `income` unchanged |
-| Data quality | §1.7 | Feb 22.2 / 11.1 / 3.8 percent; March carries the failed statement's flag |
+| Data quality | §1.7 | Feb 18.2 / 9.1 / 3.8 percent; March carries the failed statement's flag |
 | Uncategorized and review-pending | §1.3 | Feb uncategorized −68.00, count 2, reviewPending 1 |
 | Unlinked Transfer-kind | §1.4 | Feb unlinkedTransfers −250.00; then each §1.4 action moves it as the table says |
 | Linked transfer | §1.4 | linkedTransfers ±400.00, excluded |
@@ -712,7 +713,7 @@ Scenarios, each a named test:
 | Not-transfer with a USER Transfer category | checking 03-18 −35.00 | counts in March spending under "Transfer" |
 | Month by `txn_date` | §1.5 | Feb Dining includes the 02-27 row from the March card statement |
 | Coverage | Dec card from the 15th; April card to the 14th | Dec `PARTIAL`, Jan–Mar `COMPLETE`, Apr `PARTIAL` |
-| Failed reconciliation | checking March imported with a closing balance 10.00 off | March included, flagged `RECONCILIATION_FAILED` |
+| Failed reconciliation | checking March prints a final balance 10.00 above its rows | March included, flagged `RECONCILIATION_FAILED` |
 | Each alert type, and each threshold just below and just at its boundary | §6.3 | exactly `expected-alerts.csv` |
 
 *Hand-computed February (both accounts):*
@@ -726,12 +727,14 @@ Scenarios, each a named test:
 | 02-08 Target refund, Shopping | EXPENSE | 120.00 |
 | 02-11 Grocer, Groceries | EXPENSE | −80.00 |
 | 02-27 Diner, Dining | EXPENSE | −45.00 |
+| 02-20 Streamco, 02-09 Cloudbox, Subscriptions | EXPENSE | −14.98 |
 | 02-14, 02-16 uncategorized | UNCATEGORIZED (out) | −68.00 |
 | 02-10 Outside card autopay | UNLINKED_TRANSFER | −250.00 |
 | 02-05 card payment, both sides | LINKED_TRANSFER | −400.00 / +400.00 |
 
-→ income 3001.25; spending −1673.00; net 1328.25; savings rate 44.3%; unlinkedTransfers −250.00;
-linkedTransfers net 0.00. Check: 3001.25 − 1673.00 − 250.00 + 0.00 = 1078.25, the sum of all twelve amounts.
+→ income 3001.25; spending −1687.98; net 1313.27; savings rate 43.8%; unlinkedTransfers −250.00;
+linkedTransfers net 0.00. Check: 3001.25 − 1687.98 − 250.00 + 0.00 = 1063.27, the sum of all fourteen amounts.
+*(Step 1: the two subscription rows were added; the draft had −1673.00 and 44.3%.)*
 
 ### 9.2 Invariant tests (Testcontainers)
 
@@ -834,6 +837,92 @@ README's newman command gets `--folder "9. Analytics"`.
 Why this order: the counting rules (step 1) are the riskiest decisions and everything sums them, so they are
 pinned by tests before any endpoint exists. ANA-06 (step 4) proves the totals before any alert relies on
 them. The recurrence detector is the most heuristic part and comes last.
+
+### Step 0 notes
+
+Done: "Phase 5 plan" (`e5e2009`), with the §13 decisions, requirements v1.46 and CLAUDE.md. Its `./mvnw clean verify`
+was reported as 1,921 backend tests. That was a counting error, not lost tests: the figure was summed from
+Surefire's per-class `.txt` reports, which leave out `@Nested` classes (277 tests in 26 nested classes). Maven's
+own summary for the same build is 2,198, the same as `phase-4-done`. From step 1 on, counts are Maven's summary
+line.
+
+### Step 1 notes
+
+Done: "Phase 5 step 1: fixture and buckets". Backend 2,233 tests (Maven summary; 2,198 + 35), 0 failures, 0 skipped;
+frontend 4.
+
+**Built**
+- **V18 `analytics`:** `category.spending_offset` (true for Refunds & Rebates only) and `ix_txn_date`.
+- **`analytics` package:** `TxnBucket` and `TxnBucketSql`, the one SQL `CASE` of §1.1, in the plan's order.
+  `alert` exists as a package only.
+- **Fixture** (`sample-data/analytics/`):
+  - eight statements: Fixture Checking January to April 2026 (calendar months, balance column), and Fixture Card
+    2025-12-15 to 2026-04-14 (15th-to-14th cycles, balances sent with the import, so they reconcile);
+  - `manifest.csv`, and `categories.csv`, the category key: one row per txn, 53 in all, with its category state and
+    expected bucket;
+  - the hand-computed `expected-month-totals.csv` (15 rows: household, checking, card × 5 months, data quality
+    included), `expected-alerts.csv` (6) and `expected-recurring.csv` (3).
+- **Generator:** the fixture is written by `tools/SampleDataGenerator.java` as literal data (`writeAnalyticsFixture`),
+  the repo's rule for every non-PDF sample file. The expected files are not computed there. Regenerating gives the
+  committed files byte for byte (`SampleDataTest`).
+
+**How the expected figures were made.** By hand, row by row from the key, then the arithmetic cross-checked with a
+throwaway script (scratch only, never committed): 15 rows, 0 mismatches. No test derives them from the rows.
+`AnalyticsFixtureTest` checks only that the files agree with each other:
+- the key covers every statement row once;
+- the category states are ones the schema allows;
+- opening + rows = closing for every statement, and the March checking file's last balance is exactly 10.00 high;
+- the expected files are well-formed and refer to real rows.
+
+**Tests**
+- **`TxnBucketTest`** imports the fixture for real (detection runs). Every txn lands in the key's bucket, and the
+  oracle agrees. Detection links exactly the four card payments, and balance checks match the manifest (March
+  checking `FAILED`, the rest `PASSED`).
+- **`TxnBucketSqlTest`:** the SQL against `BucketOracle` on all 45 combinations the schema allows (5 category
+  states × linked or excluded or neither × money out, zero, money in).
+  - A deliberate mutation (Refunds & Rebates as `INCOME`) failed both bucket tests, naming the rows; reverted.
+- **`BucketOraclePropertiesTest`** (jqwik, 5 properties):
+  - nothing is dropped;
+  - refunds are in spending and never in income;
+  - a link always wins;
+  - the sign changes the bucket only for a not-transfer txn with a Transfer category;
+  - uncategorized money splits by sign.
+- **`AnalyticsSourceTest`** (GR-01, GR-02): no `avg(`, `round(`, `percentile_cont`, `float` or
+  `double precision` in a literal; no `double` or `float` in code. It has a self-check.
+- **`NoAiInAnalyticsTest`** (ArchUnit); **`PackageDependencyTest`** (analytics and alert use no other feature's
+  classes; analytics doesn't know alert).
+- **`ReadOnlyQueriesTest`:** the read-only rule for `*Service` methods (it checks nothing until step 2's services
+  exist, by design: `allowEmptyShould`, and step 2 adds the "it sees them" assertion), its self-check, and Postgres
+  rejecting a write in a read-only transaction.
+- **Extended:** `SchemaMigrationTest` (`ix_txn_date`; only Refunds & Rebates offsets spending; new categories
+  default to false; the kind stays INCOME) and `SampleDataParserSelectionTest` (78 text sample files; the 13 new ones
+  each resolve to the CSV parser).
+
+**jqwik.** 1.9.3 runs on JUnit Platform 6.0.3: properties run under `./mvnw verify`, and a failing one fails the
+build and prints its seed (checked with a throwaway probe, removed). Its failure database goes to
+`target/jqwik-database` (`junit-platform.properties`), never the repo. Property classes must end in `Test`, or
+Surefire's default includes skip them silently. The first name, `BucketOracleProperties`, would have been skipped,
+and was renamed.
+
+**Changes from the plan**
+- **February's worked figures.** The recurring scenarios need a Streamco and a Cloudbox charge in February, which
+  the draft's table didn't have:
+  - spending −1687.98 (was −1673.00), net 1313.27, savings rate 43.8% (was 44.3%);
+  - data quality 18.2 / 9.1 / 3.8 (was 22.2 / 11.1 / 3.8).
+
+  §1.7 and §9.1 are updated and marked.
+- **The failed reconciliation comes from the file.** The checking CSV has a balance column, which wins over balances
+  sent with the import, so March fails because its last printed balance is 10.00 above its rows, not through a
+  request parameter.
+- **New files and tests.** `expected-recurring.csv` (ANA-07, added at approval) and `TxnBucketSqlTest` are new;
+  the exhaustive combinations test the SQL more directly than a randomized one could.
+- **One linked row is uncategorized and one has an expense category**, to show that the link wins over both.
+- **Not in the fixture:** the §1.5 `CHECKCARD 0131` example. Embedded-date extraction belongs to the paused PDF
+  parsers; the CSV layouts print one date. The card statement that crosses a month covers §1.5.
+
+**Found on the way.** A first targeted run failed with V18 as the only migration on the classpath. `target/classes`
+was stale, most likely from the editor's incremental Java build, which writes to the same `target/`. `clean`
+fixed it; it is not a code issue.
 
 ### Requirement mapping
 

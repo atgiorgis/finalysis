@@ -1,0 +1,54 @@
+file,line,date,amount,description,category,source,ai_review_reason,transfer_excluded,expected_bucket,note
+fixture-checking_2026-01.csv,2,2026-01-02,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+fixture-checking_2026-01.csv,3,2026-01-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+fixture-checking_2026-01.csv,4,2026-01-05,-300.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-01.csv:5
+fixture-checking_2026-01.csv,5,2026-01-12,-90.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,
+fixture-checking_2026-01.csv,6,2026-01-26,1.10,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+fixture-checking_2026-02.csv,2,2026-02-01,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+fixture-checking_2026-02.csv,3,2026-02-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+fixture-checking_2026-02.csv,4,2026-02-05,-400.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-02.csv:6
+fixture-checking_2026-02.csv,5,2026-02-10,-250.00,OUTSIDE CARD AUTOPAY,Transfer,RULE,,false,UNLINKED_TRANSFER,"Transfer kind, no other side: plan §1.4"
+fixture-checking_2026-02.csv,6,2026-02-14,-60.00,MYSTERY PAYMENT,,,,false,UNCATEGORIZED,"no rule, AI off: plan §1.3"
+fixture-checking_2026-02.csv,7,2026-02-16,-8.00,BLUE BEAN CAFE,,,LOW_CONFIDENCE,false,UNCATEGORIZED,review-pending: plan §1.3
+fixture-checking_2026-02.csv,8,2026-02-20,-100.00,ONLINE TRANSFER REF 88,Person-to-Person Out,USER,,true,EXPENSE,marked not a transfer: counts normally
+fixture-checking_2026-02.csv,9,2026-02-25,1.25,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+fixture-checking_2026-03.csv,2,2026-03-02,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+fixture-checking_2026-03.csv,3,2026-03-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+fixture-checking_2026-03.csv,4,2026-03-04,-500.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-03.csv:7
+fixture-checking_2026-03.csv,5,2026-03-18,-35.00,FIXTURE GIFT SHOP,Transfer,USER,,true,EXPENSE,"marked not a transfer, USER Transfer category: by sign, plan §1.4"
+fixture-checking_2026-03.csv,6,2026-03-26,1.30,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,printed balance 10.00 too high: the statement fails reconciliation
+fixture-checking_2026-04.csv,2,2026-04-01,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+fixture-checking_2026-04.csv,3,2026-04-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+fixture-checking_2026-04.csv,4,2026-04-09,-600.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-04.csv:9
+fixture-checking_2026-04.csv,5,2026-04-15,25.00,FIXTURE MISC CREDIT,,,,false,UNCATEGORIZED,uncategorized money in: counts in income
+fixture-checking_2026-04.csv,6,2026-04-27,1.40,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+fixture-card_2026-01.csv,2,2025-12-18,-40.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-01.csv,3,2025-12-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+fixture-card_2026-01.csv,4,2025-12-22,-30.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+fixture-card_2026-01.csv,5,2026-01-06,300.00,PAYMENT THANK YOU,,,,false,LINKED_TRANSFER,"linked, uncategorized: still a linked transfer, not uncategorized"
+fixture-card_2026-01.csv,6,2026-01-10,-50.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-02.csv,2,2026-01-18,-25.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+fixture-card_2026-02.csv,3,2026-01-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+fixture-card_2026-02.csv,4,2026-01-24,-55.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-02.csv,5,2026-01-30,-120.00,TARGET,Shopping,RULE,,false,EXPENSE,refunded 2026-02-08: plan §1.2
+fixture-card_2026-02.csv,6,2026-02-05,400.00,PAYMENT THANK YOU,Transfer,RULE,,false,LINKED_TRANSFER,
+fixture-card_2026-02.csv,7,2026-02-08,120.00,TARGET,Shopping,RULE,,false,EXPENSE,"refund, money in, expense category: nets in February"
+fixture-card_2026-02.csv,8,2026-02-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,first charge of a new recurring series
+fixture-card_2026-02.csv,9,2026-02-11,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,
+fixture-card_2026-03.csv,2,2026-02-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+fixture-card_2026-03.csv,3,2026-02-27,-45.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,"February by txn_date, from the March statement: plan §1.5"
+fixture-card_2026-03.csv,4,2026-03-02,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,possible duplicate (1 of 2)
+fixture-card_2026-03.csv,5,2026-03-02,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,possible duplicate (2 of 2)
+fixture-card_2026-03.csv,6,2026-03-03,-35.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+fixture-card_2026-03.csv,7,2026-03-05,500.00,PAYMENT THANK YOU,Shopping,RULE,,false,LINKED_TRANSFER,"linked with an expense category: the link wins"
+fixture-card_2026-03.csv,8,2026-03-06,15.00,ONLINE RETURN CREDIT,Refunds & Rebates,RULE,,false,REFUND,"reduces spending, not income: plan §1.2"
+fixture-card_2026-03.csv,9,2026-03-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,
+fixture-card_2026-03.csv,10,2026-03-11,-50.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-04.csv,2,2026-03-20,-11.49,STREAMCO,Subscriptions,RULE,,false,EXPENSE,price up from 9.99
+fixture-card_2026-04.csv,3,2026-03-25,-28.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+fixture-card_2026-04.csv,4,2026-04-02,-60.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-04.csv,5,2026-04-04,-95.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-04.csv,6,2026-04-05,-700.00,FIXTURE ELECTRONICS,Shopping,AI,,false,EXPENSE,large transaction
+fixture-card_2026-04.csv,7,2026-04-08,-70.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+fixture-card_2026-04.csv,8,2026-04-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,third charge: new recurring
+fixture-card_2026-04.csv,9,2026-04-10,600.00,PAYMENT THANK YOU,Transfer,RULE,,false,LINKED_TRANSFER,

@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -134,10 +135,11 @@ public class SampleDataGenerator {
         writeAiCategorizationCases();
         writeSimilarMerchantCases();
         writeEvalHarnessCases();
+        writeAnalyticsFixture();
 
         System.out.printf(Locale.ROOT, "Wrote %d statements, 1 broken statement, %d OFX/QFX statements, %d edge cases, "
                 + "%d transfer edge-case statements, 1 merchant edge-case statement, categorization dev and holdout sets, "
-                + "AI categorization cases, similar-merchant cases, eval harness cases, "
+                + "AI categorization cases, similar-merchant cases, eval harness cases, the analytics fixture, "
                 + "%d transactions to %s/%n",
                 statements.size(), ofxFiles, OFX_EDGE_CASES + CSV_EDGE_CASES, TRANSFER_EDGE_CASE_STATEMENTS,
                 txns.size(), out);
@@ -871,6 +873,200 @@ public class SampleDataGenerator {
         write(EVAL_HARNESS_FILE, String.join("\n", lines) + "\n");
     }
 
+    static final String ANALYTICS_DIR = "analytics/";
+
+    /**
+     * The Phase 5 analytics fixture (docs/plans/phase-5.md §9.1, step 1 notes): two fictional accounts, a checking
+     * account by calendar month and a card on 15th-to-14th cycles, December 2025 to April 2026, with one row for each
+     * counting rule and alert scenario. Every file is written here as data, exactly as it was worked out by hand. The
+     * expected totals, alerts and recurring series are never derived from the rows, so a test against them checks the
+     * analytics code against an independent answer. Written last and without the random generator, so the other
+     * files are unchanged.
+     */
+    void writeAnalyticsFixture() throws IOException {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("manifest.csv", """
+                file,account,period_start,period_end,send_balances,opening_balance,closing_balance,expected_balance_check
+                fixture-checking_2026-01.csv,fixture-checking,2026-01-01,2026-01-31,false,5000.00,6111.10,PASSED
+                fixture-checking_2026-02.csv,fixture-checking,2026-02-01,2026-02-28,false,6111.10,6794.35,PASSED
+                fixture-checking_2026-03.csv,fixture-checking,2026-03-01,2026-03-31,false,6794.35,7760.65,FAILED
+                fixture-checking_2026-04.csv,fixture-checking,2026-04-01,2026-04-30,false,7760.65,8687.05,PASSED
+                fixture-card_2026-01.csv,fixture-card,2025-12-15,2026-01-14,true,-800.00,-629.99,PASSED
+                fixture-card_2026-02.csv,fixture-card,2026-01-15,2026-02-14,true,-629.99,-404.97,PASSED
+                fixture-card_2026-03.csv,fixture-card,2026-02-15,2026-03-14,true,-404.97,-194.95,PASSED
+                fixture-card_2026-04.csv,fixture-card,2026-03-15,2026-04-14,true,-194.95,-564.43,PASSED
+                """);
+        files.put("fixture-checking_2026-01.csv", """
+                Date,Description,Debit,Credit,Balance
+                01/02/2026,FIXTURE EMPLOYER PAYROLL,,3000.00,8000.00
+                01/03/2026,FIXTURE PROPERTY RENT,1500.00,,6500.00
+                01/05/2026,FIXTURE CARD PAYMENT,300.00,,6200.00
+                01/12/2026,FIXTURE GROCER,90.00,,6110.00
+                01/26/2026,FIXTURE BANK INTEREST,,1.10,6111.10
+                """);
+        files.put("fixture-checking_2026-02.csv", """
+                Date,Description,Debit,Credit,Balance
+                02/01/2026,FIXTURE EMPLOYER PAYROLL,,3000.00,9111.10
+                02/03/2026,FIXTURE PROPERTY RENT,1500.00,,7611.10
+                02/05/2026,FIXTURE CARD PAYMENT,400.00,,7211.10
+                02/10/2026,OUTSIDE CARD AUTOPAY,250.00,,6961.10
+                02/14/2026,MYSTERY PAYMENT,60.00,,6901.10
+                02/16/2026,BLUE BEAN CAFE,8.00,,6893.10
+                02/20/2026,ONLINE TRANSFER REF 88,100.00,,6793.10
+                02/25/2026,FIXTURE BANK INTEREST,,1.25,6794.35
+                """);
+        files.put("fixture-checking_2026-03.csv", """
+                Date,Description,Debit,Credit,Balance
+                03/02/2026,FIXTURE EMPLOYER PAYROLL,,3000.00,9794.35
+                03/03/2026,FIXTURE PROPERTY RENT,1500.00,,8294.35
+                03/04/2026,FIXTURE CARD PAYMENT,500.00,,7794.35
+                03/18/2026,FIXTURE GIFT SHOP,35.00,,7759.35
+                03/26/2026,FIXTURE BANK INTEREST,,1.30,7770.65
+                """);
+        files.put("fixture-checking_2026-04.csv", """
+                Date,Description,Debit,Credit,Balance
+                04/01/2026,FIXTURE EMPLOYER PAYROLL,,3000.00,10760.65
+                04/03/2026,FIXTURE PROPERTY RENT,1500.00,,9260.65
+                04/09/2026,FIXTURE CARD PAYMENT,600.00,,8660.65
+                04/15/2026,FIXTURE MISC CREDIT,,25.00,8685.65
+                04/27/2026,FIXTURE BANK INTEREST,,1.40,8687.05
+                """);
+        files.put("fixture-card_2026-01.csv", """
+                Trans. Date,Merchant Name,Amount
+                18-Dec-2025,FIXTURE DINER,-40.00
+                20-Dec-2025,STREAMCO,-9.99
+                22-Dec-2025,FIXTURE BOOKSHOP,-30.00
+                06-Jan-2026,PAYMENT THANK YOU,300.00
+                10-Jan-2026,FIXTURE DINER,-50.00
+                """);
+        files.put("fixture-card_2026-02.csv", """
+                Trans. Date,Merchant Name,Amount
+                18-Jan-2026,FIXTURE BOOKSHOP,-25.00
+                20-Jan-2026,STREAMCO,-9.99
+                24-Jan-2026,FIXTURE DINER,-55.00
+                30-Jan-2026,TARGET,-120.00
+                05-Feb-2026,PAYMENT THANK YOU,400.00
+                08-Feb-2026,TARGET,120.00
+                09-Feb-2026,CLOUDBOX STORAGE,-4.99
+                11-Feb-2026,FIXTURE GROCER,-80.00
+                """);
+        files.put("fixture-card_2026-03.csv", """
+                Trans. Date,Merchant Name,Amount
+                20-Feb-2026,STREAMCO,-9.99
+                27-Feb-2026,FIXTURE DINER,-45.00
+                02-Mar-2026,FIXTURE GROCER,-80.00
+                02-Mar-2026,FIXTURE GROCER,-80.00
+                03-Mar-2026,FIXTURE BOOKSHOP,-35.00
+                05-Mar-2026,PAYMENT THANK YOU,500.00
+                06-Mar-2026,ONLINE RETURN CREDIT,15.00
+                09-Mar-2026,CLOUDBOX STORAGE,-4.99
+                11-Mar-2026,FIXTURE DINER,-50.00
+                """);
+        files.put("fixture-card_2026-04.csv", """
+                Trans. Date,Merchant Name,Amount
+                20-Mar-2026,STREAMCO,-11.49
+                25-Mar-2026,FIXTURE BOOKSHOP,-28.00
+                02-Apr-2026,FIXTURE DINER,-60.00
+                04-Apr-2026,FIXTURE DINER,-95.00
+                05-Apr-2026,FIXTURE ELECTRONICS,-700.00
+                08-Apr-2026,FIXTURE DINER,-70.00
+                09-Apr-2026,CLOUDBOX STORAGE,-4.99
+                10-Apr-2026,PAYMENT THANK YOU,600.00
+                """);
+        files.put("categories.csv", """
+                file,line,date,amount,description,category,source,ai_review_reason,transfer_excluded,expected_bucket,note
+                fixture-checking_2026-01.csv,2,2026-01-02,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+                fixture-checking_2026-01.csv,3,2026-01-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+                fixture-checking_2026-01.csv,4,2026-01-05,-300.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-01.csv:5
+                fixture-checking_2026-01.csv,5,2026-01-12,-90.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,
+                fixture-checking_2026-01.csv,6,2026-01-26,1.10,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+                fixture-checking_2026-02.csv,2,2026-02-01,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+                fixture-checking_2026-02.csv,3,2026-02-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+                fixture-checking_2026-02.csv,4,2026-02-05,-400.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-02.csv:6
+                fixture-checking_2026-02.csv,5,2026-02-10,-250.00,OUTSIDE CARD AUTOPAY,Transfer,RULE,,false,UNLINKED_TRANSFER,"Transfer kind, no other side: plan §1.4"
+                fixture-checking_2026-02.csv,6,2026-02-14,-60.00,MYSTERY PAYMENT,,,,false,UNCATEGORIZED,"no rule, AI off: plan §1.3"
+                fixture-checking_2026-02.csv,7,2026-02-16,-8.00,BLUE BEAN CAFE,,,LOW_CONFIDENCE,false,UNCATEGORIZED,review-pending: plan §1.3
+                fixture-checking_2026-02.csv,8,2026-02-20,-100.00,ONLINE TRANSFER REF 88,Person-to-Person Out,USER,,true,EXPENSE,marked not a transfer: counts normally
+                fixture-checking_2026-02.csv,9,2026-02-25,1.25,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+                fixture-checking_2026-03.csv,2,2026-03-02,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+                fixture-checking_2026-03.csv,3,2026-03-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+                fixture-checking_2026-03.csv,4,2026-03-04,-500.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-03.csv:7
+                fixture-checking_2026-03.csv,5,2026-03-18,-35.00,FIXTURE GIFT SHOP,Transfer,USER,,true,EXPENSE,"marked not a transfer, USER Transfer category: by sign, plan §1.4"
+                fixture-checking_2026-03.csv,6,2026-03-26,1.30,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,printed balance 10.00 too high: the statement fails reconciliation
+                fixture-checking_2026-04.csv,2,2026-04-01,3000.00,FIXTURE EMPLOYER PAYROLL,Income,RULE,,false,INCOME,
+                fixture-checking_2026-04.csv,3,2026-04-03,-1500.00,FIXTURE PROPERTY RENT,Housing,RULE,,false,EXPENSE,
+                fixture-checking_2026-04.csv,4,2026-04-09,-600.00,FIXTURE CARD PAYMENT,Transfer,RULE,,false,LINKED_TRANSFER,linked by detection to fixture-card_2026-04.csv:9
+                fixture-checking_2026-04.csv,5,2026-04-15,25.00,FIXTURE MISC CREDIT,,,,false,UNCATEGORIZED,uncategorized money in: counts in income
+                fixture-checking_2026-04.csv,6,2026-04-27,1.40,FIXTURE BANK INTEREST,Interest,RULE,,false,INCOME,
+                fixture-card_2026-01.csv,2,2025-12-18,-40.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-01.csv,3,2025-12-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+                fixture-card_2026-01.csv,4,2025-12-22,-30.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+                fixture-card_2026-01.csv,5,2026-01-06,300.00,PAYMENT THANK YOU,,,,false,LINKED_TRANSFER,"linked, uncategorized: still a linked transfer, not uncategorized"
+                fixture-card_2026-01.csv,6,2026-01-10,-50.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-02.csv,2,2026-01-18,-25.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+                fixture-card_2026-02.csv,3,2026-01-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+                fixture-card_2026-02.csv,4,2026-01-24,-55.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-02.csv,5,2026-01-30,-120.00,TARGET,Shopping,RULE,,false,EXPENSE,refunded 2026-02-08: plan §1.2
+                fixture-card_2026-02.csv,6,2026-02-05,400.00,PAYMENT THANK YOU,Transfer,RULE,,false,LINKED_TRANSFER,
+                fixture-card_2026-02.csv,7,2026-02-08,120.00,TARGET,Shopping,RULE,,false,EXPENSE,"refund, money in, expense category: nets in February"
+                fixture-card_2026-02.csv,8,2026-02-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,first charge of a new recurring series
+                fixture-card_2026-02.csv,9,2026-02-11,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,
+                fixture-card_2026-03.csv,2,2026-02-20,-9.99,STREAMCO,Subscriptions,RULE,,false,EXPENSE,
+                fixture-card_2026-03.csv,3,2026-02-27,-45.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,"February by txn_date, from the March statement: plan §1.5"
+                fixture-card_2026-03.csv,4,2026-03-02,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,possible duplicate (1 of 2)
+                fixture-card_2026-03.csv,5,2026-03-02,-80.00,FIXTURE GROCER,Groceries,RULE,,false,EXPENSE,possible duplicate (2 of 2)
+                fixture-card_2026-03.csv,6,2026-03-03,-35.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+                fixture-card_2026-03.csv,7,2026-03-05,500.00,PAYMENT THANK YOU,Shopping,RULE,,false,LINKED_TRANSFER,"linked with an expense category: the link wins"
+                fixture-card_2026-03.csv,8,2026-03-06,15.00,ONLINE RETURN CREDIT,Refunds & Rebates,RULE,,false,REFUND,"reduces spending, not income: plan §1.2"
+                fixture-card_2026-03.csv,9,2026-03-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,
+                fixture-card_2026-03.csv,10,2026-03-11,-50.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-04.csv,2,2026-03-20,-11.49,STREAMCO,Subscriptions,RULE,,false,EXPENSE,price up from 9.99
+                fixture-card_2026-04.csv,3,2026-03-25,-28.00,FIXTURE BOOKSHOP,Shopping,USER,,false,EXPENSE,
+                fixture-card_2026-04.csv,4,2026-04-02,-60.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-04.csv,5,2026-04-04,-95.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-04.csv,6,2026-04-05,-700.00,FIXTURE ELECTRONICS,Shopping,AI,,false,EXPENSE,large transaction
+                fixture-card_2026-04.csv,7,2026-04-08,-70.00,FIXTURE DINER,Dining,AI,,false,EXPENSE,
+                fixture-card_2026-04.csv,8,2026-04-09,-4.99,CLOUDBOX STORAGE,Subscriptions,AI,,false,EXPENSE,third charge: new recurring
+                fixture-card_2026-04.csv,9,2026-04-10,600.00,PAYMENT THANK YOU,Transfer,RULE,,false,LINKED_TRANSFER,
+                """);
+        files.put("expected-month-totals.csv", """
+                scope,month,coverage,income,spending,net,savings_rate_percent,refunds_out,refunds_in,refunds_count,uncategorized_out,uncategorized_in,uncategorized_count,review_pending,unlinked_out,unlinked_in,unlinked_count,linked_out,linked_in,linked_count,txn_count,sum_all,counted_txns,uncategorized_percent_of_count,review_pending_percent_of_count,uncategorized_percent_of_spending,flags
+                ALL,2025-12,PARTIAL,0.00,-79.99,-79.99,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,0.00,0,3,-79.99,3,0.0,0.0,0.0,PARTIAL_COVERAGE:fixture-card
+                ALL,2026-01,COMPLETE,3001.10,-1849.99,1151.11,38.4,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,-300.00,300.00,2,11,1151.11,9,0.0,0.0,0.0,
+                ALL,2026-02,COMPLETE,3001.25,-1687.98,1313.27,43.8,0.00,0.00,0,-68.00,0.00,2,1,-250.00,0.00,1,-400.00,400.00,2,14,1063.27,11,18.2,9.1,3.8,
+                ALL,2026-03,COMPLETE,3001.30,-1809.48,1191.82,39.7,0.00,15.00,1,0.00,0.00,0,0,0.00,0.00,0,-500.00,500.00,2,14,1191.82,12,0.0,0.0,0.0,RECONCILIATION_FAILED:fixture-checking
+                ALL,2026-04,PARTIAL,3026.40,-2429.99,596.41,19.7,0.00,0.00,0,0.00,25.00,1,0,0.00,0.00,0,-600.00,600.00,2,11,596.41,9,11.1,0.0,0.0,PARTIAL_COVERAGE:fixture-card
+                fixture-checking,2025-12,NONE,0.00,0.00,0.00,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,0.00,0,0,0.00,0,,,,
+                fixture-checking,2026-01,COMPLETE,3001.10,-1590.00,1411.10,47.0,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,-300.00,0.00,1,5,1111.10,4,0.0,0.0,0.0,
+                fixture-checking,2026-02,COMPLETE,3001.25,-1668.00,1333.25,44.4,0.00,0.00,0,-68.00,0.00,2,1,-250.00,0.00,1,-400.00,0.00,1,8,683.25,6,33.3,16.7,4.1,
+                fixture-checking,2026-03,COMPLETE,3001.30,-1535.00,1466.30,48.9,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,-500.00,0.00,1,5,966.30,4,0.0,0.0,0.0,RECONCILIATION_FAILED:fixture-checking
+                fixture-checking,2026-04,COMPLETE,3026.40,-1500.00,1526.40,50.4,0.00,0.00,0,0.00,25.00,1,0,0.00,0.00,0,-600.00,0.00,1,5,926.40,4,25.0,0.0,0.0,
+                fixture-card,2025-12,PARTIAL,0.00,-79.99,-79.99,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,0.00,0,3,-79.99,3,0.0,0.0,0.0,PARTIAL_COVERAGE:fixture-card
+                fixture-card,2026-01,COMPLETE,0.00,-259.99,-259.99,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,300.00,1,6,40.01,5,0.0,0.0,0.0,
+                fixture-card,2026-02,COMPLETE,0.00,-19.98,-19.98,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,400.00,1,6,380.02,5,0.0,0.0,0.0,
+                fixture-card,2026-03,COMPLETE,0.00,-274.48,-274.48,,0.00,15.00,1,0.00,0.00,0,0,0.00,0.00,0,0.00,500.00,1,9,225.52,8,0.0,0.0,0.0,
+                fixture-card,2026-04,PARTIAL,0.00,-929.99,-929.99,,0.00,0.00,0,0.00,0.00,0,0,0.00,0.00,0,0.00,600.00,1,6,-329.99,5,0.0,0.0,0.0,PARTIAL_COVERAGE:fixture-card
+                """);
+        files.put("expected-alerts.csv", """
+                type,month,subject,observed_unit,observed,baseline,threshold,period_start,period_end,txns,note
+                CATEGORY_SPIKE,2026-04,Dining,MONEY,225.00,66.67,166.67,2026-01-01,2026-03-31,,"baseline (105.00 + 45.00 + 50.00) / 3; threshold max(66.67 x 1.5 = 100.005 -> 100.00, 66.67 + 100.00)"
+                CATEGORY_SPIKE,2026-04,Shopping,MONEY,700.00,29.33,129.33,2026-01-01,2026-03-31,,"baseline (145.00 - 120.00 + 63.00) / 3, February's refund exceeds its purchases; threshold max(43.995 -> 44.00, 129.33)"
+                LARGE_TRANSACTION,2026-04,Shopping,MONEY,700.00,30.00,500.00,2025-10-07,2026-04-04,fixture-card_2026-04.csv:6,"5 earlier Shopping charges (25, 28, 30, 35, 120), median 30.00; threshold max(500.00, 3 x 30.00)"
+                POSSIBLE_DUPLICATE,2026-03,FIXTURE GROCER,COUNT,2,,2,2026-03-02,2026-03-02,fixture-card_2026-03.csv:4;fixture-card_2026-03.csv:5,same account, merchant and amount on the same day
+                RECURRING_PRICE_INCREASE,2026-03,STREAMCO,MONEY,11.49,9.99,10.49,2026-01-20,2026-03-20,fixture-card_2026-04.csv:2,"9.99 on 01-20 and 02-20, then 11.49: +1.50, 15.0%"
+                NEW_RECURRING,2026-04,CLOUDBOX STORAGE,COUNT,3,,3,2026-02-09,2026-04-09,fixture-card_2026-02.csv:8;fixture-card_2026-03.csv:9;fixture-card_2026-04.csv:8,"first charge 56 days after the card's first covered day (2025-12-15); last within 45 days of its last (2026-04-14)"
+                """);
+        files.put("expected-recurring.csv", """
+                account,merchant,category,cadence,typical_amount,last_amount,fixed_price,occurrences,first_date,last_date,next_expected_date,status
+                fixture-card,STREAMCO,Subscriptions,MONTHLY,9.99,11.49,false,4,2025-12-20,2026-03-20,2026-04-20,ACTIVE
+                fixture-card,CLOUDBOX STORAGE,Subscriptions,MONTHLY,4.99,4.99,true,3,2026-02-09,2026-04-09,2026-05-09,ACTIVE
+                fixture-checking,FIXTURE PROPERTY RENT,Housing,MONTHLY,1500.00,1500.00,true,4,2026-01-03,2026-04-03,2026-05-03,ACTIVE
+                """);
+        for (Map.Entry<String, String> file : files.entrySet()) {
+            write(ANALYTICS_DIR + file.getKey(), file.getValue());
+        }
+    }
+
     // ---------------------------------------------------------------- categorization dev and holdout sets
 
     static final String CATEGORIZATION_DIR = "categorization/";
@@ -1344,7 +1540,7 @@ public class SampleDataGenerator {
 
     static void clearOutput() throws IOException {
         for (String dir : List.of("statements", "broken", "ofx", "edge-cases", "edge-cases/transfers", "edge-cases/merchants",
-                "edge-cases/ai-categorization", "categorization")) {
+                "edge-cases/ai-categorization", "categorization", "analytics")) {
             Path path = out.resolve(dir);
             if (Files.isDirectory(path)) {
                 try (Stream<Path> files = Files.list(path)) {

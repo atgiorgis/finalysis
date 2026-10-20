@@ -1,0 +1,7 @@
+type,month,subject,observed_unit,observed,baseline,threshold,period_start,period_end,txns,note
+CATEGORY_SPIKE,2026-04,Dining,MONEY,225.00,66.67,166.67,2026-01-01,2026-03-31,,"baseline (105.00 + 45.00 + 50.00) / 3; threshold max(66.67 x 1.5 = 100.005 -> 100.00, 66.67 + 100.00)"
+CATEGORY_SPIKE,2026-04,Shopping,MONEY,700.00,29.33,129.33,2026-01-01,2026-03-31,,"baseline (145.00 - 120.00 + 63.00) / 3, February's refund exceeds its purchases; threshold max(43.995 -> 44.00, 129.33)"
+LARGE_TRANSACTION,2026-04,Shopping,MONEY,700.00,30.00,500.00,2025-10-07,2026-04-04,fixture-card_2026-04.csv:6,"5 earlier Shopping charges (25, 28, 30, 35, 120), median 30.00; threshold max(500.00, 3 x 30.00)"
+POSSIBLE_DUPLICATE,2026-03,FIXTURE GROCER,COUNT,2,,2,2026-03-02,2026-03-02,fixture-card_2026-03.csv:4;fixture-card_2026-03.csv:5,same account, merchant and amount on the same day
+RECURRING_PRICE_INCREASE,2026-03,STREAMCO,MONEY,11.49,9.99,10.49,2026-01-20,2026-03-20,fixture-card_2026-04.csv:2,"9.99 on 01-20 and 02-20, then 11.49: +1.50, 15.0%"
+NEW_RECURRING,2026-04,CLOUDBOX STORAGE,COUNT,3,,3,2026-02-09,2026-04-09,fixture-card_2026-02.csv:8;fixture-card_2026-03.csv:9;fixture-card_2026-04.csv:8,"first charge 56 days after the card's first covered day (2025-12-15); last within 45 days of its last (2026-04-14)"

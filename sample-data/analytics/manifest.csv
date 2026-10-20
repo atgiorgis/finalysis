@@ -1,0 +1,9 @@
+file,account,period_start,period_end,send_balances,opening_balance,closing_balance,expected_balance_check
+fixture-checking_2026-01.csv,fixture-checking,2026-01-01,2026-01-31,false,5000.00,6111.10,PASSED
+fixture-checking_2026-02.csv,fixture-checking,2026-02-01,2026-02-28,false,6111.10,6794.35,PASSED
+fixture-checking_2026-03.csv,fixture-checking,2026-03-01,2026-03-31,false,6794.35,7760.65,FAILED
+fixture-checking_2026-04.csv,fixture-checking,2026-04-01,2026-04-30,false,7760.65,8687.05,PASSED
+fixture-card_2026-01.csv,fixture-card,2025-12-15,2026-01-14,true,-800.00,-629.99,PASSED
+fixture-card_2026-02.csv,fixture-card,2026-01-15,2026-02-14,true,-629.99,-404.97,PASSED
+fixture-card_2026-03.csv,fixture-card,2026-02-15,2026-03-14,true,-404.97,-194.95,PASSED
+fixture-card_2026-04.csv,fixture-card,2026-03-15,2026-04-14,true,-194.95,-564.43,PASSED

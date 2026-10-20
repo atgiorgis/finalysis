@@ -4,6 +4,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.ai.AiProperties;
+import com.finalysis.analytics.TxnBucketSql;
 import com.finalysis.ai.bedrock.BedrockClientConfiguration;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
@@ -23,7 +24,8 @@ import org.junit.jupiter.api.Test;
  * categorization, chat and any model client (no AI anywhere in 3c). Phase 4's {@code transaction} package (the
  * transaction API) is a leaf: it reads txns and calls {@code categorize} for corrections, and nothing depends on it,
  * so the category columns keep the categorization code as their one writer (phase-4.md, step 2 notes). No code names
- * a model provider (phase-4.md §7).
+ * a model provider (phase-4.md §7). Phase 5's {@code analytics} and {@code alert} read the other features' tables in
+ * SQL and depend on none of their classes, and {@code analytics} knows nothing of {@code alert} (phase-5.md §3.2).
  */
 class PackageDependencyTest {
 
@@ -49,6 +51,18 @@ class PackageDependencyTest {
             .that().resideOutsideOfPackage("com.finalysis.transaction..")
             .should().dependOnClassesThat().resideInAPackage("com.finalysis.transaction..")
             .because("the transaction API is a leaf; categories are written by the categorization code only");
+
+    static final ArchRule ANALYTICS_READS_TABLES_NOT_FEATURES = noClasses()
+            .that().resideInAnyPackage("com.finalysis.analytics..", "com.finalysis.alert..")
+            .should().dependOnClassesThat().resideInAnyPackage("com.finalysis.categorize..",
+                    "com.finalysis.ingestion..", "com.finalysis.transfer..", "com.finalysis.review..",
+                    "com.finalysis.transaction..")
+            .because("analytics reads those features' tables in SQL, so their code can change without it");
+
+    static final ArchRule ANALYTICS_KNOWS_NO_ALERTS = noClasses()
+            .that().resideInAPackage("com.finalysis.analytics..")
+            .should().dependOnClassesThat().resideInAPackage("com.finalysis.alert..")
+            .because("alerts are built on analytics figures, not the other way round");
 
     /**
      * AI-03 and the local profile to come: code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only, so
@@ -83,6 +97,7 @@ class PackageDependencyTest {
         assertThat(app.contain(CategorizationModelClient.class)).isTrue();
         assertThat(app.contain(AiProperties.class)).isTrue();
         assertThat(app.contain(BedrockClientConfiguration.class)).isTrue();
+        assertThat(app.contain(TxnBucketSql.class)).isTrue();
     }
 
     @Test
@@ -109,6 +124,12 @@ class PackageDependencyTest {
     void noCodeDependsOnAModelProvider() {
         NO_PROVIDER_IN_CODE.check(app);
         NOTHING_DEPENDS_ON_PROVIDER_CONFIG.check(app);
+    }
+
+    @Test
+    void analyticsAndAlertsUseNoOtherFeaturesCode() {
+        ANALYTICS_READS_TABLES_NOT_FEATURES.check(app);
+        ANALYTICS_KNOWS_NO_ALERTS.check(app);
     }
 
     /** The rules catch a violation. */

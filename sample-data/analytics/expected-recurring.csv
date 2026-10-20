@@ -1,0 +1,4 @@
+account,merchant,category,cadence,typical_amount,last_amount,fixed_price,occurrences,first_date,last_date,next_expected_date,status
+fixture-card,STREAMCO,Subscriptions,MONTHLY,9.99,11.49,false,4,2025-12-20,2026-03-20,2026-04-20,ACTIVE
+fixture-card,CLOUDBOX STORAGE,Subscriptions,MONTHLY,4.99,4.99,true,3,2026-02-09,2026-04-09,2026-05-09,ACTIVE
+fixture-checking,FIXTURE PROPERTY RENT,Housing,MONTHLY,1500.00,1500.00,true,4,2026-01-03,2026-04-03,2026-05-03,ACTIVE
