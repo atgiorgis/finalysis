@@ -1340,9 +1340,9 @@ startup when it is not more than `finalysis.analytics.recurring.max-gap-days`, n
 - New **9. Analytics**, in the newman run after folder 8, in five subfolders:
   - *Load the sample months.* Apex Visa May to October and Summit May to September as CSVs with the manifest's
     period and balances, checking June to September as OFX, then a rules run asserting AI `OFF` and 0 calls. The
-    expected outcomes are read from the code: Apex July is `NEEDS_REVIEW` with its balances `PASSED` (the second
-    Safeway charge is dated 06-13, before its 06-15 period); checking June is `NEEDS_REVIEW` and `FAILED` (it
-    continues Setup's May, whose closing balance is 10.00 too high); the rest are `RECONCILED`.
+    expected outcomes are read from the code: checking June is `NEEDS_REVIEW` and `FAILED` (it continues Setup's
+    May, whose closing balance is 10.00 too high); the rest are `RECONCILED`, Apex July included (see the fix below:
+    its second Safeway row posted on 06-15, the period's first day).
   - *Coverage and closure.* Coverage per account: savings has no statement, so no expected day; checking's May and
     June are flagged, and only May was reviewed. Setup's "wrong account" copy of checking leaves a gap up to the
     last covered day, so every later month is `PARTIAL`. Closed on its last covered day, the gap goes and the later
@@ -1399,6 +1399,23 @@ txn counts as spending, which Phase 5 changed. Requirements v1.53. CLAUDE.md: Ph
   are in the backlog with no phase. ANA-02 likewise, for fixed vs. discretionary (Phase 7).
 - **SEC-03 gets a note** of what Phase 5 prepared (read-only services, the one write fenced off), and stays Planned
   for Phase 6.
+
+**Fix after your first newman run** (226 requests, 662 assertions, 2 failed; AI off, reset database):
+- *"2. Accounts / Get account", "Exact DTO fields":* the check predates `closedOn` (V19, step 3), which every account
+  response now carries. It now expects `closedOn` and asserts it is null for an open account. It was the only
+  exact-field check on an account response; the `409 account-exists` check is on a problem body, which has no account
+  fields.
+- *"Import Apex Visa July", expected `NEEDS_REVIEW`, got `RECONCILED`: the assertion was wrong, not the app.* The rule
+  exists (v1.13; README "What lands in review": rows dated outside the statement period send it to review), and the app
+  applies it to each row's *printed* date, which for a CSV with a post-date column is the post date
+  (`CsvMapping.printedDateColumn`, `ParsedTxn.printedDate`; the README's `txn_date` vs `post_date` decision). The
+  second Safeway row has transaction date 06-13 but post date 06-15, the period's first day (both ends inclusive), so
+  it is inside 06-15 to 07-14. Statement periods are posting periods, so that is the intended reading. The step 7
+  assertion compared the transaction date. It now expects `RECONCILED` with no out-of-period warning; no behavior
+  changed.
+- *The other two untested assumptions held:* checking June imported as `NEEDS_REVIEW` with `FAILED`, and once the
+  copy of checking was closed a month after its close was complete, which the totals, trends and alert requests
+  rely on.
 
 ### Requirement mapping
 

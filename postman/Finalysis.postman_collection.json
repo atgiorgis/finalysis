@@ -635,7 +635,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Exact DTO fields', () => pm.expect(Object.keys(pm.response.json()).sort()).to.eql(['createdAt','id','institution','lastFour','name','type']));"
+                  "pm.test('Exact DTO fields', () => pm.expect(Object.keys(pm.response.json()).sort()).to.eql(['closedOn','createdAt','id','institution','lastFour','name','type']));",
+                  "pm.test('open: closedOn is null', () => pm.expect(pm.response.json().closedOn).to.eql(null));"
                 ]
               }
             }
@@ -5256,7 +5257,7 @@
                     }
                   ]
                 },
-                "description": "The Safeway charge of 2026-06-13 was posted twice, the second time on 06-15, in this statement: the row is dated before the period, so the statement waits for review (its balances pass). Folder 9's alerts find the pair."
+                "description": "The Safeway charge of 2026-06-13 was posted twice, the second time on 06-15, in this statement. A row's printed date is its post date when the file has one, and 06-15 is the period's first day, so the row is inside the period and the statement reconciles. Folder 9's alerts find the pair (by `txn_date`, 06-13)."
               },
               "event": [
                 {
@@ -5269,7 +5270,7 @@
                       "pm.test('read by the CSV parser', () => pm.expect(body.parser).to.eql('csv'));",
                       "pm.test('the period sent', () => { pm.expect(body.periodStart).to.eql('2026-06-15'); pm.expect(body.periodEnd).to.eql('2026-07-14'); });",
                       "pm.test('every row inserted or a duplicate', () => { pm.expect(body.parsed).to.be.above(0); pm.expect(body.inserted + body.duplicates).to.equal(body.parsed); });",
-                      "pm.test('the balances pass, but a row is dated before the period: NEEDS_REVIEW', () => { pm.expect(body.balanceCheck).to.eql('PASSED'); pm.expect(body.status).to.eql('NEEDS_REVIEW'); pm.expect(body.warnings.some(w => w.includes('dated outside the statement period'))).to.be.true; });"
+                      "pm.test('balances reconcile; the second Safeway row is inside the period by its post date', () => { pm.expect(body.status).to.eql('RECONCILED'); pm.expect(body.balanceCheck).to.eql('PASSED'); pm.expect(body.warnings.some(w => w.includes('dated outside the statement period'))).to.be.false; });"
                     ]
                   }
                 }
