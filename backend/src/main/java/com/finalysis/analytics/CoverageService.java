@@ -4,6 +4,8 @@ import com.finalysis.analytics.CoverageQuery.Flagged;
 import com.finalysis.analytics.CoverageResponse.AccountCoverage;
 import com.finalysis.analytics.CoverageResponse.DateSpan;
 import com.finalysis.analytics.CoverageResponse.FlaggedStatement;
+import java.time.YearMonth;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,6 +53,27 @@ public class CoverageService {
                 .toList();
         return new CoverageResponse(map.lastCoveredDay().orElse(null), map.latestMonth().orElse(null),
                 map.latestCompleteMonth().orElse(null), accounts);
+    }
+
+    /** The month of the last covered day; empty without statements. The alerts' default range ends there. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Optional<YearMonth> latestMonth() {
+        return coverage.load().latestMonth();
+    }
+
+    /**
+     * The household flags of each month of the range, as {@code MonthTotals.dataQuality} has them (§1.6): the
+     * figures an alert used come with the flags of their months (§6.1).
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Map<YearMonth, List<MonthFlag>> householdFlags(MonthRange range) {
+        CoverageMap map = coverage.load();
+        List<Flagged> flagged = coverage.flagged(Optional.of(range), Optional.empty());
+        Map<YearMonth, List<MonthFlag>> flags = new LinkedHashMap<>();
+        for (YearMonth month : range.months()) {
+            flags.put(month, MonthTotalsReader.flags(month, Optional.empty(), flagged, map));
+        }
+        return flags;
     }
 
     private static <T> List<T> latest(List<T> items) {

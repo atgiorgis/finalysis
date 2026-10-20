@@ -437,7 +437,7 @@ record Alert(String key, AlertType type, YearMonth month, AlertBasis basis, Aler
 record AlertBasis(Quantity observed, Quantity baseline, Quantity threshold,   // §6.6; baseline null if none
                   LocalDate periodStart, LocalDate periodEnd,                 // what the baseline covered
                   List<AlertSetting> settings)                                // the thresholds that applied
-record Quantity(QuantityUnit unit, String value)  // MONEY (2 decimals), PERCENT (1), COUNT, DAYS; as JSON text
+record Quantity(QuantityUnit unit, String value)  // MONEY (2 decimals), PERCENT (1), COUNT, DAYS, RATIO (2; step 5); as JSON text
 record AlertSetting(String name, Quantity value)   // e.g. "min-increase-percent", PERCENT "50.0"
 record TxnRef(long id, long accountId, LocalDate txnDate, @ApiMoney BigDecimal amount, String merchant)
 
@@ -452,6 +452,8 @@ record Item(long id, long accountId, LocalDate txnDate, @ApiMoney BigDecimal amo
             CategoryRef category, TxnBucket bucket)                              // TxnRef plus category and bucket
 sealed interface AlertDetails permits CategorySpike, LargeTransaction, PossibleDuplicate,
         RecurringPriceIncrease, NewRecurring { }         // JSON discriminator "type", as ReviewItem
+// step 5: PossibleDuplicate(List<DuplicateReason> reasons, amount, merchant): `reasons`, not `reason` (a group can have
+// pairs of both kinds); AlertListResponse(range, accountId, type, includeDismissed, limit, items, counts, truncated)
 ```
 
 - `TxnRef` has no raw description, counterparty or account number, only the cleaned merchant. Phase 6
@@ -695,6 +697,12 @@ income category, total income, and Refunds & Rebates as a `RECEIVED` row of mone
      Phase 6's rule will say chat depends only on the query services.
 - **No endpoint changes data** except the dismissal pair, which is a user action over the API (SEC-03),
   never a tool.
+- *Recorded at step 5:* dismissal is the only write in `analytics` and `alert`. It lives in `AlertDismissalService`
+  alone, which is never exposed as a chatbot tool. The query side (`AlertQueryService` and the checks) reads
+  dismissals through its own read-only `AlertDismissalQuery` and does not depend on the writer. Enforced by
+  `ReadOnlyQueriesTest`: every public `*Service` method in both packages except `AlertDismissalService`'s is
+  `@Transactional(readOnly = true)`, and an ArchUnit rule allows only `AlertController` to depend on
+  `AlertDismissalService`. Phase 6's tools will adapt `AlertQueryService`, never the writer.
 - **Units in the types:** money is `BigDecimal` with `@ApiMoney`, field names say the measure (`spent`,
   `received`, `…Percent`, `times…`), and every record's Javadoc states its sign and unit. Phase 6 will reuse
   those Javadoc lines as tool descriptions.
@@ -1137,6 +1145,88 @@ before). No migration, no main-code change.
 - **The report's commit** is named as "the step 4 commit, on top of `6b9fec8`": the hash isn't known before the
   commit, and amending it in would change it again.
 
+### Step 5 notes
+
+Done: "Phase 5 step 5: alert framework, spike, large transaction, possible duplicate". Backend 2,413 tests
+(Maven summary; 2,344 + 69), 0 failures, 0 skipped; frontend 4. Requirements v1.51. Migration V20
+(`alert_dismissal`).
+
+**Built** (package `alert`; plain SQL over `JdbcClient`; no AI)
+- **V20 `alert_dismissal`**, as §3.1. `EnumCheckConstraintTest` covers `AlertType`; `SchemaMigrationTest` the key,
+  type and note checks.
+- **Keys** (`AlertKey`): `{slug}.{yyyy-MM}.{16 hex of SHA-256}`, each component followed by a newline before hashing.
+  Spike: the category id; large: the txn's fingerprint; duplicate: the group's fingerprints, sorted. `parse` reads the
+  type and month back (400 `key`, never echoing the value).
+- **Basis** (`AlertBasis`, `Quantity`, `AlertSetting`): every threshold is computed once from the shown, rounded
+  baseline, rounded `HALF_EVEN` to cents, and the check is `observed ≥ threshold` on those values (§6.6).
+- **Checks** (`AlertCheck`): `CategorySpikeCheck` reads its spent and trailing-3 baseline from `TrendsService`, so the
+  alert and the trends endpoint can't disagree; `LargeTransactionCheck` takes candidates and their history's
+  `percentile_disc(0.5)` and count from one SQL query with a `LATERAL` join over `TxnBucketSql.BUCKET`;
+  `PossibleDuplicateCheck` finds pairs in SQL and joins them into groups in Java (union-find).
+- **`AlertQueryService`** (read-only, REPEATABLE READ): `alerts(from, to, type, accountId, includeDismissed, limit)` and
+  `alert(key)`, which computes only the key's month. **`AlertDismissalService`**: `dismiss(key, note)` (upsert; the first
+  `dismissedAt` stays) and `undismiss(key)`.
+- **Endpoints** (`AlertController`): `GET /api/alerts`, `GET /api/alerts/{key}`, `PUT`/`DELETE /api/alerts/{key}/dismissal`.
+- **Settings** `finalysis.alerts.*` (`AlertProperties`): `max-results` and the three checks' blocks, defaults as §6.3,
+  validated at startup.
+
+**Tests** (expected figures written by hand, as literals or in `expected-alerts.csv`)
+- **`CategorySpikeTest`:** each branch of the threshold one cent under, at and over (percent branch: baseline 207.79,
+  threshold 311.68, where 311.68 fires though the unrounded 311.685 would not; amount branch: baseline 150.00, threshold
+  250.00), the basis compared whole; a two-month baseline, a zero baseline, a partial month, a refund netting in the
+  month, Uncategorized, and at most ten txns shown.
+- **`LargeTransactionTest`:** each branch under, at and over (median 200.00 → 600.00; median 100.00 → 500.00), four and
+  five history charges, the window's days (180 before counts, 181 and the same day don't), other categories and money
+  in excluded, an uncategorized charge, transfers ignored both ways, `percentile_disc` on an even history.
+- **`PossibleDuplicateTest`:** 0, 1 and 2 days apart; one cent apart; another merchant, account, money in, transfers;
+  the raw description when there is no merchant; a chain of three as one group; the same FITID with different amounts;
+  both reasons; the month of the earliest txn across a month end; at most ten txns shown.
+- **`AlertSampleDataTest`:** on the sample data with the answer key's categories, March to October 2026, exactly four
+  alerts: the Shopping and Dining spikes of 2026-08, the Best Buy large transaction and the Safeway duplicate, each basis
+  to the cent as §6.3 and §6.6 work them out. Report: `docs/eval/phase-5-totals.md`.
+- **`AlertFixtureTest`:** the fixture raises exactly the step 5 rows of `expected-alerts.csv`, every basis column
+  compared as text with the txns it names; each alert's data flags (the failed March checking statement, the card's
+  partial April and December).
+- **`AlertKeyTest`:** deleting the card's March and April statements and importing them again keeps every key, and the
+  dismissed duplicate stays dismissed with its note and `dismissedAt`; a statement deleted for good makes its alert a
+  404 and leaves the dismissal row; a third identical charge makes a new, undismissed key and the old one a 404; a
+  recomputed list equals the first, and each alert read by key equals its list entry.
+- **`AlertKeyFormatTest`** (jqwik): every key matches V20's pattern and parses back; different facts give different
+  keys; component boundaries count; the hash pinned to a `shasum` value.
+- **`AlertApiTest`:** the empty database, the default range and order, JSON units and the details discriminator,
+  filters, `limit` and `truncated`, every 400 with its field, the 404s, dismissal (idempotent PUT, hidden unless
+  `includeDismissed`, idempotent DELETE, optional note and body, no row for an unknown key).
+- **Extended:** `ReadOnlyQueriesTest` (the alert service and the two new `CoverageService` methods; the writer rule
+  above), `SensitiveDataLeakTest` (a duplicate pair whose raw descriptions carry markers: no alert body, problem or log
+  line carries them), `AnalyticsPerformanceTest` (`/api/alerts`, default and 24 months, within 500 ms on 50,000 rows),
+  `AlertSettingsTest` (defaults and bad values).
+
+**Decisions beyond the plan**
+- **Shared analytics made public** for `alert`, which may depend on `analytics`: `Arithmetic` (plus `ratio` and
+  `money`), `MonthRanges` (a `resolve` with its own default length: alerts default to 3 months), `ReferenceQuery`, and
+  two read-only `CoverageService` methods, `latestMonth()` and `householdFlags(range)`. In the tests, `AnalyticsFixture`
+  (which gained `importStatement` and `applyCategories` for re-imports) and `SampleDataImport` are public.
+- **Spikes only for EXPENSE-kind categories.** A Transfer category marked not a transfer counts in spending, but a
+  trend in it means nothing.
+- **A spike's txns** are the category's largest charges in the month (at most ten); `accountId` lists an alert if any
+  of its txns, shown or not, is in that account.
+- **A large charge's history** is the same bucket and category, so a linked transfer with that category is no history.
+- **Duplicates** are paired over all history and grouped before the month filter, so a group's later members can be
+  past its month (within `window-days`, chained). `reasons` is a list; `amount` and `merchant` are null when the members
+  differ (possible only for `SAME_EXTERNAL_ID`); the external-id pair has no money-out or transfer condition, as §6.3
+  states it. `amount` is a magnitude (positive = money out).
+- **`Quantity` unit `RATIO`** for the `times-median` setting (two decimals).
+- **Data flags** are `RECONCILIATION_FAILED` and `PARTIAL_COVERAGE` of the months the figures used (spike M − 3 … M;
+  large: the history's first day to the txn; duplicate: the group's span), each flag once.
+- **`counts`** lists every type, over the alerts that match all filters, before `limit`. `limit` defaults to
+  `max-results`. The response echoes `range`, `accountId`, `type`, `includeDismissed` and `limit`.
+- **Dismissal:** the body and its note are optional; a note is 1 to 200 characters and not blank. `DELETE` needs no
+  current alert, so a dismissal whose facts are gone can still be removed. `PUT` returns the alert recomputed.
+- **Settings bounds:** percent 0–1000 (one decimal), amounts with at most two decimals, `min-baseline-months` 1–3,
+  `times-median` 1–100, `history-days` 1–3650, `min-history` 1–1000, `window-days` 0–7, `max-results` 1–500.
+- **Leak test:** a problem's `instance` is the request path, so malformed keys in the path are plain text, not markers;
+  the markers are in the query parameters, the note and the rows.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1144,13 +1234,13 @@ before). No migration, no main-code change.
 | ANA-01 | 1, 2, 3 | `TxnBucketTest`, `MonthlyTotalsTest`, `MerchantTotalsTest`, `DrillDownTest`, `DrillDownSampleDataTest` |
 | ANA-02 (cash flow, savings rate) | 2 | `MonthlyTotalsTest` |
 | ANA-03 | 3 | `TrendsTest` |
-| ANA-04 | 5, 6 | the alert tests, sample-data expected alerts |
+| ANA-04 | 5, 6 | `CategorySpikeTest`, `LargeTransactionTest`, `PossibleDuplicateTest`, `AlertKeyTest`, `AlertApiTest`, `AlertFixtureTest`, `AlertSampleDataTest` (step 5); the recurring tests (step 6) |
 | ANA-06 | 2, 3, 4 | `MonthlyTotalsTest`, `DrillDownTest`, `AnalyticsSampleDataTest`, `DrillDownSampleDataTest`, `docs/eval/phase-5-totals.md` |
 | ANA-07 | 6 | `MonthlySeriesTest`, `RecurringChargesApiTest` |
 | ANA-08 | 2 | `DataQualityTest` |
 | GR-01, GR-02 | all | SQL source test, rounding tests |
 | GR-04 | 1, 2 | `TxnBucketTest`, invariants |
-| SEC-03 (prepared for Phase 6) | 1, 5 | read-only tests, ArchUnit |
+| SEC-03 (prepared for Phase 6) | 1, 5 | read-only tests, ArchUnit (`ReadOnlyQueriesTest`: only `AlertController` uses `AlertDismissalService`) |
 
 ---
 

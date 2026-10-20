@@ -21,22 +21,22 @@ import tools.jackson.databind.json.JsonMapper;
  * The synthetic sample data ({@code sample-data/statements/}, as listed in {@code statements-manifest.csv}) imported
  * for real, the way {@code TransferDetectionTest} does: one account per slug with its layout's suggested CSV mapping,
  * the period of every file, and the balances of the cards, which print none. Rules and detection run as in
- * production. The caller deletes the accounts afterwards.
+ * production. The caller deletes the accounts afterwards. Public for the alert tests (step 5).
  */
-final class SampleDataImport {
+public final class SampleDataImport {
 
     static final List<String> SLUGS = List.of("northfield-checking", "northfield-savings", "apex-visa", "summit-card");
 
     private final ImportTestSupport support;
     private final JsonMapper jsonMapper;
 
-    SampleDataImport(ImportTestSupport support, JsonMapper jsonMapper) {
+    public SampleDataImport(ImportTestSupport support, JsonMapper jsonMapper) {
         this.support = support;
         this.jsonMapper = jsonMapper;
     }
 
     /** Imports every statement; returns account ids by slug. */
-    Map<String, Long> load() throws Exception {
+    public Map<String, Long> load() throws Exception {
         return load(Set.of());
     }
 
@@ -70,7 +70,7 @@ final class SampleDataImport {
      * rules gave it, so analytics tests on the sample data depend on the counting rules only (§9.3). A row is matched by
      * account, date, raw description and amount; genuine duplicates share all four and their category.
      */
-    void applyAnswerKey(JdbcTemplate jdbc, Map<String, Long> accounts) {
+    public void applyAnswerKey(JdbcTemplate jdbc, Map<String, Long> accounts) {
         applyAnswerKey(jdbc, accounts, c -> false);
     }
 

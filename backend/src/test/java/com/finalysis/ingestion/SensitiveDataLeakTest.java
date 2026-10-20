@@ -157,6 +157,7 @@ class SensitiveDataLeakTest {
         exerciseStatementEndpoints(checking, card);
         exerciseTransferAndReviewEndpoints(checking, card);
         exerciseTransactionEndpoints(checking);
+        exerciseAlertEndpoints(checking);
         databaseErrorsCarryNoRowValues();
 
         assertThat(problems).hasSizeGreaterThanOrEqualTo(20);
@@ -509,6 +510,50 @@ class SensitiveDataLeakTest {
     }
 
     /** A txn in a statement of its own, with a marker in its description. */
+    // ------------------------------------------------------------------ alerts (Phase 5 step 5)
+
+    /**
+     * Every error of the alert API, plus a list, a read, a dismissal and an undo that succeed, on a duplicate pair whose
+     * raw descriptions carry markers and that have no merchant (so the duplicate check compares the descriptions). The
+     * descriptions are compared in SQL only: no alert body, problem or log line carries them, nor the amount in a
+     * problem.
+     */
+    private void exerciseAlertEndpoints(long checking) throws Exception {
+        markedTxn(checking, "-73.19", "WITHDRAWAL");
+        markedTxn(checking, "-73.19", "WITHDRAWAL");
+        int before = problems.size();
+
+        String list = mockMvc.perform(get("/api/alerts").param("from", "2026-04").param("to", "2026-04")
+                .param("type", "POSSIBLE_DUPLICATE")).andExpect(status().isOk()).andReturn().getResponse()
+                .getContentAsString();
+        assertNoMarkers(list);
+        String key = jsonMapper.readTree(list).get("items").get(0).get("key").asString();
+        assertNoMarkers(mockMvc.perform(get("/api/alerts/{key}", key)).andExpect(status().isOk()).andReturn()
+                .getResponse().getContentAsString());
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/alerts/{key}/dismissal", key)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"note\": \"checked\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(MockMvcRequestBuilders.delete("/api/alerts/{key}/dismissal", key))
+                .andExpect(status().isNoContent());
+
+        // A malformed key in the path: the problem's "instance" is the request path, so the key is no marker.
+        problem(mockMvc.perform(get("/api/alerts/{key}", "not-a-key")), 400, null);
+        problem(mockMvc.perform(get("/api/alerts/{key}", "possible-duplicate.2026-04.0000000000000000")), 404, null);
+        problem(mockMvc.perform(get("/api/alerts").param("from", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/alerts").param("type", DESCRIPTION)), 400, null);
+        problem(mockMvc.perform(get("/api/alerts").param("limit", "0")), 400, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.put("/api/alerts/{key}/dismissal", key)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"note\": \"" + DESCRIPTION.repeat(30) + "\"}")),
+                400, null);
+        problem(mockMvc.perform(MockMvcRequestBuilders.delete("/api/alerts/{key}/dismissal", "not-a-key")), 400, null);
+        jdbc.update("DELETE FROM alert_dismissal");
+
+        assertThat(problems.size() - before).isEqualTo(7);
+        for (String problem : problems.subList(before, problems.size())) {
+            assertThat(problem).as("SEC-10: no amount in a problem").doesNotContain("73.19");
+        }
+    }
+
     private long markedTxn(long accountId, String amount, String section) {
         long statement = jdbc.queryForObject("""
                 INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser)

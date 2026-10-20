@@ -3,6 +3,7 @@ package com.finalysis;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.account.AccountType;
+import com.finalysis.alert.AlertType;
 import com.finalysis.categorize.AiCategorizer;
 import com.finalysis.categorize.CategoryKind;
 import com.finalysis.categorize.CategorySource;
@@ -61,7 +62,8 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_transfer_link_status", TransferStatus.class),
                 Arguments.of("ck_csv_mapping_amount_mode", CsvAmountMode.class),
                 Arguments.of("ck_csv_mapping_sign", CsvSign.class),
-                Arguments.of("ck_unparsed_upload_resolution_kind", UnparsedUploadResolution.class));
+                Arguments.of("ck_unparsed_upload_resolution_kind", UnparsedUploadResolution.class),
+                Arguments.of("ck_alert_dismissal_type", AlertType.class));
     }
 
     @ParameterizedTest

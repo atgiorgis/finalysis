@@ -104,3 +104,18 @@ finalysis:
     default-months: 6   # range when from is omitted, ending at to
     merchants:
       max-limit: 50     # longest merchant list per request (default 10)
+  # Rule-based alerts (docs/plans/phase-5.md §6.3); a bad value fails startup. Checked against the synthetic answer key
+  # only, so real data may need tuning.
+  alerts:
+    max-results: 100    # longest alert list per request (and the default limit); truncated beyond it
+    category-spike:
+      min-increase-percent: 50     # spent >= baseline x 1.5 ...
+      min-increase-amount: 100.00  # ... and >= baseline + 100.00
+      min-baseline-months: 3       # complete months the trailing 3-month baseline needs
+    large-transaction:
+      min-amount: 500.00  # a charge must be at least this ...
+      times-median: 3     # ... and at least 3 x the median of its category's earlier charges
+      history-days: 180   # the days before it that the median covers
+      min-history: 5      # charges the median needs, or no alert
+    possible-duplicate:
+      window-days: 1      # same account, amount and merchant at most this many days apart

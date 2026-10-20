@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  */
 @Component
-class MonthRanges {
+public class MonthRanges {
 
     private final AnalyticsProperties properties;
 
@@ -31,6 +31,15 @@ class MonthRanges {
      * @throws InvalidRequestException for {@code from > to} or a range that is too long
      */
     Optional<MonthRange> resolve(Optional<YearMonth> from, Optional<YearMonth> to, Optional<YearMonth> latestMonth) {
+        return resolve(from, to, latestMonth, properties.defaultMonths());
+    }
+
+    /**
+     * As {@link #resolve(Optional, Optional, Optional)}, with {@code defaultMonths} months when {@code from} is omitted
+     * (the alerts default to 3, docs/plans/phase-5.md §5.2); the {@code max-months} bound is the same.
+     */
+    public Optional<MonthRange> resolve(Optional<YearMonth> from, Optional<YearMonth> to,
+                                        Optional<YearMonth> latestMonth, int defaultMonths) {
         if (from.isPresent() && to.isPresent() && from.get().isAfter(to.get())) {
             throw invalid("to", "must not be before from");
         }
@@ -40,7 +49,7 @@ class MonthRanges {
         if (end.isEmpty()) {
             return Optional.empty();
         }
-        MonthRange range = new MonthRange(from.orElse(end.get().minusMonths(properties.defaultMonths() - 1)),
+        MonthRange range = new MonthRange(from.orElse(end.get().minusMonths(defaultMonths - 1)),
                 end.get());
         if (range.length() > properties.maxMonths()) {
             throw invalid(to.isPresent() ? "to" : "from", "the range must be at most " + properties.maxMonths()

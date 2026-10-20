@@ -1,9 +1,12 @@
 package com.finalysis.analytics;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.finalysis.alert.AlertDismissalService;
+import com.finalysis.alert.AlertQueryService;
 import com.finalysis.support.IntegrationTest;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -34,7 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *       its class;</li>
  *   <li>such a transaction is {@code READ ONLY} in Postgres itself, which rejects any write.</li>
  * </ol>
- * The third, that no query service depends on {@code AlertDismissalService}, comes with that class in step 5.
+ * The third: nothing in {@code analytics} or {@code alert} depends on {@code AlertDismissalService} except the alert
+ * controller, which maps the dismissal endpoints onto it. Phase 6's chat tools will adapt the query services only.
  *
  * <p>The rule allows an empty selection (step 1 had no service), so a test also checks that it sees the services that
  * exist, and their public methods.
@@ -51,6 +55,14 @@ class ReadOnlyQueriesTest {
             .should(beReadOnlyTransactional())
             .allowEmptyShould(true)
             .because("query services become read-only chatbot tools in Phase 6 (SEC-03)");
+
+    static final ArchRule ONLY_THE_CONTROLLER_USES_THE_WRITER = noClasses()
+            .that().resideInAnyPackage("com.finalysis.analytics..", "com.finalysis.alert..")
+            .and().doNotHaveSimpleName("AlertDismissalService")
+            .and().doNotHaveSimpleName("AlertController")
+            .should().dependOnClassesThat().haveSimpleName("AlertDismissalService")
+            .because("dismissal is the one write, a user action over the API, never a query or a chatbot tool "
+                    + "(docs/plans/phase-5.md §8, SEC-03)");
 
     private final JdbcTemplate jdbc;
     private final PlatformTransactionManager transactions;
@@ -75,6 +87,25 @@ class ReadOnlyQueriesTest {
         assertThat(services).as("the rule must see the query services, or it checks nothing")
                 .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "DrillDownService",
                         "MerchantTotalsService", "MonthlyTotalsService", "TrendsService");
+        assertThat(app.contain(AlertQueryService.class)).isTrue();
+        assertThat(QUERY_SERVICES_ARE_READ_ONLY.evaluate(new ClassFileImporter().importClasses(
+                AlertQueryService.class)).hasViolation()).isFalse();
+        assertThat(QUERY_SERVICES_ARE_READ_ONLY.evaluate(new ClassFileImporter().importClasses(
+                AlertDismissalService.class)).hasViolation()).as("the one writer is exempt by name").isFalse();
+    }
+
+    /** No query class, analytics or alert, depends on the writer; the rule catches one that does. */
+    @Test
+    void onlyTheControllerUsesTheDismissalService() {
+        JavaClasses app = new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("com.finalysis");
+        assertThat(app.contain(AlertDismissalService.class)).isTrue();
+
+        ONLY_THE_CONTROLLER_USES_THE_WRITER.check(app);
+
+        assertThat(ONLY_THE_CONTROLLER_USES_THE_WRITER.evaluate(new ClassFileImporter().importClasses(
+                QueryUsingTheWriter.class)).hasViolation()).isTrue();
     }
 
     /** Each query method is read-only and REPEATABLE READ, so one response is one snapshot (§2). */
@@ -89,7 +120,12 @@ class ReadOnlyQueriesTest {
                 MerchantTotalsService.class.getMethod("merchants", Optional.class, Optional.class, Optional.class,
                         Optional.class, int.class),
                 TrendsService.class.getMethod("trends", Optional.class, Optional.class, Optional.class),
-                DrillDownService.class.getMethod("transactions", DrillDownFilter.class))) {
+                DrillDownService.class.getMethod("transactions", DrillDownFilter.class),
+                CoverageService.class.getMethod("latestMonth"),
+                CoverageService.class.getMethod("householdFlags", MonthRange.class),
+                AlertQueryService.class.getMethod("alerts", Optional.class, Optional.class, Optional.class,
+                        Optional.class, boolean.class, int.class),
+                AlertQueryService.class.getMethod("alert", String.class))) {
             Transactional transactional = method.getAnnotation(Transactional.class);
             assertThat(transactional).as(method.getName()).isNotNull();
             assertThat(transactional.readOnly()).as(method.getName()).isTrue();
@@ -136,6 +172,11 @@ class ReadOnlyQueriesTest {
                         method.getFullName() + (readOnly ? " is" : " is not") + " read-only"));
             }
         };
+    }
+
+    @SuppressWarnings("unused")
+    static class QueryUsingTheWriter {
+        private AlertDismissalService writer;
     }
 
     // Names end in "Service" so the rule applies; they sit in this package, which the rule covers.

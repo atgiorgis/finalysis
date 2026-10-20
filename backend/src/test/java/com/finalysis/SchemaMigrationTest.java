@@ -181,6 +181,31 @@ class SchemaMigrationTest {
                 .isNull();
     }
 
+    /** V20: a dismissal with a well-formed key and a known type is stored, with its time. */
+    @Test
+    void anAlertDismissalIsStored() {
+        String key = "large-transaction.2026-08.0123456789abcdef";
+        jdbc.update("INSERT INTO alert_dismissal (alert_key, alert_type) VALUES (?, 'LARGE_TRANSACTION')", key);
+        assertThat(jdbc.queryForObject("SELECT dismissed_at IS NOT NULL FROM alert_dismissal WHERE alert_key = ?",
+                Boolean.class, key)).isTrue();
+    }
+
+    /** V20: a malformed key, an unknown type, or an empty or too long note is refused. */
+    @ParameterizedTest
+    @CsvSource(value = {
+            "LARGE.2026-08.0123456789abcdef, LARGE_TRANSACTION, NULL",
+            "large-transaction.2026-8.0123456789abcdef, LARGE_TRANSACTION, NULL",
+            "large-transaction.2026-08.0123456789ABCDEF, LARGE_TRANSACTION, NULL",
+            "large-transaction.2026-08.0123456789abcde, LARGE_TRANSACTION, NULL",
+            "large-transaction.2026-08.0123456789abcdef, BUDGET, NULL",
+            "large-transaction.2026-08.0123456789abcdef, LARGE_TRANSACTION, ''",
+            "large-transaction.2026-08.0123456789abcdef, LARGE_TRANSACTION, LONG"}, nullValues = "NULL")
+    void aBadAlertDismissalIsRefused(String key, String type, String note) {
+        String value = "LONG".equals(note) ? "x".repeat(201) : note;
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO alert_dismissal (alert_key, alert_type, note) VALUES (?, ?, ?)",
+                key, type, value)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     @Test
     void activeUserRulesAreUniqueByPattern() {
         String definition = jdbc.queryForObject(

@@ -25,70 +25,86 @@ import tools.jackson.databind.json.JsonMapper;
  * then every row's category state is set from {@code categories.csv}. Analytics tests so depend on the counting
  * rules, never on how well rules or the AI categorize.
  *
- * <p>Imports commit, so the caller deletes the accounts afterwards ({@link ImportTestSupport#deleteCreatedAccounts()}).
+ * <p>Public for the alert tests (step 5). Imports commit, so the caller deletes the accounts afterwards ({@link ImportTestSupport#deleteCreatedAccounts()}).
  */
-final class AnalyticsFixture {
+public final class AnalyticsFixture {
 
-    static final Path DIR = ImportTestSupport.SAMPLE_DATA.resolve("analytics");
-    static final String CHECKING = "fixture-checking";
-    static final String CARD = "fixture-card";
+    public static final Path DIR = ImportTestSupport.SAMPLE_DATA.resolve("analytics");
+    public static final String CHECKING = "fixture-checking";
+    public static final String CARD = "fixture-card";
 
     /** One manifest row: a statement file and how it is imported. */
-    record Statement(String file, String account, LocalDate periodStart, LocalDate periodEnd, boolean sendBalances,
+    public record Statement(String file, String account, LocalDate periodStart, LocalDate periodEnd, boolean sendBalances,
                      BigDecimal openingBalance, BigDecimal closingBalance, String expectedBalanceCheck) {
     }
 
     /** One {@code categories.csv} row: the category state a fixture txn gets, and the bucket it must land in. */
-    record Entry(String file, int line, LocalDate date, BigDecimal amount, String description, String category,
+    public record Entry(String file, int line, LocalDate date, BigDecimal amount, String description, String category,
                  String source, String aiReviewReason, boolean transferExcluded, TxnBucket expectedBucket) {
 
-        String ref() {
+        public String ref() {
             return file + ":" + line;
         }
     }
 
     /** What an import of the fixture left: account ids by slug, statement ids by file, txn ids by file:line. */
-    record Loaded(Map<String, Long> accounts, Map<String, Long> statements, Map<String, Long> txns) {
+    public record Loaded(Map<String, Long> accounts, Map<String, Long> statements, Map<String, Long> txns) {
     }
 
     private final ImportTestSupport support;
     private final JdbcTemplate jdbc;
     private final JsonMapper jsonMapper;
 
-    AnalyticsFixture(ImportTestSupport support, JdbcTemplate jdbc, JsonMapper jsonMapper) {
+    public AnalyticsFixture(ImportTestSupport support, JdbcTemplate jdbc, JsonMapper jsonMapper) {
         this.support = support;
         this.jdbc = jdbc;
         this.jsonMapper = jsonMapper;
     }
 
-    Loaded load() throws Exception {
+    public Loaded load() throws Exception {
         Map<String, Long> accounts = new LinkedHashMap<>();
         accounts.put(CHECKING, account(AccountType.CHECKING, "5101", "Fixture Checking", "fixture-checking_2026-01.csv"));
         accounts.put(CARD, account(AccountType.CREDIT_CARD, "5201", "Fixture Card", "fixture-card_2026-01.csv"));
 
         Map<String, Long> statements = new LinkedHashMap<>();
         for (Statement statement : manifest()) {
-            Map<String, String> params = new HashMap<>();
-            params.put("periodStart", statement.periodStart().toString());
-            params.put("periodEnd", statement.periodEnd().toString());
-            if (statement.sendBalances()) {
-                params.put("openingBalance", statement.openingBalance().toPlainString());
-                params.put("closingBalance", statement.closingBalance().toPlainString());
-            }
-            JsonNode summary = json(support.upload(accounts.get(statement.account()), statement.file(),
-                    Files.readAllBytes(DIR.resolve(statement.file())), params).andExpect(status().isCreated())
-                    .andReturn().getResponse().getContentAsString());
-            statements.put(statement.file(), summary.get("statementId").asLong());
+            statements.put(statement.file(), importStatement(accounts, statement));
         }
 
         Map<String, Long> txns = new LinkedHashMap<>();
-        for (Entry entry : entries()) {
-            Long id = jdbc.queryForObject("SELECT id FROM txn WHERE statement_id = ? AND source_line_number = ?",
-                    Long.class, statements.get(entry.file()), entry.line());
-            txns.put(entry.ref(), id);
-            applyCategory(id, entry);
+        for (Map.Entry<String, Long> statement : statements.entrySet()) {
+            txns.putAll(applyCategories(statement.getKey(), statement.getValue()));
         }
         return new Loaded(accounts, statements, txns);
+    }
+
+    /** Imports one manifest statement through the API; returns its id. */
+    public long importStatement(Map<String, Long> accounts, Statement statement) throws Exception {
+        Map<String, String> params = new HashMap<>();
+        params.put("periodStart", statement.periodStart().toString());
+        params.put("periodEnd", statement.periodEnd().toString());
+        if (statement.sendBalances()) {
+            params.put("openingBalance", statement.openingBalance().toPlainString());
+            params.put("closingBalance", statement.closingBalance().toPlainString());
+        }
+        JsonNode summary = json(support.upload(accounts.get(statement.account()), statement.file(),
+                Files.readAllBytes(DIR.resolve(statement.file())), params).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString());
+        return summary.get("statementId").asLong();
+    }
+
+    /** Gives the rows of one imported statement their key's category state; returns txn ids by file:line. */
+    public Map<String, Long> applyCategories(String file, long statementId) {
+        Map<String, Long> txns = new LinkedHashMap<>();
+        for (Entry entry : entries()) {
+            if (entry.file().equals(file)) {
+                Long id = jdbc.queryForObject("SELECT id FROM txn WHERE statement_id = ? AND source_line_number = ?",
+                        Long.class, statementId, entry.line());
+                txns.put(entry.ref(), id);
+                applyCategory(id, entry);
+            }
+        }
+        return txns;
     }
 
     /**
@@ -140,7 +156,7 @@ final class AnalyticsFixture {
         }
     }
 
-    static List<Statement> manifest() {
+    public static List<Statement> manifest() {
         List<Statement> statements = new ArrayList<>();
         for (String[] c : rows("manifest.csv")) {
             statements.add(new Statement(c[0], c[1], LocalDate.parse(c[2]), LocalDate.parse(c[3]),
@@ -149,7 +165,7 @@ final class AnalyticsFixture {
         return statements;
     }
 
-    static List<Entry> entries() {
+    public static List<Entry> entries() {
         List<Entry> entries = new ArrayList<>();
         for (String[] c : rows("categories.csv")) {
             entries.add(new Entry(c[0], Integer.parseInt(c[1]), LocalDate.parse(c[2]), new BigDecimal(c[3]), c[4],
@@ -160,7 +176,7 @@ final class AnalyticsFixture {
     }
 
     /** Data rows of a fixture CSV, header skipped. Quoted cells (the notes) may hold commas. */
-    static List<String[]> rows(String file) {
+    public static List<String[]> rows(String file) {
         try {
             return Files.readAllLines(DIR.resolve(file)).stream().skip(1).filter(l -> !l.isBlank())
                     .map(AnalyticsFixture::split).toList();

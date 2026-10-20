@@ -71,7 +71,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 5: analytics, plan approved (docs/plans/phase-5.md, decisions in §13); steps 1 to 4 (fixture and buckets; monthly totals, coverage, data quality; merchants, trends, drill-down, closed accounts; ANA-06 on the sample data, report docs/eval/phase-5-totals.md) done, step 5 (alerts: framework, spike, large, duplicate) next. Alerts use V20 (V19 is `account.closed_on`). No AI anywhere in Phase 5. Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 5: analytics, plan approved (docs/plans/phase-5.md, decisions in §13); steps 1 to 5 (fixture and buckets; monthly totals, coverage, data quality; merchants, trends, drill-down, closed accounts; ANA-06 on the sample data, report docs/eval/phase-5-totals.md; alerts: V20 `alert_dismissal`, keys, basis, spike, large, duplicate) done, step 6 (recurring series, price increase, new recurring, recurring endpoint) next. Dismissal (`AlertDismissalService`) is the only write and never a chatbot tool. No AI anywhere in Phase 5. Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.
