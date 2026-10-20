@@ -3,6 +3,7 @@
 # confirmation flag). Its SHA-256 is pinned in ChatQuestionSetsTest and recorded in the plan. Before that run, the
 # owner may revise the user-written questions; each revision is a plan note, a requirements changelog entry and a
 # new pinned hash. After the run, this file never changes.
+# Revisions: 1 (2026-10-20) h-u07 accepts either reading of "save" (docs/plans/phase-6.md, step 1 notes).
 #
 # Format: see dev.yml's header. author: user marks the owner's own questions, kept exactly as written; their
 # expected answers come from the same sources as the rest.
@@ -104,19 +105,21 @@ questions:
     turns:
       - ask: "how much did i save in august?"
         expect: ANSWER
-        tools: [[get_month_totals]]
+        tools: [[get_month_totals], [get_category_totals], [get_account_totals], [list_transactions]]
         figures:
           - - {value: "462.40", source: {month: {month: "2026-08", field: "net"}}}
           - - {value: "9.4", source: {month: {month: "2026-08", field: "savingsRatePercent"}}}
-        note: "save = net cash flow (income + spending, transfers excluded) or the savings rate, as Phase 5 defines them"
+          - - {value: "500.00", source: {row: {date: "2026-08-02", contains: "TRANSFER TO SAVINGS", account: "northfield-checking"}}}
+        note: "revision 1: save = net cash flow or savings rate (as Phase 5 defines them: 462.40 or 9.4%), OR the amount moved to savings (500.00, a linked transfer, outside the totals). An answer that gives both readings, or asks which one is meant, also counts as correct"
       - ask: "and what about september?"
         dependsOnPrevious: true
         expect: ANSWER
-        tools: [[get_month_totals]]
+        tools: [[get_month_totals], [get_category_totals], [get_account_totals], [list_transactions]]
         figures:
           - - {value: "1388.37", source: {month: {month: "2026-09", field: "net"}}}
           - - {value: "28.1", source: {month: {month: "2026-09", field: "savingsRatePercent"}}}
-        note: "answered from the first turn's context: September's savings"
+          - - {value: "500.00", source: {row: {date: "2026-09-02", contains: "TRANSFER TO SAVINGS", account: "northfield-checking"}}}
+        note: "revision 1: answered from the first turn's context, in the reading turn 1 used: net 1388.37 or savings rate 28.1% after the first reading, 500.00 moved to savings after the second; after both readings or a clarifying question, either"
   - id: h-u08
     author: user
     category: SEARCH

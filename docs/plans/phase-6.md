@@ -921,7 +921,7 @@ Sonnet 5.5.
 | 5 | Chat loop and API | V21; `ChatModelClient` (framework tool execution proven off), `ChatService`, limits and prices, retry and fallback, `ChatConversationStore`, endpoints and errors, AI off, AI-06 lines; main role options (no temperature unless set) | `ChatServiceTest`, `ChatApiTest`, `ChatOutboundPayloadTest`, `SchemaMigrationTest`, `EnumCheckConstraintTest`, `SensitiveDataLeakTest`, `AiModeTest` |
 | 6 | Search and routing | `MerchantIndexRefresh` (categorize), `MerchantSearchQuery`, `search_transactions`, `get_merchant_totals`, the outbound-text map, refresh endpoint; routing rules in the prompt | `MerchantSearchTest` (fake vectors with chosen neighbours, the name match, coverage, a refused query), `MerchantIndexRefreshTest`, routing scripted turns |
 | 7 | Memory and monthly summary | Window and summarization, figure stripping, retention purge; `MonthlySummaryService` with grounding and the template | `ConversationMemoryTest`, `RetentionTest`, `MonthlySummaryTest` (template figures equal the months endpoint; model path grounded; fallback) |
-| 8 | Evaluation harness | Before it: the Bedrock catalog check and §2.4 updated (§18 decision 1). `ChatLiveEvalIT`, metrics, guards, reports, price file entries; **no live run** | `ChatEvalMetricsTest` (hand-made turns), `ChatEvalGuardsTest`, `EvalExclusionTest`; then your dev runs, the settings and model choice from them (a small follow-up commit), then your one holdout run |
+| 8 | Evaluation harness | Before it: the Bedrock catalog check and §2.4 updated (§18 decision 1). Scoring follows each turn's notes where figures alone can't (h-u07: one reading kept across both turns; both readings or a clarifying question count). `ChatLiveEvalIT`, metrics, guards, reports, price file entries; **no live run** | `ChatEvalMetricsTest` (hand-made turns), `ChatEvalGuardsTest`, `EvalExclusionTest`; then your dev runs, the settings and model choice from them (a small follow-up commit), then your one holdout run |
 | 9 | Docs, Postman, close-out | README (chat, what leaves the machine, limits, the eval headline), Postman folder 10, requirement statuses, phase summary; tag `phase-6-done` is yours after your newman run | newman against a reset database |
 
 Why this order: nothing that needs a model comes before step 5, so the privacy rules (step 2), the tools (step 3)
@@ -948,8 +948,15 @@ skipped; frontend 4. Requirements v1.55. No migration. No main code beyond the t
 exists; nothing is tuned against the holdout.
 
 **Holdout pin.** `sample-data/chat/holdout.yml`, SHA-256
-`f336384b1789d1a2786d7cf50c8a7f2541a0a22cefd1956e79493ca044eb3e7f`, pinned in `ChatQuestionSetsTest.HOLDOUT_SHA256`, taken
-after the owner's ten questions were in. **Edits rule:** until the holdout is run, the owner may revise their own
+`25ee03caab9e7ac8b3df26c37367f8a5c7d2bf1a454ed509aa033e700b4a3ad8` (revision 1, below), pinned in
+`ChatQuestionSetsTest.HOLDOUT_SHA256`. The first pin, taken after the owner's ten questions were in, was
+`f336384b1789d1a2786d7cf50c8a7f2541a0a22cefd1956e79493ca044eb3e7f`.
+
+**Holdout revisions** (the edits rule; the holdout has not been run):
+
+| # | Date | Change | Hash |
+|---|---|---|---|
+| 1 | 2026-10-20 | `h-u07` accepts either reading of "save", as the owner decided. Turn 1 (August): net cash flow 462.40 or savings rate 9.4%, **or** the amount moved to savings, 500.00 (the answer key's 2026-08-02 transfer to savings). Turn 2 (September): the matching figure of the reading turn 1 used: 1,388.37 or 28.1%, or 500.00 (the 2026-09-02 transfer). An answer giving both readings, or asking which one is meant, also counts as correct (scoring notes on both turns). Both turns' tool alternatives gain `get_category_totals`, `get_account_totals` and `list_transactions`, the tools that return a linked transfer. No other change | `25ee03ca…3ad8` | **Edits rule:** until the holdout is run, the owner may revise their own
 questions; each revision is a note here, a requirements changelog entry and a new pin. After the run the file never
 changes. The dev set is not pinned (it is for tuning).
 
@@ -1014,7 +1021,7 @@ sample data's last covered day.
   is a June alert; mentioning it is allowed.
 - h-u07: net 462.40 or savings rate 9.4% for August; 1,388.37 or 28.1% for September. **Not settled by the data:** "save"
   could also mean the 500.00 moved to savings each month (a transfer, outside the totals). The set follows Phase 5's
-  definitions; reported for the owner's decision.
+  definitions; reported for the owner's decision. *Revision 1: both readings accepted (above).*
 - h-u08: 733.59 over all data (all of it is 2026, so "this year" gives the same). The descriptions say `AMZN MKTP`, so
   only meaning-based search finds "amazon".
 - h-u09: a forecast → refusal.

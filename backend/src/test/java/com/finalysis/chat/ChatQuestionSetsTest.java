@@ -57,7 +57,7 @@ class ChatQuestionSetsTest {
     static final Path ANALYTICS = ImportTestSupport.SAMPLE_DATA.resolve("analytics");
 
     /** Recorded in docs/plans/phase-6.md (step 1 notes). A revision of the owner's questions changes both. */
-    static final String HOLDOUT_SHA256 = "f336384b1789d1a2786d7cf50c8a7f2541a0a22cefd1956e79493ca044eb3e7f";
+    static final String HOLDOUT_SHA256 = "25ee03caab9e7ac8b3df26c37367f8a5c7d2bf1a454ed509aa033e700b4a3ad8";
 
     /** The owner's questions, exactly as written (§18 decision 12); h-u07 is two turns. */
     static final Map<String, List<String>> USER_QUESTIONS = orderedMap(
