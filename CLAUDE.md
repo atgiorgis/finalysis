@@ -71,7 +71,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 6: chatbot, not started (no plan yet; read the Phase 6 requirements in docs/requirements.md first). Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 6: chatbot, plan drafted and awaiting approval: docs/plans/phase-6.md (no feature code yet). Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.
