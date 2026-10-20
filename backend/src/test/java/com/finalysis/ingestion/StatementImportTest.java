@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Imports through the API against Testcontainers Postgres. No test transaction: every import
@@ -352,6 +353,50 @@ class StatementImportTest {
         assertThat(strings(summary.get("warnings"))).first().asString()
                 .startsWith(after + " rows are dated outside the statement period 2026-04-01 to 2026-04-15 and were imported anyway (lines ");
         assertThat(support.count("SELECT count(*) FROM txn WHERE account_id = ?", checking)).isEqualTo(10);
+    }
+
+    /**
+     * Statement periods are posting periods, so the out-of-period rule reads each row's printed date, which for a CSV
+     * with a post-date column is the post date. Apex July's first row (SAFEWAY, transaction date 06-13, posted 06-15)
+     * is inside 06-15 to 07-14 by its post date and outside by its transaction date (Phase 5 step 7, the newman fix).
+     */
+    @Test
+    void outOfPeriodRuleComparesThePostDateWhenTheCsvHasOne() throws Exception {
+        String file = "statements/apex-visa_2026-07.csv";
+        String[] period = manifest(file);
+        Map<String, String> params = Map.of("periodStart", period[2], "periodEnd", period[3],
+                "openingBalance", period[4], "closingBalance", period[5]);
+        long withPostDate = support.account(AccountType.CREDIT_CARD, "2001");
+        JsonNode suggested = json(support.preview(withPostDate, "july.csv", ImportTestSupport.sample(file))
+                .andExpect(status().isOk()).andReturn()).get("suggestedMapping").get("mapping");
+        assertThat(suggested.get("dateColumn").asString()).isEqualTo("Transaction Date");
+        assertThat(suggested.get("postDateColumn").asString()).isEqualTo("Post Date");
+        support.putMapping(withPostDate, suggested.toString()).andExpect(status().isCreated());
+
+        JsonNode byPostDate = importOk(withPostDate, "july.csv", ImportTestSupport.sample(file), params);
+
+        assertThat(byPostDate.get("status").asString()).isEqualTo("RECONCILED");
+        assertThat(strings(byPostDate.get("warnings"))).isEmpty();
+        assertThat(byPostDate.get("inserted").asInt()).isEqualTo(23);
+        assertThat(jdbc.queryForMap("""
+                SELECT txn_date, post_date FROM txn WHERE account_id = ? AND source_line_number = 2""", withPostDate))
+                .containsEntry("txn_date", java.sql.Date.valueOf("2026-06-13"))
+                .containsEntry("post_date", java.sql.Date.valueOf("2026-06-15"));
+
+        // The contrast: the same file, mapped without its post date, is judged by transaction date. The file hash is
+        // blocked across accounts (409), so the first account and its statement go first.
+        support.deleteCreatedAccounts();
+        long withoutPostDate = support.account(AccountType.CREDIT_CARD, "2001");
+        ObjectNode transactionDateOnly = (ObjectNode) suggested.deepCopy();
+        transactionDateOnly.putNull("postDateColumn");
+        support.putMapping(withoutPostDate, transactionDateOnly.toString()).andExpect(status().isCreated());
+
+        JsonNode byTransactionDate = importOk(withoutPostDate, "july.csv", ImportTestSupport.sample(file), params);
+
+        assertThat(byTransactionDate.get("status").asString()).isEqualTo("NEEDS_REVIEW");
+        assertThat(strings(byTransactionDate.get("warnings"))).containsExactly("1 rows are dated outside the statement "
+                + "period 2026-06-15 to 2026-07-14 and were imported anyway (lines 2)");
+        assertThat(byTransactionDate.get("inserted").asInt()).isEqualTo(23);
     }
 
     @Test

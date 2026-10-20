@@ -356,6 +356,11 @@ erDiagram
 | V10 `statement_review` | `statement.reviewed_at`, allowed only on NEEDS_REVIEW statements. |
 | V11 `unparsed_upload_resolution` | `unparsed_upload.resolution` (RESOLVED, DISMISSED), tied to `resolved_at`, backfilled from V8's rule. |
 | V12 `account_unique` | Unique index `uq_account_identity` on (lower(btrim(institution)), type, last_four). Fails, naming the account ids, if duplicates already exist. |
+| V13 `merchant_cleaning` | `ix_txn_merchant` on `txn (merchant)`; `app_setting`, a small key-value table whose first use is the merchant-cleaning rules' fingerprint, so a changed rules file re-cleans every txn at startup. |
+| V14 `categorization_rules` | `categorization_rule.field` (MERCHANT, DESCRIPTION), `direction` (ANY, OUT, IN) and `updated_at`; match types EXACT, PREFIX, CONTAINS, REGEX; source USER; priority 0–1000; patterns 1–200 characters, upper case unless REGEX; one active user rule per field, match type, pattern and direction. `txn.category_rule_id` (only on a RULE category) and `categorized_at`. |
+| V15 `seed_categorization_rules` | The 95 seeded rules: national brands, payment services and generic category words, never a sample-data name. |
+| V16 `ai_categorization` | AI provenance on `txn` (`category_model`, `category_confidence` 0–1, `category_prompt_version`, only on an AI category) and `ai_review_reason` (LOW_CONFIDENCE, INVALID_ANSWER) with `ai_review_at`, only on an uncategorized txn; `ix_txn_ai_review`. |
+| V17 `merchant_embedding_by_model` | Replaces V1's `merchant_embedding`: one vector per merchant and model, with `dimensions` (1024) and the SHA-256 of the redacted text embedded; HNSW cosine index. |
 | V18 `analytics` | `category.spending_offset`, set for Refunds & Rebates; `ix_txn_date` on `txn (txn_date)` for month-range totals across accounts. |
 | V19 `account_closed_on` | `account.closed_on`: the last day an account was open; coverage expects no statement after it. |
 | V20 `alert_dismissal` | `alert_dismissal`: dismissed alerts by key, with CHECK constraints on the key format, the alert type and a 1–200 character note. |
