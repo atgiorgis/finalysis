@@ -11,6 +11,10 @@ files per run:
 
 The Phase 4 summary is [phase-4-accuracy.md](phase-4-accuracy.md).
 
+Phase 5's analytics totals against the sample data's answer key (ANA-06) are in
+[phase-5-totals.md](phase-5-totals.md). They come from `AnalyticsSampleDataTest`, which runs in every
+`./mvnw verify` and calls no model.
+
 Synthetic data only (`sample-data/categorization/`). Result files are committed as evidence (the dev and holdout
 runs of Phase 4 step 9 are), so a new run leaves the working tree dirty until its files are committed or deleted.
 The holdout is evaluated once: a holdout run refuses to start while any `holdout-*` file exists here, and both

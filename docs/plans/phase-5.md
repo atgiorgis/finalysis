@@ -1099,6 +1099,44 @@ household's last covered day, or to its `closed_on`.
   `TxnRef` (no raw description), plus category and bucket.
 - **`SampleDataImport.applyAnswerKey`** sets the answer key's categories as USER categories; step 4 will reuse it.
 
+### Step 4 notes
+
+Done: "Phase 5 step 4: ANA-06 on the sample data". Backend 2,344 tests (Maven summary; 2,342 + 2),
+0 failures, 0 skipped; frontend 4. Requirements v1.50 (v1.49, the goals and UI requirements, was its own commit just
+before). No migration, no main-code change.
+
+**Built** (tests and the report only)
+- **`AnswerKeyOracle`:** the expected cells from `answer-key.csv`, with plain Java streams. No SQL, no
+  `TxnBucketSql`, no `BucketOracle`, no service: the counting rules are written out again, for the cases the key has
+  (linked, unlinked, income, refunds, expense), with the seeded income categories listed in it.
+- **`AnalyticsSampleDataTest`:** imports the sample data for real (detection runs), applies the key's categories
+  (`SampleDataImport.applyAnswerKey`, step 3), and compares every category cell (month × bucket × category, household
+  and each account) and eight month totals per scope and month, March to October. **482 of 482 match.** Detection
+  links exactly the key's 36 transfers.
+- **Broken June file:** with `broken/summit-card_2026-06.csv` in place of the good one, exactly the 11 cells built on
+  the missing −23.44 Dining row differ, each by that row; against the key minus that row, all 482 match; June, and
+  only June, carries `RECONCILIATION_FAILED` with the Summit statement's id.
+- **Step 3's 318 drill-down cells, re-checked:** `DrillDownSampleDataTest` now compares each one with the oracle too,
+  not only with the endpoints. All match.
+- **Report:** `docs/eval/phase-5-totals.md`, from the counts the test writes to `target/phase-5-totals/` (never the
+  repo). `docs/eval/README.md` links it.
+
+**Decisions beyond the plan**
+- **Months compared: March to October**, not only the key's six (April to September). The two extra months have no
+  key rows, so the endpoints must report them empty, and that is checked too.
+- **Month totals are compared as well as the category cells:** eight per scope and month (`income`, `spending`,
+  `net`, `savingsRatePercent`, both transfer lines, `netChange`, `txnCount`). The plan's "about 11 categories" are
+  162 non-empty category cells across the five scopes.
+- **The broken-file variant asserts the exact set of differing cells** (11), not only June Dining, and that the file
+  matches the key minus its missing row.
+- **A merchant's oracle figure** groups the key's spending rows by the merchant the import gave each one, matched on
+  account, date, raw description and amount: the key has no cleaned merchant column. Only that grouping comes from
+  the database; the sums are the key's.
+- **The report's alert section lists the three labelled anomalies** and is completed when the alerts exist (steps 5
+  and 6).
+- **The report's commit** is named as "the step 4 commit, on top of `6b9fec8`": the hash isn't known before the
+  commit, and amending it in would change it again.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1107,7 +1145,7 @@ household's last covered day, or to its `closed_on`.
 | ANA-02 (cash flow, savings rate) | 2 | `MonthlyTotalsTest` |
 | ANA-03 | 3 | `TrendsTest` |
 | ANA-04 | 5, 6 | the alert tests, sample-data expected alerts |
-| ANA-06 | 4 | `AnalyticsSampleDataTest`, `docs/eval/phase-5-totals.md` |
+| ANA-06 | 2, 3, 4 | `MonthlyTotalsTest`, `DrillDownTest`, `AnalyticsSampleDataTest`, `DrillDownSampleDataTest`, `docs/eval/phase-5-totals.md` |
 | ANA-07 | 6 | `MonthlySeriesTest`, `RecurringChargesApiTest` |
 | ANA-08 | 2 | `DataQualityTest` |
 | GR-01, GR-02 | all | SQL source test, rounding tests |

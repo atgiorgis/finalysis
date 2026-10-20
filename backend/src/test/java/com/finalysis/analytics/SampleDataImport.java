@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -35,11 +37,23 @@ final class SampleDataImport {
 
     /** Imports every statement; returns account ids by slug. */
     Map<String, Long> load() throws Exception {
+        return load(Set.of());
+    }
+
+    /**
+     * Imports every statement, with {@code broken/} files in place of the good ones of the same name (the manifest
+     * lists both); returns account ids by slug.
+     */
+    Map<String, Long> load(Set<String> brokenFiles) throws Exception {
         Map<String, Long> accounts = new LinkedHashMap<>();
         for (String slug : SLUGS) {
             accounts.put(slug, account(slug));
         }
         for (String[] entry : manifest()) {
+            String name = Path.of(entry[0]).getFileName().toString();
+            if (brokenFiles.contains(name)) {
+                entry = brokenEntry(name);
+            }
             String slug = entry[1];
             Map<String, String> params = new LinkedHashMap<>(Map.of("periodStart", entry[2], "periodEnd", entry[3]));
             if (!slug.startsWith("northfield")) {
@@ -57,9 +71,14 @@ final class SampleDataImport {
      * account, date, raw description and amount; genuine duplicates share all four and their category.
      */
     void applyAnswerKey(JdbcTemplate jdbc, Map<String, Long> accounts) {
+        applyAnswerKey(jdbc, accounts, c -> false);
+    }
+
+    /** As {@link #applyAnswerKey(JdbcTemplate, Map)}, skipping the key rows {@code missing} names (a broken file's). */
+    void applyAnswerKey(JdbcTemplate jdbc, Map<String, Long> accounts, Predicate<String[]> missing) {
         try {
             for (String[] c : Files.readAllLines(ImportTestSupport.SAMPLE_DATA.resolve("answer-key.csv")).stream()
-                    .skip(1).map(line -> line.split(",", -1)).toList()) {
+                    .skip(1).map(line -> line.split(",", -1)).filter(missing.negate()).toList()) {
                 int updated = jdbc.update("""
                         UPDATE txn SET category_id = (SELECT id FROM category WHERE name = ?), category_source = 'USER',
                                        category_rule_id = NULL, categorized_at = now()
@@ -98,6 +117,16 @@ final class SampleDataImport {
         support.putMapping(id, preview.get("suggestedMapping").get("mapping").toString())
                 .andExpect(status().isCreated());
         return id;
+    }
+
+    private static String[] brokenEntry(String name) {
+        try {
+            return Files.readAllLines(ImportTestSupport.SAMPLE_DATA.resolve("statements-manifest.csv")).stream()
+                    .skip(1).map(line -> line.split(",", -1)).filter(c -> c[0].equals("broken/" + name))
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("no broken/" + name));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /** The {@code statements/} rows of the manifest: file, slug, period start and end, opening and closing balance. */
