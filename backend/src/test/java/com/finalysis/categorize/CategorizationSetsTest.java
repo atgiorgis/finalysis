@@ -48,6 +48,12 @@ class CategorizationSetsTest {
             "SeedRulesTest.java", "CategorizationLiveEvalIT.java",
             "EvalGuards.java", "EvalGuardsTest.java");
 
+    /**
+     * Phase 6's chat evaluation has a holdout of its own ({@code sample-data/chat/holdout.yml}), which these test files
+     * name. They may say "holdout"; they may never name this one ({@link #neitherChatFileNamesTheCategorizationHoldout}).
+     */
+    private static final Set<String> CHAT_HOLDOUT_READERS = Set.of("ChatQuestionSetsTest.java", "SampleDataTest.java");
+
     private static final Pattern WORD = Pattern.compile("[A-Z]{3,}");
     private static final Pattern MONEY = Pattern.compile("-?\\d+\\.\\d{2}");
 
@@ -146,7 +152,22 @@ class CategorizationSetsTest {
         assertThat(filesMentioningHoldout(Path.of("src/main/java"))).isEmpty();
         assertThat(filesMentioningHoldout(Path.of("src/main/resources"))).isEmpty();
         assertThat(filesMentioningHoldout(Path.of("src/test")))
-                .allMatch(file -> HOLDOUT_READERS.contains(file.getFileName().toString()));
+                .allMatch(file -> HOLDOUT_READERS.contains(file.getFileName().toString())
+                        || CHAT_HOLDOUT_READERS.contains(file.getFileName().toString()));
+    }
+
+    /** The chat holdout's readers are allowed by name only because they never name the categorization holdout. */
+    @Test
+    void neitherChatFileNamesTheCategorizationHoldout() throws IOException {
+        try (Stream<Path> files = Files.walk(Path.of("src/test"))) {
+            List<Path> chatReaders = files.filter(file -> CHAT_HOLDOUT_READERS.contains(file.getFileName().toString()))
+                    .toList();
+            assertThat(chatReaders).hasSize(CHAT_HOLDOUT_READERS.size());
+            for (Path file : chatReaders) {
+                assertThat(Files.readString(file)).as(file.toString())
+                        .doesNotContain("categorization/holdout").doesNotContain("holdout.csv");
+            }
+        }
     }
 
     /** Files with a non-comment line that mentions the holdout; comments may say "never tune against the holdout". */

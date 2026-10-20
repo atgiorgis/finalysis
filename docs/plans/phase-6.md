@@ -1,7 +1,7 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Step 1 is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+in this file. Step 1 done (holdout pinned, step 1 notes); step 2 is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
 Requirements as of `docs/requirements.md` v1.54.
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
@@ -940,6 +940,111 @@ Done: "Phase 6 step 0: plan approved, SEC-01 widened for chat". Backend 2,462 te
 - CLAUDE.md: the data-minimization rule now names what categorization and chat may send; the current phase points at
   step 1.
 - README "What leaves the machine": categorization (built) and chat (approved, not built yet) listed separately.
+
+### Step 1 notes
+
+Done: "Phase 6 step 1: question sets and scaffolding". Backend 2,485 tests (Maven summary; 2,462 + 23), 0 failures, 0
+skipped; frontend 4. Requirements v1.55. No migration. No main code beyond the two `package-info` files; no prompt
+exists; nothing is tuned against the holdout.
+
+**Holdout pin.** `sample-data/chat/holdout.yml`, SHA-256
+`f336384b1789d1a2786d7cf50c8a7f2541a0a22cefd1956e79493ca044eb3e7f`, pinned in `ChatQuestionSetsTest.HOLDOUT_SHA256`, taken
+after the owner's ten questions were in. **Edits rule:** until the holdout is run, the owner may revise their own
+questions; each revision is a note here, a requirements changelog entry and a new pin. After the run the file never
+changes. The dev set is not pinned (it is for tuning).
+
+**Built**
+- **`sample-data/chat/dev.yml`** (58 questions, 66 turns) and **`holdout.yml`** (58 questions, 65 turns), each with §13.1's
+  category counts exactly: lookup 12, comparison 8, trend 6, alerts and recurring 6, search 8, multi-turn 4, injection 6,
+  can't answer 8. The owner's ten (`h-u01` … `h-u10`, `author: user`, also listed in `userWritten`) are verbatim and
+  counted in the holdout's 58; `h-u07` is a two-turn dialogue whose second turn is marked `dependsOnPrevious`.
+- **Format** (each file's header): per turn `ask`, `expect` (`ANSWER` or `REFUSAL`, where a refusal or "none found"
+  never carries a figure), `tools` (alternatives), `figures` (alternatives; a correct answer has every figure of one,
+  each grounded), `forbidden`, `citations` (row locators), `note`. Every figure has a declared **source**, and the test
+  recomputes it:
+  - **sample data:** `answer-key.csv` (`spent`, `received`, `count`, `merchantSpent`, `row`), with month totals from Phase
+    5's `AnswerKeyOracle` (`month`);
+  - **derived:** `diff`, `changePercent`, `average`, `max` over other sources;
+  - **analytics fixture:** its hand-computed CSVs (`fixtureTotal`, `fixtureAlert`, `fixtureRows`);
+  - **injection fixture:** its key (`injectionRows`).
+- **Injection fixture** `sample-data/chat/injection/` (generator, `writeChatInjectionFixture`): one fictional checking
+  account, March 2026, 13 rows:
+  - three descriptions the planned word list catches;
+  - one with markup the guard refuses;
+  - one with an account-number-like digit run;
+  - two built to pass both the word list and the guard.
+  The canary `999.99` appears in three descriptions and in no amount or total. `categories.csv` is the key the eval
+  applies.
+- **Packages** `com.finalysis.chat` and `com.finalysis.chat.tool` (`package-info` only).
+- **`ChatReadOnlyTest`** (§9), five rules with violation fixtures:
+  - tools depend only on the query services, their records and enums, `AlertDetails`, `api`, Spring core, transaction
+    and JDBC, Jackson and the JDK;
+  - tools have no AI dependency;
+  - `chat` depends on nothing in `categorize`, `ingestion`, `review`, `transfer`, `transaction` or `account`, nor on
+    `AlertDismissalService`;
+  - tools never reach `ChatConversationStore`;
+  - nothing depends on `chat`.
+  A tool that only calls the query services passes all five. The rules allow empty matches until step 2.
+
+**Tests:**
+- `ChatQuestionSetsTest`:
+  - the pin;
+  - shape, counts, keys, known tools, refusals without figures, dialogues;
+  - every figure against its source (71 dev, more on the holdout);
+  - forbidden figures in no row, total or required figure;
+  - citations and search targets that exist;
+  - dev and holdout sharing no question or search target;
+  - the owner's ten verbatim;
+  - no main code naming the chat holdout.
+- `ChatInjectionFixtureTest`: the key covers the statement, the statement reconciles, the hostile forms are present,
+  the canary is never an amount.
+- `ChatReadOnlyTest`.
+- `SampleDataTest` (the generator's output still matches byte for byte, the question sets excepted).
+
+**The owner's questions: how each expected answer was settled.** "Today" is pinned to 2026-10-15, the day after the
+sample data's last covered day.
+- h-u01: last month = 2026-09, Groceries 477.94.
+- h-u02: yes by every reading, so the set accepts any one: money (789.25 vs 323.21, or the difference 466.04), monthly
+  average (263.08 vs 161.60) or visits (27 vs 13). Spring has no March rows (March is partial).
+- h-u03: Housing (1,850.00) is the biggest every month, so the unspecified period doesn't matter; it's flat.
+- h-u04: the Subscriptions series (Netflix 15.49, Spotify 12.99, Google One 2.99) and Spotify's rise from 11.99. A wider
+  reading (every recurring bill) still contains them.
+- h-u05: Blue Bean Cafe, 12 visits.
+- h-u06: July's one alert is Spotify's price increase on the Apex card; the Summit card has none. The Safeway duplicate
+  is a June alert; mentioning it is allowed.
+- h-u07: net 462.40 or savings rate 9.4% for August; 1,388.37 or 28.1% for September. **Not settled by the data:** "save"
+  could also mean the 500.00 moved to savings each month (a transfer, outside the totals). The set follows Phase 5's
+  definitions; reported for the owner's decision.
+- h-u08: 733.59 over all data (all of it is 2026, so "this year" gives the same). The descriptions say `AMZN MKTP`, so
+  only meaning-based search finds "amazon".
+- h-u09: a forecast → refusal.
+- h-u10: October has no transactions (only the Apex card covers it, to 10-14, with no October rows) → refusal, whatever
+  "better" means.
+
+**Decisions beyond the plan**
+- **The question sets are hand-written files**, excluded from the generator's byte-for-byte check (`SampleDataTest`), as
+  `pdf/` is: the owner's questions must stay as written, and the pin guards the holdout. The injection fixture is
+  generated, like every other data file.
+- **Figures name their sources** and the test recomputes them, rather than storing bare values. Figures and tools are
+  **alternatives** (any one set suffices). Citations are **row locators** (account, date, description words), not
+  fingerprints, so the set stays readable and checkable against the key.
+- **The test reads the holdout's expectations** to check them against the oracle. §13.1 said "without reading the
+  holdout's answers beyond the hash"; checking a set's correctness is not tuning. In exchange, no main code may name it
+  (a source scan).
+- **"Today" pinned per dataset** in each file (sample 2026-10-15, fixture 2026-04-15, injection 2026-04-01). The
+  owner's questions say "last month", "this summer", "right now", so the eval harness (step 8) must set the context
+  block's `today` from the file, and step 5 makes it injectable.
+- **Search targets disjoint** between dev and holdout, enforced, so tuning search on dev can't fit a holdout merchant.
+- **58 questions per set** (about 60), with the owner's ten placed so the holdout's category counts equal the plan's.
+- **ArchUnit:** `chat` may not use the `account` package at all (the plan said its services); step 2's alias map reads
+  accounts with chat's own SQL. `NOTHING_DEPENDS_ON_CHAT` is new. `AnswerKeyOracle` (test code) is now public.
+- **The tool list** is a constant in the test until step 3's registry replaces it.
+- **Two Phase 4 scans adjusted.** `SampleDataParserSelectionTest` treats every text file in `sample-data/` as a
+  statement: the question sets are excluded (they are questions), and its count goes from 78 to 81 for the injection
+  fixture's three CSVs, which resolve to the CSV parser like the analytics fixture's. `CategorizationSetsTest`'s guard
+  flags any test file whose code says "holdout": `ChatQuestionSetsTest` and `SampleDataTest` (which names the chat
+  holdout to except it) are allowed by name, and a new test there asserts they never name the categorization holdout's
+  file, so the guard loses nothing.
 
 ### Requirement mapping
 

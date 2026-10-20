@@ -29,14 +29,16 @@ import java.util.stream.Stream;
  *   <li>any other category: an expense, whatever the sign.</li>
  * </ul>
  * The month is the calendar month of the key's {@code date}, which is the txn date (the CSV layouts print one date).
+ *
+ * <p>Public for Phase 6's {@code ChatQuestionSetsTest}, whose month figures come from here.
  */
-final class AnswerKeyOracle {
+public final class AnswerKeyOracle {
 
     /** The seeded income categories (V2). Written here, not read from the database, so the oracle stays independent. */
     static final Set<String> INCOME = Set.of("Income", "Interest", "Person-to-Person In");
     static final String REFUNDS = "Refunds & Rebates";
     static final String TRANSFER = "Transfer";
-    static final String ALL = "ALL";
+    public static final String ALL = "ALL";
 
     /** One answer-key row. */
     record KeyRow(String file, String account, LocalDate date, String description, BigDecimal amount,
@@ -102,7 +104,7 @@ final class AnswerKeyOracle {
      * A month's totals as §1.1 defines them, for one scope. The answer key has no uncategorized rows and no refunds,
      * so income is the income rows and spending the expense rows.
      */
-    record Month(BigDecimal income, BigDecimal spending, BigDecimal net, BigDecimal savingsRatePercent,
+    public record Month(BigDecimal income, BigDecimal spending, BigDecimal net, BigDecimal savingsRatePercent,
                  BigDecimal unlinked, BigDecimal linked, BigDecimal netChange, int txnCount) {
     }
 
@@ -113,7 +115,7 @@ final class AnswerKeyOracle {
     }
 
     /** The whole answer key. */
-    static AnswerKeyOracle answerKey() {
+    public static AnswerKeyOracle answerKey() {
         return answerKey(row -> true);
     }
 
@@ -159,7 +161,7 @@ final class AnswerKeyOracle {
     }
 
     /** A month's totals for a scope. */
-    Month month(String scope, YearMonth month) {
+    public Month month(String scope, YearMonth month) {
         List<KeyRow> inMonth = rows.stream()
                 .filter(row -> scope.equals(ALL) || row.account().equals(scope))
                 .filter(row -> row.month().equals(month))

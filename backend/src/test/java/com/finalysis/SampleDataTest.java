@@ -29,6 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 class SampleDataTest {
 
     private static final Path SAMPLE_DATA = Path.of("..", "sample-data");
+    private static final List<Path> CHAT_QUESTION_SETS = List.of(Path.of("chat", "dev.yml"), Path.of("chat", "holdout.yml"));
     private static final DateTimeFormatter NORTHFIELD_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
     private static final DateTimeFormatter SUMMIT_DATE = DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH);
     private static final Map<String, String> CHECKING_PAYMENT_DESCRIPTIONS = Map.of(
@@ -143,8 +144,9 @@ class SampleDataTest {
 
         Map<Path, byte[]> generated = filesUnder(output);
         Map<Path, byte[]> committed = filesUnder(SAMPLE_DATA);
-        // pdf/ belongs to tools/SyntheticPdfGenerator.java and is checked by SyntheticPdfTest.
-        committed.keySet().removeIf(file -> file.startsWith("pdf"));
+        // pdf/ belongs to tools/SyntheticPdfGenerator.java and is checked by SyntheticPdfTest. The chat question sets
+        // are hand-written (the owner's holdout questions verbatim) and checked by ChatQuestionSetsTest.
+        committed.keySet().removeIf(file -> file.startsWith("pdf") || CHAT_QUESTION_SETS.contains(file));
         assertThat(generated.keySet()).containsExactlyInAnyOrderElementsOf(committed.keySet());
         generated.forEach((file, bytes) -> assertThat(bytes).as(file.toString()).isEqualTo(committed.get(file)));
     }

@@ -60,7 +60,12 @@ class SampleDataParserSelectionTest {
 
     /** Text files: everything except PDFs and the PDF generator's own expectation files. */
     static Stream<Path> textSampleFiles() throws IOException {
-        return sampleFiles().filter(path -> !isPdf(path) && !isPdfExpectation(path));
+        return sampleFiles().filter(path -> !isPdf(path) && !isPdfExpectation(path) && !isChatQuestionSet(path));
+    }
+
+    /** Phase 6's chat question sets (YAML, checked by {@code ChatQuestionSetsTest}): questions, not statements. */
+    private static boolean isChatQuestionSet(Path relativePath) {
+        return relativePath.startsWith("chat") && relativePath.getFileName().toString().endsWith(".yml");
     }
 
     static Stream<PdfExpectation> pdfManifest() throws IOException {
@@ -87,8 +92,8 @@ class SampleDataParserSelectionTest {
         // statements and their expected outcomes, 1 merchant edge-case statement and its expected
         // merchants, manifest, answer key, categorization dev and holdout sets, AI categorization,
         // similar-merchant and eval harness cases, and the analytics fixture (8 statements, its manifest, category key
-        // and 3 expected files)
-        assertThat(textSampleFiles()).hasSize(78);
+        // and 3 expected files), and the chat injection fixture (1 statement, its manifest and category key)
+        assertThat(textSampleFiles()).hasSize(81);
         // 6 monthly PDFs and 12 edge cases
         assertThat(sampleFiles().filter(SampleDataParserSelectionTest::isPdf)).hasSize(18);
     }
