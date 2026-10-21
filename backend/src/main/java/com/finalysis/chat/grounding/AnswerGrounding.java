@@ -23,6 +23,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class AnswerGrounding {
 
+    /** How the retry message starts; the evaluation reads the figures after it (step 8). */
+    public static final String RETRY_PREFIX = "These figures are not in this turn's tool results: ";
+
     private static final Pattern SENTENCE_END = Pattern.compile("[.!?](?=\\s|$)|\\R");
 
     private final ChatPayloadGuard guard;
@@ -61,7 +64,7 @@ public class AnswerGrounding {
         if (check.grounded()) {
             throw new IllegalArgumentException("the answer is grounded; there is nothing to retry");
         }
-        return "These figures are not in this turn's tool results: "
+        return RETRY_PREFIX
                 + check.ungrounded().stream().map(Figure::asWritten).distinct().collect(Collectors.joining(", "))
                 + ". Rewrite the answer using only figures from tool results, call a tool if one returns the figure "
                 + "you need (`compare_periods` for differences), or say you can't tell.";

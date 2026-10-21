@@ -29,16 +29,23 @@
         <jqwik.version>1.9.3</jqwik.version>
         <!-- The AWS SDK version Spring AI 2.0.1's Bedrock modules bring; keep them equal when upgrading. -->
         <aws-sdk.version>2.51.2</aws-sdk.version>
-        <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke and ai-eval profiles flip these. -->
+        <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke, ai-eval and chat-eval profiles flip
+             these. -->
         <surefire.groups></surefire.groups>
-        <surefire.excludedGroups>live-ai,ai-eval</surefire.excludedGroups>
+        <surefire.excludedGroups>live-ai,ai-eval,chat-eval</surefire.excludedGroups>
         <finalysis.live-ai>false</finalysis.live-ai>
         <finalysis.ai-eval>false</finalysis.ai-eval>
+        <finalysis.chat-eval>false</finalysis.chat-eval>
         <!-- Inputs of the accuracy evaluation (ai-eval profile); override with -D. No set: it refuses to run. -->
         <eval.set></eval.set>
         <eval.min-confidence>0.80</eval.min-confidence>
         <eval.direct-min-similarity>0.97</eval.direct-min-similarity>
         <eval.holdout.confirm>false</eval.holdout.confirm>
+        <!-- Inputs of the chat evaluation (chat-eval profile) and the chat smoke test: the Bedrock model id (the price
+             file must list it; no default), questions or the search-floor sweep, and the run budget in dollars. -->
+        <eval.model></eval.model>
+        <eval.run>questions</eval.run>
+        <eval.max-cost>5.00</eval.max-cost>
     </properties>
 
     <dependencyManagement>
@@ -181,7 +188,7 @@
             <id>ai-smoke</id>
             <properties>
                 <surefire.groups>live-ai</surefire.groups>
-                <surefire.excludedGroups>ai-eval</surefire.excludedGroups>
+                <surefire.excludedGroups>ai-eval,chat-eval</surefire.excludedGroups>
                 <finalysis.live-ai>true</finalysis.live-ai>
             </properties>
         </profile>
@@ -195,8 +202,35 @@
             <id>ai-eval</id>
             <properties>
                 <surefire.groups>ai-eval</surefire.groups>
-                <surefire.excludedGroups>live-ai</surefire.excludedGroups>
+                <surefire.excludedGroups>live-ai,chat-eval</surefire.excludedGroups>
                 <finalysis.ai-eval>true</finalysis.ai-eval>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Opt-in chat evaluation against the cloud models (ChatLiveEvalIT, ChatSearchSweepIT; docs/plans/phase-6.md,
+             step 8 notes): the dev or holdout question set, or the dev search-floor sweep, results in docs/eval/.
+               cd backend && ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=<id>
+               cd backend && ./mvnw test -Pchat-eval -Deval.run=sweep -Deval.set=dev
+             A holdout run also needs -Deval.holdout.confirm=true, a clean working tree and no earlier chat holdout
+             results. Needs Docker (Testcontainers) and the AWS CLI profile named in application-aws.yml. -->
+        <profile>
+            <id>chat-eval</id>
+            <properties>
+                <surefire.groups>chat-eval</surefire.groups>
+                <surefire.excludedGroups>live-ai,ai-eval</surefire.excludedGroups>
+                <finalysis.chat-eval>true</finalysis.chat-eval>
             </properties>
             <build>
                 <plugins>
@@ -220,9 +254,9 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- Tests tagged live-ai or ai-eval call a real cloud model; they run only with -Pai-smoke or -Pai-eval
-                 (below). *IT classes aren't in surefire's default includes, so the evaluation isn't even selected
-                 without its profile. -->
+            <!-- Tests tagged live-ai, ai-eval or chat-eval call a real cloud model; they run only with -Pai-smoke,
+                 -Pai-eval or -Pchat-eval (above). *IT classes aren't in surefire's default includes, so the evaluations
+                 aren't even selected without their profiles. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -236,6 +270,10 @@
                         <eval.min-confidence>${eval.min-confidence}</eval.min-confidence>
                         <eval.direct-min-similarity>${eval.direct-min-similarity}</eval.direct-min-similarity>
                         <eval.holdout.confirm>${eval.holdout.confirm}</eval.holdout.confirm>
+                        <finalysis.chat-eval>${finalysis.chat-eval}</finalysis.chat-eval>
+                        <eval.model>${eval.model}</eval.model>
+                        <eval.run>${eval.run}</eval.run>
+                        <eval.max-cost>${eval.max-cost}</eval.max-cost>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

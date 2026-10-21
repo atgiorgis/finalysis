@@ -50,9 +50,13 @@ class CategorizationSetsTest {
 
     /**
      * Phase 6's chat evaluation has a holdout of its own ({@code sample-data/chat/holdout.yml}), which these test files
-     * name. They may say "holdout"; they may never name this one ({@link #neitherChatFileNamesTheCategorizationHoldout}).
+     * name: the question sets' test, the sample-data check, and the chat evaluation's harness (step 8: its run, guards,
+     * set loader and their tests). They may say "holdout"; they may never name this one
+     * ({@link #neitherChatFileNamesTheCategorizationHoldout}).
      */
-    private static final Set<String> CHAT_HOLDOUT_READERS = Set.of("ChatQuestionSetsTest.java", "SampleDataTest.java");
+    private static final Set<String> CHAT_HOLDOUT_READERS = Set.of("ChatQuestionSetsTest.java", "SampleDataTest.java",
+            "ChatLiveEvalIT.java", "ChatEvalGuards.java", "ChatEvalGuardsTest.java", "ChatEvalSetTest.java",
+            "ChatEvalReportTest.java");
 
     private static final Pattern WORD = Pattern.compile("[A-Z]{3,}");
     private static final Pattern MONEY = Pattern.compile("-?\\d+\\.\\d{2}");

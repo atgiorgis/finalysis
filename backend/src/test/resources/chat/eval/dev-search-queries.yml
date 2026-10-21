@@ -1,0 +1,13 @@
+# Search texts for the retrieval-only sweep of the search floor (docs/plans/phase-6.md §4.3, step 8). DEV ONLY: one
+# entry per dev question with searchTargets, nothing from the holdout. Each is a few words the model could plausibly
+# send for the question (the tool asks for "a kind of merchant ... or part of a name"), written from the question's
+# words alone: no query names a target merchant (SearchSweepQueriesTest checks both). Add the texts a dev run's model
+# actually sent (the results' "searched" lines) to see the floor for them too.
+d-s01: ["rideshare", "ride share", "taxi"]
+d-s02: ["food delivery", "delivery"]
+d-s03: ["gas", "gas station", "fuel"]
+d-s04: ["pharmacy", "drugstore"]
+d-s05: ["burrito", "burrito place", "mexican restaurant"]
+d-s06: ["ramen", "ramen restaurant", "japanese restaurant"]
+d-s07: ["phone bill", "phone", "mobile carrier"]
+d-s08: ["internet", "internet bill", "internet provider"]

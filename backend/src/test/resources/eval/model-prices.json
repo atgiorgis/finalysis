@@ -1,5 +1,5 @@
 {
-  "source": "docs/plans/phase-4.md §4.5 and §11.1 (on-demand, us-east-1). Check the AWS Bedrock pricing page before relying on an estimate; a model not listed here gets no estimate.",
+  "source": "docs/plans/phase-4.md §4.5 and §11.1, docs/plans/phase-6.md §2.1 (on-demand, us-east-1, Anthropic list prices). Check the AWS Bedrock pricing page before relying on an estimate. Keyed by the exact Bedrock id: the chat evaluation (-Deval.model) and the chat smoke test refuse a chat model not listed here, and give the app this price for its cost limits; a model not listed gets no estimate.",
   "models": {
     "us.anthropic.claude-haiku-4-5-20251001-v1:0": { "inputPerMillionUsd": "1.00", "outputPerMillionUsd": "5.00" },
     "amazon.titan-embed-text-v2:0": { "inputPerMillionUsd": "0.02", "outputPerMillionUsd": "0" }

@@ -1,8 +1,9 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 7 done (step notes); step 8 (evaluation harness) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.62).
+in this file. Steps 1 to 8 done (step notes); next: the owner's dev runs and search sweep, the settings and model
+choice from them (a small follow-up commit), the one holdout run, then step 9. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.63).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -1617,6 +1618,126 @@ is `ScriptedChatModel`, and `NoCloudAiGuard` holds in every context.
   data says so; no data at all is `month: null`. A failed call is 502 as §10.2 says, not the template.
 - **`get_merchant_totals` gained `category`** (decision 28 names it among the tools with a category).
 - **`MerchantTotalsService.category`** is a small read-only addition to analytics, so the rule lives in one place.
+
+### Step 8 notes
+
+Done: "Phase 6 step 8: evaluation harness". Backend 3,081 tests (Maven summary; 3,015 + 66), 0 failures, 0 skipped;
+frontend 4. Requirements v1.63. No migration. **No live run, and no AWS call of any kind**: the Bedrock catalog check
+(§18 decision 1) and the IAM change (§2.4) are the owner's, with the commands below; §2.1's table stays as drafted
+until the catalog has been read. Every test is mocks only, with `NoCloudAiGuard` in force.
+
+**How it runs** (`backend/`, Docker for Testcontainers, the AWS CLI profile of `application-aws.yml`):
+
+```sh
+caffeinate -i ./mvnw test -Pai-smoke -Dtest=LiveChatSmokeTest -Deval.model=<id>            # one question, counts only
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=<id>                      # dev, per model
+caffeinate -i ./mvnw test -Pchat-eval -Deval.run=sweep -Deval.set=dev                       # search floor, dev only
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=holdout -Deval.holdout.confirm=true -Deval.model=<id>   # once
+```
+
+**Built** (all test code, `com.finalysis.chat.eval`, except two one-line exposures in main)
+- **The profile and switch.** `-Pchat-eval` selects tag `chat-eval`, sets `finalysis.chat-eval=true` (the only switch
+  that lifts `NoCloudAiGuard` for a `chat-eval` class) and includes `*IT` classes; the default build and the `ai-smoke`
+  and `ai-eval` profiles exclude the tag and never set the switch. `-Deval.run` picks the class: `questions` (default,
+  `ChatLiveEvalIT`) or `sweep` (`ChatSearchSweepIT`).
+- **`ChatLiveEvalIT`.** `@BeforeAll`, before any context, database or model: the set (`dev` or `holdout` only), the
+  model (`-Deval.model`, required, and listed in the price file as a chat model), and for the holdout
+  **`ChatEvalGuards`** in Phase 4's order: the pinned hash `25ee03ca…3ad8` first (the same pin as
+  `ChatQuestionSetsTest`), then `-Deval.holdout.confirm=true`, then no `docs/eval/chat-holdout-*` file, then a clean
+  tree (`git status --porcelain`, untracked files included). Then the context: the `aws` profile, `roles.main` = the
+  model, its price from the price file as `finalysis.ai.prices[<id>]`, every chat limit as the app has it except the
+  daily cap, which is off and replaced by the run budget `-Deval.max-cost` (default $5.00): a run is about 70
+  conversations on one pinned day and would hit $1.00 midway.
+- **`ChatEvalRunner`.** Per dataset in the set's order: everything earlier deleted (conversations, ledger, index,
+  accounts; refuses a database that still has txns), the dataset seeded as the Phase 5 and 6 tests seed it (SAMPLE with
+  `answer-key.csv`'s categories, FIXTURE, INJECTION), the search index built by `MerchantIndexRefresh`, the clock set to
+  the set's `today` for that dataset (SAMPLE 2026-10-15), then each question in a fresh conversation through
+  `ChatService.ask`, a dialogue's turns in one; a failed turn ends its dialogue. Stops: the run budget (results written,
+  the report says where it stopped), or three failed turns in a row (expired SSO session, no model access): aborted,
+  **nothing written**, since nothing was evaluated.
+- **`ChatCallRecorder`**, a post-processor that wraps the context's `ChatModel` and delegates unchanged: it keeps, per
+  turn, the figures a grounding retry listed (read from the retry message, `AnswerGrounding.RETRY_PREFIX`), the answer
+  the retry replaced, and the search texts sent. Memory only, never logged.
+- **`ChatEvalScoring`**, deterministic, no model as judge:
+  - an answer turn is correct when every figure of one listed alternative appears in the shown answer and no forbidden
+    figure does. "Appears" uses the extractor and `GroundingMatcher` themselves (exact, or whole dollars and percents
+    half-even), so every scored figure is a grounded one (a shown answer is grounded or the Java fallback). Counts of 0
+    and 1, which the extractor never reports (§5.2), are looked for as a digit or a word;
+  - a refusal turn is correct only with no figure at all and refusal wording (a fixed list: "can't tell", "don't have",
+    "no data", "only answer questions about", ...). The system prompt prescribes no fixed phrase (§13.1 assumed one);
+  - **h-u07** (revision 1's note): alternatives 0 and 1 are one reading of "save", 2 the other; turn 2 must keep turn
+    1's reading, unless turn 1 gave both or asked which was meant (a clarifying question then counts as correct);
+  - tool choice apart: the calls include every tool of one alternative, order ignored, extras allowed.
+- **`ChatEvalMetrics`**: questions and turns correct (overall, per category, the owner's ten apart; correct fallbacks
+  counted apart), first-try grounding, the model's answer shown, fallbacks, failed turns, retries and the retries with a
+  bare year among their figures (and caused by bare years alone), tool choice, limits by kind, refusal precision and
+  recall and false refusals, injection questions and turns showing a forbidden figure, expected citations present,
+  rounds, tool calls, tokens, calls without usage, cost, and turn and question latency.
+- **`ChatEvalReport`**: `docs/eval/chat-<set>-<commit12>-<timestamp>.json` (everything) and `.md`: the run's identity
+  (commit and dirtiness, model, prompt version and system prompt SHA-256, set SHA-256, today per dataset, prices
+  source, every `finalysis.chat.*`, `finalysis.ai.*` and Bedrock option setting; profile names and credentials never),
+  summary, per category, **"Your questions"** with their answers, grounding and refusals, cost and latency (also the
+  usage ledger's total), per question, wrong turns, then **every answer as shown** (and a retried turn's first
+  answer), the index builds and the settings. Never overwrites.
+- **Prices per model id.** `eval/model-prices.json` stays the one price file: the chat eval and the smoke test refuse a
+  chat model it doesn't list (naming the entry to add) and give the app its price, so the turn cost limits and the
+  reported cost agree for every model run. Only Haiku 4.5 and Titan are listed until the catalog confirms other ids.
+- **Search floor sweep** (`ChatSearchSweepIT`, `SearchSweep`, `SearchSweepRunner`): refuses any set but dev and never
+  opens the holdout. For each dev search question, its queries (`src/test/resources/chat/eval/dev-search-queries.yml`,
+  2 to 3 plausible texts each, none naming a target) go once through `ToolExecutor` → `search_transactions` (limit 10) at
+  floor 0.30; floors 0.30 to 0.60 by 0.05 are worked out from that list (the list at a higher floor is a prefix of it;
+  similarities are the tool's two-decimal values, so a hit within 0.005 below a floor counts as at it). Per floor:
+  queries and questions with every target, targets found, candidates and non-target candidates, and the highest floor
+  that loses no target found at 0.30. Embeddings only: it asserts no chat call was made. `chat-sweep-dev-*` files.
+- **`LiveChatSmokeTest`** (`-Pai-smoke`, tag `live-ai`): one synthetic question on the analytics fixture through a whole
+  turn with `-Deval.model` (default the profile's main role), printing source, grounding, rounds, tools, tokens and
+  cost, never the answer; it needs a tool round and an answer, so it shows whether a model's Converse tool loop
+  (sampling options, reasoning content) works before a dev run is spent on it.
+
+**Tests** (mocks only): `ChatEvalScoringTest` (20: every rule on hand-written answers, h-u07's reading rule, the retry
+message's figures from the real `retryMessage`), `ChatEvalMetricsTest` (6, every count by hand), `ChatEvalGuardsTest`
+(13: every guard alone and in order, the shared pin, the results prefix, set and model checks, the price file),
+`SearchSweepTest` (7, the sweep arithmetic by hand), `ChatEvalSetTest` (3: dev loads whole; the holdout parses and the
+reading note fits its question; the sweep queries cover the dev search questions only), `ChatEvalReportTest` (4),
+`ChatEvalRunnerTest` (6: citations by locator, recorded settings), `ChatCallRecorderTest` (3),
+`ChatEvalRunnerFlowTest` (1: the runner end to end with the scripted model on the sample data: seeding, index, three
+questions through `ChatService`, a bare-year retry seen, scored, the database left empty), `EvalExclusionTest` (+3: the
+chat profile, tag and switch; only the two chat classes carry the tag; the guard stays in force without the switch).
+
+**Decisions beyond the plan**
+- **The eval's own model flag** is `-Deval.model`, required (the plan's `-Dfinalysis.ai.roles.main` would have run an
+  unpriced model into the startup check): each run names its model, and the price comes with it.
+- **The daily cap is off in the eval**, replaced by the run budget; every per-turn limit is the app's, since the eval
+  measures them.
+- **Correctness follows your definition**, not §13.3's: required figures and refusals decide it, plus "no forbidden
+  figure" (an answer showing the canary can't be correct). Expected citations are reported apart.
+- **Fallbacks can be correct** when they hold the figures (they are what the user sees, and grounded); the report counts
+  them apart so the model's own rate is visible.
+- **Every answer is in both sets' reports**, as you asked; §13.3 had the holdout report aggregates and ids only.
+- **Refusals are recognised by wording, not a fixed phrase**; the prompt is not changed in this step.
+- **An aborted run writes nothing**, so a credentials failure doesn't use up the holdout.
+- **One dataset at a time** in one container, everything deleted between them, since the three datasets' accounts
+  would otherwise mix in every total.
+- **Two main-code exposures**: `GroundingMatcher.matches(Figure, Value)` public, and `AnswerGrounding.RETRY_PREFIX`, so
+  scoring uses the grounding rule itself and the recorder reads the retry by the same constant. No behaviour change.
+- **`ChatEvalGuards.GitState` copies Phase 4's**, which is private to its package, rather than changing Phase 4 code.
+- **The sweep's queries are hand-written for dev** from the questions' own words; a dev run's results list the texts the
+  model actually sent ("searched"), which can be added to the file.
+
+**Model setup (the owner's; read-only listing, then the policy change)**
+
+```sh
+aws bedrock list-foundation-models --region us-east-1 --profile finalysis \
+  --query "modelSummaries[?providerName=='Anthropic'].[modelId,modelName,modelLifecycle.status]" --output table
+aws bedrock list-inference-profiles --region us-east-1 --profile finalysis \
+  --query "inferenceProfileSummaries[?contains(inferenceProfileId,'anthropic')].[inferenceProfileId,inferenceProfileName,status]" \
+  --output table
+```
+
+For a confirmed Sonnet `us.` profile id, add to the existing statement (or a second one) exactly: `bedrock:InvokeModel`
+on `arn:aws:bedrock:us-east-1:<account>:inference-profile/<us. profile id>` and
+`arn:aws:bedrock:*::foundation-model/<foundation id>` (the profile id without `us.`). Then the price file entry, then the
+smoke test, then the dev run.
 
 ### Requirement mapping
 

@@ -19,10 +19,12 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
  * but any request fails while it is being signed, before anything is sent. Spring AI's own provider (which reads
  * the AWS CLI profile) backs off, since it is only created when none exists.
  *
- * <p>The two exceptions are opt-in: the live smoke test, a class tagged {@value #LIVE_TAG} run with
- * {@code -D}{@value #LIVE_PROPERTY}{@code =true} (the {@code ai-smoke} Maven profile sets both), and the accuracy
- * evaluation, a class tagged {@value #EVAL_TAG} run with {@code -D}{@value #EVAL_PROPERTY}{@code =true} (the
- * {@code ai-eval} profile). A tag without its own property, or a property without its own tag, changes nothing.
+ * <p>The three exceptions are opt-in: the live smoke tests, a class tagged {@value #LIVE_TAG} run with
+ * {@code -D}{@value #LIVE_PROPERTY}{@code =true} (the {@code ai-smoke} Maven profile sets both), the categorization
+ * accuracy evaluation, a class tagged {@value #EVAL_TAG} run with {@code -D}{@value #EVAL_PROPERTY}{@code =true} (the
+ * {@code ai-eval} profile), and the chat evaluation (docs/plans/phase-6.md step 8), a class tagged
+ * {@value #CHAT_EVAL_TAG} run with {@code -D}{@value #CHAT_EVAL_PROPERTY}{@code =true} (the {@code chat-eval} profile).
+ * A tag without its own property, or a property without its own tag, changes nothing.
  *
  * <p>Registered for every Spring test context in {@code META-INF/spring.factories}, like {@link DevDatabaseGuard}.
  */
@@ -32,6 +34,8 @@ public class NoCloudAiGuard implements ContextCustomizerFactory {
     public static final String LIVE_PROPERTY = "finalysis.live-ai";
     public static final String EVAL_TAG = "ai-eval";
     public static final String EVAL_PROPERTY = "finalysis.ai-eval";
+    public static final String CHAT_EVAL_TAG = "chat-eval";
+    public static final String CHAT_EVAL_PROPERTY = "finalysis.chat-eval";
 
     @Override
     public ContextCustomizer createContextCustomizer(
@@ -42,7 +46,8 @@ public class NoCloudAiGuard implements ContextCustomizerFactory {
     /** Whether this test class may call a cloud model now: its tag and its own switch are both on. */
     static boolean isLive(Class<?> testClass) {
         return tagged(testClass, LIVE_TAG) && Boolean.getBoolean(LIVE_PROPERTY)
-                || tagged(testClass, EVAL_TAG) && Boolean.getBoolean(EVAL_PROPERTY);
+                || tagged(testClass, EVAL_TAG) && Boolean.getBoolean(EVAL_PROPERTY)
+                || tagged(testClass, CHAT_EVAL_TAG) && Boolean.getBoolean(CHAT_EVAL_PROPERTY);
     }
 
     private static boolean tagged(Class<?> testClass, String name) {
@@ -55,7 +60,7 @@ public class NoCloudAiGuard implements ContextCustomizerFactory {
 
         CloudCallBlockedException() {
             super("Tests never call a cloud model; run the live smoke test with -Pai-smoke, the evaluation with "
-                    + "-Pai-eval");
+                    + "-Pai-eval, the chat evaluation with -Pchat-eval");
         }
     }
 

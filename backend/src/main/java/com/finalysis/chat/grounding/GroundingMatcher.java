@@ -29,7 +29,8 @@ public final class GroundingMatcher {
         return set.values().stream().filter(v -> matches(figure, v)).toList();
     }
 
-    static boolean matches(Figure figure, GroundedSet.Value value) {
+    /** Whether one figure matches one value by the forms above (public for the evaluation's scoring, step 8). */
+    public static boolean matches(Figure figure, GroundedSet.Value value) {
         BigDecimal f = figure.magnitude();
         return switch (figure.kind()) {
             case MONEY -> switch (figure.form()) {
