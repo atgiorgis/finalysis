@@ -1,0 +1,74 @@
+package com.finalysis.chat;
+
+import com.finalysis.ai.AiPrices;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+
+/**
+ * The usage of calls made outside a turn's rounds: the conversation summary and the monthly summary (§8). As in a turn,
+ * a call without usage counts at its input estimate and the output cap, so a missing count can never make a call look
+ * free; reported tokens alone are what the ledger shows as tokens.
+ */
+public final class UsageTally {
+
+    private final Optional<AiPrices.Price> price;
+    private int calls;
+    private Integer inputTokens;
+    private Integer outputTokens;
+    private int callsWithoutUsage;
+    private BigDecimal cost;
+
+    public UsageTally(Optional<AiPrices.Price> price) {
+        this.price = price;
+        this.cost = price.isPresent() ? BigDecimal.ZERO : null;
+    }
+
+    /** What a call of this estimate may cost at most (estimated input, full output cap); zero when unpriced. */
+    public BigDecimal worstCase(int estimate, int maxOutputTokens) {
+        return price.map(p -> p.cost(estimate, maxOutputTokens)).orElse(BigDecimal.ZERO);
+    }
+
+    public void add(ChatModelClient.Reply reply, int estimate, int maxOutputTokens) {
+        calls++;
+        long input;
+        long output;
+        if (reply.usageReported()) {
+            input = reply.inputTokens();
+            output = reply.outputTokens();
+            inputTokens = (inputTokens == null ? 0 : inputTokens) + reply.inputTokens();
+            outputTokens = (outputTokens == null ? 0 : outputTokens) + reply.outputTokens();
+        } else {
+            input = estimate;
+            output = maxOutputTokens;
+            callsWithoutUsage++;
+        }
+        price.ifPresent(p -> cost = cost.add(p.cost(input, output)));
+    }
+
+    public int calls() {
+        return calls;
+    }
+
+    public Integer inputTokens() {
+        return inputTokens;
+    }
+
+    public Integer outputTokens() {
+        return outputTokens;
+    }
+
+    public int callsWithoutUsage() {
+        return callsWithoutUsage;
+    }
+
+    /** Estimated cost so far; null when the model has no price. */
+    public BigDecimal cost() {
+        return cost;
+    }
+
+    public ChatConversationStore.Usage toUsage(UsageKind kind, String model, OffsetDateTime at) {
+        return new ChatConversationStore.Usage(kind, model, calls, inputTokens, outputTokens, callsWithoutUsage, cost,
+                at);
+    }
+}

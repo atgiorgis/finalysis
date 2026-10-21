@@ -39,6 +39,11 @@ public enum OutboundKind {
     PARAM,
     /** One of the fixed tool-error messages ({@code ToolProblem}). */
     MESSAGE,
-    /** Free text: only the outbound question, the recent answers and the summary. */
-    TEXT
+    /** Free text: only the outbound question (1–1,000 characters, without {@code < > { }}). */
+    TEXT,
+    /**
+     * A conversation's memory (CHT-06, §7): an earlier answer as shown or the summary of older turns, 1–4,000
+     * characters without {@code < > { }}, with every figure already replaced ({@code SummaryFigureStripper}).
+     */
+    HISTORY
 }

@@ -14,7 +14,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The one writer of the chat tables (docs/plans/phase-6.md §7.3, §9): conversations, turns and their tool calls.
+ * The one writer of the chat tables (docs/plans/phase-6.md §7.3, §9): conversations, turns and their tool calls, each
+ * conversation's summary (CHT-06, §7.2), the usage ledger the daily cap sums (V22), and the retention purge (§7.4).
  * Writes happen after a turn's rounds, outside the tools' read-only transactions; nothing in {@code chat.tool} may
  * depend on this class ({@code ChatReadOnlyTest}). Plain SQL, like the other chat queries. It writes its own JSON
  * columns (citations, the alias map, tool arguments): local data that never goes to the model, so it is the one other
@@ -72,6 +73,38 @@ public class ChatConversationStore {
                              LimitHit limitHit, String citations, String model, int rounds, int toolCalls,
                              Integer inputTokens, Integer outputTokens, int callsWithoutUsage,
                              BigDecimal estimatedCost, long millis, OffsetDateTime createdAt) {
+    }
+
+    /**
+     * One ledger row: what a turn, a conversation summary or a monthly summary cost. Counts only.
+     *
+     * @param inputTokens  reported input tokens summed; null when no call reported usage
+     * @param outputTokens reported output tokens summed; null when no call reported usage
+     * @param cost         estimated cost; null when the model has no price
+     */
+    public record Usage(UsageKind kind, String model, int calls, Integer inputTokens, Integer outputTokens,
+                        int callsWithoutUsage, BigDecimal cost, OffsetDateTime at) {
+    }
+
+    /**
+     * What a conversation's memory is built from (§7.1): its summary and the turns not folded into it, oldest first.
+     *
+     * @param summary        figures already stripped; null before the first fold
+     * @param summaryThrough the last turn folded into the summary; 0 before the first fold
+     */
+    public record Memory(String summary, int summaryThrough, List<PastTurn> turns) {
+
+        public Memory {
+            turns = List.copyOf(turns);
+        }
+    }
+
+    /** A turn as memory sees it: what was sent and what was shown (null for a failed turn). */
+    public record PastTurn(int seq, String outboundQuestion, String answer, AnswerSource source) {
+    }
+
+    /** What the retention purge deleted. */
+    public record Purged(int conversations, int usageRows) {
     }
 
     @Transactional
@@ -197,6 +230,8 @@ public class ChatConversationStore {
                     .param("millis", (int) Math.min(Integer.MAX_VALUE, call.millis()))
                     .update();
         }
+        recordUsage(new Usage(UsageKind.TURN, turn.model(), turn.rounds(), turn.inputTokens(), turn.outputTokens(),
+                turn.callsWithoutUsage(), turn.estimatedCost(), turn.createdAt()));
         String title = turn.question().strip();
         if (title.length() > TITLE_LENGTH) {
             title = title.substring(0, TITLE_LENGTH);
@@ -220,10 +255,70 @@ public class ChatConversationStore {
         }
     }
 
-    /** Estimated cost of every turn stored since a time: the daily cap's spend (§8). Unpriced turns count 0. */
+    /**
+     * Estimated cost of every turn, conversation summary and monthly summary since a time: the daily cap's spend (§8),
+     * from the ledger, so deleting a conversation never lowers it. Unpriced calls count 0.
+     */
     @Transactional(readOnly = true)
     public BigDecimal costSince(OffsetDateTime from) {
-        return jdbc.sql("SELECT coalesce(sum(estimated_cost), 0) FROM chat_turn WHERE created_at >= :from")
+        return jdbc.sql("SELECT coalesce(sum(estimated_cost), 0) FROM chat_usage WHERE created_at >= :from")
                 .param("from", from).query(BigDecimal.class).single();
+    }
+
+    /** Adds a ledger row. A turn's row is written by {@link #saveTurn}, in the turn's transaction. */
+    @Transactional
+    public void recordUsage(Usage usage) {
+        jdbc.sql("""
+                        INSERT INTO chat_usage (kind, model, calls, input_tokens, output_tokens, calls_without_usage,
+                            estimated_cost, created_at)
+                        VALUES (:kind, :model, :calls, :input, :output, :withoutUsage, :cost, :at)""")
+                .param("kind", usage.kind().name()).param("model", usage.model()).param("calls", usage.calls())
+                .param("input", usage.inputTokens()).param("output", usage.outputTokens())
+                .param("withoutUsage", usage.callsWithoutUsage()).param("cost", usage.cost()).param("at", usage.at())
+                .update();
+    }
+
+    /** A conversation's summary and the turns after it, oldest first; empty for an unknown conversation. */
+    @Transactional(readOnly = true)
+    public Optional<Memory> memory(long conversationId) {
+        Optional<Memory> head = jdbc.sql("SELECT summary, summary_through FROM chat_conversation WHERE id = :id")
+                .param("id", conversationId)
+                .query((rs, n) -> new Memory(rs.getString("summary"), rs.getInt("summary_through"), List.of()))
+                .optional();
+        return head.map(h -> new Memory(h.summary(), h.summaryThrough(), jdbc.sql("""
+                        SELECT seq, outbound_question, answer, answer_source FROM chat_turn
+                        WHERE conversation_id = :id AND seq > :through ORDER BY seq""")
+                .param("id", conversationId).param("through", h.summaryThrough())
+                .query((rs, n) -> new PastTurn(rs.getInt("seq"), rs.getString("outbound_question"),
+                        rs.getString("answer"), AnswerSource.valueOf(rs.getString("answer_source"))))
+                .list()));
+    }
+
+    /**
+     * Replaces a conversation's summary and moves its fold point, if nothing else moved it since it was read. The
+     * conversation's activity time is unchanged: a summary is not the user's activity.
+     *
+     * @param summary figures stripped (§7.2), at most 4,000 characters; null keeps none
+     * @return false when the conversation is gone or its fold point is no longer {@code expectedThrough}
+     */
+    @Transactional
+    public boolean saveSummary(long conversationId, int expectedThrough, int through, String summary) {
+        return jdbc.sql("""
+                        UPDATE chat_conversation SET summary = :summary, summary_through = :through
+                        WHERE id = :id AND summary_through = :expected""")
+                .param("summary", summary).param("through", through).param("id", conversationId)
+                .param("expected", expectedThrough).update() > 0;
+    }
+
+    /**
+     * The retention purge (§7.4): every conversation idle since before {@code idleSince} (its turns, tool calls and
+     * summary go with it, by cascade), and ledger rows older than that.
+     */
+    @Transactional
+    public Purged purgeIdle(OffsetDateTime idleSince) {
+        int conversations = jdbc.sql("DELETE FROM chat_conversation WHERE updated_at < :since")
+                .param("since", idleSince).update();
+        int usage = jdbc.sql("DELETE FROM chat_usage WHERE created_at < :since").param("since", idleSince).update();
+        return new Purged(conversations, usage);
     }
 }

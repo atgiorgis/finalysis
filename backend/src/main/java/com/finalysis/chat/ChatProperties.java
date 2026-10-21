@@ -19,7 +19,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param maxTurnTime              wall time per turn; no round starts after it
  * @param maxTurnCost              estimated dollars per turn, checked before each call with that call's worst case;
  *                                 0 turns it off
- * @param maxDailyCost             estimated dollars per local day over every stored turn; 0 turns it off
+ * @param maxDailyCost             estimated dollars per local day over every turn, conversation summary and monthly
+ *                                 summary (the usage ledger); 0 turns it off
+ * @param retentionDays            a conversation idle this many days is deleted, at startup and daily (§7.4; 1–3650)
  */
 @ConfigurationProperties("finalysis.chat")
 public record ChatProperties(@DefaultValue List<String> redactTerms,
@@ -30,7 +32,8 @@ public record ChatProperties(@DefaultValue List<String> redactTerms,
                              @DefaultValue("1500") int maxOutputTokens,
                              @DefaultValue("45s") Duration maxTurnTime,
                              @DefaultValue("0.05") BigDecimal maxTurnCost,
-                             @DefaultValue("1.00") BigDecimal maxDailyCost) {
+                             @DefaultValue("1.00") BigDecimal maxDailyCost,
+                             @DefaultValue("90") int retentionDays) {
 
     public ChatProperties {
         redactTerms = redactTerms.stream().filter(term -> term != null && !term.isBlank()).map(String::strip).toList();
@@ -45,6 +48,7 @@ public record ChatProperties(@DefaultValue List<String> redactTerms,
         }
         notNegative("max-turn-cost", maxTurnCost);
         notNegative("max-daily-cost", maxDailyCost);
+        between("retention-days", retentionDays, 1, 3650);
     }
 
     /** Whether either cost limit is on; then the main model needs a price (§8). */

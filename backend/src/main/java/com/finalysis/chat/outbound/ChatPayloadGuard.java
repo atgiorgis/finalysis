@@ -9,8 +9,10 @@ import com.finalysis.chat.tool.view.ComparisonView;
 import com.finalysis.chat.tool.view.ContextBlockView;
 import com.finalysis.chat.tool.view.CoverageView;
 import com.finalysis.chat.tool.view.DataNotesView;
+import com.finalysis.chat.tool.view.HistoryView;
 import com.finalysis.chat.tool.view.MerchantTotalsView;
 import com.finalysis.chat.tool.view.MonthTotalsView;
+import com.finalysis.chat.tool.view.MonthlyRecordsView;
 import com.finalysis.chat.tool.view.Outbound;
 import com.finalysis.chat.tool.view.OutboundKind;
 import com.finalysis.chat.tool.view.RecurringView;
@@ -63,6 +65,8 @@ public class ChatPayloadGuard {
     private static final Pattern PARAM = Pattern.compile("[a-z][A-Za-z]{0,30}(?:\\.[a-z][A-Za-z]{0,30})?|\\(unknown\\)");
     private static final Pattern TEXT_FORBIDDEN = Pattern.compile("[<>{}]");
     static final int MAX_TEXT = 1000;
+    /** The longest history text: a summary (V21's check) or an earlier answer as sent back. */
+    public static final int MAX_HISTORY = 4000;
 
     private final OutboundPayloadGuard guard;
     private final Map<Class<?>, List<Field>> layouts = new ConcurrentHashMap<>();
@@ -71,7 +75,8 @@ public class ChatPayloadGuard {
     public static final List<Class<? extends Record>> VIEWS = List.of(MonthTotalsView.class, CategoryTotalsView.class,
             AccountTotalsView.class, TopMerchantsView.class, TrendsView.class, ComparisonView.class,
             TransactionsView.class, RecurringView.class, AlertsView.class, CoverageView.class, SearchView.class,
-            MerchantTotalsView.class, ContextBlockView.class, DataNotesView.class, ToolErrorView.class);
+            MerchantTotalsView.class, ContextBlockView.class, DataNotesView.class, ToolErrorView.class,
+            HistoryView.class, MonthlyRecordsView.class);
 
     public ChatPayloadGuard(OutboundPayloadGuard guard) {
         this.guard = guard;
@@ -112,9 +117,27 @@ public class ChatPayloadGuard {
         return new Checked<>(text, 1, 0);
     }
 
-    /** Whether a free text (the outbound question, a shown answer, the summary) may be sent. */
+    /** Whether a free text (the outbound question) may be sent. */
     public boolean allowsText(String text) {
         return text != null && !text.isBlank() && text.length() <= MAX_TEXT && !TEXT_FORBIDDEN.matcher(text).find();
+    }
+
+    /**
+     * Checks a conversation's memory text for sending: the summary, or an earlier answer, figures already stripped.
+     *
+     * @throws PayloadRefusedException if the text fails {@link #allowsHistory}
+     */
+    public Checked<String> checkHistory(String text) {
+        if (!allowsHistory(text)) {
+            throw new PayloadRefusedException("history");
+        }
+        return new Checked<>(text, 1, 0);
+    }
+
+    /** Whether a history text (a summary, an earlier answer) may be sent: 1–4,000 characters without {@code < > { }}. */
+    public boolean allowsHistory(String text) {
+        return text != null && !text.isBlank() && text.length() <= MAX_HISTORY
+                && !TEXT_FORBIDDEN.matcher(text).find();
     }
 
     /**
@@ -237,6 +260,7 @@ public class ChatPayloadGuard {
             case PARAM -> PARAM.matcher((String) value).matches();
             case MESSAGE -> ToolProblem.isText((String) value);
             case TEXT -> allowsText((String) value);
+            case HISTORY -> allowsHistory((String) value);
         };
     }
 

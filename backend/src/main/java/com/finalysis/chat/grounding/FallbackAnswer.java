@@ -121,7 +121,8 @@ public final class FallbackAnswer {
                     span(v.from(), v.to()), "spent " + signed(c.spent()), count(c.count())) + marker(c.ref())).toList();
             case MerchantTotalsView v -> {
                 List<String> lines = new ArrayList<>(v.merchants().stream().map(m -> join(m.merchant(),
-                        span(v.from(), v.to()), v.account(), "spent " + signed(m.spent()), count(m.count()))
+                        m.category(), span(v.from(), v.to()), v.account(), "spent " + signed(m.spent()),
+                        count(m.count()))
                         + marker(m.ref())).toList());
                 lines.add(join("These merchants together", span(v.from(), v.to()), v.account(),
                         "spent " + signed(v.combined().spent()), count(v.combined().count()))

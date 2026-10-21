@@ -23,8 +23,8 @@ import org.springframework.stereotype.Component;
  * The rounds of one turn (docs/plans/phase-6.md §1 step 3–4, §5.5, §8): the model routes, {@link ToolExecutor} runs
  * every tool call, and the answer is checked by {@link AnswerGrounding} before it can be shown.
  * <ol>
- *   <li>Before each round, the limits: rounds, wall time, input tokens (the oldest tool results of the turn are cut
- *       first to fit the per-call cap), and the cost, with the round's worst case (estimated input and the output cap)
+ *   <li>Before each round, the limits: rounds, wall time, input tokens (to fit the per-call cap, the history is
+ *       shortened first, oldest first, then the oldest tool results of the turn are cut), and the cost, with the round's worst case (estimated input and the output cap)
  *       added to what the turn has spent. A limit ends the turn with the fallback.</li>
  *   <li>Tool calls are run in order and answered in one tool-response message. Past the tool call cap, or in the last
  *       round the turn has, they are not run ({@code SKIPPED_LIMIT}) and the model is told to answer.</li>
@@ -69,12 +69,14 @@ public class TurnLoop {
      * @param limit        the first limit reached, or null
      * @param error        the model call's failure ({@code ERROR}); else null
      * @param inputTokens  reported input tokens summed; null when no call reported usage
+     * @param inputForLimits input tokens counted against the per-turn cap: reported, or estimated for a call without
+     *                     usage
      * @param outputTokens reported output tokens summed; null when no call reported usage
      * @param cost         estimated cost; null when the model has no price
      */
     public record Result(AnswerSource source, AnswerCheck check, String fallback, boolean retried, LimitHit limit,
                          TurnEvidence evidence, int rounds, int toolCalls, Integer inputTokens, Integer outputTokens,
-                         int callsWithoutUsage, BigDecimal cost, RuntimeException error) {
+                         long inputForLimits, int callsWithoutUsage, BigDecimal cost, RuntimeException error) {
     }
 
     /** One turn's running state. */
@@ -98,12 +100,14 @@ public class TurnLoop {
         boolean retried;
         AnswerCheck lastCheck;
         String cutResult;
+        int historyMessages;
 
-        Run(OutboundTurn turn, String question, Collection<String> names, List<Message> start) {
+        Run(OutboundTurn turn, String question, Collection<String> names, List<Message> start, int historyMessages) {
             this.turn = turn;
             this.question = question;
             this.names = names;
             this.messages = new ArrayList<>(start);
+            this.historyMessages = historyMessages;
         }
 
         TurnEvidence evidence() {
@@ -123,17 +127,20 @@ public class TurnLoop {
 
         Result end(AnswerSource source, AnswerCheck check, String fallback, RuntimeException error) {
             return new Result(source, check, fallback, retried, limit, evidence(), rounds, toolCalls, inputTokens,
-                    outputTokens, callsWithoutUsage, cost, error);
+                    outputTokens, inputForLimits, callsWithoutUsage, cost, error);
         }
     }
 
     /**
-     * @param start    the round's fixed messages ({@link ChatPrompt#start})
-     * @param question the outbound question (its whole numbers ground counts)
-     * @param names    the names the model was given besides the results: category names and aliases
+     * @param start           the round's fixed messages ({@link ChatPrompt#start})
+     * @param historyMessages how many of them are history (the summary, then each earlier question and answer), right
+     *                        after the context block
+     * @param question        the outbound question (its whole numbers ground counts)
+     * @param names           the names the model was given besides the results: category names and aliases
      */
-    public Result run(OutboundTurn turn, List<Message> start, String question, Collection<String> names) {
-        Run run = new Run(turn, question, names, start);
+    public Result run(OutboundTurn turn, List<Message> start, int historyMessages, String question,
+                      Collection<String> names) {
+        Run run = new Run(turn, question, names, start, historyMessages);
         while (true) {
             Integer estimate = beforeRound(run);
             if (estimate == null) {
@@ -192,7 +199,7 @@ public class TurnLoop {
             return null;
         }
         int estimate = TokenEstimate.of(run.messages, definitionChars);
-        while (estimate > limits.maxInputTokensPerCall() && cutOldestResult(run)) {
+        while (estimate > limits.maxInputTokensPerCall() && (cutOldestHistory(run) || cutOldestResult(run))) {
             estimate = TokenEstimate.of(run.messages, definitionChars);
         }
         if (estimate > limits.maxInputTokensPerCall()
@@ -248,6 +255,22 @@ public class TurnLoop {
         }
         run.messages.add(reply.message());
         run.messages.add(ToolResponseMessage.builder().responses(responses).build());
+    }
+
+    /**
+     * Removes the oldest history message (the summary, else the oldest earlier question with its answer); false when no
+     * history is left. History sits right after the system prompt and the context block ({@link ChatPrompt#start}).
+     */
+    private boolean cutOldestHistory(Run run) {
+        if (run.historyMessages == 0) {
+            return false;
+        }
+        int removed = run.messages.get(ChatPrompt.HISTORY_START) instanceof UserMessage ? 2 : 1;
+        for (int i = 0; i < removed; i++) {
+            run.messages.remove(ChatPrompt.HISTORY_START);
+        }
+        run.historyMessages -= removed;
+        return true;
     }
 
     /** Replaces the oldest tool result not yet cut with the fixed cut result; false when none is left. */

@@ -318,6 +318,69 @@ class MerchantSearchTest {
         }
     }
 
+    /**
+     * Step 6 review, decision 28: one rule for a merchant's category in every tool, the category of most of its rows,
+     * ties to the newest row's. FIXTURE DINER's eight rows are Dining; its newest moves to Groceries, and every tool
+     * still says Dining (the newest row's would say Groceries).
+     */
+    @Test
+    void aMerchantHasTheSameCategoryInEveryToolByMostRows() {
+        long newest = jdbc.queryForObject("SELECT id FROM txn WHERE merchant = 'FIXTURE DINER' "
+                + "ORDER BY txn_date DESC, id DESC LIMIT 1", Long.class);
+        long dining = jdbc.queryForObject("SELECT category_id FROM txn WHERE id = ?", Long.class, newest);
+        jdbc.update("UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries') WHERE id = ?",
+                newest);
+        try {
+            OutboundTurn turn = turns.start();
+            JsonNode search = result(turn, "search_transactions", "{\"query\": \"diner\", " + RANGE + ", \"limit\": 10}");
+            JsonNode totals = result(turn, "get_merchant_totals", "{\"merchants\": [\"FIXTURE DINER\"], " + RANGE + "}");
+            JsonNode top = result(turn, "get_top_merchants", "{" + RANGE + ", \"limit\": 20}");
+
+            assertThat(search.get("candidates").get(0).get("merchant").stringValue()).isEqualTo("FIXTURE DINER");
+            assertThat(search.get("candidates").get(0).get("category").stringValue()).isEqualTo("Dining");
+            assertThat(totals.get("merchants").get(0).get("category").stringValue()).isEqualTo("Dining");
+            assertThat(top.get("items").valueStream().filter(i -> "FIXTURE DINER".equals(i.get("merchant").stringValue()))
+                    .findFirst().orElseThrow().get("category").stringValue()).isEqualTo("Dining");
+        } finally {
+            jdbc.update("UPDATE txn SET category_id = ? WHERE id = ?", dining, newest);
+        }
+    }
+
+    /** A tie goes to the newest row's category, in every tool. */
+    @Test
+    void aTiedMerchantTakesItsNewestRowsCategoryInEveryTool() {
+        // STREAMCO's four charges from December to March split in two: the older two Shopping, the newer as they are
+        String range = "\"from\": \"2025-12\", \"to\": \"2026-03\"";
+        List<Long> rows = jdbc.queryForList("SELECT id FROM txn WHERE merchant = 'STREAMCO' AND txn_date >= ? "
+                + "AND txn_date < ? AND amount < 0 ORDER BY txn_date, id", Long.class,
+                java.time.LocalDate.of(2025, 12, 1), java.time.LocalDate.of(2026, 4, 1));
+        assertThat(rows.size()).as("an even count to tie").isEven().isPositive();
+        List<Long> older = rows.subList(0, rows.size() / 2);
+        Map<Long, Long> before = new java.util.HashMap<>();
+        older.forEach(id -> before.put(id, jdbc.queryForObject("SELECT category_id FROM txn WHERE id = ?",
+                Long.class, id)));
+        String newestCategory = jdbc.queryForObject("SELECT c.name FROM txn t JOIN category c ON c.id = t.category_id "
+                + "WHERE t.id = ?", String.class, rows.getLast());
+        assertThat(newestCategory).isNotEqualTo("Shopping");
+        older.forEach(id -> jdbc.update("UPDATE txn SET category_id = (SELECT id FROM category WHERE name = "
+                + "'Shopping') WHERE id = ?", id));
+        try {
+            OutboundTurn turn = turns.start();
+            JsonNode search = result(turn, "search_transactions", "{\"query\": \"streamco\", " + range + ", \"limit\": 10}");
+            JsonNode totals = result(turn, "get_merchant_totals", "{\"merchants\": [\"STREAMCO\"], " + range + "}");
+            JsonNode top = result(turn, "get_top_merchants", "{" + range + ", \"limit\": 20}");
+
+            assertThat(search.get("candidates").get(0).get("merchant").stringValue()).isEqualTo("STREAMCO");
+            assertThat(search.get("candidates").get(0).get("category").stringValue()).isEqualTo(newestCategory);
+
+            assertThat(totals.get("merchants").get(0).get("category").stringValue()).isEqualTo(newestCategory);
+            assertThat(top.get("items").valueStream().filter(i -> "STREAMCO".equals(i.get("merchant").stringValue()))
+                    .findFirst().orElseThrow().get("category").stringValue()).isEqualTo(newestCategory);
+        } finally {
+            before.forEach((id, category) -> jdbc.update("UPDATE txn SET category_id = ? WHERE id = ?", category, id));
+        }
+    }
+
     // ------------------------------------------------------------------ get_merchant_totals
 
     @Test
@@ -332,6 +395,7 @@ class MerchantSearchTest {
             MerchantTotalsResponse.MerchantTotal top = top(merchant.get("merchant").stringValue(), Optional.empty());
             assertThat(merchant.get("spent").stringValue()).isEqualTo(top.spent().toPlainString());
             assertThat(merchant.get("count").intValue()).isEqualTo(top.count());
+            assertThat(merchant.get("category").stringValue()).isEqualTo(top.category().name());
             sum = sum.add(top.spent());
             count += top.count();
         }

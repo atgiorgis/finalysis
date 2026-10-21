@@ -16,6 +16,6 @@ public final class ChatLimits {
 
     public static ChatProperties withRedactTerms(List<String> terms) {
         return new ChatProperties(terms, 5, 8, 12_000, 40_000, 1_500, Duration.ofSeconds(45), new BigDecimal("0.05"),
-                new BigDecimal("1.00"));
+                new BigDecimal("1.00"), 90);
     }
 }

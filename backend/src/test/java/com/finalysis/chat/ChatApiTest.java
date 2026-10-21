@@ -91,6 +91,7 @@ class ChatApiTest {
     @AfterEach
     void deleteConversations() {
         jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM chat_usage");
     }
 
     private long create() throws Exception {
@@ -247,12 +248,8 @@ class ChatApiTest {
     @Test
     void theDailyBudgetIs429WithItsResetTime() throws Exception {
         long id = create();
-        jdbc.update("""
-                INSERT INTO chat_turn (conversation_id, seq, question, outbound_question, answer, answer_source,
-                    grounding_status, alias_map, model, prompt_version, rounds, tool_calls, estimated_cost, millis,
-                    created_at)
-                VALUES (?, 1, 'q', 'q', 'a', 'MODEL', 'NO_FIGURES', '{}', 'm', 'chat-1', 1, 0, 1.000000, 1, ?)""",
-                id, java.sql.Timestamp.from(clock.instant()));
+        jdbc.update("INSERT INTO chat_usage (kind, model, calls, estimated_cost, created_at) "
+                + "VALUES ('TURN', 'm', 1, 1.000000, ?)", java.sql.Timestamp.from(clock.instant()));
 
         mvc.perform(post("/api/chat/conversations/{id}/turns", id).contentType(MediaType.APPLICATION_JSON)
                         .content(turn(QUESTION)))

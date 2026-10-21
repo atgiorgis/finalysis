@@ -2,6 +2,8 @@ package com.finalysis.chat.outbound;
 
 import com.finalysis.chat.tool.view.ContextBlockView;
 import com.finalysis.chat.tool.view.DataNotesView;
+import com.finalysis.chat.tool.view.HistoryView;
+import com.finalysis.chat.tool.view.MonthlyRecordsView;
 import com.finalysis.chat.tool.view.ToolErrorView;
 import java.nio.charset.StandardCharsets;
 import org.springframework.stereotype.Component;
@@ -11,8 +13,8 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Writes what the model receives as JSON (docs/plans/phase-6.md §3.1, §12.1): tool results, and the context block and
- * question of every round. It takes only what {@link ChatPayloadGuard} returned, so nothing unchecked can be written:
+ * Writes what the model receives as JSON (docs/plans/phase-6.md §3.1, §12.1): tool results, the context block and
+ * question of every round, the conversation's memory (§7) and the monthly summary's records (§11.1). It takes only what {@link ChatPayloadGuard} returned, so nothing unchecked can be written:
  * <pre>{"result": {…the view…}, "dataNotes": [{type, account, month}], "shortened": true}</pre>
  * {@code dataNotes} is left out when empty, {@code shortened} unless rows were cut. A result over {@value #MAX_BYTES}
  * bytes is cut to fit: one row at a time from the longest list, the oldest first in a list ordered by month, otherwise the
@@ -23,6 +25,8 @@ public class ToolResultWriter {
 
     /** The most JSON one tool result may send (§3.1). */
     public static final int MAX_BYTES = 8 * 1024;
+    /** The most JSON the monthly summary's records may send: four results' worth in one block. */
+    public static final int MAX_RECORDS_BYTES = 16 * 1024;
 
     private final JsonMapper json;
 
@@ -42,8 +46,22 @@ public class ToolResultWriter {
         if (notes != null && !notes.view().notes().isEmpty()) {
             envelope.set("dataNotes", json.valueToTree(notes.view().notes()));
         }
+        return capped(envelope, MAX_BYTES);
+    }
+
+    /**
+     * The monthly summary's records (§11.1), in the same envelope as a tool result, so grounding reads them the same
+     * way; cut to {@value #MAX_RECORDS_BYTES} bytes by the same rule.
+     */
+    public Written records(ChatPayloadGuard.Checked<MonthlyRecordsView> records) {
+        ObjectNode envelope = json.createObjectNode();
+        envelope.set("result", json.valueToTree(records.view()));
+        return capped(envelope, MAX_RECORDS_BYTES);
+    }
+
+    private Written capped(ObjectNode envelope, int maxBytes) {
         boolean shortened = false;
-        while (size(envelope) > MAX_BYTES) {
+        while (size(envelope) > maxBytes) {
             ArrayNode longest = longest(envelope.get("result"), null);
             if (longest == null || longest.isEmpty()) {
                 break;
@@ -65,6 +83,24 @@ public class ToolResultWriter {
     /** The outbound question as a JSON string (quotes and backslashes escaped), for the {@code <question>} message. */
     public String question(ChatPayloadGuard.Checked<String> question) {
         return json.writeValueAsString(question.view());
+    }
+
+    /** The summary of older turns as a JSON string, for the {@code <summary>} message (§7.1). */
+    public String summary(ChatPayloadGuard.Checked<String> summary) {
+        return json.writeValueAsString(summary.view());
+    }
+
+    /**
+     * An earlier answer, figures stripped, as the assistant message of the history (§7.1): plain text, as the model
+     * wrote it then.
+     */
+    public String answer(ChatPayloadGuard.Checked<String> answer) {
+        return answer.view();
+    }
+
+    /** What the summary call folds (§7.2): the previous summary and the folded turns. */
+    public String history(ChatPayloadGuard.Checked<HistoryView> history) {
+        return json.writeValueAsString(history.view());
     }
 
     /** An error result. */

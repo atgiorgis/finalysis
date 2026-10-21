@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The chat API (docs/plans/phase-6.md §10.2). Conversations are the user's to create, read and delete; a turn asks one
- * question. Deleting is a user action here, never a tool. The monthly summary (step 7) and the search index refresh
- * (step 6) come later.
+ * question. Deleting is a user action here, never a tool: it removes the conversation's turns, tool calls and summary.
+ * The monthly summary is {@code MonthlySummaryController}'s; the search index refresh is categorization's.
  */
 @RestController
 @RequestMapping("/api/chat/conversations")

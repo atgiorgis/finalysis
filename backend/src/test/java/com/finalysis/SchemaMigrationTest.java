@@ -47,7 +47,8 @@ class SchemaMigrationTest {
         assertThat(tables).contains(
                 "account", "statement", "category", "txn",
                 "categorization_rule", "transfer_link", "transfer_rejection", "merchant_embedding", "csv_mapping",
-                "app_setting", "alert_dismissal", "chat_conversation", "chat_turn", "chat_tool_call");
+                "app_setting", "alert_dismissal", "chat_conversation", "chat_turn", "chat_tool_call",
+                "chat_usage");
     }
 
     @ParameterizedTest
@@ -142,6 +143,10 @@ class SchemaMigrationTest {
             "chat_tool_call,      uq_chat_tool_call_seq,               u",
             "chat_tool_call,      ck_chat_tool_call_status,            c",
             "chat_tool_call,      ck_chat_tool_call_arguments_object,  c",
+            "chat_usage,          pk_chat_usage,                       p",
+            "chat_usage,          ck_chat_usage_kind,                  c",
+            "chat_usage,          ck_chat_usage_counts,                c",
+            "chat_usage,          ck_chat_usage_cost,                  c",
     })
     void constraintExists(String table, String constraint, String type) {
         Integer count = jdbc.queryForObject("""

@@ -19,6 +19,7 @@ class MerchantTotalsQuery {
             + " AS bucket\nFROM " + TxnBucketSql.FROM + "\nWHERE t.txn_date >= :from AND t.txn_date < :dayAfter\n";
     static final String FOR_ACCOUNT = "  AND t.account_id = :accountId\n";
     static final String FOR_CATEGORY = "  AND t.category_id = :categoryId\n";
+    static final String FOR_MERCHANTS = "  AND t.merchant IN (:merchants)\n";
 
     /**
      * One merchant's spending rows in one category.
@@ -37,9 +38,15 @@ class MerchantTotalsQuery {
     }
 
     List<Cell> find(MonthRange range, Optional<Long> accountId, Optional<Long> categoryId) {
+        return find(range, accountId, categoryId, List.of());
+    }
+
+    /** @param merchants only these stored merchants; empty = every merchant */
+    List<Cell> find(MonthRange range, Optional<Long> accountId, Optional<Long> categoryId, List<String> merchants) {
         String sql = "SELECT b.merchant, b.category_id, sum(b.amount) AS net, count(*) AS n, "
                 + "min(b.txn_date) AS first_date, max(b.txn_date) AS last_date\nFROM (" + INNER_SQL
                 + (accountId.isPresent() ? FOR_ACCOUNT : "") + (categoryId.isPresent() ? FOR_CATEGORY : "")
+                + (merchants.isEmpty() ? "" : FOR_MERCHANTS)
                 + ") b\nWHERE " + SpendingRowsSql.SPENDING + "\nGROUP BY b.merchant, b.category_id";
         JdbcClient.StatementSpec spec = jdbc.sql(sql).param("from", range.firstDay()).param("dayAfter", range.dayAfter());
         if (accountId.isPresent()) {
@@ -47,6 +54,9 @@ class MerchantTotalsQuery {
         }
         if (categoryId.isPresent()) {
             spec = spec.param("categoryId", categoryId.get());
+        }
+        if (!merchants.isEmpty()) {
+            spec = spec.param("merchants", merchants);
         }
         return spec.query((rs, row) -> new Cell(rs.getString("merchant"), rs.getObject("category_id", Long.class),
                 rs.getBigDecimal("net"), rs.getInt("n"), rs.getObject("first_date", LocalDate.class),

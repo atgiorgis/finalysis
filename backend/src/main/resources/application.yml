@@ -108,11 +108,13 @@ finalysis:
     max-output-tokens: 1500           # per call; an answer cut here is treated as ungrounded
     max-turn-time: 45s                # no round starts after it (each call keeps Bedrock's own 30s timeout)
     max-turn-cost: 0.05               # dollars, estimated from finalysis.ai.prices; 0 turns it off
-    max-daily-cost: 1.00              # dollars per local day over every stored turn; 0 turns it off
+    max-daily-cost: 1.00              # dollars per local day over every turn and summary (the usage ledger); 0 turns it off
+    retention-days: 90                # a conversation idle this long is deleted, at startup and nightly (1-3650)
     # Meaning-based merchant search (docs/plans/phase-6.md §4). The index is filled by categorization's embedding path
     # after each AI run and on POST /api/chat/search-index/refresh; chat only reads it.
     search:
-      min-similarity: 0.40          # cosine similarity a merchant needs to be a candidate by meaning; step 8 sets it
+      min-similarity: 0.40          # cosine similarity a merchant needs to be a candidate by meaning; provisional:
+                                    # step 8 tunes it on the dev set only, never on the holdout
       max-embeddings-per-run: 500   # cost guard: embedding calls per index refresh; the rest wait for the next one
   # Read-only analytics (docs/plans/phase-5.md §3.3); a bad value fails startup.
   analytics:

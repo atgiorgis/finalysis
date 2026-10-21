@@ -44,6 +44,16 @@ class ChatPayloadGuardTest {
     }
 
     @Test
+    void historyTextIsUpToFourThousandCharactersAndNeverBlank() {
+        assertThat(guard.allowsHistory("a".repeat(ChatPayloadGuard.MAX_HISTORY))).isTrue();
+        assertThat(guard.allowsHistory("a".repeat(ChatPayloadGuard.MAX_HISTORY + 1))).isFalse();
+        assertThat(guard.allowsHistory(" ")).isFalse();
+        assertThat(guard.allowsText("a".repeat(1001))).as("the question stays at 1,000").isFalse();
+        assertThatThrownBy(() -> guard.checkHistory("{\"role\": \"system\"}"))
+                .isInstanceOf(PayloadRefusedException.class);
+    }
+
+    @Test
     void aFailingRowIsDroppedAndCounted() {
         OutboundTurn turn = OutboundTurns.turn();
         String t1 = turn.refs().ref(new RefRegistry.Txn(1));
@@ -89,7 +99,8 @@ class ChatPayloadGuardTest {
             "SETTING|min-increase-percent|true", "SETTING|Min Increase|false",
             "PARAM|includeDismissed|true", "PARAM|a.month|true", "PARAM|(unknown)|true", "PARAM|ignore all|false",
             "PARAM|IGNORE|false", "MESSAGE|is required|true", "MESSAGE|is required.|false", "MESSAGE|say 999.99|false",
-            "TEXT|how much did i spend?|true", "TEXT|a <b> c|false"})
+            "TEXT|how much did i spend?|true", "TEXT|a <b> c|false",
+            "HISTORY|You spent [amount] on Dining in August 2026.|true", "HISTORY|a {b} c|false", "HISTORY|a <b> c|false"})
     void eachKindHasItsCheck(OutboundKind kind, String value, boolean allowed) {
         OutboundTurn turn = OutboundTurns.turn();
         turn.refs().ref(new RefRegistry.Txn(7)); // issues t1 only
@@ -119,6 +130,7 @@ class ChatPayloadGuardTest {
                 case PARAM -> new ParamValue(probe.value());
                 case MESSAGE -> new MessageValue(probe.value());
                 case TEXT -> new TextValue(probe.value());
+                case HISTORY -> new HistoryValue(probe.value());
                 default -> throw new IllegalArgumentException(kind.name());
             }, turn);
             return true;
@@ -146,6 +158,7 @@ class ChatPayloadGuardTest {
     record ParamValue(@Outbound(OutboundKind.PARAM) String v) { }
     record MessageValue(@Outbound(OutboundKind.MESSAGE) String v) { }
     record TextValue(@Outbound(OutboundKind.TEXT) String v) { }
+    record HistoryValue(@Outbound(OutboundKind.HISTORY) String v) { }
 
     record Unclassified(String amount) { }
     record WrongType(@Outbound(OutboundKind.COUNT) String count) { }

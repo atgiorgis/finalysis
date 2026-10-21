@@ -6,12 +6,14 @@
     {
       "ref": "c1",
       "merchant": "MAPLEWOOD GROCERY",
+      "category": "Groceries",
       "spent": "115.50",
       "count": 2
     },
     {
       "ref": "c2",
       "merchant": "RIVERBEND NOODLE BAR",
+      "category": "Dining",
       "spent": "23.60",
       "count": 1
     }

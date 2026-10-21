@@ -99,12 +99,54 @@ public class MerchantTotalsService {
         int count = cells.stream().mapToInt(Cell::count).sum();
         LocalDate first = cells.stream().map(Cell::firstDate).min(LocalDate::compareTo).orElseThrow();
         LocalDate last = cells.stream().map(Cell::lastDate).max(LocalDate::compareTo).orElseThrow();
-        // Most rows; ties to the category of the latest row, then the lower id (no category before any).
-        Cell main = cells.stream().max(Comparator.comparingInt(Cell::count).thenComparing(Cell::lastDate)
+        return new MerchantTotal(merchant, net.negate(), count, first, last, mainCategory(cells, categories));
+    }
+
+    /**
+     * The category of a group of stored merchants' spending rows over a range, by the one rule every merchant list
+     * uses (docs/plans/phase-6.md, step 6 review decision 28): the category of most rows, ties to the newest row's.
+     * Chat's search and merchant totals use it, so a merchant has the same category in every tool.
+     *
+     * @return empty when the rows have no category, or there are no rows
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Optional<CategoryRef> category(MonthRange range, Optional<Long> accountId, List<String> merchants) {
+        if (merchants.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Cell> cells = this.merchants.find(range, accountId, Optional.empty(), merchants);
+        return cells.isEmpty() ? Optional.empty()
+                : Optional.ofNullable(mainCategory(cells, references.categories()));
+    }
+
+    /**
+     * Most rows; ties to the category of the latest row, then the lower id (no category before any). Cells of several
+     * merchants are merged per category first.
+     */
+    private static CategoryRef mainCategory(List<Cell> cells, Map<Long, CategoryRef> categories) {
+        Map<Long, Cell> byCategory = new HashMap<>();
+        Cell none = null;
+        for (Cell cell : cells) {
+            if (cell.categoryId() == null) {
+                none = none == null ? cell : merge(none, cell);
+            } else {
+                byCategory.merge(cell.categoryId(), cell, MerchantTotalsService::merge);
+            }
+        }
+        List<Cell> merged = new ArrayList<>(byCategory.values());
+        if (none != null) {
+            merged.add(none);
+        }
+        Cell main = merged.stream().max(Comparator.comparingInt(Cell::count).thenComparing(Cell::lastDate)
                 .thenComparing(Cell::categoryId, Comparator.nullsLast(Comparator.<Long>reverseOrder())))
                 .orElseThrow();
-        CategoryRef category = main.categoryId() == null ? null : categories.get(main.categoryId());
-        return new MerchantTotal(merchant, net.negate(), count, first, last, category);
+        return main.categoryId() == null ? null : categories.get(main.categoryId());
+    }
+
+    private static Cell merge(Cell a, Cell b) {
+        return new Cell(null, a.categoryId(), a.net().add(b.net()), a.count() + b.count(),
+                a.firstDate().isBefore(b.firstDate()) ? a.firstDate() : b.firstDate(),
+                a.lastDate().isAfter(b.lastDate()) ? a.lastDate() : b.lastDate());
     }
 
     private static BigDecimal sumSpent(List<MerchantTotal> totals) {

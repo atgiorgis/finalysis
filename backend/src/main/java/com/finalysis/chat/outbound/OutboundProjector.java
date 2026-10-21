@@ -400,7 +400,8 @@ public class OutboundProjector {
     public MerchantTotalsView merchantTotals(ToolRead.MerchantTotals r, OutboundTurn turn) {
         List<MerchantTotalsView.Merchant> merchants = r.merchants().stream()
                 .map(m -> new MerchantTotalsView.Merchant(spendRef(m, r.accountId(), turn),
-                        turn.merchant(m.parts().getFirst().merchant()), money(m.spent()), m.count()))
+                        turn.merchant(m.parts().getFirst().merchant()), category(m.category()), money(m.spent()),
+                        m.count()))
                 .toList();
         List<Map<String, String>> drills = r.merchants().stream()
                 .flatMap(m -> spendDrills(m, r.range(), r.accountId()).stream()).toList();

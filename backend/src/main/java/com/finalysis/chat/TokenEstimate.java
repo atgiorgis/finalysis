@@ -30,6 +30,11 @@ final class TokenEstimate {
                 (chars + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN + (long) PER_MESSAGE * messages.size());
     }
 
+    /** One message of this text: the history window's measure (§7.1). */
+    static int ofText(String text) {
+        return (length(text) + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN + PER_MESSAGE;
+    }
+
     private static long chars(Message message) {
         long chars = message.getText() == null ? 0 : message.getText().length();
         if (message instanceof AssistantMessage assistant) {

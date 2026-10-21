@@ -95,6 +95,7 @@ class ChatServiceTest {
     @AfterEach
     void deleteConversations() {
         jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM chat_usage");
         assertThat(model.remaining()).as("every scripted step was used").isZero();
     }
 
@@ -434,13 +435,8 @@ class ChatServiceTest {
 
     @Test
     void theDailyCapRefusesBeforeAnyCallAndResetsAtLocalMidnight() {
-        long other = chat.create().id();
-        jdbc.update("""
-                INSERT INTO chat_turn (conversation_id, seq, question, outbound_question, answer, answer_source,
-                    grounding_status, alias_map, model, prompt_version, rounds, tool_calls, estimated_cost, millis,
-                    created_at)
-                VALUES (?, 1, 'q', 'q', 'a', 'MODEL', 'NO_FIGURES', '{}', 'm', 'chat-1', 1, 0, 1.000000, 1, ?)""",
-                other, java.sql.Timestamp.from(clock.instant().minusSeconds(3600)));
+        jdbc.update("INSERT INTO chat_usage (kind, model, calls, estimated_cost, created_at) "
+                + "VALUES ('TURN', 'm', 1, 1.000000, ?)", java.sql.Timestamp.from(clock.instant().minusSeconds(3600)));
 
         assertThatThrownBy(() -> ask("How much did I spend in March?"))
                 .isInstanceOfSatisfying(ErrorResponseException.class, e -> {

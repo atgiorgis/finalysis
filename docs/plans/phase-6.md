@@ -1,8 +1,8 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 6 done (step notes); step 7 (memory and monthly summary) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.61).
+in this file. Steps 1 to 7 done (step notes); step 8 (evaluation harness) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.62).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -253,7 +253,8 @@ guard-refused merchants are never embedded, as today, and are found only by name
    tool error, never sent.
 2. The text is embedded with the embedding role (one call, logged).
 3. Nearest merchants of the current model by cosine distance (HNSW, `ORDER BY … LIMIT`), at least
-   `finalysis.chat.search.min-similarity` (default 0.40, set from the dev set in step 8), at most `limit`.
+   `finalysis.chat.search.min-similarity` (default 0.40, **provisional**: step 8 tunes it on the dev set only,
+   never on the holdout; step 6 review), at most `limit`.
 4. Plus a name match: merchants whose outbound text contains every word of the query (whole words), so an exact
    name works with AI's embedding unavailable or a merchant not yet embedded. Name matches rank first, with
    similarity null.
@@ -1521,6 +1522,101 @@ frontend 4. Requirements v1.61. No migration. No live model call: embeddings in 
   classes, by `ChatReadOnlyTest`.
 - **Tool errors** gained fixed texts `NOT_A_LIST`, `LISTED_TWICE`, `TEXT_TOO_SHORT`, `SEARCH_REFUSED`; `NOT_A_MERCHANT` and
   `SEVERAL_MERCHANTS` were reworded as above.
+
+### Step 7 notes
+
+Done: "Phase 6 step 7: memory and the monthly summary". Backend 3,015 tests (Maven summary; 2,962 + 53), 0 failures,
+0 skipped; frontend 4. Requirements v1.62. V22. No live model call: every turn, summary and monthly summary in the tests
+is `ScriptedChatModel`, and `NoCloudAiGuard` holds in every context.
+
+**Step 6 review**
+- **Decision 28: one rule for a merchant's category** in `search_transactions`, `get_merchant_totals` and
+  `get_top_merchants`: the category of most of its rows, ties to the newest row's (then the lower id, no category first,
+  as before). The rule lives once, in `MerchantTotalsService` (a new read-only `category(range, account, merchants)`
+  over the same spending rows, merging a text's stored merchants per category); `MerchantSpendReader` uses it instead
+  of the newest drill-down row. `get_merchant_totals` now shows each merchant's `category` too, so all three tools say
+  the same; its expected payload (`get_merchant_totals.json`) gained it. Tests: `MerchantSearchTest`
+  (`aMerchantHasTheSameCategoryInEveryToolByMostRows`: the newest of eight Dining rows moved to Groceries, every tool
+  still says Dining; `aTiedMerchantTakesItsNewestRowsCategoryInEveryTool`; the merchant totals' category equals
+  `get_top_merchants`').
+- **The 0.40 similarity floor is provisional** (§4.3, `application.yml`, CHT-02): step 8 tunes it on the dev set only.
+
+**Built**
+- **`ConversationMemory`** (CHT-06, §7.1, §7.2). The window: the summary in `<summary>` (a system message, after
+  `<context>`), then the turns after the fold point, oldest first, each its outbound question in `<question>` and its
+  answer as an assistant message; newest first while the history stays within 1,500 estimated tokens; failed turns left
+  out. Prompt version `chat-3`; the system prompt says earlier figures were removed and every figure needs a tool call.
+- **`SummaryFigureStripper`** (`chat.grounding`): every figure `FigureExtractor` finds becomes `[amount]`, `[percent]`
+  or `[number]`, markers go, `< > { }` go, and the result is extracted again (a surviving figure empties it). Applied to
+  every earlier answer sent back and to every summary before it is stored and again before it is sent.
+- **Folding**: after a turn is stored, when more than 6 turns are outside the summary or the newest 4 don't fit the
+  window, the older ones are folded so at most 4 remain. One call with the main role, no tools, 400 output tokens,
+  `role=chat-summary` (`items` = turns folded), fixed prompt (`chat/summary-prompt.txt`); its input is a guard-checked
+  `HistoryView` (previous summary and folded turns, figures already stripped; new guard kind `HISTORY`: 1–4,000
+  characters without `< > { }`). It counts against the turn's limits: time, input per call and per turn, and cost with
+  its worst case. Failed, refused or skipped: logged (`chat summary conversation= folded= outcome=`), fold point
+  unchanged, tried again after the next turn. The fold point moves only if nothing else moved it.
+- **The usage ledger** (V22 `chat_usage`): one count-only row per turn, conversation summary and monthly summary
+  (model, calls, tokens, cost, time; no conversation id or content). The daily cap sums it, so deleting a conversation
+  no longer lowers the day's spend. Existing turns were copied in by the migration.
+- **History shortened first** (§8): over the per-call input cap, `TurnLoop` drops the summary, then the oldest earlier
+  turn, before cutting the turn's oldest tool results.
+- **Retention** (§7.4): `finalysis.chat.retention-days` (90, 1–3650); `ChatRetention` purges conversations idle that
+  long (cascading to turns and tool calls; the summary is on the row) and older ledger rows, at startup and nightly at
+  03:30 (`config.SchedulingConfiguration` turns scheduling on). Delete on demand is the step 5 endpoint.
+- **Monthly summary** (ANA-05, §11.1, package `chat.summary`): `POST /api/chat/summaries {month}`, default the latest
+  complete month. `MonthlyRecordsReader` (`chat.tool`, query services only, one read-only transaction) reads the
+  month's totals, trends, alerts and the active recurring charges last charged in it; `OutboundProjector` projects each
+  as its tool does and the guard checks them as one `MonthlyRecordsView`, written in a tool-result envelope (16 KB cap).
+  AI on: daily cap (429), one call (500 output tokens, `role=summary`, `items=4`), grounding against the records as sent,
+  one retry (ungrounded or cut), then `MonthlySummaryTemplate`; the turn limits apply (a limit gives the template); a
+  failed call is 502 (`ai-unavailable`, no turn number); usage to the ledger. AI off, or a month without data: the
+  template, no call. The template is fixed sentences from the checked records (totals and savings rate, the three
+  categories that moved most against their trailing 3-month average, alerts, recurring charges, data caveats) with refs
+  as markers; Java only chooses rows. Every shown text, the template's included, goes through `AnswerGrounding` and
+  `CitationResolver.cite`.
+
+**Tests**
+- `ConversationMemoryTest` (9, sample data): the dev-style two-turn case, "how much did i save in august?" then "and
+  what about september?" (the second turn calls `get_month_totals` for September and grounds; no form of August's net or
+  savings rate is in any of its prompts); an earlier figure repeated without a tool call is retried and falls back; the
+  history carries outbound questions, never the account's name; folding at the seventh turn (the summarizer gets three
+  turns with no figure, the stored summary has `[amount]` and `[percent]` where the scripted summary had figures, the
+  eighth prompt has the summary and turns 4–7 and none of the seven answers' figures; ledger row; AI-06 line); a failed
+  summary (window of seven, folded after the eighth turn); a summary skipped at the turn's time limit; the 1,500-token
+  cap folding long turns sooner; failed turns not sent back; delete on demand leaves no conversation, turn, tool call or
+  summary, and the day's spend unchanged.
+- `SummaryFigureStripperTest` (10), `RetentionTest` (3), `MonthlySummaryTest` (13), `MonthlySummaryTemplateTest` (4, AI
+  off: every fixture month's income, spending, net and savings rate equal `GET /api/analytics/months` in cents, grounded,
+  cited, nothing in the ledger).
+- `ChatTurnPayloadTest` (+1, injection fixture): the second turn's history (the first turn's fallback, stripped) and the
+  monthly summary's records carry no identifier, hostile description, hostile word or canary.
+- `MerchantSearchTest` (+2), `ChatPayloadGuardTest` (`HISTORY`), `ChatSettingsTest` (retention bounds),
+  `SchemaMigrationTest` (+4), `EnumCheckConstraintTest` (`UsageKind`). The daily-cap tests now seed the ledger.
+
+**Decisions beyond the plan**
+- **Earlier answers are sent back with their figures stripped too**, not verbatim (§7.1 said verbatim): your brief asked
+  that no number from an earlier answer reach the next prompt. Grounding was already per turn; now the model can't even
+  copy an old figure, so every figure needs a new tool call. Answers are cut to 1,000 characters.
+- **The window is every turn after the fold point** (4 to 6 normally, more after a failed summary), within the 1,500
+  tokens, rather than exactly the last 4: turns 5 and 6 back are in neither the summary nor the window otherwise.
+- **The token cap also triggers a fold** when the newest 4 turns don't fit, so long turns are summarized instead of
+  silently dropped from the window.
+- **The summary runs synchronously** after the turn is stored, before the response returns, still under the
+  conversation's one-turn lock, so the next turn always sees it. §1 said "outside the response time"; a background thread
+  would need its own lock hand-off. It adds one call's time every few turns.
+- **The summary's usage is in the ledger, not in the turn's stored usage**, but it is checked against the turn's
+  remaining limits (time, tokens, cost) before it runs.
+- **A usage ledger (V22) replaces summing `chat_turn` for the daily cap**: the monthly summary needed somewhere to count,
+  and deleting a conversation used to lower the day's spend.
+- **Questions outside the window keep their numbers**: only answers and summaries are stripped; a question is the user's
+  own words (and its whole numbers ground counts only in its own turn).
+- **The monthly summary's records are one guard-checked view** in a tool-result envelope with a 16 KB cap, so grounding
+  reads them exactly as tool results; the template is checked by the same grounding (always grounded in the tests).
+- **The template is also used for a month without data** and when a limit stops the call; a month asked for without
+  data says so; no data at all is `month: null`. A failed call is 502 as §10.2 says, not the template.
+- **`get_merchant_totals` gained `category`** (decision 28 names it among the tools with a category).
+- **`MerchantTotalsService.category`** is a small read-only addition to analytics, so the rule lives in one place.
 
 ### Requirement mapping
 

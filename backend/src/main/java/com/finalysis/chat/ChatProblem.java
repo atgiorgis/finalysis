@@ -56,9 +56,14 @@ public class ChatProblem extends ErrorResponseException {
      * message is never rendered or logged with the problem.
      */
     public static ChatProblem aiUnavailable(int turn) {
-        ChatProblem problem = new ChatProblem(HttpStatus.BAD_GATEWAY, "ai-unavailable", "AI unavailable",
-                "The model could not answer. Try again later.", null);
+        ChatProblem problem = aiUnavailable();
         problem.getBody().setProperty("turn", turn);
         return problem;
+    }
+
+    /** 502: a model call failed after the SDK's retries; nothing was stored (the monthly summary, §11.1). */
+    public static ChatProblem aiUnavailable() {
+        return new ChatProblem(HttpStatus.BAD_GATEWAY, "ai-unavailable", "AI unavailable",
+                "The model could not answer. Try again later.", null);
     }
 }

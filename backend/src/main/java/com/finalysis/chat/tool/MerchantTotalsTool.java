@@ -37,8 +37,8 @@ class MerchantTotalsTool implements ChatTool {
 
     @Override
     public String description() {
-        return "What these merchants spent over the range: per merchant spent (a positive amount = money out after "
-                + "refunds) and count, then combined (their sum, computed for you). Use combined for \"how much on all "
+        return "What these merchants spent over the range: per merchant its category, spent (a positive amount = "
+                + "money out after refunds) and count, then combined (their sum, computed for you). Use combined for \"how much on all "
                 + "of them\"; never add the merchants' figures yourself. At most " + ToolParam.MAX_MONTHS + " months.";
     }
 

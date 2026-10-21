@@ -15,6 +15,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +38,8 @@ import org.springframework.stereotype.Component;
 public class ChatModelClient {
 
     static final String ROLE = "chat";
+    public static final String SUMMARY_ROLE = "chat-summary";
+    public static final String MONTHLY_ROLE = "summary";
 
     private final ObjectProvider<ChatModel> chatModel;
     private final AiProperties ai;
@@ -87,6 +90,22 @@ public class ChatModelClient {
      * @throws RuntimeException      whatever the model client throws; the call is logged with the class name first
      */
     public Reply call(List<Message> messages, int maxOutputTokens, int toolResults) {
+        return send(messages, maxOutputTokens, tools.callbacks(), ROLE, toolResults);
+    }
+
+    /**
+     * A call with the main role and no tools: the conversation summary ({@value #SUMMARY_ROLE}) and the monthly summary
+     * ({@value #MONTHLY_ROLE}), each with its own role in the AI-06 line (§8).
+     *
+     * @param role  the log line's role
+     * @param items the log line's items: turns folded, or records sent
+     */
+    public Reply complete(List<Message> messages, int maxOutputTokens, String role, int items) {
+        return send(messages, maxOutputTokens, List.of(), role, items);
+    }
+
+    private Reply send(List<Message> messages, int maxOutputTokens, List<ToolCallback> callbacks, String role,
+                       int toolResults) {
         ChatModel model = chatModel.getIfAvailable();
         if (!ai.enabled() || model == null) {
             throw new IllegalStateException("AI is off");
@@ -95,9 +114,9 @@ public class ChatModelClient {
         long start = System.nanoTime();
         ChatResponse response;
         try {
-            response = model.call(new Prompt(messages, options.options(model, maxOutputTokens, tools.callbacks())));
+            response = model.call(new Prompt(messages, options.options(model, maxOutputTokens, callbacks)));
         } catch (RuntimeException e) {
-            AiCallLog.record(ROLE, modelId, toolResults, null, null, millisSince(start), AiCallLog.Outcome.ERROR, e);
+            AiCallLog.record(role, modelId, toolResults, null, null, millisSince(start), AiCallLog.Outcome.ERROR, e);
             throw e;
         }
         long millis = millisSince(start);
@@ -110,7 +129,7 @@ public class ChatModelClient {
                 .filter(g -> g != null && g.getOutput() != null).toList();
         if (generations.isEmpty()) {
             InvalidReplyException invalid = new InvalidReplyException();
-            AiCallLog.record(ROLE, modelId, toolResults, input, output, millis, AiCallLog.Outcome.INVALID_OUTPUT,
+            AiCallLog.record(role, modelId, toolResults, input, output, millis, AiCallLog.Outcome.INVALID_OUTPUT,
                     invalid);
             throw invalid;
         }
@@ -137,7 +156,7 @@ public class ChatModelClient {
             AssistantMessage base = Objects.requireNonNullElse(carrier, generations.getLast().getOutput());
             message = base.mutate().content(text).toolCalls(calls).build();
         }
-        AiCallLog.record(ROLE, modelId, toolResults, input, output, millis,
+        AiCallLog.record(role, modelId, toolResults, input, output, millis,
                 cut && calls.isEmpty() ? AiCallLog.Outcome.LIMIT : AiCallLog.Outcome.OK, null);
         return new Reply(message, calls, text, cut && calls.isEmpty(), input, output, millis);
     }

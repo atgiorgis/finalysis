@@ -92,6 +92,7 @@ class ChatTurnPayloadTest {
     @AfterEach
     void cleanUp() {
         jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM chat_usage");
         support.deleteCreatedAccounts();
     }
 
@@ -195,5 +196,53 @@ class ChatTurnPayloadTest {
             assertThat(log).doesNotContain(description);
         }
         assertThat(log).contains("ai call role=chat").contains("chat turn conversation=" + id);
+    }
+    /**
+     * Step 7's two new payloads on the same fixture: a later turn's history (the earlier fallback answer, figures
+     * stripped, sent back as an assistant message) and the monthly summary's records. Neither carries an identifier,
+     * a hostile description or a hostile word.
+     */
+    @Test
+    void historyAndTheMonthlySummarySendNoIdentifier() throws Exception {
+        long id = json.readTree(mvc.perform(post("/api/chat/conversations")).andReturn().getResponse()
+                .getContentAsString()).get("id").asLong();
+        model.then(model.toolCalls(EVERY_TOOL.get(0), EVERY_TOOL.get(6)), text("You spent $999.99 [c1]."),
+                text("It was $999.99 [c1]."), text("Nothing more to add."));
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/chat/conversations/{id}/turns", id).contentType(MediaType.APPLICATION_JSON)
+                            .content(json.writeValueAsString(Map.of("message", QUESTION))))
+                    .andExpect(status().isOk());
+        }
+        Prompt later = model.prompts().getLast();
+        List<Message> history = later.getInstructions().stream().filter(m -> m instanceof AssistantMessage).toList();
+        assertThat(history).as("the first turn's fallback, sent back").hasSize(1);
+        assertThat(history.getFirst().getText()).contains("[amount]");
+
+        int before = model.prompts().size();
+        model.then(text("A month of spending."));
+        mvc.perform(post("/api/chat/summaries").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"month\": \"2026-03\"}"))
+                .andExpect(status().isOk());
+        Prompt summary = model.prompts().get(before);
+
+        for (Prompt prompt : List.of(later, summary)) {
+            String all = prompt.getInstructions().stream().map(Message::getText).reduce("", (a, b) -> a + "\n" + b);
+            for (String forbidden : List.of(ChatInjectionFixture.NAME, ChatInjectionFixture.INSTITUTION, "Halden",
+                    ChatInjectionFixture.LAST_FOUR, "jordan", "example.com", "999.99", "\"id\"", "\"accountId\"",
+                    "\"statementId\"", "\"fingerprint\"", "\"sourceLine\"", "\"key\"", "\"description\"")) {
+                assertThat(all).as(forbidden).doesNotContainIgnoringCase(forbidden);
+            }
+            for (String description : ChatInjectionFixture.hostileDescriptions()) {
+                assertThat(all).doesNotContain(description);
+            }
+        }
+        // the data parts: the answer's lines sent back (without the fallback's own fixed header), and the records
+        String lines = history.getFirst().getText().replace("I couldn't confirm every figure in my answer, so here is "
+                + "what the data returned:", "");
+        assertThat(lines).contains("MERCHANT WITHHELD");
+        for (String data : List.of(lines, summary.getInstructions().get(1).getText())) {
+            assertThat(com.finalysis.chat.outbound.ChatOutboundPayloadTest.HOSTILE)
+                    .allSatisfy(word -> assertThat(data.toUpperCase()).doesNotContain(word));
+        }
     }
 }

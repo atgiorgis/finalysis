@@ -41,10 +41,13 @@ import tools.jackson.databind.json.JsonMapper;
  *       conversation running: 409; more than {@value #MAX_CONCURRENT} turns overall: a wait of up to 5 seconds, then
  *       429. The day's estimated cost at the cap: 429, before any call.</li>
  *   <li>The outbound question ({@link QuestionRedactor}); a question that is nothing once identifiers are removed is a
- *       400, and nothing is sent. The context block, checked by the guard, with today from the {@link Clock}.</li>
+ *       400, and nothing is sent. The context block, checked by the guard, with today from the {@link Clock}. The
+ *       conversation's history ({@link ConversationMemory#window}): its summary and recent turns, figures stripped.</li>
  *   <li>The rounds ({@link TurnLoop}), then citations resolved locally, then the turn stored
  *       ({@link ChatConversationStore}) with its usage, whatever path it took. A failed model call is stored as
  *       {@code ERROR} (exception class only) and answered 502.</li>
+ *   <li>Older turns folded into the summary when due ({@link ConversationMemory#foldIfDue}), within what is left of
+ *       the turn's limits, still under the conversation's one-turn-at-a-time lock, so the next turn sees it.</li>
  * </ol>
  * One count-only log line per turn: {@code chat turn conversation=7 turn=3 source=MODEL grounding=GROUNDED ...}.
  */
@@ -67,6 +70,7 @@ public class ChatService {
     private final ChatPayloadGuard guard;
     private final ChatPrompt prompt;
     private final TurnLoop loop;
+    private final ConversationMemory memory;
     private final CitationResolver citations;
     private final ChatProperties limits;
     private final Clock clock;
@@ -76,7 +80,8 @@ public class ChatService {
 
     public ChatService(ChatModelClient client, ChatConversationStore store, OutboundTurnFactory turns,
                        QuestionRedactor redactor, ContextBlockFactory context, ChatPayloadGuard guard, ChatPrompt prompt,
-                       TurnLoop loop, CitationResolver citations, ChatProperties limits, Clock clock, JsonMapper json) {
+                       TurnLoop loop, ConversationMemory memory, CitationResolver citations, ChatProperties limits,
+                       Clock clock, JsonMapper json) {
         this.client = client;
         this.store = store;
         this.turns = turns;
@@ -85,6 +90,7 @@ public class ChatService {
         this.guard = guard;
         this.prompt = prompt;
         this.loop = loop;
+        this.memory = memory;
         this.citations = citations;
         this.limits = limits;
         this.clock = clock;
@@ -191,7 +197,9 @@ public class ChatService {
         List<String> names = new ArrayList<>(CategoryNamesQuery.sorted(turn.categories()));
         turn.aliases().entries().forEach(e -> names.add(e.alias()));
 
-        TurnLoop.Result result = loop.run(turn, prompt.start(block, sendable), outbound.text(), names);
+        ChatHistory history = memory.window(conversationId);
+        TurnLoop.Result result = loop.run(turn, prompt.start(block, history, sendable),
+                ChatPrompt.historyMessages(history), outbound.text(), names);
         long millis = Math.max(0, clock.millis() - started);
 
         CitationResolver.CitedAnswer cited = switch (result.source()) {
@@ -226,6 +234,8 @@ public class ChatService {
         if (result.source() == AnswerSource.ERROR) {
             throw ChatProblem.aiUnavailable(seq);
         }
+        memory.foldIfDue(conversationId, turn,
+                new ConversationMemory.Spent(started, result.inputForLimits(), result.cost()));
 
         return new ChatTurnResponse(conversationId, seq, cited.text(), result.source(),
                 new ChatTurnResponse.Grounding(status, figures, result.retried(), ungrounded), shown,

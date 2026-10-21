@@ -13,7 +13,8 @@ import java.util.List;
  *
  * @param range    the months the drill-downs covered (null when there is no data)
  * @param parts    each stored merchant and its drill-down total
- * @param category the category of the newest spending row of the group; null when it has none or no rows
+ * @param category the category of most of the group's spending rows, ties to the newest row's (the rule of
+ *                 {@code get_top_merchants}); null when that is no category, or there are no rows
  */
 public record MerchantSpend(String text, MonthRange range, List<Part> parts, BigDecimal spent, int count,
                             CategoryRef category) {

@@ -41,6 +41,7 @@ class ChatAiOffApiTest {
     @AfterEach
     void deleteConversations() {
         jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM chat_usage");
     }
 
     @Test

@@ -106,6 +106,7 @@ class ChatSearchTurnTest {
     @AfterEach
     void deleteConversations() {
         jdbc.update("DELETE FROM chat_conversation");
+        jdbc.update("DELETE FROM chat_usage");
         assertThat(model.remaining()).as("every scripted step was used").isZero();
     }
 
@@ -169,7 +170,7 @@ class ChatSearchTurnTest {
         assertThat(model.prompts().getFirst().getInstructions().getFirst().getText())
                 .contains("first search_transactions").contains("get_merchant_totals");
         assertThat(jdbc.queryForObject("SELECT prompt_version FROM chat_turn WHERE conversation_id = ?", String.class,
-                conversation)).isEqualTo("chat-2");
+                conversation)).isEqualTo(ChatPrompt.VERSION);
     }
 
     /** The model adding the candidates' figures itself fails grounding (§4.4): the retry sends it to the tool. */

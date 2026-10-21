@@ -49,6 +49,7 @@ class ChatSettingsTest {
         assertThat(limits.maxTurnTime()).isEqualTo(Duration.ofSeconds(45));
         assertThat(limits.maxTurnCost()).isEqualByComparingTo("0.05");
         assertThat(limits.maxDailyCost()).isEqualByComparingTo("1.00");
+        assertThat(limits.retentionDays()).isEqualTo(90);
         assertThat(limits.redactTerms()).isEmpty();
         assertThat(limits.costLimited()).isTrue();
         assertThat(ChatLimits.defaults()).isEqualTo(limits);
@@ -59,7 +60,7 @@ class ChatSettingsTest {
             "max-rounds, 0", "max-rounds, 21", "max-tool-calls, 0", "max-tool-calls, 51",
             "max-input-tokens-per-call, 999", "max-input-tokens-per-turn, 11999", "max-output-tokens, 99",
             "max-turn-time, 4s", "max-turn-time, 11m", "max-turn-cost, -0.01", "max-daily-cost, -1",
-            "max-turn-cost, 0.0000001"})
+            "max-turn-cost, 0.0000001", "retention-days, 0", "retention-days, 3651"})
     void aBadLimitFailsStartup(String name, String value) {
         assertThatThrownBy(() -> new Binder(new MapConfigurationPropertySource(Map.of("finalysis.chat." + name, value)))
                 .bind("finalysis.chat", ChatProperties.class))
@@ -85,7 +86,7 @@ class ChatSettingsTest {
                 .hasMessageContaining("no price for the main model main-model")
                 .hasMessageContaining("max-turn-cost and finalysis.chat.max-daily-cost to 0");
         ChatStartupCheck.verify(CLOUD, none, new ChatProperties(List.of(), 5, 8, 12_000, 40_000, 1_500,
-                Duration.ofSeconds(45), BigDecimal.ZERO, BigDecimal.ZERO));
+                Duration.ofSeconds(45), BigDecimal.ZERO, BigDecimal.ZERO, 90));
         ChatStartupCheck.verify(CLOUD, new AiPrices(Map.of("main-model",
                 new AiPrices.Price(BigDecimal.ONE, new BigDecimal("5")))), ChatLimits.defaults());
         ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null),

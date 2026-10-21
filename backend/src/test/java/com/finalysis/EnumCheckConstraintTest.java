@@ -67,7 +67,8 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_chat_turn_answer_source", com.finalysis.chat.AnswerSource.class),
                 Arguments.of("ck_chat_turn_grounding", com.finalysis.chat.grounding.GroundingStatus.class),
                 Arguments.of("ck_chat_turn_limit", com.finalysis.chat.LimitHit.class),
-                Arguments.of("ck_chat_tool_call_status", com.finalysis.chat.ToolStatus.class));
+                Arguments.of("ck_chat_tool_call_status", com.finalysis.chat.ToolStatus.class),
+                Arguments.of("ck_chat_usage_kind", com.finalysis.chat.UsageKind.class));
     }
 
     @ParameterizedTest

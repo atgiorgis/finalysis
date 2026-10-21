@@ -99,7 +99,7 @@ class TurnLoopCutTest {
 
     private Start start() {
         OutboundTurn turn = turns.start();
-        List<Message> messages = prompt.start(guard.check(context.build(turn, LocalDate.of(2026, 10, 15)), turn),
+        List<Message> messages = prompt.start(guard.check(context.build(turn, LocalDate.of(2026, 10, 15)), turn), ChatHistory.NONE,
                 guard.checkText("How much did I spend from January to April?"));
         int definitions = registry.definitions().stream()
                 .mapToInt(d -> d.name().length() + d.description().length() + d.inputSchema().length()).sum();
@@ -108,7 +108,8 @@ class TurnLoopCutTest {
 
     private TurnLoop loop(int maxInputTokensPerCall) {
         return new TurnLoop(client, executor, grounding, new ChatProperties(List.of(), 5, 8, maxInputTokensPerCall,
-                100_000, 1_500, Duration.ofSeconds(45), new BigDecimal("0.05"), new BigDecimal("1.00")), prices, clock,
+                100_000, 1_500, Duration.ofSeconds(45), new BigDecimal("0.05"), new BigDecimal("1.00"), 90), prices,
+                clock,
                 registry);
     }
 
@@ -118,7 +119,7 @@ class TurnLoopCutTest {
         model.then(model.toolCalls(call("get_month_totals", "{\"from\": \"2026-01\", \"to\": \"2026-04\"}")),
                 text("You spent $1,809.48 in March 2026."));
 
-        TurnLoop.Result result = loop(start.estimate() + 400).run(start.turn(), start.messages(),
+        TurnLoop.Result result = loop(start.estimate() + 400).run(start.turn(), start.messages(), 0,
                 "How much did I spend from January to April?", List.of());
 
         assertThat(result.source()).isEqualTo(AnswerSource.MODEL);
@@ -136,7 +137,7 @@ class TurnLoopCutTest {
         Start start = start();
         model.then(model.toolCalls(call("get_month_totals", "{\"from\": \"2026-01\", \"to\": \"2026-04\"}")));
 
-        TurnLoop.Result result = loop(start.estimate() + 10).run(start.turn(), start.messages(),
+        TurnLoop.Result result = loop(start.estimate() + 10).run(start.turn(), start.messages(), 0,
                 "How much did I spend from January to April?", List.of());
 
         assertThat(result.limit()).isEqualTo(LimitHit.TOKENS);
