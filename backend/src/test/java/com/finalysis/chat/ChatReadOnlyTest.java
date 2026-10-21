@@ -23,6 +23,7 @@ import com.finalysis.chat.tool.ToolUsingTheDismissal;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
@@ -32,6 +33,9 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -101,6 +105,21 @@ class ChatReadOnlyTest {
             .allowEmptyShould(true)
             .because("the conversation store is the chat tables' one writer, outside the tools' read-only transactions");
 
+    /** A JDBC call that can write: an update, a batch or a statement executed as is. */
+    static final DescribedPredicate<JavaMethodCall> JDBC_WRITE = DescribedPredicate.describe(
+            "a JDBC update, batchUpdate or execute",
+            call -> Set.of("update", "batchUpdate", "execute").contains(call.getName())
+                    && (call.getTargetOwner().isAssignableTo(JdbcClient.StatementSpec.class)
+                    || call.getTargetOwner().isAssignableTo(JdbcOperations.class)
+                    || call.getTargetOwner().isAssignableTo(NamedParameterJdbcOperations.class)));
+
+    static final ArchRule ONLY_THE_STORE_WRITES = noClasses()
+            .that().resideInAPackage(CHAT).and().doNotHaveSimpleName("ChatConversationStore")
+            .should().callMethodWhere(JDBC_WRITE)
+            .allowEmptyShould(true)
+            .because("ChatConversationStore is the chat tables' one writer (phase-6.md §7.3, §9); everything else in "
+                    + "chat reads");
+
     static final ArchRule NOTHING_DEPENDS_ON_CHAT = noClasses()
             .that().resideOutsideOfPackage(CHAT)
             .should().dependOnClassesThat().resideInAPackage(CHAT)
@@ -128,6 +147,17 @@ class ChatReadOnlyTest {
     void chatUsesNoWriterAndNothingFromCategorize() {
         CHAT_USES_NO_WRITER.check(app);
         TOOLS_NEVER_REACH_THE_STORE.check(app);
+    }
+
+    /** Step 5: the store exists, and it is the only class in chat that writes through JDBC. */
+    @Test
+    void onlyTheConversationStoreWrites() {
+        assertThat(app.contain(ChatConversationStore.class)).isTrue();
+        ONLY_THE_STORE_WRITES.check(app);
+        assertThat(ONLY_THE_STORE_WRITES.evaluate(new ClassFileImporter().importClasses(ChatConversationStore.class))
+                .hasViolation()).as("the store itself may write").isFalse();
+        assertThat(ONLY_THE_STORE_WRITES.evaluate(new ClassFileImporter().importClasses(ChatWritingOnItsOwn.class))
+                .hasViolation()).isTrue();
     }
 
     /**
@@ -238,6 +268,14 @@ class ChatReadOnlyTest {
                     || name.equals("com.finalysis.alert.AlertDetails");
         }
         return false;
+    }
+
+    /** A rule fixture: a chat class writing a chat table itself instead of through the store. */
+    static class ChatWritingOnItsOwn {
+
+        void write(JdbcClient jdbc) {
+            jdbc.sql("DELETE FROM chat_turn").update();
+        }
     }
 
     @SuppressWarnings("unused")

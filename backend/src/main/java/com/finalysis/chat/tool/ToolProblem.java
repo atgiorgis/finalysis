@@ -15,6 +15,8 @@ public enum ToolProblem {
     INVALID_ARGUMENTS("one or more arguments are invalid; fix them and call again, or answer without this tool"),
     FAILED("the tool could not read the data; answer without it, or try a narrower question"),
     REFUSED("the result could not be sent safely; answer without it"),
+    SKIPPED_LIMIT("not run: this question's tool call limit is reached; answer now from the results you have"),
+    CUT("removed from the conversation to keep it within its size limit; call the tool again if you still need it"),
     // one argument
     UNKNOWN_PARAMETER("not a parameter of this tool; use only the schema's properties"),
     REQUIRED("is required"),

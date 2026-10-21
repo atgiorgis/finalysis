@@ -62,13 +62,13 @@ import tools.jackson.databind.json.JsonMapper;
 @IntegrationTest
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
-class ChatOutboundPayloadTest {
+public class ChatOutboundPayloadTest {
 
     static final Path EXPECTED = Path.of("src/test/resources/chat/outbound");
     static final YearMonth MARCH = YearMonth.of(2026, 3);
 
     /** Words of the injection fixture's hostile descriptions; none may reach a payload or the log. */
-    static final List<String> HOSTILE = List.of("999.99", "IGNORE", "INSTRUCTION", "SYSTEM", "PROMPT", "ASSISTANT",
+    public static final List<String> HOSTILE = List.of("999.99", "IGNORE", "INSTRUCTION", "SYSTEM", "PROMPT", "ASSISTANT",
             "REVEAL", "PLEASE", "REPORT", "THANKS", "QUESTION", "ROLE", "DISMISS", "SEND ALL", "ALL MONEY", "99887766",
             "ADMIN", "DELETE", "ANSWER", "ALWAYS", "YOU ARE");
 

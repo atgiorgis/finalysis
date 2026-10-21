@@ -21,6 +21,7 @@ public record AiProperties(@DefaultValue("OFF") AiMode mode, String provider, @D
     public AiProperties {
         if (mode != AiMode.OFF) {
             require(provider, "provider", mode);
+            require(roles.main(), "roles.main", mode);
             require(roles.categorization(), "roles.categorization", mode);
             require(roles.embedding(), "roles.embedding", mode);
         }
@@ -31,7 +32,7 @@ public record AiProperties(@DefaultValue("OFF") AiMode mode, String provider, @D
     }
 
     /**
-     * A model id per role. {@code main} (chat) and {@code vision} are used from Phases 6 and 8.
+     * A model id per role. {@code main} is chat's (Phase 6); {@code vision} is used from Phase 8.
      */
     public record Roles(String main, String categorization, String embedding, String vision) {
     }

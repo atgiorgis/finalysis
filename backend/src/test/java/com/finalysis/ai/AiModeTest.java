@@ -50,7 +50,8 @@ class AiModeTest {
     }
 
     private static final String[] CLOUD = {"finalysis.ai.mode=CLOUD", "finalysis.ai.provider=bedrock",
-            "finalysis.ai.roles.categorization=chat-model", "finalysis.ai.roles.embedding=embedding-model"};
+            "finalysis.ai.roles.categorization=chat-model", "finalysis.ai.roles.embedding=embedding-model",
+            "finalysis.ai.roles.main=main-model"};
 
     @Test
     void offByDefault() {
@@ -111,10 +112,17 @@ class AiModeTest {
                         .hasRootCauseMessage("finalysis.ai.provider must be set when finalysis.ai.mode is CLOUD"));
         assertThatThrownBy(() -> new Binder(new MapConfigurationPropertySource(Map.of(
                 "finalysis.ai.mode", "CLOUD", "finalysis.ai.provider", "bedrock",
-                "finalysis.ai.roles.categorization", "chat-model")))
+                "finalysis.ai.roles.main", "main-model", "finalysis.ai.roles.categorization", "chat-model")))
                 .bind("finalysis.ai", AiProperties.class))
                 .isInstanceOf(BindException.class)
                 .hasRootCauseMessage("finalysis.ai.roles.embedding must be set when finalysis.ai.mode is CLOUD");
+        // Phase 6: chat's main role is required too
+        assertThatThrownBy(() -> new Binder(new MapConfigurationPropertySource(Map.of(
+                "finalysis.ai.mode", "CLOUD", "finalysis.ai.provider", "bedrock",
+                "finalysis.ai.roles.categorization", "chat-model", "finalysis.ai.roles.embedding", "embedding-model")))
+                .bind("finalysis.ai", AiProperties.class))
+                .isInstanceOf(BindException.class)
+                .hasRootCauseMessage("finalysis.ai.roles.main must be set when finalysis.ai.mode is CLOUD");
     }
 
     @Test
@@ -125,6 +133,6 @@ class AiModeTest {
 
         assertThat(AiStatus.of(off)).isEqualTo(new AiStatus(AiMode.OFF, null, null));
         assertThat(AiStatus.of(cloud)).isEqualTo(new AiStatus(AiMode.CLOUD, "bedrock",
-                Map.of("categorization", "chat-model", "embedding", "embedding-model")));
+                Map.of("categorization", "chat-model", "embedding", "embedding-model", "main", "main-model")));
     }
 }

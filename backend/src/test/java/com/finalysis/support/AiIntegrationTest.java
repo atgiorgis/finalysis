@@ -27,7 +27,9 @@ import org.springframework.test.context.TestPropertySource;
         "finalysis.ai.provider=test",
         "finalysis.ai.roles.categorization=" + AiIntegrationTest.CATEGORIZATION_MODEL,
         "finalysis.ai.roles.embedding=" + AiIntegrationTest.EMBEDDING_MODEL,
-        "finalysis.ai.roles.main=test-main-model"})
+        "finalysis.ai.roles.main=test-main-model",
+        "finalysis.ai.prices[test-main-model].input-per-million=1.00",
+        "finalysis.ai.prices[test-main-model].output-per-million=5.00"})
 public @interface AiIntegrationTest {
 
     String CATEGORIZATION_MODEL = "test-categorization-model";

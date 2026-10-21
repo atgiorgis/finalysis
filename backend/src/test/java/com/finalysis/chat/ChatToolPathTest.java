@@ -48,7 +48,9 @@ class ChatToolPathTest {
     static final String CHAT = "com.finalysis.chat..";
 
     /** Step 5 adds the prompt builder (the context block and history), which also writes only checked views. */
-    static final Set<Class<?>> SERIALIZERS = Set.of(ToolResultWriter.class, ToolRegistry.class);
+    /** The writer (what the model receives), the registry (the schemas) and the store (local JSON columns only). */
+    static final Set<Class<?>> SERIALIZERS = Set.of(ToolResultWriter.class, ToolRegistry.class,
+            ChatConversationStore.class);
 
     static final Set<String> WRITE_METHODS = Set.of("writeValueAsString", "writeValueAsBytes", "writeValue",
             "valueToTree", "convertValue", "writer", "writerFor", "writerWithDefaultPrettyPrinter", "writerWithView");

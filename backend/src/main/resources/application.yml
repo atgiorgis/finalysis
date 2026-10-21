@@ -98,6 +98,17 @@ finalysis:
       # Distinct examples per call at most; each item's nearest is kept before any item's second. 50 is two per item
       # in a full batch of 25 (k 5 could reach 125). The step 9 eval reports the examples' share of input tokens.
       max-examples-per-batch: 50
+  # Chat limits per turn and per day (docs/plans/phase-6.md §8, §18 decision 9); a bad value fails startup. Used only
+  # while a profile turns AI on; with AI off a turn is 503 ai-off and nothing is called.
+  chat:
+    max-rounds: 5                     # model calls per turn: tool rounds, the answer and the grounding retry
+    max-tool-calls: 8                 # further calls are not run (SKIPPED_LIMIT) and the model is told to answer
+    max-input-tokens-per-call: 12000  # estimated before each call; the turn's oldest tool results are cut first
+    max-input-tokens-per-turn: 40000  # reported, summed over the turn
+    max-output-tokens: 1500           # per call; an answer cut here is treated as ungrounded
+    max-turn-time: 45s                # no round starts after it (each call keeps Bedrock's own 30s timeout)
+    max-turn-cost: 0.05               # dollars, estimated from finalysis.ai.prices; 0 turns it off
+    max-daily-cost: 1.00              # dollars per local day over every stored turn; 0 turns it off
   # Read-only analytics (docs/plans/phase-5.md §3.3); a bad value fails startup.
   analytics:
     max-months: 24      # longest from-to range per request: bounds every response

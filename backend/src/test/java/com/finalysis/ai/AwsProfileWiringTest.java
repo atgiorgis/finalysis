@@ -74,6 +74,10 @@ class AwsProfileWiringTest {
         assertThat(properties.roles().categorization()).isEqualTo("us.anthropic.claude-haiku-4-5-20251001-v1:0");
         assertThat(properties.roles().embedding()).isEqualTo("amazon.titan-embed-text-v2:0");
         assertThat(properties.nativeStructuredOutput()).isTrue();
+        // Phase 6: chat's role, priced so its cost limits are on, and no temperature of its own (phase-6.md §2.3)
+        assertThat(properties.roles().main()).isEqualTo("us.anthropic.claude-haiku-4-5-20251001-v1:0");
+        assertThat(context.getBean(com.finalysis.ai.AiPrices.class).of(properties.roles().main())).isPresent();
+        assertThat(context.getBean(com.finalysis.ai.ChatRoleProperties.class).temperature()).isNull();
     }
 
     /** Spring AI's Bedrock chat model uses this client bean; its transport retries are the SDK's standard three. */
@@ -106,8 +110,9 @@ class AwsProfileWiringTest {
                 .andExpect(jsonPath("$.ai.provider").value("bedrock"))
                 .andExpect(jsonPath("$.ai.models.categorization").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
                 .andExpect(jsonPath("$.ai.models.embedding").value("amazon.titan-embed-text-v2:0"))
+                .andExpect(jsonPath("$.ai.models.main").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
                 .andExpect(jsonPath("$.ai.length()").value(3))
-                .andExpect(jsonPath("$.ai.models.length()").value(2))
+                .andExpect(jsonPath("$.ai.models.length()").value(3))
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(body).doesNotContain("us-east-1", "profile", "region", "key", "credential");

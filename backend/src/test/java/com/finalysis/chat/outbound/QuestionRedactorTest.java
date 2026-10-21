@@ -18,7 +18,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 class QuestionRedactorTest {
 
     private final QuestionRedactor redactor = new QuestionRedactor(new ChatPayloadGuard(new OutboundPayloadGuard()),
-            new ChatProperties(List.of("Jordan")));
+            com.finalysis.chat.ChatLimits.withRedactTerms(List.of("Jordan")));
 
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {

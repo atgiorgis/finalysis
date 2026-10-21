@@ -21,6 +21,7 @@ public record AiStatus(AiMode mode, String provider, Map<String, String> models)
         Map<String, String> models = new TreeMap<>();
         models.put("categorization", properties.roles().categorization());
         models.put("embedding", properties.roles().embedding());
+        models.put("main", properties.roles().main());
         return new AiStatus(properties.mode(), properties.provider(), models);
     }
 }

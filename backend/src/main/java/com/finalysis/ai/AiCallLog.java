@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
  * class name ({@code error=SdkClientException}). Token counts the provider didn't report are written as {@code n/a},
  * never as 0, so a missing count can't pass for a free call. An embedding call has no output tokens, so its line has
  * none: <pre>ai call role=embedding model=&lt;id&gt; items=1 inputTokens=7 ms=210 outcome=OK</pre>
+ * A chat round's {@code items} is the number of tool results in its prompt (docs/plans/phase-6.md §8).
  */
 public final class AiCallLog {
 
@@ -22,7 +23,9 @@ public final class AiCallLog {
         /** The model answered, but not in the requested structure. Tokens were still spent. */
         INVALID_OUTPUT,
         /** The call failed (network, throttling, timeout, credentials...). */
-        ERROR
+        ERROR,
+        /** The model answered, but stopped at the output-token cap; its answer is cut (docs/plans/phase-6.md §8). */
+        LIMIT
     }
 
     private AiCallLog() {

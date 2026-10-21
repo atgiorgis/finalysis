@@ -1,6 +1,8 @@
 package com.finalysis.chat.citation;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.finalysis.analytics.MoneyFlow;
 import com.finalysis.api.ApiMoney;
 import com.finalysis.chat.tool.FigureBasis;
@@ -13,8 +15,15 @@ import java.util.Map;
 /**
  * One citation of an answer (CHT-05, docs/plans/phase-6.md §6), resolved locally and returned to the client only:
  * none of it is ever sent to the model (it holds ids, account names and statement lines). {@code marker} is the
- * number the answer's text shows ({@code [1]}).
+ * number the answer's text shows ({@code [1]}). Stored with its turn as JSON, {@code kind} naming the type, and read back
+ * to be re-resolved ({@link CitationResolver#refresh}).
  */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "kind")
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = Citation.Txn.class, name = "TRANSACTION"),
+        @JsonSubTypes.Type(value = Citation.Total.class, name = "TOTAL"),
+        @JsonSubTypes.Type(value = Citation.Alert.class, name = "ALERT"),
+        @JsonSubTypes.Type(value = Citation.Series.class, name = "SERIES")})
 public sealed interface Citation {
 
     enum Kind { TRANSACTION, TOTAL, ALERT, SERIES }

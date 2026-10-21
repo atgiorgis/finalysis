@@ -310,6 +310,65 @@ class CitationTest {
         }
     }
 
+    /** The comparison cell's figure {@code a.value}, quoted with the cell's marker, and its citation. */
+    private Citation.Total citeSideA(String arguments, String written) {
+        Turn t = run(List.of(new ToolCall("compare_periods", arguments)));
+        String ref = ((com.finalysis.chat.tool.view.ComparisonView) t.evidence().results().getFirst().outcome().view())
+                .ref();
+        AnswerCheck check = grounding.check("It was " + written + " [" + ref + "].", t.evidence());
+        assertThat(check.ungrounded()).isEmpty();
+        return (Citation.Total) citations.cite(check, t.turn().refs()).citations().getFirst();
+    }
+
+    private static BigDecimal sum(Citation.CitedFigure figure) {
+        return figure.terms().stream().map(term -> part(term.drillDown().total(), figure.component())
+                .multiply(BigDecimal.valueOf(term.sign()))).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Step 4 regression: a NET side drilled into every row of its months, linked and unlinked transfers included.
+     * February's net is 1,313.27 while all its rows sum to 1,063.27 (the unlinked OUTSIDE CARD AUTOPAY, -250.00;
+     * expected-month-totals.csv's {@code sum_all}), so the old drill-down didn't add up.
+     */
+    @Test
+    void aNetComparisonDrillsIntoIncomeAndSpendingRowsOnlyNotTransfers() {
+        Citation.Total cell = citeSideA("{\"measure\": \"NET\", \"a\": {\"month\": \"2026-02\"}, "
+                + "\"b\": {\"month\": \"2026-01\"}}", "$1313.27");
+
+        Citation.CitedFigure net = cell.figures().getFirst();
+        assertThat(net.field()).isEqualTo("a.value");
+        assertThat(net.value()).isEqualTo("1313.27");
+        assertThat(sum(net)).isEqualByComparingTo("1313.27");
+        assertThat(net.terms()).extracting(term -> term.drillDown().params().get("measure"))
+                .containsExactlyInAnyOrder("RECEIVED", "SPENT");
+        assertThat(cell.drillDowns()).allSatisfy(drill ->
+                assertThat(drill.params()).containsKey("measure").doesNotContainKey("bucket"));
+        assertThat(cell.drillDowns().stream().flatMap(d -> d.sampleTxns().stream()))
+                .noneMatch(txn -> txn.merchant() != null && txn.merchant().contains("AUTOPAY"));
+    }
+
+    /**
+     * Step 4 regression: a CATEGORY_SPENT side drilled into {@code measure=SPENT}, which nets the category's refund
+     * rows into its spending; the service counts its expense rows only. Refunds &amp; Rebates has one refund row in
+     * March (ONLINE RETURN CREDIT, +15.00) and no expense rows, so it spent 0.00, and the old drill-down said -15.00.
+     */
+    @Test
+    void aCategorySpentComparisonDrillsIntoExpenseRowsOnlyNotRefunds() {
+        Citation.Total cell = citeSideA("{\"measure\": \"CATEGORY_SPENT\", \"category\": \"Refunds & Rebates\", "
+                + "\"a\": {\"month\": \"2026-03\"}, \"b\": {\"month\": \"2026-02\"}}", "$0.00");
+
+        Citation.CitedFigure spent = cell.figures().stream().filter(f -> f.field().equals("a.value")).findFirst()
+                .orElseThrow();
+        assertThat(spent.value()).isEqualTo("0.00");
+        assertThat(sum(spent)).isEqualByComparingTo("0.00");
+        assertThat(spent.terms()).singleElement().satisfies(term -> {
+            assertThat(term.drillDown().params()).containsEntry("bucket", "EXPENSE").doesNotContainKey("measure");
+            assertThat(term.drillDown().count()).isZero();
+        });
+        assertThat(cell.drillDowns()).allSatisfy(drill ->
+                assertThat(drill.params()).containsEntry("bucket", "EXPENSE").doesNotContainKey("measure"));
+    }
+
     /** Every tool's template, on its real result: lines with issued markers, and as grounded as a model's answer. */
     @Test
     void theFallbackOfEveryToolIsGroundedAndCited() {

@@ -1,8 +1,8 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 4 done (step notes); step 5 (chat loop and API) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.59).
+in this file. Steps 1 to 5 done (step notes); step 6 (search and routing) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.60).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -1332,6 +1332,106 @@ Done: "Phase 6 step 4: grounding and citations". Backend 2,817 tests (Maven summ
 - **The fallback renders the outbound views** (aliases, outbound merchant texts, `MERCHANT WITHHELD`), not the local
   records, so it is as safe as the payloads if a later turn shows it to the model as history.
 - **`CitedTxn` keeps its fingerprint** for re-resolution; ids and fingerprints go to the local client only.
+
+### Step 5 notes
+
+Done: "Phase 6 step 5: the chat loop and API". Backend 2,912 tests (Maven summary; 2,817 + 95), 0 failures, 0 skipped; frontend 4. Requirements v1.60. V21. No live
+model call: every turn in the tests is a scripted model (`ScriptedChatModel`), and the Bedrock proof uses a stubbed HTTP
+client.
+
+**Step 4 review**
+- **Named regression tests** for the two comparison drill-downs corrected in step 4 (`CitationTest`):
+  `aNetComparisonDrillsIntoIncomeAndSpendingRowsOnlyNotTransfers` (February's net 1,313.27 against all its rows' 1,063.27,
+  the unlinked −250.00 transfer) and `aCategorySpentComparisonDrillsIntoExpenseRowsOnlyNotRefunds` (Refunds & Rebates
+  spent 0.00 in March; the old `measure=SPENT` drill-down said −15.00). Both fail with the step 3 drill-downs restored.
+- **Bare years** stay a known limitation (§15); step 8's eval reports how often they cause a retry.
+
+**First: framework tool execution (§10.1).** Proven before the loop was written, on Spring AI 2.0.1's real
+`BedrockProxyChatModel` over the app's own Bedrock client with an in-process HTTP client (`BedrockToolCallsTest`, no
+network, dummy credentials). A `toolUse` response comes back to the caller as tool calls, with one HTTP request and the
+refusing callbacks never invoked; the next request carries our results as `toolResult` blocks with the model's ids. 2.0.1's
+model has no tool-execution path at all (it only asks the `ToolCallingManager` to resolve definitions; execution moved to
+`ChatClient` advisors), so there was no eligibility check to turn off. Two findings shaped `ChatModelClient`:
+- called directly, the Converse model casts the prompt's options to `BedrockChatOptions` (a plain
+  `ToolCallingChatOptions` is a `ClassCastException`), so the role's options are merged onto `model.getOptions()`, as
+  `ChatClient` does;
+- one Converse message comes back as **two generations** (the text, then the tool calls), so `getResult()` alone misses
+  the calls. The client gathers every generation's calls and joins the texts into one assistant message, built from the
+  message that carries the calls so provider content (reasoning) stays on it.
+
+**Built** (`com.finalysis.chat`, `com.finalysis.ai`, V21)
+- **V21** as §7.3, plus `figures_checked` and `ungrounded` (counts), checks that answer, source, grounding and error agree,
+  JSON-type checks, and `chat_tool_call.status` from the step 3 `ToolStatus` (`OK`, `INVALID_ARGUMENTS`, `FAILED`,
+  `REFUSED`, `SKIPPED_LIMIT`). `EnumCheckConstraintTest` covers the four enums.
+- **`ChatModelClient`**: `ChatModel.call(Prompt)` with no `ChatClient`, the main role's options (`ChatRoleOptions`, in
+  `ai`: model id, output cap, tool definitions, temperature only when `finalysis.ai.chat.temperature` is set; the `aws`
+  profile's 0.0 is cleared), usage (0 input means unreported, as categorization), `max_tokens`/`length` as a cut answer,
+  and one `ai call role=chat` line per call (`items` = tool results in the prompt; outcome `LIMIT` for a cut answer).
+- **`ChatPrompt`** (`chat-1`): the system prompt (`chat/system-prompt.txt`), the context block as a second system message
+  in `<context>` (Converse hoists system messages; a user message there would break alternation once history is added),
+  the question as a JSON string in `<question>`.
+- **`TurnLoop`**: limits before each round (rounds, time, input per call after cutting the oldest results, input per turn,
+  cost with the round's worst case: estimated input plus the output cap); tool calls run in order and answered in one
+  message; past 8, or in the last round, calls are `SKIPPED_LIMIT` with a fixed message telling the model to answer; a
+  grounded answer is shown; an ungrounded or cut one is retried once (a user message: the §5.5 text, or a fixed "cut off"
+  text); a limit, a second miss or a blank answer gives the fallback. A failed call ends the turn as `ERROR`.
+- **`ChatService`** and **`ChatController`**: §10.2's endpoints but the summary and search refresh (steps 6, 7); §1's
+  order (AI off 503, unknown 404, same conversation 409, more than two turns a 5 s wait then 429, daily cap 429 before any
+  call); redaction, the guard-checked context with today from the `Clock`; citations resolved and stored as JSON, re-resolved
+  on every read; one `chat turn …` count-only line per turn. Problems are `ErrorResponseException`s, so `api` needs nothing
+  from chat (§9's "nothing depends on chat" holds).
+- **`ChatConversationStore`**: the only writer (a new ArchUnit rule: no JDBC update, batch or execute elsewhere in chat,
+  with a violation test). Turn numbers under a row lock; title from the first question.
+- **Limits and prices**: `ChatProperties` with every §8 limit validated at startup; `AiPrices`
+  (`finalysis.ai.prices.[<model-id>]`, Haiku 4.5 at $1.00/$5.00, equal to the eval's price file, `ChatSettingsTest`);
+  `ChatStartupCheck` stops startup for an unpriced main model while a cost limit is on. `roles.main` is required when AI is
+  on and shown in `/api/status`.
+- **`Clock` bean** (`config.ClockConfiguration`, system zone): the context block's today and the daily cap's local midnight.
+  Tests use `MutableClock`, starting at the sample data's 2026-10-15.
+
+**Tests**
+- `BedrockToolCallsTest` (3): above, plus temperature absent by default and sent when configured.
+- `ChatServiceTest` (22): a direct answer; one round with its citation, usage, cost and stored rows; message order and the
+  clock's today; parallel calls in order over several rounds; an unknown tool (stored as `(unknown)`, never by name);
+  invented arguments then a correction; ungrounded then fixed; ungrounded twice then the fallback (the text never stored);
+  a cut answer retried; a blank answer; reasoning properties round-tripped; every limit (rounds with the last round's calls
+  skipped, tool calls, a limit then no retry, cost, tokens per turn, time); usage missing; the daily cap and its reset at
+  midnight; one turn at a time; a failed call (502, `ERROR`, class only); the token lines.
+- `TurnLoopCutTest` (2): the oldest result cut to fit the per-call cap (it still grounds), and `TOKENS` when nothing is
+  left to cut.
+- `ChatApiTest` (17): every endpoint's shape, paging, 404s, every 400 (blank, missing, null, unknown field, over 1,000,
+  a question that is only identifiers, bad paging), 429 with `resetsAt`, 502 with nothing quoted, citations `GONE` after
+  a statement delete. `ChatAiOffApiTest` (2): 503 `ai-off`, no model bean, nothing stored.
+- `ChatTurnPayloadTest`: §12.6 on whole turns through the API on the injection fixture (every tool, a retry, the
+  fallback, a failed call), at DEBUG: no identifier, hostile text, canary or id in any prompt; nothing of the question,
+  answer or account in the log or the problem body.
+- `ChatSettingsTest` (17), `SchemaMigrationTest` (+24), `EnumCheckConstraintTest` (+4), `ChatReadOnlyTest` (+1),
+  `AiModeTest` and `AwsProfileWiringTest` (main role, price, no chat temperature).
+
+**Decisions beyond the plan**
+- **No `ChatClient`.** The loop calls `ChatModel.call` directly, so no advisor (tool calling, memory, logging) can be in
+  the path; the options are merged onto the model's own as above.
+- **The retry is a user message**, not a system message (§5.5 said system): Converse moves every system message to the
+  top, which would put the retry before the answer it's about.
+- **A blank answer goes straight to the fallback**, without a retry: Converse can't carry an empty assistant message.
+- **Calls returned in the last allowed round are not run** (`SKIPPED_LIMIT`, `ROUNDS`): the model would never see their
+  results.
+- **The cost check is projected**: a round starts only if its worst case (estimated input, full output cap) keeps the
+  turn within $0.05, so the cap is never passed rather than detected after.
+- **Tokens are estimated at three characters each**, on purpose higher than Claude's usual four.
+- **A question with nothing left after redaction is a 400** (`message`), with nothing sent or stored; §12.4 didn't say.
+- **Overall concurrency is 429 `chat-busy`** after the 5 s wait (§8 named only the status).
+- **No history yet**: earlier turns aren't sent until step 7's window and summary; the message layout leaves their place.
+- **`chat_tool_call.status` follows the step 3 enum** (`FAILED`, `REFUSED` instead of §7.3's `ERROR`), and arguments are
+  stored as the model sent them when they are a JSON object (they contain only outbound names), `{}` otherwise; an
+  unknown tool's name is never stored.
+- **The 502 carries no cause**, so an SDK message can't reach a log or a body through the problem handler; the turn
+  stores the exception's class.
+- **Citations deserialize** (`@JsonTypeInfo` on `kind`), so a stored turn's citations can be re-resolved on read.
+- **The context block and the question are written by `ToolResultWriter`**, like tool results, from checked values only:
+  step 3's rule (only the writer serializes in chat) caught the first draft writing them in `ChatPrompt`. The guard gained
+  `checkText`, so the question is a `Checked<String>` by type. The store is the rule's one other exception: it writes its
+  own JSON columns (citations, alias map, arguments), which never go to the model.
 
 ### Requirement mapping
 

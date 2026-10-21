@@ -1,5 +1,6 @@
 package com.finalysis.chat.outbound;
 
+import com.finalysis.chat.tool.view.ContextBlockView;
 import com.finalysis.chat.tool.view.DataNotesView;
 import com.finalysis.chat.tool.view.ToolErrorView;
 import java.nio.charset.StandardCharsets;
@@ -10,8 +11,8 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Writes a tool result as the JSON the model receives (docs/plans/phase-6.md §3.1, §12.1). It takes only what
- * {@link ChatPayloadGuard} returned, so nothing unchecked can be written:
+ * Writes what the model receives as JSON (docs/plans/phase-6.md §3.1, §12.1): tool results, and the context block and
+ * question of every round. It takes only what {@link ChatPayloadGuard} returned, so nothing unchecked can be written:
  * <pre>{"result": {…the view…}, "dataNotes": [{type, account, month}], "shortened": true}</pre>
  * {@code dataNotes} is left out when empty, {@code shortened} unless rows were cut. A result over {@value #MAX_BYTES}
  * bytes is cut to fit: one row at a time from the longest list, the oldest first in a list ordered by month, otherwise the
@@ -54,6 +55,16 @@ public class ToolResultWriter {
             envelope.put("shortened", true);
         }
         return new Written(json.writeValueAsString(envelope), shortened);
+    }
+
+    /** The context block (§3.4) as JSON, for the {@code <context>} message. */
+    public String context(ChatPayloadGuard.Checked<ContextBlockView> context) {
+        return json.writeValueAsString(context.view());
+    }
+
+    /** The outbound question as a JSON string (quotes and backslashes escaped), for the {@code <question>} message. */
+    public String question(ChatPayloadGuard.Checked<String> question) {
+        return json.writeValueAsString(question.view());
     }
 
     /** An error result. */

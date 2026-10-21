@@ -40,3 +40,10 @@ finalysis:
       main: us.anthropic.claude-haiku-4-5-20251001-v1:0   # Phase 6 chat may choose another
       embedding: amazon.titan-embed-text-v2:0
       vision: ""                                          # Phase 8, local only
+    # Dollars per million tokens, for chat's cost limits (docs/plans/phase-6.md §8). The same values as the evaluation's
+    # price file (src/test/resources/eval/model-prices.json; ChatPricesTest checks they agree). Check the AWS Bedrock
+    # pricing page before relying on an estimate. A main model without a price stops startup while a cost limit is on.
+    prices:
+      "[us.anthropic.claude-haiku-4-5-20251001-v1:0]":
+        input-per-million: 1.00
+        output-per-million: 5.00

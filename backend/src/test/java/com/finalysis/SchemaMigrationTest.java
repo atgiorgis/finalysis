@@ -47,7 +47,7 @@ class SchemaMigrationTest {
         assertThat(tables).contains(
                 "account", "statement", "category", "txn",
                 "categorization_rule", "transfer_link", "transfer_rejection", "merchant_embedding", "csv_mapping",
-                "app_setting");
+                "app_setting", "alert_dismissal", "chat_conversation", "chat_turn", "chat_tool_call");
     }
 
     @ParameterizedTest
@@ -126,6 +126,22 @@ class SchemaMigrationTest {
             "app_setting,         pk_app_setting,                      p",
             "app_setting,         ck_app_setting_key,                  c",
             "app_setting,         ck_app_setting_value_length,         c",
+            "chat_conversation,   pk_chat_conversation,                p",
+            "chat_conversation,   ck_chat_conversation_title,          c",
+            "chat_conversation,   ck_chat_conversation_summary,        c",
+            "chat_turn,           fk_chat_turn_conversation,           f",
+            "chat_turn,           uq_chat_turn_seq,                    u",
+            "chat_turn,           ck_chat_turn_question,               c",
+            "chat_turn,           ck_chat_turn_answer_source,          c",
+            "chat_turn,           ck_chat_turn_grounding,              c",
+            "chat_turn,           ck_chat_turn_answer,                 c",
+            "chat_turn,           ck_chat_turn_limit,                  c",
+            "chat_turn,           ck_chat_turn_citations_array,        c",
+            "chat_turn,           ck_chat_turn_error,                  c",
+            "chat_tool_call,      fk_chat_tool_call_turn,              f",
+            "chat_tool_call,      uq_chat_tool_call_seq,               u",
+            "chat_tool_call,      ck_chat_tool_call_status,            c",
+            "chat_tool_call,      ck_chat_tool_call_arguments_object,  c",
     })
     void constraintExists(String table, String constraint, String type) {
         Integer count = jdbc.queryForObject("""
@@ -167,6 +183,50 @@ class SchemaMigrationTest {
                 .isFalse();
         assertThat(jdbc.queryForObject("SELECT kind FROM category WHERE name = 'Refunds & Rebates'", String.class))
                 .as("the kind, which categorization reads, is unchanged").isEqualTo("INCOME");
+    }
+
+    private long chatConversation() {
+        return jdbc.queryForObject("INSERT INTO chat_conversation DEFAULT VALUES RETURNING id", Long.class);
+    }
+
+    private static final String CHAT_TURN = "INSERT INTO chat_turn (conversation_id, seq, question, outbound_question, "
+            + "answer, answer_source, grounding_status, alias_map, model, prompt_version, rounds, tool_calls, millis, "
+            + "error) VALUES (?, ?, 'q', 'q', ?, ?, ?, '{}', 'm', 'chat-1', 1, 0, 1, ?)";
+
+    /** V21: a turn's answer, source, grounding and error agree; deleting a conversation deletes its turns and calls. */
+    @Test
+    void chatTurnsAreConsistentAndCascade() {
+        long conversation = chatConversation();
+        jdbc.update(CHAT_TURN, conversation, 1, "an answer", "MODEL", "GROUNDED", null);
+        jdbc.update(CHAT_TURN, conversation, 2, "the list", "FALLBACK", "FALLBACK", null);
+        jdbc.update(CHAT_TURN, conversation, 3, null, "ERROR", null, "SdkClientException");
+        long turn = jdbc.queryForObject("SELECT id FROM chat_turn WHERE conversation_id = ? AND seq = 1", Long.class,
+                conversation);
+        jdbc.update("INSERT INTO chat_tool_call (turn_id, seq, tool, arguments, status, millis) "
+                + "VALUES (?, 1, 'get_trends', '{}', 'OK', 3)", turn);
+
+        jdbc.update("DELETE FROM chat_conversation WHERE id = ?", conversation);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_turn WHERE conversation_id = ?", Integer.class,
+                conversation)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_tool_call WHERE turn_id = ?", Integer.class, turn))
+                .isZero();
+    }
+
+    /** V21: an answer without a source that has one, a fallback not marked FALLBACK, an error without its class. */
+    @ParameterizedTest
+    @CsvSource(nullValues = "null", value = {
+            "null,      MODEL,    GROUNDED,  null",
+            "an answer, ERROR,    null,      SdkClientException",
+            "an answer, FALLBACK, GROUNDED,  null",
+            "an answer, MODEL,    FALLBACK,  null",
+            "null,      ERROR,    null,      null",
+            "an answer, MODEL,    GROUNDED,  SdkClientException",
+            "an answer, MODEL,    null,      null"})
+    void anInconsistentChatTurnIsRefused(String answer, String source, String grounding, String error) {
+        long conversation = chatConversation();
+        assertThatThrownBy(() -> jdbc.update(CHAT_TURN, conversation, 1, answer, source, grounding, error))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     /** V19: accounts are open (null) until the user closes them; existing accounts stay open. */

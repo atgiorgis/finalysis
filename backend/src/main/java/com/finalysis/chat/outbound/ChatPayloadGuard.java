@@ -97,6 +97,18 @@ public class ChatPayloadGuard {
         return new Checked<>(checked, counter.kept, counter.dropped);
     }
 
+    /**
+     * Checks a free text (the outbound question) for sending: the writer takes only checked values.
+     *
+     * @throws PayloadRefusedException if the text fails {@link #allowsText}
+     */
+    public Checked<String> checkText(String text) {
+        if (!allowsText(text)) {
+            throw new PayloadRefusedException("text");
+        }
+        return new Checked<>(text, 1, 0);
+    }
+
     /** Whether a free text (the outbound question, a shown answer, the summary) may be sent. */
     public boolean allowsText(String text) {
         return text != null && !text.isBlank() && text.length() <= MAX_TEXT && !TEXT_FORBIDDEN.matcher(text).find();

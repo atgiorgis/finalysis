@@ -9,5 +9,7 @@ public enum ToolStatus {
     /** The read failed; the model is told to answer without it. */
     FAILED,
     /** The guard refused the result as a whole; nothing of it was sent. */
-    REFUSED
+    REFUSED,
+    /** Not run: the turn's tool call limit was reached, or the round limit left no round to read it (§8). */
+    SKIPPED_LIMIT
 }

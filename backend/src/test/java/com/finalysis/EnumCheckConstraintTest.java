@@ -63,7 +63,11 @@ class EnumCheckConstraintTest {
                 Arguments.of("ck_csv_mapping_amount_mode", CsvAmountMode.class),
                 Arguments.of("ck_csv_mapping_sign", CsvSign.class),
                 Arguments.of("ck_unparsed_upload_resolution_kind", UnparsedUploadResolution.class),
-                Arguments.of("ck_alert_dismissal_type", AlertType.class));
+                Arguments.of("ck_alert_dismissal_type", AlertType.class),
+                Arguments.of("ck_chat_turn_answer_source", com.finalysis.chat.AnswerSource.class),
+                Arguments.of("ck_chat_turn_grounding", com.finalysis.chat.grounding.GroundingStatus.class),
+                Arguments.of("ck_chat_turn_limit", com.finalysis.chat.LimitHit.class),
+                Arguments.of("ck_chat_tool_call_status", com.finalysis.chat.ToolStatus.class));
     }
 
     @ParameterizedTest

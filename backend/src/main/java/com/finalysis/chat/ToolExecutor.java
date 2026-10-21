@@ -122,6 +122,23 @@ public class ToolExecutor {
         }
     }
 
+    /**
+     * A call that is not run because a turn limit was reached (docs/plans/phase-6.md §8): an error result telling the
+     * model to answer, and the count-only log line.
+     */
+    public ToolOutcome skipped(ToolCall call, OutboundTurn turn) {
+        return error(registry.find(call.name()).orElse(null), ToolStatus.SKIPPED_LIMIT, ToolProblem.SKIPPED_LIMIT,
+                List.of(), turn, System.nanoTime());
+    }
+
+    /**
+     * What replaces a result cut from a later round's prompt to keep it under the per-call input limit (§8): fixed text,
+     * checked like every error. The result stays in the turn's evidence, since the model saw it in an earlier round.
+     */
+    public String cutResult(OutboundTurn turn) {
+        return writer.error(guard.check(projector.error("CUT", ToolProblem.CUT, List.of(), turn), turn));
+    }
+
     /** The model's arguments as JSON; blank means none. Malformed JSON parses to null, an error naming no value. */
     private JsonNode arguments(String text) {
         if (text == null || text.isBlank()) {
