@@ -1,0 +1,24 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "account": null,
+  "merchants": [
+    {
+      "ref": "c1",
+      "merchant": "MAPLEWOOD GROCERY",
+      "spent": "115.50",
+      "count": 2
+    },
+    {
+      "ref": "c2",
+      "merchant": "RIVERBEND NOODLE BAR",
+      "spent": "23.60",
+      "count": 1
+    }
+  ],
+  "combined": {
+    "ref": "c3",
+    "spent": "139.10",
+    "count": 3
+  }
+}

@@ -21,7 +21,7 @@ class ChatToolCallbacksTest {
 
     @Test
     void theDefinitionsAreTheRegistrys() {
-        assertThat(callbacks.callbacks()).hasSize(10);
+        assertThat(callbacks.callbacks()).hasSize(com.finalysis.chat.tool.ToolName.values().length);
         for (int i = 0; i < registry.definitions().size(); i++) {
             ToolRegistry.Definition expected = registry.definitions().get(i);
             ToolCallback callback = callbacks.callbacks().get(i);

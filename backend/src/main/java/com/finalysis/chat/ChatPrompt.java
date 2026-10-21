@@ -24,8 +24,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ChatPrompt {
 
-    /** Stored with every turn; changes whenever the system prompt or the message layout does. */
-    public static final String VERSION = "chat-1";
+    /**
+     * Stored with every turn; changes whenever the system prompt or the message layout does. chat-1 was step 5; chat-2
+     * adds the routing rules for search (step 6).
+     */
+    public static final String VERSION = "chat-2";
 
     static final String RESOURCE = "chat/system-prompt.txt";
 

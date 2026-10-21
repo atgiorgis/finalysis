@@ -75,6 +75,8 @@ class ChatPayloadGuardTest {
             "MONEY|-1183.67|true", "MONEY|1183.6|false", "MONEY|1,183.67|false", "MONEY|$5.00|false",
             "PERCENT|384.3|true", "PERCENT|384|false",
             "RATIO|13.55|true", "RATIO|-1.00|false",
+            "SIMILARITY|0.82|true", "SIMILARITY|1.00|true", "SIMILARITY|0.05|true", "SIMILARITY|1.01|false",
+            "SIMILARITY|0.8|false", "SIMILARITY|999.99|false", "SIMILARITY|-0.20|false",
             "NUMBER|180|true", "NUMBER|0.50|true", "NUMBER|1e3|false",
             "MONTH|2026-03|true", "MONTH|2026-13|false",
             "DATE|2026-02-28|true", "DATE|2026-02-30|false",
@@ -104,6 +106,7 @@ class ChatPayloadGuardTest {
                 case MONEY -> new Money(probe.value());
                 case PERCENT -> new Percent(probe.value());
                 case RATIO -> new Ratio(probe.value());
+                case SIMILARITY -> new SimilarityValue(probe.value());
                 case NUMBER -> new NumberValue(probe.value());
                 case MONTH -> new MonthValue(probe.value());
                 case DATE -> new DateValue(probe.value());
@@ -130,6 +133,7 @@ class ChatPayloadGuardTest {
     record Money(@Outbound(OutboundKind.MONEY) String v) { }
     record Percent(@Outbound(OutboundKind.PERCENT) String v) { }
     record Ratio(@Outbound(OutboundKind.RATIO) String v) { }
+    record SimilarityValue(@Outbound(OutboundKind.SIMILARITY) String v) { }
     record NumberValue(@Outbound(OutboundKind.NUMBER) String v) { }
     record MonthValue(@Outbound(OutboundKind.MONTH) String v) { }
     record DateValue(@Outbound(OutboundKind.DATE) String v) { }

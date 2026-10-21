@@ -13,6 +13,8 @@ public enum OutboundKind {
     RATIO,
     /** A number in an alert's quantity (money, percent, count, days or ratio, as its unit says). */
     NUMBER,
+    /** A search candidate's cosine similarity, 0.00 to 1.00: a label of the result, never a figure to ground. */
+    SIMILARITY,
     /** A whole number. */
     COUNT,
     /** An ISO date. */

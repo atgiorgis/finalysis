@@ -34,6 +34,7 @@ final class OutboundTurns {
         RedactionContext context = new RedactionContext(Set.of("7310", "7311", "2001"),
                 List.of("Halden Everyday", "Halden Bank", "Rainy Day Savings", "Orbit Rewards Visa",
                         "Orbit Card Services"), counterparties);
-        return new OutboundTurn(aliases, context, IDENTITIES, Map.of("Dining", 1L, "Groceries", 2L), MERCHANTS);
+        return new OutboundTurn(aliases, context, IDENTITIES, Map.of("Dining", 1L, "Groceries", 2L), MERCHANTS,
+                List::of, null);
     }
 }

@@ -19,7 +19,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * AI off, the default (docs/plans/phase-6.md §10.4, §18 decision 10): conversations still work, and a turn is 503
- * {@code ai-off}, with no model, no call and nothing stored. The conversation keeps no turns.
+ * {@code ai-off}, with no model, no call and nothing stored. The conversation keeps no turns. The search index refresh
+ * answers {@code OFF}.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -60,6 +61,17 @@ class ChatAiOffApiTest {
                 .andExpect(jsonPath("$.turns").isEmpty())
                 .andExpect(jsonPath("$.title").doesNotExist());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_turn", Integer.class)).isZero();
+    }
+
+    /** §4.2: the search index refresh answers OFF with AI off, and calls and stores nothing. */
+    @Test
+    void theSearchIndexRefreshIsOffAndMakesNoCall() throws Exception {
+        mvc.perform(post("/api/chat/search-index/refresh"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OFF"))
+                .andExpect(jsonPath("$.calls").value(0))
+                .andExpect(jsonPath("$.embedded").value(0));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_embedding", Integer.class)).isZero();
     }
 
     @Test

@@ -1,8 +1,8 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 5 done (step notes); step 6 (search and routing) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.60).
+in this file. Steps 1 to 6 done (step notes); step 7 (memory and monthly summary) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.61).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -889,7 +889,8 @@ Sonnet 5.5.
   answer is retried unless the question or a call's arguments held the number (step 4). The eval will show how often.
 - **Unknown names in questions** are sent as typed, unless they are counterparties or configured redact terms.
 - **Search knows merchants, not descriptions**, and only redacted text: two merchants that redact to one text look
-  alike, and a withheld merchant is found only by its category or by listing transactions.
+  alike, and a withheld merchant is found only by its category or by listing transactions. A text standing for more
+  than 20 stored merchants can't be searched or totalled by name. Search embeddings aren't in the chat cost caps.
 - **No averages over arbitrary ranges, shares or rates** beyond the trends and comparisons; such questions are
   refused.
 - **No streaming**; a slow turn shows nothing until it is done.
@@ -1433,13 +1434,101 @@ model has no tool-execution path at all (it only asks the `ToolCallingManager` t
   `checkText`, so the question is a `Checked<String>` by type. The store is the rule's one other exception: it writes its
   own JSON columns (citations, alias map, arguments), which never go to the model.
 
+### Step 6 notes
+
+Done: "Phase 6 step 6: search and routing". Backend 2,962 tests (Maven summary; 2,912 + 50), 0 failures, 0 skipped;
+frontend 4. Requirements v1.61. No migration. No live model call: embeddings in the tests come from the deterministic
+`FakeEmbeddingModel` with chosen neighbours, the turns from `ScriptedChatModel`, and `NoCloudAiGuard` holds in every context.
+
+**Built**
+- **`MerchantIndexRefresh`** (`categorize`, §4.2): every distinct merchant whose outbound text passes categorization's
+  path (`CategorizationPromptBuilder.outboundMerchant`: redacted, guard-checked, never person-to-person) and has no
+  vector of the current model for that text is embedded through `MerchantEmbeddingStage` (its loop is now shared:
+  same hash, embedder, AI-06 line per call, failure handling), in name order, at most
+  `finalysis.chat.search.max-embeddings-per-run` (500) calls, one refresh at a time, no transaction held across calls.
+  It runs after an AI categorization run started by `POST /api/categorization/run` or after an import, and on
+  `POST /api/chat/search-index/refresh` (counts; `OFF` with AI off, no call). One log line of counts.
+- **`MerchantSearchQuery`** (`chat.tool`, read-only SQL): the nearest merchants of one embedding model (`model` on the
+  query, the inner `ORDER BY <=> LIMIT 40` kept for HNSW, the similarity floor after it, merchants still in `txn`), the
+  index's coverage counted in SQL, and the distinct stored merchants.
+- **`MerchantDirectory`** (`chat.tool`): a turn's nameable merchants by outbound text, built once per turn from the same
+  decisions as the payloads (`MerchantOutbound`), without counting them. A text stands for every stored merchant behind
+  it; withheld, refused and person-to-person merchants aren't in it; a text for more than 20 stored merchants is left
+  out. It answers the whole-word name match and, through `OutboundTurn.storedMerchants`, every merchant argument.
+- **`SearchTextOutbound`** (`chat.outbound`, §4.3 points 1–2): the search text through the question's `QuestionRedactor`,
+  upper-cased like the merchants, then the guard's merchant rule; a text that fails is an error result
+  (`SEARCH_REFUSED`) and goes nowhere. What passes is embedded with the embedding role (the `TextEmbedder`, so the AI-06
+  line), once per text per turn; no embedding model, or a failed call, leaves the name match (`byMeaning: false`).
+- **`search_transactions`** (`query` 2–60 characters, `from`, `to`, `limit` 1–10): name matches first in name order, then
+  meaning hits nearest first, each a merchant text once; per candidate `spent` and `count` from `MerchantSpendReader`, one
+  `DrillDownService` call per stored merchant (`measure=SPENT`, the bucket rule of every total), summed in Java;
+  `category` is the newest spending row's; `merchants` and `indexedMerchants`.
+- **`get_merchant_totals`** (`merchants` 1–10 texts, `from`, `to`, `account`): each text's spending the same way, and
+  `combined` summed in Java `BigDecimal`.
+- **Views and refs**: `SearchView`, `MerchantTotalsView`; each candidate, merchant and the combined figure is a cell whose
+  `spent` is Σ −1 × net and `count` Σ count over one drill-down per stored merchant, so a citation adds up by construction.
+  The same merchant over the same range in one turn is one ref, from search or from the totals. New guard kind
+  `SIMILARITY` (`0.00`–`1.00`), which `GroundedSet` never grounds. Fallback lines and data notes for both tools.
+- **Routing** (§4.4): rules in the system prompt, prompt version `chat-2`.
+
+**Tests**
+- `MerchantSearchTest` (12, analytics fixture, chosen neighbours): the floor, nearest first, figures equal
+  `get_top_merchants`' and their drill-downs; name matches first; the limit; another model's identical vector never
+  compared; coverage against SQL; the search text redacted (an account name becomes its alias) or refused with nothing
+  sent; one embedding per text per turn and its AI-06 line; a failed embedding (name only, class logged); two stored
+  merchants under one text (one candidate, both drill-downs, the same ref from both tools, list_transactions pointing to
+  the totals); combined totals; the account filter; a name from the question resolves, an invented one doesn't.
+- `MerchantIndexRefreshTest` (6, synthetic similar-merchant cases): every sendable merchant once as its outbound text
+  (identifiers redacted, the person-to-person one never), a second refresh with no call, another model's vector not
+  counted, the cap, a failed call caught up next time, the endpoint. `ChatAiOffApiTest`: the endpoint is `OFF`.
+- `ChatSearchPayloadTest` (3, injection fixture, meaning on): both payloads equal hand-checked documents
+  (`search_transactions.json`, `get_merchant_totals.json`) while every hostile merchant sits at similarity 1.00 to the
+  search text; no canary, hostile word, account name, institution, last four, id or balance in either; searching for the
+  hostile words or the account's name finds no hostile merchant and sends no identifier; logs name nothing.
+- `ChatSearchTurnTest` (4, scripted turns): search, then `get_merchant_totals`, grounded and cited to each stored
+  merchant's drill-down; a sum written by the model retried and grounded on the tool's combined figure; a quoted
+  similarity ungrounded; no fitting candidate answered without figures.
+- `MerchantDirectoryTest`; `ToolArgumentsTest` (both new types, every problem); `ToolRegistryTest` (twelve tools, the new
+  schemas); `ChatPayloadGuardTest` (`SIMILARITY`); `CitationTest` (both tools' figures add up from their drill-downs, their
+  fallbacks grounded and cited); `ToolExecutorTest`; `ChatReadOnlyTest` (`MerchantSearchQuery`);
+  `ChatQuestionSetsTest` (tools from the registry only; dev and holdout search targets still disjoint, unchanged).
+
+**Decisions beyond the plan**
+- **The refresh endpoint lives in `categorize`** under the plan's path, `POST /api/chat/search-index/refresh`: filling the
+  index is categorization's embedding path, and chat may not depend on `categorize` (§9). The search settings,
+  `ChatSearchProperties`, sit in `ai` because both sides use them.
+- **The refresh follows API and after-import runs, not `AiCategorizer.run` itself**, so direct runs (the categorization
+  eval) are unchanged. Its counts are logged, not added to the run's response. `EmbeddingStageTest` now reads the stage's
+  own call count from the response, since the refresh's calls follow it.
+- **Merchant arguments resolve through the turn's directory**, as §4.3 asked: a text the turn hasn't shown resolves if
+  some merchant goes out as it (step 3 allowed only texts the turn had sent; `ToolExecutorTest` changed accordingly).
+  `list_transactions` still takes one stored merchant; for a text with several, its error now points to
+  `get_merchant_totals`. A missing name's error points to `search_transactions`.
+- **Candidates are merchant texts, not stored merchants**, and a text's figures always cover all its stored merchants, so
+  search and the totals agree. Texts for more than 20 stored merchants are left out of the directory (§4.3's cap).
+- **Withheld merchants are never candidates**, though the refresh still embeds them (categorization's rule is the guard
+  only, and `categorize` can't use chat's word list). Found only by category or listing, as §15 says.
+- **The search text is not checked by the instruction word list**: it goes only to the embedding model and is never
+  echoed back to the chat model.
+- **Coverage is two counts** (`merchants`, `indexedMerchants`) rather than a fraction string, so the guard checks them as
+  counts; a `match` field (`NAME`, `MEANING`) and a `byMeaning` flag say how each candidate and the search were found.
+- **A candidate's category is its newest spending row's**, from the drill-down page already read; `get_top_merchants`
+  uses the category of most rows. They can differ for a merchant that changed category.
+- **Search embeddings are logged (AI-06) but not in a turn's usage or the chat cost caps**: a search text is a few tokens
+  of Titan (about $0.02 per million).
+- **The query vector is bound as pgvector's text form with a cast**, so `chat.tool` needs no driver type and its ArchUnit
+  allow-list is unchanged. The parameter type is `ToolParam.Search`: classes named `*Query` in chat are the read-only SQL
+  classes, by `ChatReadOnlyTest`.
+- **Tool errors** gained fixed texts `NOT_A_LIST`, `LISTED_TWICE`, `TEXT_TOO_SHORT`, `SEARCH_REFUSED`; `NOT_A_MERCHANT` and
+  `SEVERAL_MERCHANTS` were reworded as above.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
 | CHT-01 | 3, 5 | `*ToolTest`, `ChatServiceTest` |
-| CHT-02 | 6 | `MerchantSearchTest`, `MerchantIndexRefreshTest` |
-| CHT-03 | 6, 8 | routing turns; eval's tool-choice metric |
+| CHT-02 | 6 | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest` |
+| CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
 | CHT-04 | 4, 5 | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
 | CHT-06 | 7 | `ConversationMemoryTest` |

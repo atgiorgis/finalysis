@@ -1,0 +1,98 @@
+package com.finalysis.chat.tool;
+
+import java.math.BigDecimal;
+import java.util.List;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Chat's read-only SQL over the merchant index (CHT-02; docs/plans/phase-6.md §4.3): the nearest merchants to a search
+ * vector, the index's coverage, and the distinct merchants the turn's directory is built from. It never writes: the
+ * index is filled by categorization's {@code MerchantIndexRefresh}, which chat may not reach (SEC-03).
+ *
+ * <p>Only vectors of the query's own embedding model are compared ({@code model} on every query), even when two models
+ * share a dimension count. The vector is bound as pgvector's text form and cast, so the tools need no driver type; the
+ * inner {@code ORDER BY <=> LIMIT} keeps the HNSW index usable, as in categorization's nearest-neighbour query.
+ */
+@Component
+public class MerchantSearchQuery {
+
+    /**
+     * Neighbours asked of the index before the similarity floor. pgvector's HNSW scan returns at most
+     * {@code hnsw.ef_search} rows (40 by default), so asking for more gains nothing.
+     */
+    static final int POOL = 40;
+
+    static final String NEAREST_SQL = """
+            SELECT merchant, round((1 - distance)::numeric, 2) AS similarity
+            FROM (
+                SELECT merchant, embedding <=> CAST(:embedding AS vector) AS distance
+                FROM merchant_embedding
+                WHERE model = :model
+                ORDER BY embedding <=> CAST(:embedding AS vector)
+                LIMIT :pool
+            ) n
+            WHERE 1 - distance >= :minSimilarity
+              AND EXISTS (SELECT 1 FROM txn t WHERE t.merchant = n.merchant)
+            ORDER BY distance, merchant
+            """;
+
+    private final JdbcClient jdbc;
+
+    public MerchantSearchQuery(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    /** A stored merchant near the query, with its cosine similarity to two decimals. */
+    public record Hit(String merchant, BigDecimal similarity) {
+    }
+
+    /** How much of the data the index covers: distinct merchants, and those with a vector of the model. */
+    public record Coverage(int merchants, int indexed) {
+    }
+
+    /** Stored merchants at least {@code minSimilarity} from the vector, nearest first, at most {@value #POOL}. */
+    @Transactional(readOnly = true)
+    public List<Hit> nearest(float[] vector, String model, double minSimilarity) {
+        return jdbc.sql(NEAREST_SQL)
+                .param("embedding", vectorText(vector))
+                .param("model", model)
+                .param("pool", POOL)
+                .param("minSimilarity", minSimilarity)
+                .query((rs, row) -> new Hit(rs.getString("merchant"), rs.getBigDecimal("similarity")))
+                .list();
+    }
+
+    /** Counted in SQL (§4.3 point 6), so the model can say results may be incomplete. */
+    @Transactional(readOnly = true)
+    public Coverage coverage(String model) {
+        return jdbc.sql("""
+                SELECT count(*) AS merchants,
+                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM merchant_embedding e
+                                                      WHERE e.merchant = m.merchant AND e.model = :model)) AS indexed
+                FROM (SELECT DISTINCT merchant FROM txn WHERE merchant IS NOT NULL) m""")
+                .param("model", model)
+                .query((rs, row) -> new Coverage(rs.getInt("merchants"), rs.getInt("indexed")))
+                .single();
+    }
+
+    /** Every distinct stored merchant, in name order: what a turn's directory decides once. */
+    @Transactional(readOnly = true)
+    public List<String> merchants() {
+        return jdbc.sql("SELECT DISTINCT merchant FROM txn WHERE merchant IS NOT NULL ORDER BY merchant")
+                .query(String.class).list();
+    }
+
+    /** pgvector's text form, {@code [0.1,-0.2,...]}; {@link Float#toString} round-trips every float. */
+    static String vectorText(float[] vector) {
+        StringBuilder text = new StringBuilder(vector.length * 12).append('[');
+        for (int i = 0; i < vector.length; i++) {
+            if (!Float.isFinite(vector[i])) {
+                throw new IllegalArgumentException("a search vector's values must be finite");
+            }
+            text.append(i == 0 ? "" : ",").append(vector[i]);
+        }
+        return text.append(']').toString();
+    }
+}

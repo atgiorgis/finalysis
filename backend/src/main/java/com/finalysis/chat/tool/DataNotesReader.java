@@ -55,6 +55,8 @@ public class DataNotesReader {
             case ToolRead.Transactions t -> read(t.response().range(), t.accountId(), notes);
             case ToolRead.Recurring ignored -> { }
             case ToolRead.Coverage ignored -> { }
+            case ToolRead.Search r -> read(r.range(), null, notes);
+            case ToolRead.MerchantTotals r -> read(r.range(), r.accountId(), notes);
         }
         return List.copyOf(notes);
     }

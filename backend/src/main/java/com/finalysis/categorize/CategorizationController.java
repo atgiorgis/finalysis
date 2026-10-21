@@ -28,12 +28,14 @@ public class CategorizationController {
     private final RuleService rules;
     private final CategorizationService categorization;
     private final AiCategorizer aiCategorizer;
+    private final MerchantIndexRefresh searchIndex;
 
     public CategorizationController(RuleService rules, CategorizationService categorization,
-                                    AiCategorizer aiCategorizer) {
+                                    AiCategorizer aiCategorizer, MerchantIndexRefresh searchIndex) {
         this.rules = rules;
         this.categorization = categorization;
         this.aiCategorizer = aiCategorizer;
+        this.searchIndex = searchIndex;
     }
 
     /** In winning order (§3.2). */
@@ -72,13 +74,18 @@ public class CategorizationController {
      * Runs every stage now (§1.2): with {@code reclean}, re-cleans every merchant first; then rules and memory, in
      * one transaction; then, when AI is on and {@code ai} isn't false, the AI stage, with no transaction held across
      * its calls. {@code force} also asks again for txns the AI already categorized or left for review; USER and RULE
-     * categories never change.
+     * categories never change. After an AI run, the chat search index is refreshed (docs/plans/phase-6.md §4.2); its
+     * counts are logged, not returned.
      */
     @PostMapping("/run")
     public RunResponse run(@RequestParam(defaultValue = "false") boolean reclean,
                            @RequestParam(defaultValue = "true") boolean ai,
                            @RequestParam(defaultValue = "false") boolean force) {
         RunResult rulesResult = categorization.run(reclean);
-        return RunResponse.of(rulesResult, ai ? aiCategorizer.run(force) : AiRunResult.off());
+        AiRunResult aiResult = ai ? aiCategorizer.run(force) : AiRunResult.off();
+        if (aiResult.status() != AiCategorizer.Status.OFF) {
+            searchIndex.refresh();
+        }
+        return RunResponse.of(rulesResult, aiResult);
     }
 }

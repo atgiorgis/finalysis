@@ -6,8 +6,10 @@ import com.finalysis.chat.tool.view.AlertsView;
 import com.finalysis.chat.tool.view.CategoryTotalsView;
 import com.finalysis.chat.tool.view.ComparisonView;
 import com.finalysis.chat.tool.view.CoverageView;
+import com.finalysis.chat.tool.view.MerchantTotalsView;
 import com.finalysis.chat.tool.view.MonthTotalsView;
 import com.finalysis.chat.tool.view.RecurringView;
+import com.finalysis.chat.tool.view.SearchView;
 import com.finalysis.chat.tool.view.TopMerchantsView;
 import com.finalysis.chat.tool.view.TransactionsView;
 import com.finalysis.chat.tool.view.TrendsView;
@@ -115,6 +117,17 @@ public final class FallbackAnswer {
                             .collect(Collectors.joining(", ")),
                     a.gaps().isEmpty() ? "no gaps" : a.gaps().size() == 1 ? "1 gap" : a.gaps().size() + " gaps"))
                     .toList();
+            case SearchView v -> v.candidates().stream().map(c -> join(c.merchant(), c.category(),
+                    span(v.from(), v.to()), "spent " + signed(c.spent()), count(c.count())) + marker(c.ref())).toList();
+            case MerchantTotalsView v -> {
+                List<String> lines = new ArrayList<>(v.merchants().stream().map(m -> join(m.merchant(),
+                        span(v.from(), v.to()), v.account(), "spent " + signed(m.spent()), count(m.count()))
+                        + marker(m.ref())).toList());
+                lines.add(join("These merchants together", span(v.from(), v.to()), v.account(),
+                        "spent " + signed(v.combined().spent()), count(v.combined().count()))
+                        + marker(v.combined().ref()));
+                yield lines;
+            }
             default -> List.of();
         };
     }

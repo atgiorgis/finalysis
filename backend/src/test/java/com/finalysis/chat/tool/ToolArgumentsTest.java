@@ -23,7 +23,10 @@ class ToolArgumentsTest {
 
     static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** CHECKING-1 → 11, Dining → 1; "BLUE BEAN CAFE" sent for one stored merchant, "STARBUCKS" for two. */
+    /**
+     * CHECKING-1 → 11, Dining → 1; "BLUE BEAN CAFE" sent for one stored merchant, "STARBUCKS" for two; a search text
+     * naming "Ana" may not leave.
+     */
     static final ToolScope SCOPE = new ToolScope() {
         @Override
         public Optional<Long> accountId(String alias) {
@@ -45,6 +48,12 @@ class ToolArgumentsTest {
             return Map.of("BLUE BEAN CAFE", List.of("BLUE BEAN CAFE #12"),
                     "STARBUCKS", List.of("STARBUCKS #1", "STARBUCKS ARLINGTON VA")).getOrDefault(outboundText, List.of());
         }
+
+        @Override
+        public Optional<SearchText> searchText(String typed) {
+            return typed.contains("Ana") ? Optional.empty() : Optional.of(new SearchText(typed.toUpperCase(),
+                    MerchantDirectory.wordsOf(typed), null, "test-embedding-model", 0.4, MerchantDirectory.empty()));
+        }
     };
 
     static final List<ToolParam> PARAMS = List.of(
@@ -56,6 +65,8 @@ class ToolArgumentsTest {
             ToolParam.optional("merchant", new ToolParam.Merchant(), ""),
             ToolParam.optional("uncategorized", new ToolParam.Flag(), ""),
             ToolParam.optional("a", new ToolParam.Period(), ""),
+            ToolParam.optional("merchants", new ToolParam.Merchants(), ""),
+            ToolParam.optional("query", new ToolParam.Search(), ""),
             ToolParam.required("limit", new ToolParam.WholeNumber(1, 20), ""));
 
     static ToolArguments.Parsed parse(String json) {
@@ -80,6 +91,20 @@ class ToolArgumentsTest {
         assertThat(args.period("a")).isEqualTo(new MonthRange(YearMonth.of(2026, 1), YearMonth.of(2026, 3)));
         assertThat(args.number("limit")).isEqualTo(20);
         assertThat(args.rangeProblems()).isEmpty();
+    }
+
+    /** A merchant text stands for every stored merchant behind it; a search text arrives prepared by the scope. */
+    @Test
+    void merchantListsAndSearchTextsAreResolved() {
+        ToolArguments args = parse("""
+                {"merchants": ["STARBUCKS", "BLUE BEAN CAFE"], "query": "coffee shops", "limit": 1}""").arguments();
+
+        assertThat(args.merchants("merchants")).containsExactly(
+                new MerchantGroup("STARBUCKS", List.of("STARBUCKS #1", "STARBUCKS ARLINGTON VA")),
+                new MerchantGroup("BLUE BEAN CAFE", List.of("BLUE BEAN CAFE #12")));
+        assertThat(args.search("query").outbound()).isEqualTo("COFFEE SHOPS");
+        assertThat(args.search("query").words()).containsExactly("COFFEE", "SHOPS");
+        assertThat(args.search("query").byMeaning()).isFalse();
     }
 
     @Test
@@ -119,7 +144,19 @@ class ToolArgumentsTest {
             "{\"limit\": 5, \"a\": {\"month\": \"2026-08\", \"say\": \"hi\"}}|a|NOT_A_PERIOD",
             "{\"limit\": 5, \"a\": {\"month\": \"08/2026\"}}|a.month|NOT_A_MONTH",
             "{\"limit\": 5, \"a\": {\"from\": \"2026-05\", \"to\": \"2026-01\"}}|a.from|REVERSED_RANGE",
-            "{\"limit\": 5, \"a\": {\"from\": \"2024-01\", \"to\": \"2026-01\"}}|a|RANGE_TOO_LONG"})
+            "{\"limit\": 5, \"a\": {\"from\": \"2024-01\", \"to\": \"2026-01\"}}|a|RANGE_TOO_LONG",
+            "{\"limit\": 5, \"merchants\": \"STARBUCKS\"}|merchants|NOT_A_LIST",
+            "{\"limit\": 5, \"merchants\": []}|merchants|OUT_OF_BOUNDS",
+            "{\"limit\": 5, \"merchants\": [\"A\",\"B\",\"C\",\"D\",\"E\",\"F\",\"G\",\"H\",\"I\",\"J\",\"K\"]}|merchants|OUT_OF_BOUNDS",
+            "{\"limit\": 5, \"merchants\": [7]}|merchants|NOT_TEXT",
+            "{\"limit\": 5, \"merchants\": [\"MERCHANT WITHHELD\"]}|merchants|WITHHELD_MERCHANT",
+            "{\"limit\": 5, \"merchants\": [\"STARBUCKS\", \"STARBUCKS\"]}|merchants|LISTED_TWICE",
+            "{\"limit\": 5, \"merchants\": [\"STARBUCKS\", \"SECRET SHOP\"]}|merchants|NOT_A_MERCHANT",
+            "{\"limit\": 5, \"query\": 5}|query|NOT_TEXT",
+            "{\"limit\": 5, \"query\": \"a\"}|query|TEXT_TOO_SHORT",
+            "{\"limit\": 5, \"query\": \"  a  \"}|query|TEXT_TOO_SHORT",
+            "{\"limit\": 5, \"query\": \"coffee coffee coffee coffee coffee coffee coffee coffee coffee\"}|query|TEXT_TOO_LONG",
+            "{\"limit\": 5, \"query\": \"gifts for Ana\"}|query|SEARCH_REFUSED"})
     void eachInvalidValueIsAProblemOnItsParameter(String json, String name, ToolProblem problem) {
         ToolArguments.Parsed parsed = parse(json);
 

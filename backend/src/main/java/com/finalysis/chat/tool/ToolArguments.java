@@ -92,6 +92,15 @@ public final class ToolArguments {
         return (Boolean) values.getOrDefault(name, otherwise);
     }
 
+    @SuppressWarnings("unchecked")
+    public List<MerchantGroup> merchants(String name) {
+        return (List<MerchantGroup>) values.get(name);
+    }
+
+    public SearchText search(String name) {
+        return (SearchText) values.get(name);
+    }
+
     public MonthRange period(String name) {
         return (MonthRange) values.get(name);
     }

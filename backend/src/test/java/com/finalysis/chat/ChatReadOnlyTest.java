@@ -12,6 +12,7 @@ import com.finalysis.chat.tool.AccountAliasQuery;
 import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.ChatTool;
 import com.finalysis.chat.tool.DataNotesReader;
+import com.finalysis.chat.tool.MerchantSearchQuery;
 import com.finalysis.chat.tool.ToolArguments;
 import com.finalysis.chat.tool.ToolName;
 import com.finalysis.chat.tool.ToolRead;
@@ -161,13 +162,13 @@ class ChatReadOnlyTest {
     }
 
     /**
-     * Chat's own SQL (aliases, category names, identities, citations) reads only: every public query method is
+     * Chat's own SQL (aliases, category names, identities, citations, the merchant index) reads only: every public query method is
      * read-only, and so is every public method of the citation resolver, which also runs drill-downs.
      */
     @Test
     void chatsOwnQueriesAreReadOnly() {
         List<Class<?>> queries = List.of(AccountAliasQuery.class, CategoryNamesQuery.class, AccountIdentityQuery.class,
-                CitationQuery.class);
+                CitationQuery.class, MerchantSearchQuery.class);
         assertThat(app.stream().filter(c -> c.getPackageName().startsWith("com.finalysis.chat")
                 && c.getSimpleName().endsWith("Query")).map(JavaClass::reflect).toList())
                 .containsExactlyInAnyOrderElementsOf(queries);

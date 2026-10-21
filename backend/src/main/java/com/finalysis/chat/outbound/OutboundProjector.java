@@ -35,6 +35,7 @@ import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.DataNote;
 import com.finalysis.chat.tool.FieldProblem;
 import com.finalysis.chat.tool.FigureBasis;
+import com.finalysis.chat.tool.MerchantSpend;
 import com.finalysis.chat.tool.RefRegistry;
 import com.finalysis.chat.tool.ToolProblem;
 import com.finalysis.chat.tool.ToolRead;
@@ -47,9 +48,11 @@ import com.finalysis.chat.tool.view.CoverageView;
 import com.finalysis.chat.tool.view.DataNotesView;
 import com.finalysis.chat.tool.view.FlagView;
 import com.finalysis.chat.tool.view.FlowView;
+import com.finalysis.chat.tool.view.MerchantTotalsView;
 import com.finalysis.chat.tool.view.MonthCoverageView;
 import com.finalysis.chat.tool.view.MonthTotalsView;
 import com.finalysis.chat.tool.view.RecurringView;
+import com.finalysis.chat.tool.view.SearchView;
 import com.finalysis.chat.tool.view.TopMerchantsView;
 import com.finalysis.chat.tool.view.TransactionsView;
 import com.finalysis.chat.tool.view.TrendsView;
@@ -95,6 +98,8 @@ public class OutboundProjector {
             case ToolRead.Recurring r -> recurring(r.response(), turn);
             case ToolRead.Alerts r -> alerts(r.response(), turn);
             case ToolRead.Coverage r -> coverage(r.response(), turn);
+            case ToolRead.Search r -> search(r, turn);
+            case ToolRead.MerchantTotals r -> merchantTotals(r, turn);
         };
     }
 
@@ -370,6 +375,61 @@ public class OutboundProjector {
         return new TransactionsView(ref, month(r.range() == null ? null : r.range().from()),
                 month(r.range() == null ? null : r.range().to()), flow(r.total()), items,
                 r.total().count() > items.size());
+    }
+
+    // ------------------------------------------------------------------ search_transactions
+
+    /**
+     * Search candidates (§4.3), each a cell over the drill-downs of every stored merchant its text stands for, so
+     * {@code spent} and {@code count} add up from them. The merchant is the turn's own decision for that text; the
+     * search only ever proposes texts that may be sent.
+     */
+    public SearchView search(ToolRead.Search r, OutboundTurn turn) {
+        return new SearchView(month(r.range() == null ? null : r.range().from()),
+                month(r.range() == null ? null : r.range().to()), r.byMeaning(),
+                r.candidates().stream().map(c -> new SearchView.Candidate(spendRef(c.spend(), null, turn),
+                        turn.merchant(c.spend().parts().getFirst().merchant()), c.match().name(),
+                        ratio(c.similarity()), category(c.spend().category()), money(c.spend().spent()),
+                        c.spend().count())).toList(),
+                r.coverage().merchants(), r.coverage().indexed());
+    }
+
+    // ------------------------------------------------------------------ get_merchant_totals
+
+    /** Each merchant group's spending by its own cell, and the combined figure over all their drill-downs. */
+    public MerchantTotalsView merchantTotals(ToolRead.MerchantTotals r, OutboundTurn turn) {
+        List<MerchantTotalsView.Merchant> merchants = r.merchants().stream()
+                .map(m -> new MerchantTotalsView.Merchant(spendRef(m, r.accountId(), turn),
+                        turn.merchant(m.parts().getFirst().merchant()), money(m.spent()), m.count()))
+                .toList();
+        List<Map<String, String>> drills = r.merchants().stream()
+                .flatMap(m -> spendDrills(m, r.range(), r.accountId()).stream()).toList();
+        String combined = turn.refs().ref(new RefRegistry.Cell("Combined merchants · "
+                + (r.range() == null ? "no data" : span(r.range())) + scope(r.accountId(), turn), drills,
+                spendFigures(drills)));
+        return new MerchantTotalsView(month(r.range() == null ? null : r.range().from()),
+                month(r.range() == null ? null : r.range().to()), turn.aliases().aliasOrNull(r.accountId()), merchants,
+                new MerchantTotalsView.Combined(combined, money(r.combinedSpent()), r.combinedCount()));
+    }
+
+    /** The cell of one merchant group's spending: one drill-down per stored merchant. */
+    private String spendRef(MerchantSpend spend, Long accountId, OutboundTurn turn) {
+        List<Map<String, String>> drills = spendDrills(spend, spend.range(), accountId);
+        return turn.refs().ref(new RefRegistry.Cell(turn.merchant(spend.parts().getFirst().merchant()) + " · "
+                + (spend.range() == null ? "no data" : span(spend.range())) + scope(accountId, turn), drills,
+                spendFigures(drills)));
+    }
+
+    private static List<Map<String, String>> spendDrills(MerchantSpend spend, MonthRange range, Long accountId) {
+        return spend.parts().stream().map(part -> params("from", range == null ? null : range.from().toString(),
+                "to", range == null ? null : range.to().toString(), "measure", "SPENT", "merchant", part.merchant(),
+                "accountId", id(accountId))).toList();
+    }
+
+    /** {@code spent} is −(Σ net of the spending rows); {@code count} Σ their counts. */
+    private static Map<String, FigureBasis> spendFigures(List<Map<String, String>> drills) {
+        return Map.of("spent", FigureBasis.sum(NET, drills.stream().map(d -> new FigureBasis.Term(-1, d)).toList()),
+                "count", FigureBasis.sum(COUNT, drills.stream().map(d -> new FigureBasis.Term(1, d)).toList()));
     }
 
     // ------------------------------------------------------------------ get_recurring_charges

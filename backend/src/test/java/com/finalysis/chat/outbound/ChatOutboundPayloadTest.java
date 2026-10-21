@@ -56,8 +56,8 @@ import tools.jackson.databind.json.JsonMapper;
  *       id field appears anywhere.</li>
  *   <li>The log counts withheld names and says nothing else about them.</li>
  * </ul>
- * {@code search_transactions} and {@code get_merchant_totals} are built with search (step 6) and get their expected
- * payloads there.
+ * {@code search_transactions} and {@code get_merchant_totals} came with search (step 6); their expected payloads, on the
+ * same fixture with search by meaning on, are checked in {@link ChatSearchPayloadTest}.
  */
 @IntegrationTest
 @AutoConfigureMockMvc

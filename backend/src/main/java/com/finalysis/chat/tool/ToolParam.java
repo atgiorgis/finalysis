@@ -3,6 +3,7 @@ package com.finalysis.chat.tool;
 import com.finalysis.analytics.MonthRange;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -52,7 +53,8 @@ public record ToolParam(String name, Type type, boolean required, String descrip
     }
 
     /** What a parameter holds. */
-    public sealed interface Type permits Month, Alias, Category, Choice, WholeNumber, Flag, Merchant, Period {
+    public sealed interface Type permits Month, Alias, Category, Choice, WholeNumber, Flag, Merchant, Merchants, Search,
+            Period {
 
         /** This type's part of the JSON schema. */
         void schema(ObjectNode property);
@@ -172,9 +174,9 @@ public record ToolParam(String name, Type type, boolean required, String descrip
     }
 
     /**
-     * A merchant exactly as this turn's results showed it (docs/plans/phase-6.md §4.3); parsed to the one stored
-     * merchant behind it. The withheld placeholder, a text the turn never sent, and a text that stands for several stored
-     * merchants (step 6 adds the combined lookup) are errors.
+     * A merchant exactly as results show it (docs/plans/phase-6.md §4.3); parsed to the one stored merchant behind it.
+     * The withheld placeholder, a text no merchant goes out as, and a text that stands for several stored merchants
+     * (the drill-down takes one; {@code get_merchant_totals} adds a group up) are errors.
      */
     public record Merchant() implements Type {
 
@@ -201,6 +203,86 @@ public record ToolParam(String name, Type type, boolean required, String descrip
                 case 1 -> Parsed.ok(stored.getFirst());
                 default -> Parsed.problem(name, ToolProblem.SEVERAL_MERCHANTS);
             };
+        }
+    }
+
+    /**
+     * 1 to {@value #MAX_MERCHANTS} merchants exactly as results show them, each once (docs/plans/phase-6.md §4.3); parsed
+     * to a list of {@link MerchantGroup}s, each with every stored merchant its text stands for. The withheld placeholder
+     * and a text no merchant goes out as are errors, reported on the list (an element's text is never echoed).
+     */
+    public record Merchants() implements Type {
+
+        public static final int MAX_MERCHANTS = 10;
+
+        @Override
+        public void schema(ObjectNode property) {
+            property.put("type", "array").put("minItems", 1).put("maxItems", MAX_MERCHANTS);
+            property.putObject("items").put("type", "string").put("minLength", 1).put("maxLength", MAX_TEXT);
+        }
+
+        @Override
+        public Parsed parse(String name, JsonNode value, ToolScope scope) {
+            if (!value.isArray()) {
+                return Parsed.problem(name, ToolProblem.NOT_A_LIST);
+            }
+            if (value.size() < 1 || value.size() > MAX_MERCHANTS) {
+                return Parsed.problem(name, ToolProblem.OUT_OF_BOUNDS);
+            }
+            List<MerchantGroup> groups = new ArrayList<>();
+            for (JsonNode element : value.values()) {
+                if (!element.isString()) {
+                    return Parsed.problem(name, ToolProblem.NOT_TEXT);
+                }
+                String text = element.stringValue();
+                if (text.length() > MAX_TEXT) {
+                    return Parsed.problem(name, ToolProblem.TEXT_TOO_LONG);
+                }
+                if (scope.isWithheldMerchant(text)) {
+                    return Parsed.problem(name, ToolProblem.WITHHELD_MERCHANT);
+                }
+                if (groups.stream().anyMatch(g -> g.text().equals(text))) {
+                    return Parsed.problem(name, ToolProblem.LISTED_TWICE);
+                }
+                List<String> stored = scope.storedMerchants(text);
+                if (stored.isEmpty()) {
+                    return Parsed.problem(name, ToolProblem.NOT_A_MERCHANT);
+                }
+                groups.add(new MerchantGroup(text, stored));
+            }
+            return Parsed.ok(List.copyOf(groups));
+        }
+    }
+
+    /**
+     * What the user is looking for, in their words, {@value #MIN_QUERY} to {@value #MAX_QUERY} characters
+     * (docs/plans/phase-6.md §4.3); parsed to the {@link SearchText} the scope prepared: redacted, checked and embedded.
+     * A text that may not leave the machine is an error, and nothing of it is sent.
+     */
+    public record Search() implements Type {
+
+        public static final int MIN_QUERY = 2;
+        public static final int MAX_QUERY = 60;
+
+        @Override
+        public void schema(ObjectNode property) {
+            property.put("type", "string").put("minLength", MIN_QUERY).put("maxLength", MAX_QUERY);
+        }
+
+        @Override
+        public Parsed parse(String name, JsonNode value, ToolScope scope) {
+            if (!value.isString()) {
+                return Parsed.problem(name, ToolProblem.NOT_TEXT);
+            }
+            String text = value.stringValue();
+            if (text.strip().length() < MIN_QUERY) {
+                return Parsed.problem(name, ToolProblem.TEXT_TOO_SHORT);
+            }
+            if (text.length() > MAX_QUERY) {
+                return Parsed.problem(name, ToolProblem.TEXT_TOO_LONG);
+            }
+            return scope.searchText(text).map(Parsed::ok)
+                    .orElseGet(() -> Parsed.problem(name, ToolProblem.SEARCH_REFUSED));
         }
     }
 

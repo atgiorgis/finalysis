@@ -5,8 +5,7 @@ import java.util.Optional;
 
 /**
  * The names of the chat tools (docs/plans/phase-6.md §3.2): a closed set, so the model can't name a writer (§9). The
- * {@link ToolRegistry} has exactly one tool per name. {@code search_transactions} and {@code get_merchant_totals} join
- * with search (step 6).
+ * {@link ToolRegistry} has exactly one tool per name.
  */
 public enum ToolName {
     GET_MONTH_TOTALS,
@@ -18,7 +17,9 @@ public enum ToolName {
     LIST_TRANSACTIONS,
     GET_RECURRING_CHARGES,
     GET_ALERTS,
-    GET_DATA_COVERAGE;
+    GET_DATA_COVERAGE,
+    SEARCH_TRANSACTIONS,
+    GET_MERCHANT_TOTALS;
 
     /** The name the model sees: {@code get_month_totals}. */
     public String wire() {

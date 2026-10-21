@@ -34,9 +34,14 @@ public enum ToolProblem {
     RANGE_TOO_LONG("the range is at most 24 months, both ends included"),
     CONFLICT("can't be combined with the parameter named in conflictsWith"),
     NEEDS("needs the parameter named in conflictsWith"),
-    NOT_A_MERCHANT("not a merchant name from this turn's results; copy one exactly, or filter by category"),
+    NOT_A_MERCHANT("not a merchant name in the data; copy one exactly from a result, or find it with "
+            + "search_transactions"),
     WITHHELD_MERCHANT("a withheld name can't be used as a filter; filter by category, month or account instead"),
-    SEVERAL_MERCHANTS("this name stands for more than one stored merchant; filter by category, month or account");
+    SEVERAL_MERCHANTS("this name stands for several stored merchants; get_merchant_totals adds them up"),
+    NOT_A_LIST("must be a list of merchant names"),
+    LISTED_TWICE("lists the same merchant twice"),
+    TEXT_TOO_SHORT("is too short"),
+    SEARCH_REFUSED("this search text can't be sent; use other words, without names, numbers or symbols");
 
     private static final Set<String> TEXTS = Arrays.stream(values()).map(ToolProblem::text)
             .collect(Collectors.toUnmodifiableSet());

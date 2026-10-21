@@ -73,12 +73,8 @@ class ChatQuestionSetsTest {
             "h-u09", List.of("what will my spending be in december?"),
             "h-u10", List.of("is october looking better than september so far?"));
 
-    /** The search tools, registered with search in step 6, which deletes this list. */
-    static final Set<String> STEP_6_TOOLS = Set.of("get_merchant_totals", "search_transactions");
-
-    /** The Phase 6 tools (§3.2): the registry's names, and the two of step 6. */
-    static final Set<String> TOOLS = Stream.concat(ToolRegistryTestSupport.registry().names().stream(),
-            STEP_6_TOOLS.stream()).collect(Collectors.toUnmodifiableSet());
+    /** The Phase 6 tools (§3.2): the registry's names. */
+    static final Set<String> TOOLS = Set.copyOf(ToolRegistryTestSupport.registry().names());
 
     /** §13.1's table, per set (the holdout's counts include the owner's ten). */
     static final Map<String, Integer> CATEGORY_COUNTS = orderedMap("LOOKUP", 12, "COMPARISON", 8, "TREND", 6,

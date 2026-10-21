@@ -26,7 +26,7 @@ class ToolRegistryTest {
         return List.of(new MonthTotalsTool(null), new CategoryTotalsTool(null), new AccountTotalsTool(null),
                 new TopMerchantsTool(null), new TrendsTool(null), new ComparePeriodsTool(null),
                 new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null),
-                new DataCoverageTool(null));
+                new DataCoverageTool(null), new SearchTransactionsTool(null, null), new MerchantTotalsTool(null));
     }
 
     /** §3.2's parameters per tool; required ones marked with "!". */
@@ -44,12 +44,14 @@ class ToolRegistryTest {
         PLAN.put("get_recurring_charges", List.of("account", "status!", "limit!"));
         PLAN.put("get_alerts", List.of("from", "to", "type", "account", "includeDismissed", "limit!"));
         PLAN.put("get_data_coverage", List.of());
+        PLAN.put("search_transactions", List.of("query!", "from", "to", "limit!"));
+        PLAN.put("get_merchant_totals", List.of("merchants!", "from", "to", "account"));
     }
 
     private final ToolRegistry registry = new ToolRegistry(tools(), JSON);
 
     @Test
-    void oneToolPerNameExactlyThePlansTen() {
+    void oneToolPerNameExactlyThePlansTwelve() {
         assertThat(registry.names()).containsExactlyElementsOf(Arrays.stream(ToolName.values()).map(ToolName::wire)
                 .toList());
         assertThat(registry.names()).containsExactlyElementsOf(PLAN.keySet());
@@ -89,6 +91,8 @@ class ToolRegistryTest {
                     case "string" -> assertThat(p.has("enum") || p.has("pattern") || p.has("maxLength")).as(where)
                             .isTrue();
                     case "boolean" -> { }
+                    case "array" -> assertThat(p.has("minItems") && p.has("maxItems")
+                            && p.get("items").has("maxLength")).as(where).isTrue();
                     default -> throw new AssertionError(where);
                 }
             });
@@ -98,7 +102,7 @@ class ToolRegistryTest {
     @Test
     void limitsAreThePlansCaps() {
         Map<String, Integer> caps = Map.of("get_top_merchants", 20, "list_transactions", 25,
-                "get_recurring_charges", 25, "get_alerts", 20);
+                "get_recurring_charges", 25, "get_alerts", 20, "search_transactions", 10);
         caps.forEach((tool, cap) -> {
             JsonNode limit = JSON.readTree(definition(tool).inputSchema()).get("properties").get("limit");
             assertThat(limit.get("minimum").intValue()).isEqualTo(1);
@@ -124,11 +128,26 @@ class ToolRegistryTest {
                 "NET", "CATEGORY_SPENT", "CATEGORY_RECEIVED");
     }
 
+    /** §3.2: a search is 2 to 60 characters; a merchant total takes 1 to 10 names, each as results show it. */
+    @Test
+    void theSearchToolsSchemas() {
+        JsonNode query = JSON.readTree(definition("search_transactions").inputSchema()).get("properties").get("query");
+        assertThat(query.get("minLength").intValue()).isEqualTo(2);
+        assertThat(query.get("maxLength").intValue()).isEqualTo(60);
+        JsonNode merchants = JSON.readTree(definition("get_merchant_totals").inputSchema()).get("properties")
+                .get("merchants");
+        assertThat(merchants.get("type").stringValue()).isEqualTo("array");
+        assertThat(merchants.get("minItems").intValue()).isEqualTo(1);
+        assertThat(merchants.get("maxItems").intValue()).isEqualTo(10);
+        assertThat(merchants.get("items").get("type").stringValue()).isEqualTo("string");
+        assertThat(merchants.get("items").get("maxLength").intValue()).isEqualTo(100);
+    }
+
     @Test
     void theApplicationsRegistryNeedsEveryToolOnce() {
         List<ChatTool> missing = new ArrayList<>(tools());
         missing.removeLast();
-        assertThatThrownBy(() -> new ToolRegistry(missing, JSON)).hasMessageContaining("get_data_coverage");
+        assertThatThrownBy(() -> new ToolRegistry(missing, JSON)).hasMessageContaining("get_merchant_totals");
         List<ChatTool> twice = new ArrayList<>(tools());
         twice.add(new TrendsTool(null));
         assertThatThrownBy(() -> new ToolRegistry(twice, JSON)).hasMessageContaining("two chat tools named get_trends");

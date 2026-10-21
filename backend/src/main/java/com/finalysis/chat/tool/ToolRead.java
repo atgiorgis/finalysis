@@ -8,12 +8,16 @@ import com.finalysis.analytics.CoverageResponse;
 import com.finalysis.analytics.DrillDownFilter;
 import com.finalysis.analytics.DrillDownResponse;
 import com.finalysis.analytics.MerchantTotalsResponse;
+import com.finalysis.analytics.MonthRange;
 import com.finalysis.analytics.MonthlyTotalsResponse;
 import com.finalysis.analytics.RecurringChargesResponse;
 import com.finalysis.analytics.TrendsResponse;
+import java.math.BigDecimal;
+import java.util.List;
 
 /**
- * What a tool read: the Phase 5 service's own record, unchanged. It never leaves the machine as is: the executor hands
+ * What a tool read: the Phase 5 service's own record, unchanged (for the two search tools, the drill-down totals of each
+ * merchant group they read). It never leaves the machine as is: the executor hands
  * it to the outbound projection, one view per kind (docs/plans/phase-6.md §12.1), and the projection's switch over this
  * sealed type makes a tool without a view a compile error.
  */
@@ -55,5 +59,40 @@ public sealed interface ToolRead {
     }
 
     record Coverage(CoverageResponse response) implements ToolRead {
+    }
+
+    /**
+     * {@code search_transactions} (§4.3): the candidates, name matches first, then by meaning, each with its spending
+     * over the range; and the index's coverage.
+     *
+     * @param range        the months the spending covers; null without candidates or data
+     * @param byMeaning    whether the search used a vector (false: by name only)
+     */
+    record Search(MonthRange range, List<Candidate> candidates, MerchantSearchQuery.Coverage coverage,
+                  boolean byMeaning) implements ToolRead {
+
+        public Search {
+            candidates = List.copyOf(candidates);
+        }
+
+        /** How a candidate was found. */
+        public enum Match { NAME, MEANING }
+
+        /** @param similarity cosine similarity to two decimals; null for a name match */
+        public record Candidate(Match match, BigDecimal similarity, MerchantSpend spend) {
+        }
+    }
+
+    /**
+     * {@code get_merchant_totals} (§3.2): each merchant group's spending over the range, and their sum, in Java.
+     *
+     * @param range the months covered; null when there is no data
+     */
+    record MerchantTotals(MonthRange range, Long accountId, List<MerchantSpend> merchants, BigDecimal combinedSpent,
+                          int combinedCount) implements ToolRead {
+
+        public MerchantTotals {
+            merchants = List.copyOf(merchants);
+        }
     }
 }

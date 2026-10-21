@@ -145,6 +145,42 @@ public class MerchantEmbeddingStage {
 
         Map<String, String> stored = embeddings.inputHashes(model);
         Map<String, float[]> fresh = new HashMap<>();
+        EmbeddingRunResult result = embedMissing(textByMerchant, model, stored, properties.maxEmbeddingsPerRun(),
+                fresh);
+
+        Map<String, float[]> vectors = new HashMap<>();
+        for (String merchant : itemMerchants) {
+            float[] vector = fresh.get(merchant);
+            if (vector == null && sha256(textByMerchant.get(merchant)).equals(stored.get(merchant))) {
+                vector = embeddings.find(merchant, model).map(MerchantEmbedding::embedding).orElse(null);
+            }
+            if (vector != null) {
+                vectors.put(merchant, vector);
+            }
+        }
+        log("Merchant embeddings", result);
+        return new Outcome(result, Map.copyOf(vectors));
+    }
+
+    /**
+     * Embeds every merchant of {@code textByMerchant} (stored merchant → outbound text) that has no vector of the
+     * current model for that text, in the map's order, at most {@code cap} calls: the search index's refresh
+     * (docs/plans/phase-6.md §4.2), on the same path as the items' vectors. Makes no call when AI is off.
+     */
+    public EmbeddingRunResult embedAll(Map<String, String> textByMerchant, int cap, String logLabel) {
+        if (!embedder.enabled()) {
+            return EmbeddingRunResult.off();
+        }
+        String model = embedder.modelId();
+        EmbeddingRunResult result = embedMissing(textByMerchant, model, embeddings.inputHashes(model), cap,
+                new HashMap<>());
+        log(logLabel, result);
+        return result;
+    }
+
+    /** The calls: each merchant whose text's hash isn't the stored one, until {@code cap} calls or a failure. */
+    private EmbeddingRunResult embedMissing(Map<String, String> textByMerchant, String model,
+                                            Map<String, String> stored, int cap, Map<String, float[]> fresh) {
         List<Map.Entry<String, String>> needed = new ArrayList<>();
         int cached = 0;
         for (Map.Entry<String, String> entry : textByMerchant.entrySet()) {
@@ -161,7 +197,7 @@ public class MerchantEmbeddingStage {
         long inputTokens = 0;
         int done = 0;
         for (Map.Entry<String, String> entry : needed) {
-            if (calls >= properties.maxEmbeddingsPerRun()) {
+            if (calls >= cap) {
                 status = Status.CAP_REACHED;
                 break;
             }
@@ -170,7 +206,7 @@ public class MerchantEmbeddingStage {
             try {
                 embedding = embedder.embed(entry.getValue());
             } catch (RuntimeException e) {
-                // The message can echo the request: class only. Stage 5 goes on without the missing vectors.
+                // The message can echo the request: class only. The rest waits for the next run.
                 log.warn("Merchant embedding failed ({}); the rest waits for the next run", e.getClass().getName());
                 status = Status.STOPPED_ON_ERROR;
                 break;
@@ -184,24 +220,15 @@ public class MerchantEmbeddingStage {
             fresh.put(entry.getKey(), embedding.vector());
             done++;
         }
-        EmbeddingRunResult result = new EmbeddingRunResult(status, textByMerchant.size(), cached, done, calls,
-                callsWithoutUsage, inputTokens, needed.size() - done);
+        return new EmbeddingRunResult(status, textByMerchant.size(), cached, done, calls, callsWithoutUsage,
+                inputTokens, needed.size() - done);
+    }
 
-        Map<String, float[]> vectors = new HashMap<>();
-        for (String merchant : itemMerchants) {
-            float[] vector = fresh.get(merchant);
-            if (vector == null && sha256(textByMerchant.get(merchant)).equals(stored.get(merchant))) {
-                vector = embeddings.find(merchant, model).map(MerchantEmbedding::embedding).orElse(null);
-            }
-            if (vector != null) {
-                vectors.put(merchant, vector);
-            }
-        }
-        log.info("Merchant embeddings: status={} merchants={} cached={} embedded={} calls={} callsWithoutUsage={} "
-                        + "inputTokens={} remaining={}", result.status(), result.merchants(), result.cached(),
+    private static void log(String label, EmbeddingRunResult result) {
+        log.info("{}: status={} merchants={} cached={} embedded={} calls={} callsWithoutUsage={} inputTokens={} "
+                        + "remaining={}", label, result.status(), result.merchants(), result.cached(),
                 result.embedded(), result.calls(), result.callsWithoutUsage(), result.inputTokens(),
                 result.remaining());
-        return new Outcome(result, Map.copyOf(vectors));
     }
 
     /**
@@ -215,6 +242,11 @@ public class MerchantEmbeddingStage {
         }
         return embeddings.findNearestLabeled(vector, embedder.modelId(), merchant, direction,
                 properties.minSimilarity(), POOL, properties.k());
+    }
+
+    /** Whether an embedding model is configured (AI on). */
+    boolean enabled() {
+        return embedder.enabled();
     }
 
     /** The embedding model's id: what a direct assignment records as its model. */

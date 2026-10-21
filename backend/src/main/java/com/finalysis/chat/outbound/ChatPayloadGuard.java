@@ -9,10 +9,12 @@ import com.finalysis.chat.tool.view.ComparisonView;
 import com.finalysis.chat.tool.view.ContextBlockView;
 import com.finalysis.chat.tool.view.CoverageView;
 import com.finalysis.chat.tool.view.DataNotesView;
+import com.finalysis.chat.tool.view.MerchantTotalsView;
 import com.finalysis.chat.tool.view.MonthTotalsView;
 import com.finalysis.chat.tool.view.Outbound;
 import com.finalysis.chat.tool.view.OutboundKind;
 import com.finalysis.chat.tool.view.RecurringView;
+import com.finalysis.chat.tool.view.SearchView;
 import com.finalysis.chat.tool.view.TopMerchantsView;
 import com.finalysis.chat.tool.view.TransactionsView;
 import com.finalysis.chat.tool.view.TrendsView;
@@ -39,7 +41,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Every component of a view must carry a kind or be a view record (or a list of either); anything else fails
  * {@link #classify}, which runs on first use of a type and in a test over every view, so a new field can't slip out
- * unclassified. Checks per kind: money, percent, ratio, number, month and date by pattern; a category by the guard's
+ * unclassified. Checks per kind: money, percent, ratio, similarity, number, month and date by pattern; a category by the guard's
  * category rule; a merchant by the guard's merchant rule and {@link InstructionLikeText} (or the withheld placeholder);
  * an alias or ref only if this turn issued it; an enum constant's name; a tool parameter's name by pattern; a tool error's message only if it is one of
  * {@link ToolProblem}'s fixed texts; free text 1–1,000 characters without
@@ -51,6 +53,7 @@ public class ChatPayloadGuard {
     private static final Pattern MONEY = Pattern.compile("-?\\d{1,10}\\.\\d{2}");
     private static final Pattern PERCENT = Pattern.compile("-?\\d{1,7}\\.\\d");
     private static final Pattern RATIO = Pattern.compile("\\d{1,7}\\.\\d{2}");
+    private static final Pattern SIMILARITY = Pattern.compile("0\\.\\d{2}|1\\.00");
     private static final Pattern NUMBER = Pattern.compile("-?\\d{1,10}(?:\\.\\d{1,2})?");
     private static final Pattern MONTH = Pattern.compile("\\d{4}-(?:0[1-9]|1[0-2])");
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
@@ -67,8 +70,8 @@ public class ChatPayloadGuard {
     /** Every view that can be sent; classified at startup, so an unclassified field fails the app, not a turn. */
     public static final List<Class<? extends Record>> VIEWS = List.of(MonthTotalsView.class, CategoryTotalsView.class,
             AccountTotalsView.class, TopMerchantsView.class, TrendsView.class, ComparisonView.class,
-            TransactionsView.class, RecurringView.class, AlertsView.class, CoverageView.class, ContextBlockView.class,
-            DataNotesView.class, ToolErrorView.class);
+            TransactionsView.class, RecurringView.class, AlertsView.class, CoverageView.class, SearchView.class,
+            MerchantTotalsView.class, ContextBlockView.class, DataNotesView.class, ToolErrorView.class);
 
     public ChatPayloadGuard(OutboundPayloadGuard guard) {
         this.guard = guard;
@@ -221,6 +224,7 @@ public class ChatPayloadGuard {
             case MONEY -> MONEY.matcher((String) value).matches();
             case PERCENT -> PERCENT.matcher((String) value).matches();
             case RATIO -> RATIO.matcher((String) value).matches();
+            case SIMILARITY -> SIMILARITY.matcher((String) value).matches();
             case NUMBER -> NUMBER.matcher((String) value).matches();
             case MONTH -> MONTH.matcher((String) value).matches();
             case DATE -> isDate((String) value);

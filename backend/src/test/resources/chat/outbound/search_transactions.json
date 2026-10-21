@@ -1,0 +1,27 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "byMeaning": true,
+  "candidates": [
+    {
+      "ref": "c1",
+      "merchant": "MAPLEWOOD GROCERY",
+      "match": "MEANING",
+      "similarity": "0.71",
+      "category": "Groceries",
+      "spent": "115.50",
+      "count": 2
+    },
+    {
+      "ref": "c2",
+      "merchant": "RIVERBEND NOODLE BAR",
+      "match": "MEANING",
+      "similarity": "0.64",
+      "category": "Dining",
+      "spent": "23.60",
+      "count": 1
+    }
+  ],
+  "merchants": 12,
+  "indexedMerchants": 12
+}

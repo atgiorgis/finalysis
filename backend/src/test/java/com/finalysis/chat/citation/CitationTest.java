@@ -80,7 +80,12 @@ class CitationTest {
                     + "\"category\": \"Dining\", \"limit\": 5}"),
             new ToolCall("get_recurring_charges", "{\"status\": \"ALL\", \"limit\": 25}"),
             new ToolCall("get_alerts", "{\"from\": \"2026-01\", \"to\": \"2026-04\", \"limit\": 20}"),
-            new ToolCall("get_data_coverage", "{}"));
+            new ToolCall("get_data_coverage", "{}"),
+            new ToolCall("search_transactions", "{\"query\": \"diner\", \"from\": \"2026-01\", \"to\": "
+                    + "\"2026-04\", \"limit\": 10}"),
+            new ToolCall("get_merchant_totals", "{\"merchants\": [\"FIXTURE DINER\", \"STREAMCO\", \"FIXTURE GROCER\"], "
+                    + "\"from\": \"2026-01\", \"to\": \"2026-04\"}"),
+            new ToolCall("get_merchant_totals", "{\"merchants\": [\"FIXTURE DINER\"], \"account\": \"CARD-1\"}"));
 
     private final ImportTestSupport support;
     private final AnalyticsFixture fixture;

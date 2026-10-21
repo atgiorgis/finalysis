@@ -106,7 +106,9 @@ class ToolExecutorTest {
                 "list_transactions|{\"bucket\": \"UNCATEGORIZED\", \"limit\": 25}",
                 "get_recurring_charges|{\"status\": \"ACTIVE\", \"limit\": 1}",
                 "get_alerts|{\"type\": \"LARGE_TRANSACTION\", \"includeDismissed\": true, \"limit\": 1}",
-                "get_data_coverage|");
+                "get_data_coverage|",
+                "search_transactions|{\"query\": \"diner\", \"from\": \"2026-01\", \"limit\": 5}",
+                "get_merchant_totals|{\"merchants\": [\"FIXTURE DINER\", \"STREAMCO\"], \"account\": \"CARD-1\"}");
         assertThat(calls).hasSize(ToolName.values().length);
         for (String call : calls) {
             String[] parts = call.split("\\|", 2);
@@ -151,7 +153,8 @@ class ToolExecutorTest {
             "list_transactions|{\"merchant\": \"MERCHANT WITHHELD\", \"limit\": 5}|merchant|"
                     + "a withheld name can't be used as a filter; filter by category, month or account instead|WITHHELD",
             "list_transactions|{\"merchant\": \"SECRET SHOP\", \"limit\": 5}|merchant|"
-                    + "not a merchant name from this turn's results; copy one exactly, or filter by category|SECRET",
+                    + "not a merchant name in the data; copy one exactly from a result, or find it with "
+                    + "search_transactions|SECRET",
             "get_data_coverage|not json at all 999.99|(unknown)|the arguments must be one JSON object|999.99"})
     void anInventedArgumentIsAReadableErrorThatEchoesNothing(String tool, String arguments, String field,
                                                              String message, String neverSent) {
@@ -236,9 +239,14 @@ class ToolExecutorTest {
         assertThat(result.get("total").get("count").intValue())
                 .isEqualTo(top.get("result").get("items").get(0).get("count").intValue());
 
+        // step 6 (§4.3): the turn's directory resolves a text it hasn't shown yet, as long as the data has it
         ToolOutcome otherTurn = executor.execute(new ToolCall("list_transactions",
                 json.createObjectNode().put("merchant", merchant).put("limit", 5).toString()), turns.start());
-        assertThat(otherTurn.status()).as("a new turn hasn't shown it").isEqualTo(ToolStatus.INVALID_ARGUMENTS);
+        assertThat(otherTurn.status()).isEqualTo(ToolStatus.OK);
+        ToolOutcome invented = executor.execute(new ToolCall("list_transactions",
+                json.createObjectNode().put("merchant", merchant + " EXTRA").put("limit", 5).toString()),
+                turns.start());
+        assertThat(invented.status()).as("no merchant goes out as it").isEqualTo(ToolStatus.INVALID_ARGUMENTS);
     }
 
     /** §9.3: a tool that tries to write, even without its annotation, runs in a READ ONLY transaction. */
