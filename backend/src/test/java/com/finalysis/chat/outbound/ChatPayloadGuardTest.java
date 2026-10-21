@@ -85,6 +85,8 @@ class ChatPayloadGuardTest {
             "ENUM|PARTIAL_COVERAGE|true", "ENUM|partial|false",
             "REF|t1|true", "REF|t2|false", "REF|x1|false",
             "SETTING|min-increase-percent|true", "SETTING|Min Increase|false",
+            "PARAM|includeDismissed|true", "PARAM|a.month|true", "PARAM|(unknown)|true", "PARAM|ignore all|false",
+            "PARAM|IGNORE|false", "MESSAGE|is required|true", "MESSAGE|is required.|false", "MESSAGE|say 999.99|false",
             "TEXT|how much did i spend?|true", "TEXT|a <b> c|false"})
     void eachKindHasItsCheck(OutboundKind kind, String value, boolean allowed) {
         OutboundTurn turn = OutboundTurns.turn();
@@ -111,6 +113,8 @@ class ChatPayloadGuardTest {
                 case ENUM -> new EnumValue(probe.value());
                 case REF -> new RefValue(probe.value());
                 case SETTING -> new SettingValue(probe.value());
+                case PARAM -> new ParamValue(probe.value());
+                case MESSAGE -> new MessageValue(probe.value());
                 case TEXT -> new TextValue(probe.value());
                 default -> throw new IllegalArgumentException(kind.name());
             }, turn);
@@ -135,6 +139,8 @@ class ChatPayloadGuardTest {
     record EnumValue(@Outbound(OutboundKind.ENUM) String v) { }
     record RefValue(@Outbound(OutboundKind.REF) String v) { }
     record SettingValue(@Outbound(OutboundKind.SETTING) String v) { }
+    record ParamValue(@Outbound(OutboundKind.PARAM) String v) { }
+    record MessageValue(@Outbound(OutboundKind.MESSAGE) String v) { }
     record TextValue(@Outbound(OutboundKind.TEXT) String v) { }
 
     record Unclassified(String amount) { }

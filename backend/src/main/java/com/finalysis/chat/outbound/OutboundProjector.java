@@ -24,13 +24,18 @@ import com.finalysis.analytics.RecurringCharge;
 import com.finalysis.analytics.RecurringChargesResponse;
 import com.finalysis.analytics.TrendRow;
 import com.finalysis.analytics.TrendsResponse;
+import com.finalysis.chat.tool.DataNote;
+import com.finalysis.chat.tool.FieldProblem;
 import com.finalysis.chat.tool.RefRegistry;
+import com.finalysis.chat.tool.ToolProblem;
+import com.finalysis.chat.tool.ToolRead;
 import com.finalysis.chat.tool.view.AccountTotalsView;
 import com.finalysis.chat.tool.view.AlertsView;
 import com.finalysis.chat.tool.view.AverageView;
 import com.finalysis.chat.tool.view.CategoryTotalsView;
 import com.finalysis.chat.tool.view.ComparisonView;
 import com.finalysis.chat.tool.view.CoverageView;
+import com.finalysis.chat.tool.view.DataNotesView;
 import com.finalysis.chat.tool.view.FlagView;
 import com.finalysis.chat.tool.view.FlowView;
 import com.finalysis.chat.tool.view.MonthCoverageView;
@@ -39,6 +44,7 @@ import com.finalysis.chat.tool.view.RecurringView;
 import com.finalysis.chat.tool.view.TopMerchantsView;
 import com.finalysis.chat.tool.view.TransactionsView;
 import com.finalysis.chat.tool.view.TrendsView;
+import com.finalysis.chat.tool.view.ToolErrorView;
 import com.finalysis.chat.tool.view.TxnView;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -62,6 +68,36 @@ public class OutboundProjector {
 
     /** At most this many txns of an alert are sent (§3.2). */
     static final int ALERT_TXNS = 5;
+
+    // ------------------------------------------------------------------ any tool
+
+    /** A tool's result as its view: one projection per kind of read, so every tool has exactly one. */
+    public Record project(ToolRead read, OutboundTurn turn) {
+        return switch (read) {
+            case ToolRead.MonthTotals r -> monthTotals(r.response(), turn);
+            case ToolRead.CategoryTotals r -> categoryTotals(r.response(), turn);
+            case ToolRead.AccountTotals r -> accountTotals(r.response(), turn);
+            case ToolRead.TopMerchants r -> topMerchants(r.response(), turn);
+            case ToolRead.Trends r -> trends(r.response(), turn);
+            case ToolRead.Comparison r -> comparison(r.response(), turn);
+            case ToolRead.Transactions r -> transactions(r.response(), r.limit(), turn);
+            case ToolRead.Recurring r -> recurring(r.response(), turn);
+            case ToolRead.Alerts r -> alerts(r.response(), turn);
+            case ToolRead.Coverage r -> coverage(r.response(), turn);
+        };
+    }
+
+    /** The data notes of a result (§3.1): flag type, account alias, month. */
+    public DataNotesView dataNotes(List<DataNote> notes, OutboundTurn turn) {
+        return new DataNotesView(notes.stream().map(n -> new FlagView(n.type().name(),
+                turn.aliases().alias(n.accountId()), month(n.month()))).distinct().toList());
+    }
+
+    /** A tool error: a code, a fixed message and the parameters at fault by their schema names. */
+    public ToolErrorView error(String code, ToolProblem message, List<FieldProblem> fields) {
+        return new ToolErrorView(code, message.text(), fields.stream()
+                .map(f -> new ToolErrorView.Field(f.name(), f.problem().text(), f.conflictsWith())).toList());
+    }
 
     // ------------------------------------------------------------------ get_month_totals
 

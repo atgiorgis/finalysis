@@ -1,7 +1,7 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 and 2 done (step notes); step 3 (tools) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+in this file. Steps 1 to 3 done (step notes); step 4 (grounding and citations) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
 Requirements as of `docs/requirements.md` v1.54.
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
@@ -894,6 +894,11 @@ Sonnet 5.5.
 - **Answers about months with flagged data** carry `dataNotes`, but whether the sentence mentions them depends on the
   model.
 - **Bedrock prices are assumed equal to Anthropic's list prices** until checked; the cost limits are estimates.
+- **The withholding word list can be bypassed by phrasings it hasn't seen** (step 2 review). Its weak words were
+  extended after the injection fixture's two slip-past names reached a payload, which fits that defence to its own
+  test. A hostile merchant worded differently goes out as its redacted text. The defences that carry the weight are the
+  others of §12.5: delimiting, read-only tools, closed answers (refs, validated arguments) and number grounding. No
+  word is added from the holdout's injection questions; they stay unseen until the run.
 - **Conversations are stored unencrypted until Phase 8** (SEC-05): questions as typed, answers and citations with
   statement line text sit in plain Postgres tables, like the statements themselves. Retention (§7.4) and delete on
   demand limit how long (§18 decision 8).
@@ -1143,6 +1148,95 @@ one connection in `MonthlyTotalsTest` and slowed `AnalyticsPerformanceTest`. Bot
 - **`search_transactions` and `get_merchant_totals`** get their views and expected payloads with search (step 6).
 - **The injection fixture** gets its account a fictional name, institution and last four ("Halden Everyday", "Halden
   Bank", 7310) in `ChatInjectionFixture`, so redaction has something to catch.
+
+### Step 3 notes
+
+Done: "Phase 6 step 3: the tools". Backend 2,672 tests (Maven summary; 2,580 + 92), 0 failures, 0 skipped;
+frontend 4. Requirements v1.58. No migration, no endpoint, no model call. Ten of the twelve tools: `search_transactions`
+and `get_merchant_totals` come with search in step 6, as the step table has it (the owner chose this at the start of
+the step).
+
+**Built**
+- **`chat.tool`, pure readers.** `ChatTool` (name, description, parameters, checks between parameters, `read`) and ten
+  package-private adapters, one per Phase 5 query service method plus `ComparisonService`. Each `read` returns the
+  service's own record wrapped in a sealed `ToolRead` and is `@Transactional(readOnly = true, REPEATABLE READ)`.
+  `ToolName` is the closed set of names. `ToolRegistry` holds exactly one tool per name, fails at startup otherwise,
+  and builds each closed schema.
+- **Parameters write their schema and parse the value**, so the two can't disagree. `ToolParam` types: month (pattern),
+  alias, category (exact name), enum, whole number with bounds, flag, merchant and period (`{month}` or `{from, to}`).
+  Every schema is `additionalProperties: false` with a `required` list, enums for closed sets, the month pattern and a
+  `maximum` on every limit. Caps follow §3.2: 24 months, merchants 20, transactions 25, recurring 25, alerts 20,
+  coverage 100 spans (the service's).
+- **Errors the model can read, echoing nothing.** `ToolArguments.parse` checks every property. A problem is a
+  `FieldProblem` naming the schema's parameter (an invented key is reported as `(unknown)`, once) with one of
+  `ToolProblem`'s fixed texts; a conflict also names the other parameter (`conflictsWith`). Nothing is repaired: an
+  optional `null` counts as left out, and that is the only leniency. Service 400s map to fixed problems on `from`, `to`,
+  `a`, `b` or `limit`, never the service's message; any other failure is `FAILED`, logged with its exception class only.
+- **`ToolExecutor`** (in `chat`), the only way a tool runs. It looks the name up in the registry, parses and checks
+  the arguments, then reads, together with the data notes, in one `TransactionTemplate` with `readOnly = true` and
+  REPEATABLE READ. The result is projected (`OutboundProjector.project`, a switch over the sealed `ToolRead`), guarded
+  (`ChatOutbound.send`) and written by `ToolResultWriter`. It logs one line, `chat tool tool= status= rows= ms=`, and an
+  unknown name is logged as `(unknown)`. Statuses: `OK`, `INVALID_ARGUMENTS` (also for an unknown tool, as §9 says),
+  `FAILED`, `REFUSED` (the guard refused the result).
+- **Errors are views too.** `ToolErrorView` goes through the guard like any result. The guard has two new kinds:
+  `PARAM` (a parameter name by pattern, or `(unknown)`) and `MESSAGE` (only `ToolProblem`'s texts).
+- **Data notes.** `DataNotesReader` reads the flags of the months a result used from `MonthlyTotalsService` (the
+  months endpoint's `dataQuality.flags`), with the result's account, in the same transaction. Month and account totals
+  and alerts already carry theirs. Recurring series and coverage have none: coverage lists its flagged statements
+  itself, and a series spans its whole history. Notes stay local with account ids (`ToolOutcome.dataNotes`, for step
+  5's `dataNotes`) and go out as `DataNotesView` (alias, type, month) only for the tools whose view lacks flags.
+- **`ToolResultWriter`** takes only `ChatPayloadGuard.Checked` values. It writes
+  `{"result": …, "dataNotes": […], "shortened": true}` and keeps a result under 8 KB by removing rows: from the longest
+  list (a tie goes to the deeper list, so rows outlast their cells), the oldest month first in a list ordered by month,
+  otherwise the last row. It only removes checked rows; it never adds or changes a value.
+- **Merchants as filters.** `list_transactions(merchant)` takes exactly a text this turn sent. `OutboundTurn` is the
+  tools' `ToolScope`: aliases, category names and stored merchants by their outbound text. The withheld placeholder, a
+  text the turn never sent, and a text that stands for several stored merchants are errors.
+- **Spring AI** (§10.1): `ChatToolCallbacks` gives the registry's definitions as `ToolCallback`s whose `call` methods
+  throw `ToolExecutedByFrameworkException`. Step 5 proves the loop gets tool calls back unexecuted.
+
+**Tests**
+- `ToolArgumentsTest`: every type, valid and invalid, with no echo. Unknown keys, null, non-objects, ranges, conflicts.
+  Fixed messages.
+- `ToolRegistryTest`: the plan's parameters per tool, required flags, closed and bounded schemas, the caps, one schema in
+  full, a registry missing a tool or holding one twice. `ChatQuestionSetsTest` now checks the question sets' tools
+  against the registry's names plus the two step 6 tools; the step 1 constant list is gone.
+- `ToolExecutorTest` (analytics fixture): every tool with valid arguments; an unknown tool; 14 invented arguments (an
+  unknown alias and category, an out-of-range month, contradictory filters, an unknown key, an over-long range, a
+  withheld or unseen merchant, malformed JSON), each a readable error with the value absent from the JSON; conflicts;
+  data notes; a merchant filter within a turn and not across turns. **The Postgres refusal:** a tool with no annotation
+  that runs `UPDATE` gets `FAILED`, the data is unchanged, and the log names the exception class only. The count-only
+  log line.
+- `ToolsMatchEndpointsTest` (analytics fixture, MockMvc): each tool's figures equal its Phase 5 endpoint's: months
+  (household and one account, and the defaults), categories (all, and one category and account), accounts, merchants,
+  trends (all, and one category), transactions (totals, rows, `truncated`), recurring, alerts (rows and counts),
+  coverage. `compare_periods` equals the trends endpoint's change from month to month (spending, and a category's).
+- `ChatOutboundPayloadTest`: the step 2 documents, now also reached through the executor from the model's arguments,
+  with no hostile word, canary, identifier or id in what is sent.
+- `ChatToolPathTest` (ArchUnit, with a violation fixture): only `ToolExecutor` calls `ChatTool.read`; only the guard
+  creates a `Checked`; in `chat`, only the writer (and the registry, for its fixed schemas) serializes with Jackson; the
+  writer's public methods take only `Checked` values.
+- `ChatReadOnlyTest`: every tool's `read` and the data notes are read-only, and the application has exactly the
+  registry's tools. `ChatPayloadGuardTest`: the two new kinds. `ToolResultWriterTest`: the envelope and the cap.
+  `ChatToolCallbacksTest`.
+
+**Decisions beyond the plan**
+- **Tests are grouped by concern, not one `*ToolTest` per tool.** Each concern covers all ten tools: arguments,
+  schemas, the executor, agreement with the endpoints, payloads and the path rules.
+- **Unknown keys are reported as `(unknown)`, once.** A key the model invented is model text and is never echoed.
+- **Errors go through the guard**, with fixed messages (`ToolProblem`) and the `PARAM` and `MESSAGE` kinds, so an error
+  path can't become a channel either.
+- **Category names match exactly** (case included), as listed in the context block. Matching loosely would be
+  repairing an argument.
+- **A merchant text that stands for several stored merchants is an error for now.** The drill-down takes one merchant,
+  and adding up several is `get_merchant_totals`' job in step 6. Texts the turn hasn't sent are also errors until
+  step 6's lookup.
+- **Data notes come from `MonthlyTotalsService`**, not `CoverageService.householdFlags`, which the Phase 5 rules
+  reserve for the alerts. They include all three flag types the months endpoint has, so they match `get_month_totals`.
+- **One envelope per result** (`result`, `dataNotes`, `shortened`), so the views and their hand-checked documents stay
+  as they were in step 2.
+- **`RANGE_TOO_LONG` says 24 months**, the tools' own cap (`ToolParam.MAX_MONTHS`, the analytics default). The
+  analytics `max-months` setting can't widen it.
 
 ### Requirement mapping
 

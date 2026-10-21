@@ -8,6 +8,11 @@ import com.finalysis.alert.AlertQueryService;
 import com.finalysis.chat.outbound.AccountIdentityQuery;
 import com.finalysis.chat.tool.AccountAliasQuery;
 import com.finalysis.chat.tool.CategoryNamesQuery;
+import com.finalysis.chat.tool.ChatTool;
+import com.finalysis.chat.tool.DataNotesReader;
+import com.finalysis.chat.tool.ToolArguments;
+import com.finalysis.chat.tool.ToolName;
+import com.finalysis.chat.tool.ToolRead;
 import com.finalysis.chat.tool.ToolUsingAlertOnlyHelper;
 import com.finalysis.chat.tool.ToolUsingQueryServices;
 import com.finalysis.chat.tool.ToolUsingSpringAi;
@@ -25,6 +30,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -138,6 +144,26 @@ class ChatReadOnlyTest {
                 }
             }
         }
+    }
+
+    /**
+     * §9.2: every tool's read is read-only in its own declaration too, besides the executor's transaction, and the
+     * application's tools are exactly the registry's names.
+     */
+    @Test
+    void everyToolReadIsReadOnly() throws NoSuchMethodException {
+        List<Class<?>> tools = app.stream().filter(c -> c.isAssignableTo(ChatTool.class) && !c.isInterface())
+                .<Class<?>>map(JavaClass::reflect).toList();
+        assertThat(tools).hasSize(ToolName.values().length);
+        for (Class<?> tool : tools) {
+            Transactional tx = tool.getMethod("read", ToolArguments.class).getAnnotation(Transactional.class);
+            assertThat(tx).as(tool.getSimpleName()).isNotNull();
+            assertThat(tx.readOnly()).as(tool.getSimpleName()).isTrue();
+            assertThat(tx.isolation()).as(tool.getSimpleName()).isEqualTo(Isolation.REPEATABLE_READ);
+        }
+        Transactional notes = DataNotesReader.class.getMethod("notes", ToolRead.class)
+                .getAnnotation(Transactional.class);
+        assertThat(notes.readOnly()).isTrue();
     }
 
     @Test

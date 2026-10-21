@@ -19,6 +19,10 @@ import com.finalysis.analytics.RecurringChargesService;
 import com.finalysis.analytics.RecurringStatusFilter;
 import com.finalysis.analytics.TrendsService;
 import com.finalysis.chat.ChatInjectionFixture;
+import com.finalysis.chat.ToolCall;
+import com.finalysis.chat.ToolExecutor;
+import com.finalysis.chat.ToolOutcome;
+import com.finalysis.chat.ToolStatus;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
 import java.nio.file.Files;
@@ -85,13 +89,15 @@ class ChatOutboundPayloadTest {
     private final RecurringChargesService recurring;
     private final AlertQueryService alerts;
     private final CoverageService coverage;
+    private final ToolExecutor executor;
 
     ChatOutboundPayloadTest(MockMvc mockMvc, AccountRepository accountRepository, JdbcTemplate jdbc, JsonMapper json,
                             OutboundTurnFactory turns, OutboundProjector projector, ChatOutbound outbound,
                             ContextBlockFactory context, MonthlyTotalsService months, CategoryTotalsService categories,
                             AccountTotalsService accounts, MerchantTotalsService merchants, TrendsService trends,
                             ComparisonService comparison, DrillDownService drillDown, RecurringChargesService recurring,
-                            AlertQueryService alerts, CoverageService coverage) {
+                            AlertQueryService alerts, CoverageService coverage, ToolExecutor executor) {
+        this.executor = executor;
         this.support = new ImportTestSupport(mockMvc, accountRepository, jdbc);
         this.jdbc = jdbc;
         this.json = json;
@@ -161,6 +167,40 @@ class ChatOutboundPayloadTest {
 
         assertThat(payloads).hasSize(11);
         payloads.forEach((name, payload) -> assertThat(json.readTree(payload)).as(name).isEqualTo(expected(name)));
+    }
+
+    /**
+     * Step 3: the same documents through {@link ToolExecutor}, from the model's arguments. What a tool sends is its
+     * {@code result}, exactly the projected and checked view above; nothing else of the service record reaches it.
+     */
+    @Test
+    void theExecutorSendsExactlyTheExpectedPayloads() throws Exception {
+        new ChatInjectionFixture(support, jdbc, json).load();
+        Map<String, String> calls = new LinkedHashMap<>();
+        calls.put("get_month_totals", "{\"from\": \"2026-03\", \"to\": \"2026-03\"}");
+        calls.put("get_category_totals", "{\"from\": \"2026-03\", \"to\": \"2026-03\"}");
+        calls.put("get_account_totals", "{\"from\": \"2026-03\", \"to\": \"2026-03\"}");
+        calls.put("get_top_merchants", "{\"from\": \"2026-03\", \"to\": \"2026-03\", \"limit\": 20}");
+        calls.put("get_trends", "{\"month\": \"2026-03\"}");
+        calls.put("compare_periods", "{\"measure\": \"SPENDING\", \"a\": {\"month\": \"2026-03\"}, "
+                + "\"b\": {\"month\": \"2026-02\"}}");
+        calls.put("list_transactions", "{\"month\": \"2026-03\", \"limit\": 25}");
+        calls.put("get_recurring_charges", "{\"status\": \"ALL\", \"limit\": 25}");
+        calls.put("get_alerts", "{\"limit\": 20}");
+        calls.put("get_data_coverage", "{}");
+
+        StringBuilder all = new StringBuilder();
+        calls.forEach((tool, arguments) -> {
+            ToolOutcome outcome = executor.execute(new ToolCall(tool, arguments), turns.start());
+            assertThat(outcome.status()).as(tool).isEqualTo(ToolStatus.OK);
+            assertThat(json.readTree(outcome.json()).get("result")).as(tool).isEqualTo(expected(tool));
+            all.append(outcome.json()).append('\n');
+        });
+
+        assertThat(HOSTILE).allSatisfy(word -> assertThat(all.toString().toUpperCase()).doesNotContain(word));
+        assertThat(all.toString()).doesNotContain(ChatInjectionFixture.NAME).doesNotContain("Halden")
+                .doesNotContain(ChatInjectionFixture.LAST_FOUR).doesNotContain("\"accountId\"")
+                .doesNotContain("\"id\"");
     }
 
     @Test

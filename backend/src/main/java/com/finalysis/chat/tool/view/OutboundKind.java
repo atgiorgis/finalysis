@@ -33,6 +33,10 @@ public enum OutboundKind {
     SETTING,
     /** True or false. */
     FLAG,
+    /** A tool parameter's name as its schema has it, or {@code (unknown)}; never a name the model invented. */
+    PARAM,
+    /** One of the fixed tool-error messages ({@code ToolProblem}). */
+    MESSAGE,
     /** Free text: only the outbound question, the recent answers and the summary. */
     TEXT
 }

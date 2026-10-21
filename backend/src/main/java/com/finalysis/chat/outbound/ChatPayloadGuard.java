@@ -1,12 +1,14 @@
 package com.finalysis.chat.outbound;
 
 import com.finalysis.ai.outbound.OutboundPayloadGuard;
+import com.finalysis.chat.tool.ToolProblem;
 import com.finalysis.chat.tool.view.AccountTotalsView;
 import com.finalysis.chat.tool.view.AlertsView;
 import com.finalysis.chat.tool.view.CategoryTotalsView;
 import com.finalysis.chat.tool.view.ComparisonView;
 import com.finalysis.chat.tool.view.ContextBlockView;
 import com.finalysis.chat.tool.view.CoverageView;
+import com.finalysis.chat.tool.view.DataNotesView;
 import com.finalysis.chat.tool.view.MonthTotalsView;
 import com.finalysis.chat.tool.view.Outbound;
 import com.finalysis.chat.tool.view.OutboundKind;
@@ -14,6 +16,7 @@ import com.finalysis.chat.tool.view.RecurringView;
 import com.finalysis.chat.tool.view.TopMerchantsView;
 import com.finalysis.chat.tool.view.TransactionsView;
 import com.finalysis.chat.tool.view.TrendsView;
+import com.finalysis.chat.tool.view.ToolErrorView;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
@@ -38,7 +41,8 @@ import org.springframework.stereotype.Component;
  * {@link #classify}, which runs on first use of a type and in a test over every view, so a new field can't slip out
  * unclassified. Checks per kind: money, percent, ratio, number, month and date by pattern; a category by the guard's
  * category rule; a merchant by the guard's merchant rule and {@link InstructionLikeText} (or the withheld placeholder);
- * an alias or ref only if this turn issued it; an enum constant's name; free text 1–1,000 characters without
+ * an alias or ref only if this turn issued it; an enum constant's name; a tool parameter's name by pattern; a tool error's message only if it is one of
+ * {@link ToolProblem}'s fixed texts; free text 1–1,000 characters without
  * {@code < > { }}.
  */
 @Component
@@ -53,6 +57,7 @@ public class ChatPayloadGuard {
     private static final Pattern ENUM = Pattern.compile("[A-Z][A-Z0-9_]{0,40}");
     private static final Pattern REF = Pattern.compile("[tcas][1-9]\\d{0,3}");
     private static final Pattern SETTING = Pattern.compile("[a-z][a-z0-9.-]{0,60}");
+    private static final Pattern PARAM = Pattern.compile("[a-z][A-Za-z]{0,30}(?:\\.[a-z][A-Za-z]{0,30})?|\\(unknown\\)");
     private static final Pattern TEXT_FORBIDDEN = Pattern.compile("[<>{}]");
     static final int MAX_TEXT = 1000;
 
@@ -62,7 +67,8 @@ public class ChatPayloadGuard {
     /** Every view that can be sent; classified at startup, so an unclassified field fails the app, not a turn. */
     public static final List<Class<? extends Record>> VIEWS = List.of(MonthTotalsView.class, CategoryTotalsView.class,
             AccountTotalsView.class, TopMerchantsView.class, TrendsView.class, ComparisonView.class,
-            TransactionsView.class, RecurringView.class, AlertsView.class, CoverageView.class, ContextBlockView.class);
+            TransactionsView.class, RecurringView.class, AlertsView.class, CoverageView.class, ContextBlockView.class,
+            DataNotesView.class, ToolErrorView.class);
 
     public ChatPayloadGuard(OutboundPayloadGuard guard) {
         this.guard = guard;
@@ -212,6 +218,8 @@ public class ChatPayloadGuard {
             case ENUM -> ENUM.matcher((String) value).matches();
             case REF -> REF.matcher((String) value).matches() && turn.refs().issued((String) value);
             case SETTING -> SETTING.matcher((String) value).matches();
+            case PARAM -> PARAM.matcher((String) value).matches();
+            case MESSAGE -> ToolProblem.isText((String) value);
             case TEXT -> allowsText((String) value);
         };
     }

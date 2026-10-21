@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import com.finalysis.analytics.AnswerKeyOracle;
+import com.finalysis.chat.tool.ToolRegistryTestSupport;
 import com.finalysis.support.ImportTestSupport;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -72,10 +73,12 @@ class ChatQuestionSetsTest {
             "h-u09", List.of("what will my spending be in december?"),
             "h-u10", List.of("is october looking better than september so far?"));
 
-    /** The Phase 6 tools (§3.2). Step 3 replaces this list with the registry's names. */
-    static final Set<String> TOOLS = Set.of("get_month_totals", "get_category_totals", "get_account_totals",
-            "get_top_merchants", "get_trends", "compare_periods", "list_transactions", "get_merchant_totals",
-            "search_transactions", "get_recurring_charges", "get_alerts", "get_data_coverage");
+    /** The search tools, registered with search in step 6, which deletes this list. */
+    static final Set<String> STEP_6_TOOLS = Set.of("get_merchant_totals", "search_transactions");
+
+    /** The Phase 6 tools (§3.2): the registry's names, and the two of step 6. */
+    static final Set<String> TOOLS = Stream.concat(ToolRegistryTestSupport.registry().names().stream(),
+            STEP_6_TOOLS.stream()).collect(Collectors.toUnmodifiableSet());
 
     /** §13.1's table, per set (the holdout's counts include the owner's ten). */
     static final Map<String, Integer> CATEGORY_COUNTS = orderedMap("LOOKUP", 12, "COMPARISON", 8, "TREND", 6,

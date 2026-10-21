@@ -1,0 +1,141 @@
+package com.finalysis.chat.tool;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * The fixed registry and its schemas (docs/plans/phase-6.md §3.1, §3.2, §9), no Spring: one tool per name, the
+ * parameters of §3.2, closed schemas with required lists, enums, month patterns and maximums.
+ */
+class ToolRegistryTest {
+
+    static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** The tools without their services: names, descriptions and parameters need none. */
+    static List<ChatTool> tools() {
+        return List.of(new MonthTotalsTool(null), new CategoryTotalsTool(null), new AccountTotalsTool(null),
+                new TopMerchantsTool(null), new TrendsTool(null), new ComparePeriodsTool(null),
+                new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null),
+                new DataCoverageTool(null));
+    }
+
+    /** §3.2's parameters per tool; required ones marked with "!". */
+    static final Map<String, List<String>> PLAN = new LinkedHashMap<>();
+
+    static {
+        PLAN.put("get_month_totals", List.of("from", "to", "account"));
+        PLAN.put("get_category_totals", List.of("from", "to", "account", "category", "uncategorized"));
+        PLAN.put("get_account_totals", List.of("from", "to"));
+        PLAN.put("get_top_merchants", List.of("from", "to", "account", "category", "limit!"));
+        PLAN.put("get_trends", List.of("month", "account", "category"));
+        PLAN.put("compare_periods", List.of("measure!", "category", "account", "a!", "b!"));
+        PLAN.put("list_transactions", List.of("month", "from", "to", "bucket", "measure", "account", "category",
+                "merchant", "limit!"));
+        PLAN.put("get_recurring_charges", List.of("account", "status!", "limit!"));
+        PLAN.put("get_alerts", List.of("from", "to", "type", "account", "includeDismissed", "limit!"));
+        PLAN.put("get_data_coverage", List.of());
+    }
+
+    private final ToolRegistry registry = new ToolRegistry(tools(), JSON);
+
+    @Test
+    void oneToolPerNameExactlyThePlansTen() {
+        assertThat(registry.names()).containsExactlyElementsOf(Arrays.stream(ToolName.values()).map(ToolName::wire)
+                .toList());
+        assertThat(registry.names()).containsExactlyElementsOf(PLAN.keySet());
+        assertThat(registry.find("get_trends")).isPresent();
+        assertThat(registry.find("dismiss_alert")).isEmpty();
+        assertThat(registry.find("GET_TRENDS")).as("never matched loosely").isEmpty();
+        assertThat(registry.find("get_trends ")).isEmpty();
+        assertThat(registry.find(null)).isEmpty();
+    }
+
+    @Test
+    void eachToolHasThePlansParameters() {
+        for (ToolRegistry.Definition definition : registry.definitions()) {
+            JsonNode schema = JSON.readTree(definition.inputSchema());
+            List<String> params = new ArrayList<>();
+            Set<String> required = Set.copyOf(schema.get("required").valueStream().map(JsonNode::stringValue)
+                    .toList());
+            schema.get("properties").propertyNames().forEach(p -> params.add(required.contains(p) ? p + "!" : p));
+            assertThat(params).as(definition.name()).containsExactlyElementsOf(PLAN.get(definition.name()));
+        }
+    }
+
+    @Test
+    void schemasAreClosedAndBounded() {
+        for (ToolRegistry.Definition definition : registry.definitions()) {
+            JsonNode schema = JSON.readTree(definition.inputSchema());
+            assertThat(schema.get("type").stringValue()).isEqualTo("object");
+            assertThat(schema.get("additionalProperties").booleanValue()).as(definition.name()).isFalse();
+            assertThat(definition.description()).as(definition.name()).isNotBlank().hasSizeLessThan(700);
+            schema.get("properties").properties().forEach(e -> {
+                JsonNode p = e.getValue();
+                String where = definition.name() + "." + e.getKey();
+                assertThat(p.get("description").stringValue()).as(where).isNotBlank();
+                switch (p.get("type").stringValue()) {
+                    case "integer" -> assertThat(p.has("minimum") && p.has("maximum")).as(where).isTrue();
+                    case "object" -> assertThat(p.get("additionalProperties").booleanValue()).as(where).isFalse();
+                    case "string" -> assertThat(p.has("enum") || p.has("pattern") || p.has("maxLength")).as(where)
+                            .isTrue();
+                    case "boolean" -> { }
+                    default -> throw new AssertionError(where);
+                }
+            });
+        }
+    }
+
+    @Test
+    void limitsAreThePlansCaps() {
+        Map<String, Integer> caps = Map.of("get_top_merchants", 20, "list_transactions", 25,
+                "get_recurring_charges", 25, "get_alerts", 20);
+        caps.forEach((tool, cap) -> {
+            JsonNode limit = JSON.readTree(definition(tool).inputSchema()).get("properties").get("limit");
+            assertThat(limit.get("minimum").intValue()).isEqualTo(1);
+            assertThat(limit.get("maximum").intValue()).as(tool).isEqualTo(cap);
+        });
+    }
+
+    @Test
+    void oneSchemaInFull() {
+        assertThat(JSON.readTree(definition("get_month_totals").inputSchema())).isEqualTo(JSON.readTree("""
+                {"type": "object",
+                 "properties": {
+                   "from": {"type": "string", "pattern": "^\\\\d{4}-(0[1-9]|1[0-2])$",
+                            "description": "First month, yyyy-MM. Default: a few months ending at `to`; give it to be sure."},
+                   "to": {"type": "string", "pattern": "^\\\\d{4}-(0[1-9]|1[0-2])$",
+                          "description": "Last month, yyyy-MM. Default: the latest month with data (latestMonth in the context block). At most 24 months from `from` to `to`, both included."},
+                   "account": {"type": "string", "maxLength": 20,
+                               "description": "Only this account, by its alias from the context block (CHECKING-1). Default: every account."}},
+                 "required": [],
+                 "additionalProperties": false}"""));
+        JsonNode measure = JSON.readTree(definition("compare_periods").inputSchema()).get("properties").get("measure");
+        assertThat(measure.get("enum").valueStream().map(JsonNode::stringValue)).containsExactly("SPENDING", "INCOME",
+                "NET", "CATEGORY_SPENT", "CATEGORY_RECEIVED");
+    }
+
+    @Test
+    void theApplicationsRegistryNeedsEveryToolOnce() {
+        List<ChatTool> missing = new ArrayList<>(tools());
+        missing.removeLast();
+        assertThatThrownBy(() -> new ToolRegistry(missing, JSON)).hasMessageContaining("get_data_coverage");
+        List<ChatTool> twice = new ArrayList<>(tools());
+        twice.add(new TrendsTool(null));
+        assertThatThrownBy(() -> new ToolRegistry(twice, JSON)).hasMessageContaining("two chat tools named get_trends");
+        assertThat(ToolRegistry.of(List.of(new TrendsTool(null)), JSON).names()).containsExactly("get_trends");
+    }
+
+    private ToolRegistry.Definition definition(String name) {
+        return registry.definitions().stream().filter(d -> d.name().equals(name)).findFirst().orElseThrow();
+    }
+}

@@ -3,16 +3,19 @@ package com.finalysis.chat.outbound;
 import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.chat.tool.AccountAliases;
 import com.finalysis.chat.tool.RefRegistry;
+import com.finalysis.chat.tool.ToolScope;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * What one turn knows about leaving the machine (docs/plans/phase-6.md §12): its aliases and refs, the user's own
  * identifiers (local only), the category names, and each merchant's decision, made once per turn and counted once per
- * name. Not thread-safe: one per turn.
+ * name. It is also the tools' {@link ToolScope}: the names it issued resolve back to ids and stored merchants. Not
+ * thread-safe: one per turn.
  */
-public final class OutboundTurn {
+public final class OutboundTurn implements ToolScope {
 
     private final AccountAliases aliases;
     private final RefRegistry refs = new RefRegistry();
@@ -78,6 +81,33 @@ public final class OutboundTurn {
     /** Distinct merchant names refused so far (person-to-person, empty after redaction, or refused by the guard). */
     public int refusedMerchants() {
         return refusedMerchants;
+    }
+
+    @Override
+    public Optional<Long> accountId(String alias) {
+        return aliases.accountId(alias);
+    }
+
+    @Override
+    public Optional<Long> categoryId(String name) {
+        return Optional.ofNullable(categories.get(name));
+    }
+
+    @Override
+    public boolean isWithheldMerchant(String text) {
+        return MerchantOutbound.WITHHELD.equals(text);
+    }
+
+    /**
+     * The stored merchants this turn sent as exactly this text (docs/plans/phase-6.md §4.3), from the decisions made
+     * so far; step 6 adds the lookup for texts the turn hasn't shown.
+     */
+    @Override
+    public List<String> storedMerchants(String outboundText) {
+        return merchants.entrySet().stream()
+                .filter(e -> e.getValue().outcome() == MerchantOutbound.Outcome.SENT
+                        && e.getValue().text().equals(outboundText))
+                .map(Map.Entry::getKey).sorted().toList();
     }
 
     boolean merchantMayGo(String text) {
