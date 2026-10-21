@@ -1,8 +1,8 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 3 done (step notes); step 4 (grounding and citations) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54.
+in this file. Steps 1 to 4 done (step notes); step 5 (chat loop and API) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.59).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -885,6 +885,8 @@ Sonnet 5.5.
 - **Grounding checks values, not meaning.** A real figure attached to the wrong label passes; signs aren't checked.
   Citations and the eval are the mitigations.
 - **Figures in words** ("twelve hundred") aren't extracted; the prompt forbids them, the eval counts them.
+- **A bare year is a figure** ("so far in 2026"): §5.2 masks a year only beside a month name or in a date, so such an
+  answer is retried unless the question or a call's arguments held the number (step 4). The eval will show how often.
 - **Unknown names in questions** are sent as typed, unless they are counterparties or configured redact terms.
 - **Search knows merchants, not descriptions**, and only redacted text: two merchants that redact to one text look
   alike, and a withheld merchant is found only by its category or by listing transactions.
@@ -1238,6 +1240,99 @@ the step).
 - **`RANGE_TOO_LONG` says 24 months**, the tools' own cap (`ToolParam.MAX_MONTHS`, the analytics default). The
   analytics `max-months` setting can't widen it.
 
+### Step 4 notes
+
+Done: "Phase 6 step 4: grounding and citations". Backend 2,817 tests (Maven summary; 2,672 + 145), 0 failures,
+0 skipped; frontend 4. Requirements v1.59. No migration, no endpoint, no model call: answers in the tests are hand-written
+(and, for the retry and the fallback, a scripted sequence of them); step 5's loop calls these pieces.
+
+**Step 3 review**
+- **An unknown category lists the valid names.** The error's field carries `categories` (the context block's names, in
+  its order) beside the fixed message, now "not a category name; use one of categories exactly as written". The value the
+  model sent is still never echoed. The list is a `CATEGORY` field, so the guard checks each name.
+
+**Built** (`chat.grounding`, `chat.citation`)
+- **`AnswerText`** makes an answer plain text first (§12.5 point 5): images, HTML tags, autolinks, reference definitions
+  and URLs removed, a markdown link keeps its text. Removals are counted, never kept.
+- **`CitationMarkers`**: marker groups (`[t3]`, `[c1, a2]`) keep only refs this turn issued; anything else in marker form
+  (`[t9]`, `[7]`) is removed and counted (`citationsDropped`). Renumbering writes `[1]`, `[1, 2]`.
+- **`FigureExtractor`** (§5.2), failing closed: every digit run is a figure unless masked first as a marker, an ISO or
+  slash date, a day or year beside a month name, an ordinal, an alias token, or a label the turn sent that holds only
+  whole numbers (`7-ELEVEN`); 0 and 1 are not counts. Each figure has a kind (money, percent, count) and a form: exact
+  (cents, one-decimal percent, whole count), whole (no cents, whole percent) or unmatchable (`$12.5`, `12.50%`, `2.5`,
+  any `k`, `M`, `thousand`). The sign is dropped.
+- **`GroundedSet`** (§5.3) reads the outbound JSON as sent, beside its view's `@Outbound` kinds (the guard's layout):
+  money, percent, ratio, alert quantities by unit, counts. Merchant, category and alias fields are labels, never values.
+  Each value points at the nearest enclosing ref and its path there (`spending`, `months[2026-08].net`,
+  `trailing3.amount`). Counts also come from the question and from the arguments of successful calls. Errors ground
+  nothing.
+- **`GroundingMatcher`** (§5.4, §18 decision 3): cents exact (money or ratio), whole dollars half-even, one-decimal
+  percents exact, whole percents half-even, whole counts exact. Nothing looser.
+- **`AnswerGrounding`**: `check` (plain text → markers → figures → matches, so what is checked is what would be shown),
+  `retryMessage` (§5.5's fixed text with the ungrounded figures as written, only their own characters), and the
+  `AnswerCheck` with `GROUNDED` / `NO_FIGURES`, `figuresChecked`, the ungrounded figures and the kept markers.
+- **`FallbackAnswer`** (§5.5, §18 decision 4): one line per row of each successful result, rendered from the checked
+  views, with their refs as markers; at most 20 lines; "I can't answer that from your data." without results.
+- **Figure bases.** `RefRegistry.Cell` now records, per figure path, what it rests on (`FigureBasis`): `SUM` (the value as
+  returned equals Σ sign × part of each drill-down's total) or `DERIVED` (percents, averages, pending reviews: the
+  drill-downs show the inputs). Recorded by the projection beside the value, from each service's own rules: spending is
+  the net of `measure=SPENT` rows, income of `RECEIVED`, net both; trend magnitudes negate spending rows; a change is this
+  month's rows less last month's; a comparison side by its measure (a category's spending from its `EXPENSE` rows, what it
+  received from `INCOME` and `REFUND`).
+- **`CitationResolver`** (§6), one read-only REPEATABLE READ transaction: markers first, in order, then the refs of matched
+  figures; txns with their account name, statement and source line (`CitationQuery`, read-only SQL); totals with their
+  label, the figures quoted and each figure's drill-downs (path, exact parameters, total, count, up to 5 sample txns);
+  alerts with key, type, month and txns; series with the drill-down over their merchant and months. `citeFallback` for the
+  fallback's markers. `refresh` re-resolves every txn of a stored citation by fingerprint: `GONE` when it no longer
+  exists, with only the fingerprint left.
+
+**Tests**
+- `FigureExtractorTest` (47): every §5.2 row, hits and near misses: `($45.00)`, `$-45.00`, `−45.00`, `1,234,567.89`,
+  scaled forms, dates in five spellings, years, days, ordinals, aliases, labels, backticks.
+- `AnswerGroundingTest` (69): the worked example of §5.4 (and its `$939` ✓, `$940` ✗, `$116.21` ✗); rounding just inside
+  and outside for money (939.50, 940.50, 1183.49) and percents (384.5, 385.5); signs as magnitudes; dates and counts that
+  look like numbers (a bare year stays a count, as §5.2 says); counts from the question and a successful call only; a
+  failed call grounds nothing; the injection canary 999.99 in merchant text is never grounded in any form; a row the
+  writer cut can't ground; refs and paths; markers dropped and counted; the citation choice; links and URLs; the retry
+  message. A mutation (half-up for half-even) failed 6 of them.
+- `GroundingPropertiesTest` (jqwik): any money or percent rendered from a value in an allowed form is grounded; any other
+  value, exact or rounded, is not.
+- `CitationMarkersTest`, `FallbackAnswerTest` (the fallback passes the same grounding check as a model's answer).
+- `CitationTest` (analytics fixture, 18 real calls covering every tool and every comparison measure): every numeric field
+  of every cell has a basis; every quoted figure with a `SUM` basis equals its drill-downs' totals (income, spending, net,
+  refunds, uncategorized, unlinked transfers, counted txns, category totals and months, merchants' spent and count, trend
+  amount, previous month and change, comparison sides and difference); every cited txn is `FOUND`, its source line equals
+  the fixture file's line and its id is that line's txn; no source line, account name, fingerprint or alert key is in any
+  sent JSON; numbering (markers, a dropped one, a figure-only ref); series and alerts; every tool's fallback is grounded
+  (coverage aside, its gap count isn't a result value) and cited.
+- `InjectionCitationTest` (injection fixture, every tool): 999.99 is in no value; six answers that obey the injection are
+  ungrounded; a cited txn whose statement is deleted reads back `GONE`.
+- `ChatToolPathTest`: nothing in `chat.outbound` or `chat.tool` depends on `chat.citation` (with a violation fixture), and
+  no citation type can pass the guard. `ChatReadOnlyTest`: `CitationQuery` and the resolver are read-only.
+
+**Decisions beyond the plan**
+- **Backticks are not skipped** (§5.2 said they were): an answer is plain text, and a figure in backticks would otherwise be
+  shown unchecked. The extractor fails closed in general: digits are figures unless a known non-figure masks them.
+- **The transactions total has a ref** (`TransactionsView.ref`, a cell whose drill-down is the call's filter), so "you
+  spent $X on N transactions" cites its source. The step 2 document `list_transactions.json` gained `"ref": "c1"`.
+- **Ratios ground two-decimal figures exactly, never rounded** ("13.55 times the median"); `$13.55` matching a ratio is a
+  documented coincidence.
+- **Which refs a figure cites.** The refs the model marked in the same sentence win; otherwise all its matches when they
+  share one ref, or when it is exact money or an exact percent; a whole count or a rounded figure under several refs cites
+  none (likely a coincidence).
+- **A citation of a total lists the quoted figures**, each with its own drill-downs and relation, beside the cell's
+  default drill-downs; §10.2's single `value`/`drillDown` becomes `figures` and `drillDowns`. A month's net, a
+  comparison's difference or a category side are several drill-downs, so one wasn't enough.
+- **Figure bases are recorded at projection** (in the ref target), not guessed at citation time. Writing them showed two
+  step 3 default drill-downs that didn't add up: a `NET` comparison side drilled into all rows (transfers included), and a
+  `CATEGORY_SPENT` side included the category's refunds. The figures' bases use the service rules; the cells' default
+  drill-downs for comparisons are now the bases' own.
+- **Labels with whole numbers are masked** (merchants, categories, aliases sent this turn), never a label with a decimal,
+  `$` or `%`, so `7-ELEVEN` isn't a count and the canary can't hide in a name.
+- **The fallback renders the outbound views** (aliases, outbound merchant texts, `MERCHANT WITHHELD`), not the local
+  records, so it is as safe as the payloads if a later turn shows it to the model as history.
+- **`CitedTxn` keeps its fingerprint** for re-resolution; ids and fingerprints go to the local client only.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
@@ -1246,7 +1341,7 @@ the step).
 | CHT-02 | 6 | `MerchantSearchTest`, `MerchantIndexRefreshTest` |
 | CHT-03 | 6, 8 | routing turns; eval's tool-choice metric |
 | CHT-04 | 4, 5 | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
-| CHT-05 | 4 | `CitationTest` |
+| CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
 | CHT-06 | 7 | `ConversationMemoryTest` |
 | ANA-05 | 7 | `MonthlySummaryTest` |
 | SEC-01, SEC-08 | 2, 5 | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest` |

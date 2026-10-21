@@ -83,13 +83,14 @@ class ToolResultWriterTest {
 
         String sent = writer.error(guard.check(projector.error("INVALID_ARGUMENTS", ToolProblem.INVALID_ARGUMENTS,
                 List.of(new FieldProblem("category", ToolProblem.NOT_A_CATEGORY),
-                        new FieldProblem("uncategorized", ToolProblem.CONFLICT, "category"))), turn));
+                        new FieldProblem("uncategorized", ToolProblem.CONFLICT, "category")), turn), turn));
 
         assertThat(json.readTree(sent)).isEqualTo(json.readTree("""
                 {"error": "INVALID_ARGUMENTS",
                  "message": "one or more arguments are invalid; fix them and call again, or answer without this tool",
                  "fields": [{"name": "category",
-                             "message": "not a category name; use one exactly as the context block lists it"},
+                             "message": "not a category name; use one of categories exactly as written",
+                             "categories": ["Dining", "Groceries"]},
                             {"name": "uncategorized",
                              "message": "can't be combined with the parameter named in conflictsWith",
                              "conflictsWith": "category"}]}"""));
@@ -103,7 +104,7 @@ class ToolResultWriterTest {
         return new CategoryTotalsView(monthNames.getFirst(), monthNames.getLast(), null,
                 monthNames.stream().map(m -> new MonthCoverageView(m, "COMPLETE")).toList(),
                 IntStream.range(0, rows).mapToObj(r -> new CategoryTotalsView.Row(
-                        turn.refs().ref(new RefRegistry.Cell("row " + r, List.of(Map.of("r", "" + r)))), "EXPENSE",
+                        turn.refs().ref(new RefRegistry.Cell("row " + r, List.of(Map.of("r", "" + r)), Map.of())), "EXPENSE",
                         "Dining", flow, monthNames.stream().map(m -> new CategoryTotalsView.Cell(m, "-123.45",
                                 "10.00", "-113.45", 7, null)).toList())).toList());
     }

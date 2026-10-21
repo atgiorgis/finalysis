@@ -20,7 +20,7 @@ public enum ToolProblem {
     REQUIRED("is required"),
     NOT_A_MONTH("must be a month written yyyy-MM, 01 to 12"),
     NOT_AN_ACCOUNT("not an account alias; see the context block"),
-    NOT_A_CATEGORY("not a category name; use one exactly as the context block lists it"),
+    NOT_A_CATEGORY("not a category name; use one of categories exactly as written"),
     NOT_A_LISTED_VALUE("must be one of the values the schema lists"),
     NOT_A_WHOLE_NUMBER("must be a whole number"),
     OUT_OF_BOUNDS("is outside the minimum and maximum the schema gives"),

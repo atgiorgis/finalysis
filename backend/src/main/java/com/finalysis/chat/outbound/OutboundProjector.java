@@ -1,5 +1,10 @@
 package com.finalysis.chat.outbound;
 
+import static com.finalysis.chat.tool.FigureBasis.Component.COUNT;
+import static com.finalysis.chat.tool.FigureBasis.Component.MONEY_IN;
+import static com.finalysis.chat.tool.FigureBasis.Component.MONEY_OUT;
+import static com.finalysis.chat.tool.FigureBasis.Component.NET;
+
 import com.finalysis.alert.Alert;
 import com.finalysis.alert.AlertBasis;
 import com.finalysis.alert.AlertDetails;
@@ -13,6 +18,7 @@ import com.finalysis.analytics.CategoryTotalsResponse;
 import com.finalysis.analytics.ComparisonResponse;
 import com.finalysis.analytics.CoverageResponse;
 import com.finalysis.analytics.DataQuality;
+import com.finalysis.analytics.DrillDownFilter;
 import com.finalysis.analytics.DrillDownResponse;
 import com.finalysis.analytics.MerchantTotalsResponse;
 import com.finalysis.analytics.MoneyFlow;
@@ -22,10 +28,13 @@ import com.finalysis.analytics.MonthTotals;
 import com.finalysis.analytics.MonthlyTotalsResponse;
 import com.finalysis.analytics.RecurringCharge;
 import com.finalysis.analytics.RecurringChargesResponse;
+import com.finalysis.analytics.TrendMeasure;
 import com.finalysis.analytics.TrendRow;
 import com.finalysis.analytics.TrendsResponse;
+import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.DataNote;
 import com.finalysis.chat.tool.FieldProblem;
+import com.finalysis.chat.tool.FigureBasis;
 import com.finalysis.chat.tool.RefRegistry;
 import com.finalysis.chat.tool.ToolProblem;
 import com.finalysis.chat.tool.ToolRead;
@@ -50,7 +59,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -80,7 +91,7 @@ public class OutboundProjector {
             case ToolRead.TopMerchants r -> topMerchants(r.response(), turn);
             case ToolRead.Trends r -> trends(r.response(), turn);
             case ToolRead.Comparison r -> comparison(r.response(), turn);
-            case ToolRead.Transactions r -> transactions(r.response(), r.limit(), turn);
+            case ToolRead.Transactions r -> transactions(r.response(), r.filter(), r.limit(), turn);
             case ToolRead.Recurring r -> recurring(r.response(), turn);
             case ToolRead.Alerts r -> alerts(r.response(), turn);
             case ToolRead.Coverage r -> coverage(r.response(), turn);
@@ -93,10 +104,16 @@ public class OutboundProjector {
                 turn.aliases().alias(n.accountId()), month(n.month()))).distinct().toList());
     }
 
-    /** A tool error: a code, a fixed message and the parameters at fault by their schema names. */
-    public ToolErrorView error(String code, ToolProblem message, List<FieldProblem> fields) {
+    /**
+     * A tool error: a code, a fixed message and the parameters at fault by their schema names. An unknown category also
+     * lists the valid names, never the value the model sent.
+     */
+    public ToolErrorView error(String code, ToolProblem message, List<FieldProblem> fields, OutboundTurn turn) {
         return new ToolErrorView(code, message.text(), fields.stream()
-                .map(f -> new ToolErrorView.Field(f.name(), f.problem().text(), f.conflictsWith())).toList());
+                .map(f -> new ToolErrorView.Field(f.name(), f.problem().text(), f.conflictsWith(),
+                        f.problem() == ToolProblem.NOT_A_CATEGORY ? CategoryNamesQuery.sorted(turn.categories())
+                                : null))
+                .toList());
     }
 
     // ------------------------------------------------------------------ get_month_totals
@@ -111,11 +128,39 @@ public class OutboundProjector {
     private MonthTotalsView.Month month(MonthTotals m, Long accountId, OutboundTurn turn) {
         Map<String, String> drill = params("month", m.month().toString(), "accountId", id(accountId));
         String ref = turn.refs().ref(new RefRegistry.Cell("Totals · " + m.month() + scope(accountId, turn),
-                List.of(drill)));
+                List.of(drill), monthFigures(drill)));
         return new MonthTotalsView.Month(ref, m.month().toString(), m.coverage().name(), money(m.income()),
                 money(m.spending()), money(m.net()), percent(m.savingsRatePercent()), money(m.refunds().net()),
                 flow(m.uncategorized()), m.dataQuality().reviewPendingCount(), money(m.unlinkedTransfers().net()),
                 quality(m.dataQuality(), m.month(), turn));
+    }
+
+    /**
+     * What each figure of a month rests on (phase-5.md §1.1): spending is the net of the spending rows, income of the
+     * income rows, net both; the flows and counts their bucket's rows; percents and pending reviews are derived.
+     */
+    private static Map<String, FigureBasis> monthFigures(Map<String, String> month) {
+        Map<String, String> spent = with(month, "measure", "SPENT");
+        Map<String, String> received = with(month, "measure", "RECEIVED");
+        Map<String, String> uncategorized = with(month, "bucket", "UNCATEGORIZED");
+        Map<String, String> unlinked = with(month, "bucket", "UNLINKED_TRANSFER");
+        Map<String, FigureBasis> figures = new HashMap<>();
+        figures.put("income", FigureBasis.sum(NET, received));
+        figures.put("spending", FigureBasis.sum(NET, spent));
+        figures.put("net", FigureBasis.sumOf(NET, spent, received));
+        figures.put("savingsRatePercent", FigureBasis.derived(received, spent));
+        figures.put("refundsNet", FigureBasis.sum(NET, with(month, "bucket", "REFUND")));
+        flowFigures(figures, "uncategorized.", uncategorized);
+        figures.put("reviewPending", FigureBasis.derived(uncategorized));
+        figures.put("unlinkedTransfersNet", FigureBasis.sum(NET, unlinked));
+        figures.put("dataQuality.countedTxns", FigureBasis.sumOf(COUNT, spent, received));
+        figures.put("dataQuality.uncategorizedCount", FigureBasis.sum(COUNT, uncategorized));
+        figures.put("dataQuality.reviewPendingCount", FigureBasis.derived(uncategorized));
+        figures.put("dataQuality.unlinkedTransferCount", FigureBasis.sum(COUNT, unlinked));
+        figures.put("dataQuality.uncategorizedPercentOfCount", FigureBasis.derived(uncategorized, spent, received));
+        figures.put("dataQuality.reviewPendingPercentOfCount", FigureBasis.derived(uncategorized, spent, received));
+        figures.put("dataQuality.uncategorizedPercentOfSpending", FigureBasis.derived(uncategorized, spent));
+        return figures;
     }
 
     private MonthTotalsView.Quality quality(DataQuality q, YearMonth month, OutboundTurn turn) {
@@ -153,7 +198,14 @@ public class OutboundProjector {
         Map<String, String> drill = params("from", range.from().toString(), "to", range.to().toString(),
                 "bucket", row.bucket().name(), "categoryId", row.category() == null ? null : id(row.category().id()),
                 "accountId", id(accountId));
-        String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill)));
+        Map<String, FigureBasis> figures = new HashMap<>();
+        flowFigures(figures, "total.", drill);
+        for (CategoryTotalsResponse.Cell c : row.months()) {
+            Map<String, String> month = with(drill, "from", null, "to", null, "month", c.month().toString());
+            flowFigures(figures, "months[" + c.month() + "].", month);
+            figures.put("months[" + c.month() + "].reviewPending", FigureBasis.derived(month));
+        }
+        String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill), figures));
         return new CategoryTotalsView.Row(ref, row.bucket().name(), category(row.category()), flow(row.total()),
                 row.months().stream().map(c -> new CategoryTotalsView.Cell(c.month().toString(),
                         money(c.flow().moneyOut()), money(c.flow().moneyIn()), money(c.flow().net()), c.flow().count(),
@@ -179,9 +231,12 @@ public class OutboundProjector {
                             r.range().to().toString(), "measure", "SPENT", "merchant", m.merchant(),
                             "noMerchant", m.merchant() == null ? "true" : null, "accountId", id(r.accountId()),
                             "categoryId", id(r.categoryId()));
+                    // spent is a positive magnitude: the spending rows' net, negated
                     String ref = turn.refs().ref(new RefRegistry.Cell((m.merchant() == null ? "No merchant"
                             : turn.merchant(m.merchant())) + " · " + r.range().from() + "–" + r.range().to(),
-                            List.of(drill)));
+                            List.of(drill), Map.of(
+                                    "spent", FigureBasis.sum(NET, List.of(new FigureBasis.Term(-1, drill))),
+                                    "count", FigureBasis.sum(COUNT, drill))));
                     return new TopMerchantsView.Merchant(ref, turn.merchant(m.merchant()), money(m.spent()),
                             m.count(), date(m.firstDate()), date(m.lastDate()), category(m.category()));
                 }).toList(),
@@ -197,17 +252,17 @@ public class OutboundProjector {
     }
 
     private TrendsView.Row trendRow(TrendRow row, YearMonth month, Long accountId, OutboundTurn turn) {
-        Map<String, String> drill = switch (row.line()) {
-            case TOTAL_SPENDING -> params("month", month.toString(), "measure", "SPENT", "accountId", id(accountId));
-            case TOTAL_INCOME -> params("month", month.toString(), "measure", "RECEIVED", "accountId", id(accountId));
-            case UNCATEGORIZED -> params("month", month.toString(), "bucket", "UNCATEGORIZED", "measure", "SPENT",
+        Map<String, String> rows = switch (row.line()) {
+            case TOTAL_SPENDING -> params("measure", "SPENT", "accountId", id(accountId));
+            case TOTAL_INCOME -> params("measure", "RECEIVED", "accountId", id(accountId));
+            case UNCATEGORIZED -> params("bucket", "UNCATEGORIZED", "measure", "SPENT", "accountId", id(accountId));
+            case CATEGORY -> params("bucket", row.bucket().name(), "categoryId", id(row.category().id()),
                     "accountId", id(accountId));
-            case CATEGORY -> params("month", month.toString(), "bucket", row.bucket().name(),
-                    "categoryId", id(row.category().id()), "accountId", id(accountId));
         };
+        Map<String, String> drill = with(rows, "month", month.toString());
         String label = (row.category() != null ? row.category().name() : row.line().name()) + " · " + month
                 + scope(accountId, turn);
-        String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill)));
+        String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill), trendFigures(row, rows, month)));
         return new TrendsView.Row(ref, row.line().name(), row.bucket() == null ? null : row.bucket().name(),
                 category(row.category()), row.measure().name(), money(row.amount()), money(row.previousMonth()),
                 money(row.changeAmount()), percent(row.changePercent()), average(row.trailing3()),
@@ -215,26 +270,73 @@ public class OutboundProjector {
                 row.monthCoverage() == null ? null : row.monthCoverage().name());
     }
 
+    /**
+     * What each figure of a trend row rests on (TrendsService): amounts are magnitudes, so a spending line's amount is
+     * its rows' net negated; the change is this month's rows less the previous month's; percents and the trailing
+     * averages are derived from their months' rows.
+     */
+    private static Map<String, FigureBasis> trendFigures(TrendRow row, Map<String, String> rows, YearMonth month) {
+        int sign = row.measure() == TrendMeasure.SPENT ? -1 : 1;
+        FigureBasis.Term at = new FigureBasis.Term(sign, with(rows, "month", month.toString()));
+        FigureBasis.Term previous = new FigureBasis.Term(sign, with(rows, "month", month.minusMonths(1).toString()));
+        FigureBasis.Term lastYear = new FigureBasis.Term(sign, with(rows, "month", month.minusMonths(12).toString()));
+        Map<String, FigureBasis> figures = new HashMap<>();
+        figures.put("amount", FigureBasis.sum(NET, List.of(at)));
+        figures.put("previousMonth", FigureBasis.sum(NET, List.of(previous)));
+        figures.put("changeAmount", FigureBasis.sum(NET, List.of(at, previous.negated())));
+        figures.put("changePercent", FigureBasis.derived(List.of(at, previous)));
+        figures.put("sameMonthLastYear", FigureBasis.sum(NET, List.of(lastYear)));
+        for (int months : new int[] {3, 6}) {
+            FigureBasis trailing = FigureBasis.derived(with(rows, "from", month.minusMonths(months).toString(),
+                    "to", month.minusMonths(1).toString()));
+            for (String field : List.of("amount", "monthsUsed", "monthsWanted")) {
+                figures.put("trailing" + months + "." + field, trailing);
+            }
+        }
+        return figures;
+    }
+
     // ------------------------------------------------------------------ compare_periods
 
     public ComparisonView comparison(ComparisonResponse r, OutboundTurn turn) {
         String label = r.measure().name() + (r.category() == null ? "" : " " + r.category().name()) + " · "
                 + span(r.a().range()) + " vs " + span(r.b().range()) + scope(r.accountId(), turn);
+        List<FigureBasis.Term> a = sideTerms(r, r.a().range());
+        List<FigureBasis.Term> b = sideTerms(r, r.b().range());
+        List<FigureBasis.Term> both = new ArrayList<>(a);
+        both.addAll(b);
+        List<FigureBasis.Term> difference = new ArrayList<>(a);
+        b.forEach(t -> difference.add(t.negated()));
         String ref = turn.refs().ref(new RefRegistry.Cell(label,
-                List.of(sideDrill(r, r.a().range()), sideDrill(r, r.b().range()))));
+                both.stream().map(FigureBasis.Term::drillDown).toList(),
+                Map.of("a.value", FigureBasis.sum(NET, a), "b.value", FigureBasis.sum(NET, b),
+                        "difference", FigureBasis.sum(NET, difference),
+                        "changePercent", FigureBasis.derived(both))));
         return new ComparisonView(ref, r.measure().name(), category(r.category()),
                 turn.aliases().aliasOrNull(r.accountId()), side(r.a()), side(r.b()), money(r.difference()),
                 percent(r.changePercent()));
     }
 
-    private static Map<String, String> sideDrill(ComparisonResponse r, MonthRange range) {
-        String measure = switch (r.measure()) {
-            case SPENDING, CATEGORY_SPENT -> "SPENT";
-            case INCOME, CATEGORY_RECEIVED -> "RECEIVED";
-            case NET -> null;
+    /**
+     * The rows one side's value is the sum of, by ComparisonService's rules: spending as a magnitude (the spending
+     * rows' net, negated), income as the income rows' net, net as both nets; a category's spending from its expense
+     * rows only, what it received from its income and refund rows.
+     */
+    private static List<FigureBasis.Term> sideTerms(ComparisonResponse r, MonthRange range) {
+        Map<String, String> side = params("from", range.from().toString(), "to", range.to().toString(),
+                "accountId", id(r.accountId()));
+        String category = r.category() == null ? null : id(r.category().id());
+        return switch (r.measure()) {
+            case SPENDING -> List.of(new FigureBasis.Term(-1, with(side, "measure", "SPENT")));
+            case INCOME -> List.of(new FigureBasis.Term(1, with(side, "measure", "RECEIVED")));
+            case NET -> List.of(new FigureBasis.Term(1, with(side, "measure", "RECEIVED")),
+                    new FigureBasis.Term(1, with(side, "measure", "SPENT")));
+            case CATEGORY_SPENT -> List.of(new FigureBasis.Term(-1,
+                    with(side, "bucket", "EXPENSE", "categoryId", category)));
+            case CATEGORY_RECEIVED -> List.of(
+                    new FigureBasis.Term(1, with(side, "bucket", "INCOME", "categoryId", category)),
+                    new FigureBasis.Term(1, with(side, "bucket", "REFUND", "categoryId", category)));
         };
-        return params("from", range.from().toString(), "to", range.to().toString(), "measure", measure,
-                "categoryId", r.category() == null ? null : id(r.category().id()), "accountId", id(r.accountId()));
     }
 
     private static ComparisonView.Side side(ComparisonResponse.Side side) {
@@ -245,12 +347,28 @@ public class OutboundProjector {
 
     // ------------------------------------------------------------------ list_transactions
 
-    public TransactionsView transactions(DrillDownResponse r, int limit, OutboundTurn turn) {
+    public TransactionsView transactions(DrillDownResponse r, DrillDownFilter filter, int limit, OutboundTurn turn) {
+        String ref = null;
+        if (r.range() != null) {
+            Map<String, String> drill = with(params("bucket", filter.bucket().map(Enum::name).orElse(null),
+                            "measure", filter.measure().map(Enum::name).orElse(null),
+                            "accountId", id(filter.accountId().orElse(null)),
+                            "categoryId", id(filter.categoryId().orElse(null)),
+                            "merchant", filter.merchant().orElse(null)),
+                    "month", filter.month().map(YearMonth::toString).orElse(null),
+                    "from", filter.month().isPresent() ? null : r.range().from().toString(),
+                    "to", filter.month().isPresent() ? null : r.range().to().toString());
+            Map<String, FigureBasis> figures = new HashMap<>();
+            flowFigures(figures, "total.", drill);
+            ref = turn.refs().ref(new RefRegistry.Cell("Transactions · " + span(r.range())
+                    + scope(filter.accountId().orElse(null), turn), List.of(drill), figures));
+        }
         List<TxnView> items = r.items().stream().limit(limit)
                 .map(i -> txn(i.id(), i.accountId(), i.txnDate(), i.amount(), i.merchant(), i.category(),
                         i.bucket().name(), turn))
                 .toList();
-        return new TransactionsView(month(r.range().from()), month(r.range().to()), flow(r.total()), items,
+        return new TransactionsView(ref, month(r.range() == null ? null : r.range().from()),
+                month(r.range() == null ? null : r.range().to()), flow(r.total()), items,
                 r.total().count() > items.size());
     }
 
@@ -262,7 +380,8 @@ public class OutboundProjector {
     }
 
     private RecurringView.Series series(RecurringCharge s, OutboundTurn turn) {
-        String ref = turn.refs().ref(new RefRegistry.Series(s.accountId(), s.merchant()));
+        String ref = turn.refs().ref(new RefRegistry.Series(s.accountId(), s.merchant(),
+                YearMonth.from(s.firstDate()), YearMonth.from(s.lastDate())));
         return new RecurringView.Series(ref, turn.merchant(s.merchant()), turn.aliases().alias(s.accountId()),
                 category(s.category()), s.cadence().name(), money(s.typicalAmount()), money(s.lastAmount()),
                 s.fixedPrice(), s.occurrences(), date(s.firstDate()), date(s.lastDate()), date(s.nextExpectedDate()),
@@ -280,7 +399,8 @@ public class OutboundProjector {
     }
 
     private AlertsView.Item alert(Alert a, OutboundTurn turn) {
-        String ref = turn.refs().ref(new RefRegistry.Alert(a.key()));
+        String ref = turn.refs().ref(new RefRegistry.Alert(a.key(), a.type().name(), a.month(),
+                a.txns().stream().limit(ALERT_TXNS).map(TxnRef::id).toList()));
         List<TxnView> txns = a.txns().stream().limit(ALERT_TXNS).map(t -> txn(t, turn)).toList();
         return new AlertsView.Item(ref, a.type().name(), a.month().toString(), basis(a.basis()),
                 details(a.details(), turn), txns, flags(a.dataFlags(), null, turn), a.dismissed());
@@ -397,6 +517,27 @@ public class OutboundProjector {
 
     private static String id(Long id) {
         return id == null ? null : id.toString();
+    }
+
+    /** A cell's flow figures under a prefix: each part of the drill-down's total. */
+    private static void flowFigures(Map<String, FigureBasis> figures, String prefix, Map<String, String> drill) {
+        figures.put(prefix + "moneyOut", FigureBasis.sum(MONEY_OUT, drill));
+        figures.put(prefix + "moneyIn", FigureBasis.sum(MONEY_IN, drill));
+        figures.put(prefix + "net", FigureBasis.sum(NET, drill));
+        figures.put(prefix + "count", FigureBasis.sum(COUNT, drill));
+    }
+
+    /** Drill-down parameters with some set (a null value removes the parameter); sorted, as {@link #params}. */
+    private static Map<String, String> with(Map<String, String> base, String... pairs) {
+        Map<String, String> params = new TreeMap<>(base);
+        for (int i = 0; i < pairs.length; i += 2) {
+            if (pairs[i + 1] == null) {
+                params.remove(pairs[i]);
+            } else {
+                params.put(pairs[i], pairs[i + 1]);
+            }
+        }
+        return Collections.unmodifiableMap(params);
     }
 
     /** Drill-down parameters, nulls left out; sorted, so equal cells get equal refs. */

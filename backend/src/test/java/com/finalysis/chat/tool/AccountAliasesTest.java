@@ -3,6 +3,7 @@ package com.finalysis.chat.tool;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -31,14 +32,18 @@ class AccountAliasesTest {
         RefRegistry refs = new RefRegistry();
 
         assertThat(refs.ref(new RefRegistry.Txn(501))).isEqualTo("t1");
-        assertThat(refs.ref(new RefRegistry.Cell("Dining · 2026-03", List.of(Map.of("month", "2026-03")))))
+        assertThat(refs.ref(new RefRegistry.Cell("Dining · 2026-03", List.of(Map.of("month", "2026-03")),
+                Map.of())))
                 .isEqualTo("c1");
         assertThat(refs.ref(new RefRegistry.Txn(502))).isEqualTo("t2");
         assertThat(refs.ref(new RefRegistry.Txn(501))).isEqualTo("t1");
-        assertThat(refs.ref(new RefRegistry.Alert("category-spike.2026-08.4b1f0c9a7e2d3851"))).isEqualTo("a1");
-        assertThat(refs.ref(new RefRegistry.Series(3, "SPOTIFY USA"))).isEqualTo("s1");
+        assertThat(refs.ref(new RefRegistry.Alert("category-spike.2026-08.4b1f0c9a7e2d3851",
+                "CATEGORY_SPIKE", YearMonth.of(2026, 8), List.of(412L)))).isEqualTo("a1");
+        assertThat(refs.ref(new RefRegistry.Series(3, "SPOTIFY USA", YearMonth.of(2025, 9),
+                YearMonth.of(2026, 9)))).isEqualTo("s1");
         assertThat(refs.target("t2")).contains(new RefRegistry.Txn(502));
         assertThat(refs.issued("t3")).isFalse();
         assertThat(refs.size()).isEqualTo(5);
+        assertThat(refs.issuedRefs()).containsExactly("t1", "c1", "t2", "a1", "s1");
     }
 }

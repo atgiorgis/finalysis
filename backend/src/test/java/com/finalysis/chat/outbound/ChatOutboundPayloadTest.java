@@ -139,9 +139,9 @@ class ChatOutboundPayloadTest {
         tools.put("compare_periods", t -> projector.comparison(comparison.compare(ComparisonMeasure.SPENDING,
                 Optional.empty(), Optional.empty(), new MonthRange(MARCH, MARCH),
                 new MonthRange(MARCH.minusMonths(1), MARCH.minusMonths(1))), t));
-        tools.put("list_transactions", t -> projector.transactions(drillDown.transactions(new DrillDownFilter(
-                Optional.of(MARCH), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), false, 0, 25)), 25, t));
+        DrillDownFilter march = new DrillDownFilter(Optional.of(MARCH), Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), false, 0, 25);
+        tools.put("list_transactions", t -> projector.transactions(drillDown.transactions(march), march, 25, t));
         tools.put("get_recurring_charges", t -> projector.recurring(
                 recurring.recurring(Optional.empty(), RecurringStatusFilter.ALL, 25), t));
         tools.put("get_alerts", t -> projector.alerts(alerts.alerts(Optional.empty(), Optional.empty(),

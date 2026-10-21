@@ -9,11 +9,13 @@ import java.util.List;
  *
  * @param tool      the tool, or null when the model named none of them
  * @param json      what is sent back in the tool-response message, written by {@code ToolResultWriter} only
+ * @param view      the checked view {@code json} was written from (null for an error); local only, for grounding (the
+ *                  kind of each field) and the fallback answer (docs/plans/phase-6.md §5)
  * @param rows      rows the guard kept; 0 for an error
  * @param dataNotes the result's data-quality flags with account ids, for the client's {@code dataNotes}; local only
  * @param shortened whether rows were cut to keep the result under its size cap
  */
-public record ToolOutcome(ToolName tool, ToolStatus status, String json, int rows, long millis,
+public record ToolOutcome(ToolName tool, ToolStatus status, String json, Record view, int rows, long millis,
                           List<DataNote> dataNotes, boolean shortened) {
 
     public ToolOutcome {

@@ -5,6 +5,7 @@ import com.finalysis.analytics.AccountTotalsResponse;
 import com.finalysis.analytics.CategoryTotalsResponse;
 import com.finalysis.analytics.ComparisonResponse;
 import com.finalysis.analytics.CoverageResponse;
+import com.finalysis.analytics.DrillDownFilter;
 import com.finalysis.analytics.DrillDownResponse;
 import com.finalysis.analytics.MerchantTotalsResponse;
 import com.finalysis.analytics.MonthlyTotalsResponse;
@@ -36,10 +37,15 @@ public sealed interface ToolRead {
     record Comparison(ComparisonResponse response) implements ToolRead {
     }
 
-    /** @param limit     how many rows the model asked for; the page holds as many at most
-     * @param accountId the account it was filtered to, or null
+    /** @param limit  how many rows the model asked for; the page holds as many at most
+     * @param filter the drill-down it ran, for the total's citation
      */
-    record Transactions(DrillDownResponse response, int limit, Long accountId) implements ToolRead {
+    record Transactions(DrillDownResponse response, int limit, DrillDownFilter filter) implements ToolRead {
+
+        /** The account it was filtered to, or null. */
+        public Long accountId() {
+            return filter.accountId().orElse(null);
+        }
     }
 
     record Recurring(RecurringChargesResponse response) implements ToolRead {

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.alert.AlertDismissalService;
 import com.finalysis.alert.AlertQueryService;
+import com.finalysis.chat.citation.CitationQuery;
+import com.finalysis.chat.citation.CitationResolver;
 import com.finalysis.chat.outbound.AccountIdentityQuery;
 import com.finalysis.chat.tool.AccountAliasQuery;
 import com.finalysis.chat.tool.CategoryNamesQuery;
@@ -128,10 +130,14 @@ class ChatReadOnlyTest {
         TOOLS_NEVER_REACH_THE_STORE.check(app);
     }
 
-    /** Chat's own SQL (aliases, category names, identities) reads only: every public query method is read-only. */
+    /**
+     * Chat's own SQL (aliases, category names, identities, citations) reads only: every public query method is
+     * read-only, and so is every public method of the citation resolver, which also runs drill-downs.
+     */
     @Test
     void chatsOwnQueriesAreReadOnly() {
-        List<Class<?>> queries = List.of(AccountAliasQuery.class, CategoryNamesQuery.class, AccountIdentityQuery.class);
+        List<Class<?>> queries = List.of(AccountAliasQuery.class, CategoryNamesQuery.class, AccountIdentityQuery.class,
+                CitationQuery.class);
         assertThat(app.stream().filter(c -> c.getPackageName().startsWith("com.finalysis.chat")
                 && c.getSimpleName().endsWith("Query")).map(JavaClass::reflect).toList())
                 .containsExactlyInAnyOrderElementsOf(queries);
@@ -142,6 +148,17 @@ class ChatReadOnlyTest {
                     assertThat(tx).as(query.getSimpleName() + "." + method.getName()).isNotNull();
                     assertThat(tx.readOnly()).as(query.getSimpleName() + "." + method.getName()).isTrue();
                 }
+            }
+        }
+    }
+
+    @Test
+    void citationsAreResolvedReadOnly() {
+        for (Method method : CitationResolver.class.getDeclaredMethods()) {
+            if (Modifier.isPublic(method.getModifiers()) && !Modifier.isStatic(method.getModifiers())) {
+                Transactional tx = method.getAnnotation(Transactional.class);
+                assertThat(tx).as("CitationResolver." + method.getName()).isNotNull();
+                assertThat(tx.readOnly()).as("CitationResolver." + method.getName()).isTrue();
             }
         }
     }

@@ -2,7 +2,11 @@ package com.finalysis.chat;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.finalysis.ai.outbound.OutboundPayloadGuard;
+import com.finalysis.chat.citation.Citation;
+import com.finalysis.chat.outbound.CitationLeak;
 import com.finalysis.chat.outbound.ChatPayloadGuard;
 import com.finalysis.chat.outbound.ToolResultWriter;
 import com.finalysis.chat.tool.ChatTool;
@@ -32,7 +36,9 @@ import tools.jackson.databind.ObjectMapper;
  *   <li>only the guard makes a {@link ChatPayloadGuard.Checked};</li>
  *   <li>in chat, only the writer serializes (and the registry, its fixed schemas), so no service record or unchecked
  *       view can be turned into JSON anywhere else;</li>
- *   <li>the writer's public methods take only {@code Checked} values.</li>
+ *   <li>the writer's public methods take only {@code Checked} values;</li>
+ *   <li>citations stay local (CHT-05, §6): nothing that builds or writes a payload depends on {@code chat.citation},
+ *       and no citation type can pass the guard.</li>
  * </ul>
  * Each rule is shown to catch a violation. {@code ToolExecutorTest} checks the same path at run time: what is sent for
  * each tool equals its service record projected and checked.
@@ -70,6 +76,11 @@ class ChatToolPathTest {
                             && WRITE_METHODS.contains(call.getTarget().getName())))
             .because("what the model receives is written from checked views only (phase-6.md §12.1)");
 
+    static final ArchRule CITATIONS_STAY_LOCAL = noClasses()
+            .that().resideInAnyPackage("com.finalysis.chat.outbound..", "com.finalysis.chat.tool..")
+            .should().dependOnClassesThat().resideInAPackage("com.finalysis.chat.citation..")
+            .because("citations hold ids, account names and statement lines: they go to the client, never to the model");
+
     private static JavaClasses app;
 
     @BeforeAll
@@ -102,12 +113,25 @@ class ChatToolPathTest {
     }
 
     @Test
+    void citationsNeverReachAPayload() {
+        CITATIONS_STAY_LOCAL.check(app);
+        ChatPayloadGuard guard = new ChatPayloadGuard(new OutboundPayloadGuard());
+        for (Class<?> citation : Citation.class.getPermittedSubclasses()) {
+            assertThatThrownBy(() -> guard.classify(citation)).as(citation.getSimpleName())
+                    .isInstanceOf(IllegalStateException.class);
+        }
+        assertThatThrownBy(() -> guard.classify(Citation.CitedTxn.class)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void theRulesFailOnAViolation() {
         JavaClasses fixtures = new ClassFileImporter().importClasses(Bypass.class);
 
         assertThat(ONLY_THE_EXECUTOR_RUNS_TOOLS.evaluate(fixtures).hasViolation()).isTrue();
         assertThat(ONLY_THE_GUARD_CHECKS.evaluate(fixtures).hasViolation()).isTrue();
         assertThat(ONLY_THE_WRITER_SERIALIZES.evaluate(fixtures).hasViolation()).isTrue();
+        assertThat(CITATIONS_STAY_LOCAL.evaluate(new ClassFileImporter().importClasses(CitationLeak.class))
+                .hasViolation()).isTrue();
     }
 
     /** A rule fixture: runs a tool and sends its record without the projection or the guard. */

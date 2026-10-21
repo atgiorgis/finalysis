@@ -69,9 +69,10 @@ class ListTransactionsTool implements ChatTool {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ToolRead read(ToolArguments arguments) {
         int limit = arguments.number("limit");
-        return new ToolRead.Transactions(drillDown.transactions(new DrillDownFilter(arguments.month("month"),
-                arguments.month("from"), arguments.month("to"), arguments.choice("bucket", TxnBucket.class),
+        DrillDownFilter filter = new DrillDownFilter(arguments.month("month"), arguments.month("from"),
+                arguments.month("to"), arguments.choice("bucket", TxnBucket.class),
                 arguments.choice("measure", TrendMeasure.class), arguments.id("account"), arguments.id("category"),
-                arguments.text("merchant"), false, 0, limit)), limit, arguments.id("account").orElse(null));
+                arguments.text("merchant"), false, 0, limit);
+        return new ToolRead.Transactions(drillDown.transactions(filter), limit, filter);
     }
 }

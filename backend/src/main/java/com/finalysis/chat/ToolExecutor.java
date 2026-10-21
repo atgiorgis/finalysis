@@ -113,8 +113,8 @@ public class ToolExecutor {
             ChatPayloadGuard.Checked<DataNotesView> noteView = DataNotesReader.carriedByView(read.read()) ? null
                     : guard.check(projector.dataNotes(read.notes(), turn), turn);
             ToolResultWriter.Written written = writer.result(view, noteView);
-            return done(new ToolOutcome(tool.name(), ToolStatus.OK, written.json(), view.rowsKept(), millis(start),
-                    read.notes(), written.shortened()), null);
+            return done(new ToolOutcome(tool.name(), ToolStatus.OK, written.json(), view.view(), view.rowsKept(),
+                    millis(start), read.notes(), written.shortened()), null);
         } catch (PayloadRefusedException e) {
             return error(tool, ToolStatus.REFUSED, ToolProblem.REFUSED, List.of(), turn, start);
         } catch (RuntimeException e) {
@@ -157,8 +157,8 @@ public class ToolExecutor {
 
     private ToolOutcome error(ChatTool tool, ToolStatus status, ToolProblem message, List<FieldProblem> fields,
                               OutboundTurn turn, long start, RuntimeException cause) {
-        String body = writer.error(guard.check(projector.error(status.name(), message, fields), turn));
-        return done(new ToolOutcome(tool == null ? null : tool.name(), status, body, 0, millis(start), List.of(),
+        String body = writer.error(guard.check(projector.error(status.name(), message, fields, turn), turn));
+        return done(new ToolOutcome(tool == null ? null : tool.name(), status, body, null, 0, millis(start), List.of(),
                 false), cause);
     }
 

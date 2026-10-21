@@ -1,5 +1,6 @@
 package com.finalysis.chat.tool;
 
+import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,18 +23,30 @@ public final class RefRegistry {
     }
 
     /**
-     * A total: a label for the citation and the drill-down parameters of {@code GET /api/analytics/transactions} that
-     * list its rows (one set per side for a comparison).
+     * A total: a label for the citation, the drill-down parameters of {@code GET /api/analytics/transactions} that
+     * list its rows (one set per side for a comparison), and what each of its figures rests on, by the figure's path in
+     * the cell's outbound object ({@code spending}, {@code uncategorized.moneyOut}, {@code months[2026-08].net},
+     * {@code trailing3.amount}).
      */
-    public record Cell(String label, List<Map<String, String>> drillDowns) implements Target {
+    public record Cell(String label, List<Map<String, String>> drillDowns, Map<String, FigureBasis> figures)
+            implements Target {
+
+        public Cell {
+            drillDowns = List.copyOf(drillDowns);
+            figures = Map.copyOf(figures);
+        }
     }
 
-    /** An alert, by its key. */
-    public record Alert(String key) implements Target {
+    /** An alert: its key, type and month, and the ids of the txns it sent (at most 5). */
+    public record Alert(String key, String type, YearMonth month, List<Long> txnIds) implements Target {
+
+        public Alert {
+            txnIds = List.copyOf(txnIds);
+        }
     }
 
-    /** A recurring series: account and stored merchant. */
-    public record Series(long accountId, String merchant) implements Target {
+    /** A recurring series: account, stored merchant, and the months of its first and last charge. */
+    public record Series(long accountId, String merchant, YearMonth from, YearMonth to) implements Target {
     }
 
     private final Map<Target, String> refs = new LinkedHashMap<>();
@@ -64,5 +77,10 @@ public final class RefRegistry {
 
     public int size() {
         return targets.size();
+    }
+
+    /** Every ref issued so far, in issue order. */
+    public List<String> issuedRefs() {
+        return List.copyOf(targets.keySet());
     }
 }

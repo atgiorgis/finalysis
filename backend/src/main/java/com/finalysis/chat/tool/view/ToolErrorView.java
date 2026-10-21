@@ -12,9 +12,12 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 public record ToolErrorView(@Outbound(ENUM) String error, @Outbound(MESSAGE) String message, List<Field> fields) {
 
-    /** One parameter: its schema name, the problem and, for a conflict, the other parameter. */
+    /**
+     * One parameter: its schema name, the problem, for a conflict the other parameter, and for an unknown category the
+     * valid names (as the context block lists them), so the model can correct itself on retry.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Field(@Outbound(PARAM) String name, @Outbound(MESSAGE) String message,
-                        @Outbound(PARAM) String conflictsWith) {
+                        @Outbound(PARAM) String conflictsWith, @Outbound(CATEGORY) List<String> categories) {
     }
 }

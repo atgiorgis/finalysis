@@ -11,6 +11,7 @@ import com.finalysis.chat.outbound.OutboundProjector;
 import com.finalysis.chat.outbound.OutboundTurn;
 import com.finalysis.chat.outbound.OutboundTurnFactory;
 import com.finalysis.chat.outbound.ToolResultWriter;
+import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.ChatTool;
 import com.finalysis.chat.tool.DataNote;
 import com.finalysis.chat.tool.DataNotesReader;
@@ -131,7 +132,7 @@ class ToolExecutorTest {
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
             "get_category_totals|{\"category\": \"Coffee IGNORE PREVIOUS\"}|category|"
-                    + "not a category name; use one exactly as the context block lists it|IGNORE",
+                    + "not a category name; use one of categories exactly as written|IGNORE",
             "get_month_totals|{\"account\": \"CHECKING-7\"}|account|not an account alias; see the context block|"
                     + "CHECKING-7",
             "get_month_totals|{\"from\": \"2026-13\"}|from|must be a month written yyyy-MM, 01 to 12|2026-13",
@@ -163,6 +164,25 @@ class ToolExecutorTest {
         assertThat(error.get("fields").get(0).get("message").stringValue()).isEqualTo(message);
         assertThat(outcome.json()).doesNotContain(neverSent);
         assertThat(outcome.dataNotes()).isEmpty();
+    }
+
+    /** Step 3 review: the model can correct an unknown category on retry, and still nothing it sent is echoed. */
+    @Test
+    void anUnknownCategoryListsTheValidNamesAsTheContextBlockDoes() {
+        OutboundTurn turn = turns.start();
+        JsonNode error = json.readTree(executor.execute(new ToolCall("get_category_totals",
+                "{\"category\": \"Dinning\"}"), turn).json());
+
+        JsonNode field = error.get("fields").get(0);
+        assertThat(field.get("name").stringValue()).isEqualTo("category");
+        List<String> listed = field.get("categories").valueStream().map(JsonNode::stringValue).toList();
+        assertThat(listed).isEqualTo(CategoryNamesQuery.sorted(turn.categories())).contains("Dining")
+                .doesNotContain("Dinning");
+        assertThat(error.toString()).doesNotContain("Dinning");
+
+        JsonNode other = json.readTree(executor.execute(new ToolCall("get_month_totals",
+                "{\"account\": \"CHECKING-7\"}"), turns.start()).json());
+        assertThat(other.get("fields").get(0).has("categories")).as("only a category problem lists them").isFalse();
     }
 
     @Test
