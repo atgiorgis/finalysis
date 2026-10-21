@@ -1,0 +1,52 @@
+{
+  "account": null,
+  "status": "ALL",
+  "items": [
+    {
+      "ref": "s1",
+      "merchant": "CLOUDBOX STORAGE",
+      "account": "CARD-1",
+      "category": "Subscriptions",
+      "cadence": "MONTHLY",
+      "typicalAmount": "4.99",
+      "lastAmount": "4.99",
+      "fixedPrice": true,
+      "occurrences": 3,
+      "firstDate": "2026-02-09",
+      "lastDate": "2026-04-09",
+      "nextExpectedDate": "2026-05-09",
+      "status": "ACTIVE"
+    },
+    {
+      "ref": "s2",
+      "merchant": "FIXTURE PROPERTY RENT",
+      "account": "CHECKING-1",
+      "category": "Housing",
+      "cadence": "MONTHLY",
+      "typicalAmount": "1500.00",
+      "lastAmount": "1500.00",
+      "fixedPrice": true,
+      "occurrences": 4,
+      "firstDate": "2026-01-03",
+      "lastDate": "2026-04-03",
+      "nextExpectedDate": "2026-05-03",
+      "status": "ACTIVE"
+    },
+    {
+      "ref": "s3",
+      "merchant": "STREAMCO",
+      "account": "CARD-1",
+      "category": "Subscriptions",
+      "cadence": "MONTHLY",
+      "typicalAmount": "9.99",
+      "lastAmount": "11.49",
+      "fixedPrice": false,
+      "occurrences": 4,
+      "firstDate": "2025-12-20",
+      "lastDate": "2026-03-20",
+      "nextExpectedDate": "2026-04-20",
+      "status": "ACTIVE"
+    }
+  ],
+  "truncated": false
+}

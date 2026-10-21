@@ -1,0 +1,520 @@
+{
+  "from": "2026-03",
+  "to": "2026-04",
+  "items": [
+    {
+      "ref": "a1",
+      "type": "CATEGORY_SPIKE",
+      "month": "2026-04",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "225.00"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "66.67"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "166.67"
+        },
+        "periodStart": "2026-01-01",
+        "periodEnd": "2026-03-31",
+        "settings": [
+          {
+            "name": "min-increase-percent",
+            "value": {
+              "unit": "PERCENT",
+              "value": "50.0"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "100.00"
+            }
+          },
+          {
+            "name": "min-baseline-months",
+            "value": {
+              "unit": "COUNT",
+              "value": "3"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "CATEGORY_SPIKE",
+        "category": "Dining",
+        "spent": "225.00",
+        "baseline": {
+          "amount": "66.67",
+          "monthsUsed": 3,
+          "monthsWanted": 3
+        },
+        "increaseAmount": "158.33",
+        "increasePercent": "237.5"
+      },
+      "txns": [
+        {
+          "ref": "t1",
+          "date": "2026-04-04",
+          "amount": "-95.00",
+          "merchant": "FIXTURE DINER",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        },
+        {
+          "ref": "t2",
+          "date": "2026-04-08",
+          "amount": "-70.00",
+          "merchant": "FIXTURE DINER",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        },
+        {
+          "ref": "t3",
+          "date": "2026-04-02",
+          "amount": "-60.00",
+          "merchant": "FIXTURE DINER",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        },
+        {
+          "type": "PARTIAL_COVERAGE",
+          "account": "CARD-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    },
+    {
+      "ref": "a2",
+      "type": "CATEGORY_SPIKE",
+      "month": "2026-04",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "700.00"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "29.33"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "129.33"
+        },
+        "periodStart": "2026-01-01",
+        "periodEnd": "2026-03-31",
+        "settings": [
+          {
+            "name": "min-increase-percent",
+            "value": {
+              "unit": "PERCENT",
+              "value": "50.0"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "100.00"
+            }
+          },
+          {
+            "name": "min-baseline-months",
+            "value": {
+              "unit": "COUNT",
+              "value": "3"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "CATEGORY_SPIKE",
+        "category": "Shopping",
+        "spent": "700.00",
+        "baseline": {
+          "amount": "29.33",
+          "monthsUsed": 3,
+          "monthsWanted": 3
+        },
+        "increaseAmount": "670.67",
+        "increasePercent": "2286.6"
+      },
+      "txns": [
+        {
+          "ref": "t4",
+          "date": "2026-04-05",
+          "amount": "-700.00",
+          "merchant": "FIXTURE ELECTRONICS",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        },
+        {
+          "type": "PARTIAL_COVERAGE",
+          "account": "CARD-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    },
+    {
+      "ref": "a3",
+      "type": "LARGE_TRANSACTION",
+      "month": "2026-04",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "700.00"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "30.00"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "500.00"
+        },
+        "periodStart": "2025-10-07",
+        "periodEnd": "2026-04-04",
+        "settings": [
+          {
+            "name": "min-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "500.00"
+            }
+          },
+          {
+            "name": "times-median",
+            "value": {
+              "unit": "RATIO",
+              "value": "3.00"
+            }
+          },
+          {
+            "name": "history-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "180"
+            }
+          },
+          {
+            "name": "min-history",
+            "value": {
+              "unit": "COUNT",
+              "value": "5"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "LARGE_TRANSACTION",
+        "category": "Shopping",
+        "merchant": "FIXTURE ELECTRONICS",
+        "account": "CARD-1",
+        "txn": "t4",
+        "median": "30.00",
+        "historyCount": 5,
+        "timesMedian": "23.33",
+        "amount": "-700.00"
+      },
+      "txns": [
+        {
+          "ref": "t4",
+          "date": "2026-04-05",
+          "amount": "-700.00",
+          "merchant": "FIXTURE ELECTRONICS",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "PARTIAL_COVERAGE",
+          "account": "CARD-1",
+          "month": null
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    },
+    {
+      "ref": "a4",
+      "type": "NEW_RECURRING",
+      "month": "2026-04",
+      "basis": {
+        "observed": {
+          "unit": "COUNT",
+          "value": "3"
+        },
+        "baseline": null,
+        "threshold": {
+          "unit": "COUNT",
+          "value": "3"
+        },
+        "periodStart": "2026-02-09",
+        "periodEnd": "2026-04-09",
+        "settings": [
+          {
+            "name": "min-occurrences",
+            "value": {
+              "unit": "COUNT",
+              "value": "3"
+            }
+          },
+          {
+            "name": "amount-tolerance-percent",
+            "value": {
+              "unit": "PERCENT",
+              "value": "20.0"
+            }
+          },
+          {
+            "name": "min-prior-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "45"
+            }
+          },
+          {
+            "name": "active-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "45"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "NEW_RECURRING",
+        "merchant": "CLOUDBOX STORAGE",
+        "account": "CARD-1",
+        "typicalAmount": "4.99",
+        "occurrences": 3,
+        "firstDate": "2026-02-09",
+        "lastDate": "2026-04-09"
+      },
+      "txns": [
+        {
+          "ref": "t5",
+          "date": "2026-02-09",
+          "amount": "-4.99",
+          "merchant": "CLOUDBOX STORAGE",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        },
+        {
+          "ref": "t6",
+          "date": "2026-03-09",
+          "amount": "-4.99",
+          "merchant": "CLOUDBOX STORAGE",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        },
+        {
+          "ref": "t7",
+          "date": "2026-04-09",
+          "amount": "-4.99",
+          "merchant": "CLOUDBOX STORAGE",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        },
+        {
+          "type": "PARTIAL_COVERAGE",
+          "account": "CARD-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    },
+    {
+      "ref": "a5",
+      "type": "POSSIBLE_DUPLICATE",
+      "month": "2026-03",
+      "basis": {
+        "observed": {
+          "unit": "COUNT",
+          "value": "2"
+        },
+        "baseline": null,
+        "threshold": {
+          "unit": "COUNT",
+          "value": "2"
+        },
+        "periodStart": "2026-03-02",
+        "periodEnd": "2026-03-02",
+        "settings": [
+          {
+            "name": "window-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "1"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "POSSIBLE_DUPLICATE",
+        "merchant": "FIXTURE GROCER",
+        "reasons": [
+          "SAME_MERCHANT_AMOUNT_DATE"
+        ],
+        "amount": "80.00"
+      },
+      "txns": [
+        {
+          "ref": "t8",
+          "date": "2026-03-02",
+          "amount": "-80.00",
+          "merchant": "FIXTURE GROCER",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        },
+        {
+          "ref": "t9",
+          "date": "2026-03-02",
+          "amount": "-80.00",
+          "merchant": "FIXTURE GROCER",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    },
+    {
+      "ref": "a6",
+      "type": "RECURRING_PRICE_INCREASE",
+      "month": "2026-03",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "11.49"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "9.99"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "10.49"
+        },
+        "periodStart": "2026-01-20",
+        "periodEnd": "2026-03-20",
+        "settings": [
+          {
+            "name": "stable-count",
+            "value": {
+              "unit": "COUNT",
+              "value": "2"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "0.50"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "RECURRING_PRICE_INCREASE",
+        "merchant": "STREAMCO",
+        "account": "CARD-1",
+        "increaseAmount": "1.50",
+        "increasePercent": "15.0",
+        "previousAmount": "9.99",
+        "newAmount": "11.49"
+      },
+      "txns": [
+        {
+          "ref": "t10",
+          "date": "2026-03-20",
+          "amount": "-11.49",
+          "merchant": "STREAMCO",
+          "category": null,
+          "bucket": null,
+          "account": "CARD-1"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "account": "CHECKING-1",
+          "month": null
+        }
+      ],
+      "dismissed": false
+    }
+  ],
+  "counts": [
+    {
+      "type": "CATEGORY_SPIKE",
+      "count": 2
+    },
+    {
+      "type": "LARGE_TRANSACTION",
+      "count": 1
+    },
+    {
+      "type": "POSSIBLE_DUPLICATE",
+      "count": 1
+    },
+    {
+      "type": "RECURRING_PRICE_INCREASE",
+      "count": 1
+    },
+    {
+      "type": "NEW_RECURRING",
+      "count": 1
+    }
+  ],
+  "truncated": false
+}

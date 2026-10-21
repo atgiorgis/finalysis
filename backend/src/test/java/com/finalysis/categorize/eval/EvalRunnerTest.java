@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.categorize.CategorizationPromptBuilder;
 import com.finalysis.categorize.MerchantCleaner;
-import com.finalysis.categorize.RedactionContext;
 import com.finalysis.categorize.eval.EvalMetrics.Counts;
 import com.finalysis.categorize.eval.EvalMetrics.RowSource;
 import com.finalysis.categorize.eval.EvalMetrics.SweepPoint;

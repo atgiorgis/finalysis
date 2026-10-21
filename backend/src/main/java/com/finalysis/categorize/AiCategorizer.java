@@ -1,6 +1,8 @@
 package com.finalysis.categorize;
 
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.outbound.RedactionContext;
+import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AnswerValidator.Accepted;
 import com.finalysis.categorize.AnswerValidator.Validation;
 import com.finalysis.categorize.CategorizationModelClient.Result;
@@ -36,7 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * model can't know whose account the money went to (step 9d notes). A txn the user categorized is never selected; neither is a RULE txn. AI txns and
  * txns already left for review are skipped too, so a second run makes no call, unless {@code force} asks again for
  * them (AI txns may then get a new AI answer; USER and RULE txns still never change). Every batch goes through
- * {@link CategorizationPromptBuilder}: cleaned merchant, {@link Redactor}, {@link OutboundPayloadGuard}, per-batch
+ * {@link CategorizationPromptBuilder}: cleaned merchant, {@link com.finalysis.ai.outbound.Redactor}, {@link com.finalysis.ai.outbound.OutboundPayloadGuard}, per-batch
  * keys ({@code i1}…) and the delimited, escaped JSON. No txn id leaves the machine; the key-to-txn mapping stays here.
  *
  * <p><b>Examples (stage 4, CAT-03).</b> Before the first batch, {@link MerchantEmbeddingStage} embeds what the items

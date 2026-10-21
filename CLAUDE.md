@@ -16,7 +16,7 @@ decisions matter as much as features.
 ## Repo layout
 - `backend/` organized by feature, not by layer:
   `account`, `ingestion`, `categorize`, `analytics`, `chat`, `config`
-- `com.finalysis.ai`: shared AI wiring (mode, model roles, token log), not a feature, since `categorize` uses it now and `chat` will in Phase 6.
+- `com.finalysis.ai`: shared AI wiring (mode, model roles, token log), not a feature, since `categorize` and `chat` both use it. `com.finalysis.ai.outbound` holds what may leave the machine (Redactor, OutboundPayloadGuard), shared by both and depending on no feature.
 - `frontend/` pages, components, and a single `api.ts` for backend calls
 - `sample-data/` synthetic statements only
 - `compose.yaml` at the repo root
@@ -75,7 +75,7 @@ phase, read the requirements for that phase. Reference IDs in commit messages
 a requirement, update the file and bump its version.
 
 ## Current phase
-Phase 6: chatbot, plan approved 2026-10-20 (docs/plans/phase-6.md; the decisions in §18 override older text). Step 1 done: question sets in sample-data/chat/ (the holdout is pinned and never tuned against; only the owner revises their own questions, each revision recorded with a new pin, until the holdout is run). Step 2 (outbound projections and redaction, starting with the move to com.finalysis.ai.outbound) is next. Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
+Phase 6: chatbot, plan approved 2026-10-20 (docs/plans/phase-6.md; the decisions in §18 override older text). Step 1 done: question sets in sample-data/chat/ (the holdout is pinned and never tuned against; only the owner revises their own questions, each revision recorded with a new pin, until the holdout is run). Step 2 done: redaction and the guard live in com.finalysis.ai.outbound (shared with categorize, depending on no feature); chat payloads are per-tool views checked field by field by ChatPayloadGuard. Step 3 (tools) is next: tools stay pure readers in chat.tool; projection and the guard stay in chat.outbound. Its tools adapt the Phase 5 query services (docs/plans/phase-5.md §8), never `AlertDismissalService`; ANA-05 (monthly summary) and SEC-03 are Phase 6. Phase 5 complete: docs/plans/phase-5.md (phase summary, known limitations and Backlog; totals report docs/eval/phase-5-totals.md; no AI anywhere in analytics). Phase 4 complete: docs/plans/phase-4.md (accuracy report docs/eval/phase-4-accuracy.md; the holdout has been evaluated once and is never run again; open items in its Backlog). Phase 3c complete: docs/plans/phase-3c.md. Phase 3b (PDF) paused after step 5.
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.

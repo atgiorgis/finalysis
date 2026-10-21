@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.finalysis.ai.AiMode;
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.outbound.OutboundPayloadGuard;
+import com.finalysis.ai.outbound.RedactionContext;
+import com.finalysis.ai.outbound.Redactor;
 import com.finalysis.categorize.CategorizationModelClient.Result;
 import com.finalysis.categorize.CategorizationPromptBuilder.Candidate;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;

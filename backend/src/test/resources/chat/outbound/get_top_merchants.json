@@ -1,0 +1,102 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "account": null,
+  "category": null,
+  "items": [
+    {
+      "ref": "c1",
+      "merchant": "HOLLOWAY FLATS RENT",
+      "spent": "1200.00",
+      "count": 1,
+      "firstDate": "2026-03-03",
+      "lastDate": "2026-03-03",
+      "category": "Housing"
+    },
+    {
+      "ref": "c2",
+      "merchant": "MAPLEWOOD GROCERY",
+      "spent": "115.50",
+      "count": 2,
+      "firstDate": "2026-03-08",
+      "lastDate": "2026-03-20",
+      "category": "Groceries"
+    },
+    {
+      "ref": "c3",
+      "merchant": "RIVERBEND NOODLE BAR",
+      "spent": "23.60",
+      "count": 1,
+      "firstDate": "2026-03-22",
+      "lastDate": "2026-03-22",
+      "category": "Dining"
+    },
+    {
+      "ref": "c4",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "18.40",
+      "count": 1,
+      "firstDate": "2026-03-12",
+      "lastDate": "2026-03-12",
+      "category": "Dining"
+    },
+    {
+      "ref": "c5",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "12.00",
+      "count": 1,
+      "firstDate": "2026-03-05",
+      "lastDate": "2026-03-05",
+      "category": "Shopping"
+    },
+    {
+      "ref": "c6",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "9.99",
+      "count": 1,
+      "firstDate": "2026-03-25",
+      "lastDate": "2026-03-25",
+      "category": "Subscriptions"
+    },
+    {
+      "ref": "c7",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "7.50",
+      "count": 1,
+      "firstDate": "2026-03-10",
+      "lastDate": "2026-03-10",
+      "category": "Shopping"
+    },
+    {
+      "ref": "c8",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "5.00",
+      "count": 1,
+      "firstDate": "2026-03-15",
+      "lastDate": "2026-03-15",
+      "category": null
+    },
+    {
+      "ref": "c9",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "4.25",
+      "count": 1,
+      "firstDate": "2026-03-30",
+      "lastDate": "2026-03-30",
+      "category": "Shopping"
+    },
+    {
+      "ref": "c10",
+      "merchant": "MERCHANT WITHHELD",
+      "spent": "3.00",
+      "count": 1,
+      "firstDate": "2026-03-18",
+      "lastDate": "2026-03-18",
+      "category": null
+    }
+  ],
+  "othersSpent": "0.00",
+  "othersCount": 0,
+  "totalSpent": "1399.24",
+  "totalCount": 11
+}

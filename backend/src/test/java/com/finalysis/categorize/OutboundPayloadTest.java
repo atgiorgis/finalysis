@@ -2,6 +2,9 @@ package com.finalysis.categorize;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.finalysis.ai.outbound.OutboundPayloadGuard;
+import com.finalysis.ai.outbound.RedactionContext;
+import com.finalysis.ai.outbound.Redactor;
 import com.finalysis.categorize.CategorizationPromptBuilder.Candidate;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
 import com.finalysis.categorize.CategorizationPromptBuilder.LocalExample;

@@ -1,0 +1,130 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "total": {
+    "moneyOut": "-1399.24",
+    "moneyIn": "2500.85",
+    "net": "1101.61",
+    "count": 13
+  },
+  "items": [
+    {
+      "ref": "t1",
+      "date": "2026-03-30",
+      "amount": "-4.25",
+      "merchant": "MERCHANT WITHHELD",
+      "category": "Shopping",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t2",
+      "date": "2026-03-28",
+      "amount": "0.85",
+      "merchant": "FIXTURE BANK INTEREST",
+      "category": "Interest",
+      "bucket": "INCOME",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t3",
+      "date": "2026-03-25",
+      "amount": "-9.99",
+      "merchant": "MERCHANT WITHHELD",
+      "category": "Subscriptions",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t4",
+      "date": "2026-03-22",
+      "amount": "-23.60",
+      "merchant": "RIVERBEND NOODLE BAR",
+      "category": "Dining",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t5",
+      "date": "2026-03-20",
+      "amount": "-51.30",
+      "merchant": "MAPLEWOOD GROCERY",
+      "category": "Groceries",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t6",
+      "date": "2026-03-18",
+      "amount": "-3.00",
+      "merchant": "MERCHANT WITHHELD",
+      "category": null,
+      "bucket": "UNCATEGORIZED",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t7",
+      "date": "2026-03-15",
+      "amount": "-5.00",
+      "merchant": "MERCHANT WITHHELD",
+      "category": null,
+      "bucket": "UNCATEGORIZED",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t8",
+      "date": "2026-03-12",
+      "amount": "-18.40",
+      "merchant": "MERCHANT WITHHELD",
+      "category": "Dining",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t9",
+      "date": "2026-03-10",
+      "amount": "-7.50",
+      "merchant": "MERCHANT WITHHELD",
+      "category": "Shopping",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t10",
+      "date": "2026-03-08",
+      "amount": "-64.20",
+      "merchant": "MAPLEWOOD GROCERY",
+      "category": "Groceries",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t11",
+      "date": "2026-03-05",
+      "amount": "-12.00",
+      "merchant": "MERCHANT WITHHELD",
+      "category": "Shopping",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t12",
+      "date": "2026-03-03",
+      "amount": "-1200.00",
+      "merchant": "HOLLOWAY FLATS RENT",
+      "category": "Housing",
+      "bucket": "EXPENSE",
+      "account": "CHECKING-1"
+    },
+    {
+      "ref": "t13",
+      "date": "2026-03-02",
+      "amount": "2500.00",
+      "merchant": "FIXTURE EMPLOYER PAYROLL",
+      "category": "Income",
+      "bucket": "INCOME",
+      "account": "CHECKING-1"
+    }
+  ],
+  "truncated": false
+}

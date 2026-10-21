@@ -1,4 +1,4 @@
-package com.finalysis.categorize;
+package com.finalysis.ai.outbound;
 
 import java.util.List;
 import java.util.Set;

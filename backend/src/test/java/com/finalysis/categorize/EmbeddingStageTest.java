@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.TextEmbedder;
+import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.AiCategorizer.Status;
 import com.finalysis.categorize.ModelAnswers.Sent;

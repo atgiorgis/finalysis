@@ -1,7 +1,8 @@
-package com.finalysis.categorize;
+package com.finalysis.ai.outbound;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.finalysis.categorize.MerchantCleaningRules;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;

@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.alert.AlertDismissalService;
 import com.finalysis.alert.AlertQueryService;
+import com.finalysis.chat.outbound.AccountIdentityQuery;
+import com.finalysis.chat.tool.AccountAliasQuery;
+import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.ToolUsingAlertOnlyHelper;
 import com.finalysis.chat.tool.ToolUsingQueryServices;
 import com.finalysis.chat.tool.ToolUsingSpringAi;
@@ -16,9 +19,13 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.lang.ArchRule;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * SEC-03 for the chatbot (docs/plans/phase-6.md §9, §18 decision 5): the AI can query data but never change it.
@@ -113,6 +120,24 @@ class ChatReadOnlyTest {
     void chatUsesNoWriterAndNothingFromCategorize() {
         CHAT_USES_NO_WRITER.check(app);
         TOOLS_NEVER_REACH_THE_STORE.check(app);
+    }
+
+    /** Chat's own SQL (aliases, category names, identities) reads only: every public query method is read-only. */
+    @Test
+    void chatsOwnQueriesAreReadOnly() {
+        List<Class<?>> queries = List.of(AccountAliasQuery.class, CategoryNamesQuery.class, AccountIdentityQuery.class);
+        assertThat(app.stream().filter(c -> c.getPackageName().startsWith("com.finalysis.chat")
+                && c.getSimpleName().endsWith("Query")).map(JavaClass::reflect).toList())
+                .containsExactlyInAnyOrderElementsOf(queries);
+        for (Class<?> query : queries) {
+            for (Method method : query.getDeclaredMethods()) {
+                if (Modifier.isPublic(method.getModifiers()) && !Modifier.isStatic(method.getModifiers())) {
+                    Transactional tx = method.getAnnotation(Transactional.class);
+                    assertThat(tx).as(query.getSimpleName() + "." + method.getName()).isNotNull();
+                    assertThat(tx.readOnly()).as(query.getSimpleName() + "." + method.getName()).isTrue();
+                }
+            }
+        }
     }
 
     @Test

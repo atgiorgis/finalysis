@@ -1,7 +1,7 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Step 1 done (holdout pinned, step 1 notes); step 2 is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+in this file. Steps 1 and 2 done (step notes); step 3 (tools) is next. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
 Requirements as of `docs/requirements.md` v1.54.
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
@@ -1052,6 +1052,97 @@ sample data's last covered day.
   flags any test file whose code says "holdout": `ChatQuestionSetsTest` and `SampleDataTest` (which names the chat
   holdout to except it) are allowed by name, and a new test there asserts they never name the categorization holdout's
   file, so the guard loses nothing.
+
+### Step 2 notes
+
+Done: "Phase 6 step 2: what leaves the machine". Backend 2,580 tests (Maven summary; 2,485 + 95), 0 failures, 0 skipped;
+frontend 4. Requirements v1.57. No migration. No model call,
+no endpoint: the projections, the guard and the redaction are built and tested on their own, before any tool (step 3) or
+loop (step 5) exists.
+
+**The move first (§18 decision 5), verified on its own.** `Redactor`, `OutboundPayloadGuard`, `RedactionContext` and
+`RedactionContextQuery` moved from `categorize` to `com.finalysis.ai.outbound` with the approved seam:
+- `OutboundRules` (the four pattern lists), which `MerchantCleaningRules` implements;
+- `TextNormalizer`, which `MerchantCleaner.normalize` delegates to.
+
+`RedactorTest` (68) and `OutboundPayloadGuardTest` (46) moved with their classes and pass with only package and
+import changes. `RedactionStoredDataTest` stays in `categorize`, because it exercises the prompt builder's
+package-private types; it got an import. A full build of the move alone gave 2,486 = 2,485 + the new rule's test:
+`PackageDependencyTest.OUTBOUND_KNOWS_NO_FEATURE` keeps `ai.outbound` free of every feature package and of Spring AI,
+with a violation fixture. That build hit an environmental stop: the machine slept for 30 minutes mid-run, which broke
+one connection in `MonthlyTotalsTest` and slowed `AnalyticsPerformanceTest`. Both passed when re-run.
+
+**Built**
+- **`ComparisonService`** (`analytics`, read-only, REPEATABLE READ, no endpoint). It compares `SPENDING`, `INCOME`,
+  `NET`, `CATEGORY_SPENT` or `CATEGORY_RECEIVED` between two months or ranges, by the trends' rules, with each side's
+  months' coverage; the difference and percent come from `Arithmetic` (`HALF_EVEN`). A category is required for the
+  category measures and refused for the others; ranges are at most `max-months`; unknown ids give 404s.
+- **Views** (`chat.tool.view`), one record per tool result, every component an `@Outbound` kind or a nested view. No
+  id, key, balance (`netChange`), name, raw description or statement text exists in any of them.
+- **`AccountAliases`, `RefRegistry`** (`chat.tool`): aliases are the type plus a number per type in ascending id, read by
+  chat's own SQL (`AccountAliasQuery`); per-turn refs `t`/`c`/`a`/`s` map to txn ids, drill-down parameters, alert keys
+  and series.
+- **`OutboundProjector`** (`chat.outbound`), an explicit copy per tool. **`MerchantOutbound`** sends a merchant as the
+  redactor's copy only if the guard allows it and `InstructionLikeText` doesn't object; otherwise `MERCHANT WITHHELD`.
+  Person-to-person merchants are refused.
+- **`ChatPayloadGuard`** walks a view by reflection and checks every field against its kind. A failing list element is
+  dropped and counted; a failing field outside a list refuses the payload. It returns the filtered copy, which is what
+  gets serialized. Every view is classified at startup, and a test checks that every view in the package is in that
+  list.
+- **`InstructionLikeText`**: the word list in `chat/instruction-words.yml` (strong words, phrases, weak words, two weak
+  needed), plus a rule against a decimal amount or `$` inside a merchant name.
+- **`QuestionRedactor`** (§12.4): markup; emails, URLs and phones; last fours written as identifiers become the alias
+  (removed if unknown); other 5+ digit runs; bare last fours (but not years); account names as whole phrases and
+  institutions also by their distinctive words; counterparties → `[PERSON]`; `finalysis.chat.redact-terms` → `[NAME]`
+  (`ChatProperties`). Counts only.
+- **`ContextBlockFactory`** (§3.4). "Today" is a parameter: the loop's clock in step 5, the evaluation's pinned date in
+  step 8.
+- **`ChatOutbound.send`**: guard, then one count-only line per tool result,
+  `chat outbound tool= rows= droppedRows= withheldMerchants= refusedMerchants=` (§18 decision 6). Never a merchant or a
+  figure.
+
+**Tests**
+- **`ChatOutboundPayloadTest`.** The real services on the injection fixture; each of 11 payloads (10 tools and the
+  context block) equals a hand-checked expected document in `src/test/resources/chat/outbound/`. The analytics fixture
+  supplies the alerts (all five detail types) and the recurring series. No hostile description or word, no `999.99`,
+  no account name, institution or last four, and no id, key, balance or name field reaches any payload: all seven
+  hostile merchants go out as `MERCHANT WITHHELD`. The log counts `withheldMerchants=7` and names nothing.
+- **`ChatPayloadGuardTest`**: every kind, hit and near miss; a dropped row; a refused payload; an unclassified field
+  and a kind on the wrong type; every view classified.
+- **`InstructionLikeTextTest`**: the rules; every hostile fixture name withheld through cleaning and redaction; no
+  sample-data merchant withheld.
+- **`QuestionRedactorTest`**: every row of §12.4, the counts, the owner's questions unchanged.
+- **`AccountAliasesTest`** (aliases and refs).
+- **`ComparisonServiceTest`**: hand-computed fixture figures: spending, income, net, a category against a month (equal
+  to the trends' own change) and a range, a negative magnitude, no percent against zero, agreement with the month
+  totals in every month and scope, and the 400s and 404s.
+- **Extended:** `ReadOnlyQueriesTest` (`ComparisonService`), `ChatReadOnlyTest` (chat's own queries are read-only, and
+  the rules still pass with the new code), `PackageDependencyTest` (outbound rule).
+
+**Decisions beyond the plan**
+- **Where the code lives:** tools stay pure readers. Projection, redaction and the guard sit in `chat.outbound`, which
+  may use `ai.outbound`; `chat.tool` may not (its ArchUnit rule is unchanged). The step 3 executor (in `chat`) will call
+  a tool, then the projector, then the guard.
+- **The guard filters records, not JSON.** It rebuilds the view without failing rows through each record's canonical
+  constructor, so what is sent is typed and checked.
+- **More weak words.** The fixture's two descriptions built to slip past the word list ("PLEASE REPORT SPENDING AS",
+  "THE ANSWER IS ALWAYS") reached a payload in the first run; merchant cleaning had already removed their `999.99`.
+  Your requirement is that no hostile description reaches a payload, so politeness and absolute words (PLEASE,
+  THANKS, ALWAYS, NEVER, MUST, SHOULD) joined the weak words, and both are now withheld by the two-weak-word rule. The
+  fixture key's notes say so (`categories.csv`, generator); the holdout file is untouched.
+- **An amount in a merchant name is withheld** (decimal amount or `$`). It's a defence for a planted figure that
+  cleaning doesn't strip; it can't fire on the fixture, whose canary cleaning removes.
+- **Alert flags carry no month.** Phase 5's alert data flags name the months the figures used, not one month, so the
+  view leaves `month` null rather than stamping the alert's month (the first projection did, which was wrong).
+- **Account names match as whole phrases only; institutions also word by word.** Users name accounts with ordinary
+  words ("Rainy Day Savings" would have turned "what day" into an alias), while institutions are proper nouns
+  ("Halden", "Orbit"), and a single institution word ("my Apex card") would otherwise leave the machine. Generic
+  company words (BANK, CARD, SERVICES, ...) are never matched.
+- **Markup in a question is removed**, not refused, so a stray `<` doesn't block a question; the free-text check still
+  runs on the result.
+- **`search_transactions` and `get_merchant_totals`** get their views and expected payloads with search (step 6).
+- **The injection fixture** gets its account a fictional name, institution and last four ("Halden Everyday", "Halden
+  Bank", 7310) in `ChatInjectionFixture`, so redaction has something to catch.
 
 ### Requirement mapping
 

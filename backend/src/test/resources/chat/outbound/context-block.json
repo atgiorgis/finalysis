@@ -1,0 +1,40 @@
+{
+  "today": "2026-04-01",
+  "latestMonth": "2026-03",
+  "latestCompleteMonth": "2026-03",
+  "accounts": [
+    {
+      "alias": "CHECKING-1",
+      "type": "CHECKING",
+      "closed": false
+    }
+  ],
+  "categories": [
+    "Bank Fees",
+    "Cash & ATM",
+    "Dining",
+    "Groceries",
+    "Health",
+    "HOA & Condo Fees",
+    "Housing",
+    "Income",
+    "Interest",
+    "Mortgage",
+    "Person-to-Person In",
+    "Person-to-Person Out",
+    "Refunds & Rebates",
+    "Shopping",
+    "Subscriptions",
+    "Tolls",
+    "Transfer",
+    "Transportation",
+    "Utilities"
+  ],
+  "alertTypes": [
+    "CATEGORY_SPIKE",
+    "LARGE_TRANSACTION",
+    "POSSIBLE_DUPLICATE",
+    "RECURRING_PRICE_INCREASE",
+    "NEW_RECURRING"
+  ]
+}

@@ -4,8 +4,8 @@ import java.util.List;
 
 /**
  * The items a categorization call sends, in the {@code <transactions>} block (docs/plans/phase-4.md §4.2). Built
- * only by {@link CategorizationPromptBuilder}, so every merchant in it went through the {@link Redactor} and
- * {@link OutboundPayloadGuard}. Nothing else is ever sent: no description, date, account, counterparty or id.
+ * only by {@link CategorizationPromptBuilder}, so every merchant in it went through the {@link com.finalysis.ai.outbound.Redactor} and
+ * {@link com.finalysis.ai.outbound.OutboundPayloadGuard}. Nothing else is ever sent: no description, date, account, counterparty or id.
  * Examples are not here: they are a separate block ({@link CategorizationExamples}).
  *
  * @param allowedCategories every category name, sorted; the model must answer with one of them exactly

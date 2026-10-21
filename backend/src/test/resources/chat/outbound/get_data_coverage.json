@@ -1,0 +1,21 @@
+{
+  "lastCoveredDay": "2026-03-31",
+  "latestMonth": "2026-03",
+  "latestCompleteMonth": "2026-03",
+  "accounts": [
+    {
+      "account": "CHECKING-1",
+      "firstDay": "2026-03-01",
+      "closedOn": null,
+      "covered": [
+        {
+          "start": "2026-03-01",
+          "end": "2026-03-31"
+        }
+      ],
+      "gaps": [],
+      "flaggedStatements": [],
+      "truncated": false
+    }
+  ]
+}

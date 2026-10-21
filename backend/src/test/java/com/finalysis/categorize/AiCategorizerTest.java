@@ -11,6 +11,7 @@ import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
 import com.finalysis.ai.AiMode;
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.AiCategorizer.Status;
 import com.finalysis.categorize.AiRunObserver.ItemDecision;

@@ -19,6 +19,7 @@ import com.finalysis.analytics.TrendsService;
 import com.finalysis.analytics.TxnBucketSql;
 import com.finalysis.analytics.UsesAlert;
 import com.finalysis.ai.bedrock.BedrockClientConfiguration;
+import com.finalysis.ai.outbound.Redactor;
 import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
@@ -50,6 +51,7 @@ import org.junit.jupiter.api.Test;
 class PackageDependencyTest {
 
     static final String BEDROCK_CONFIG = "com.finalysis.ai.bedrock..";
+    static final String OUTBOUND = "com.finalysis.ai.outbound..";
 
     static final ArchRule INGESTION_KNOWS_NO_TRANSFERS_OR_REVIEW = noClasses()
             .that().resideInAPackage("com.finalysis.ingestion..")
@@ -78,6 +80,18 @@ class PackageDependencyTest {
                     "com.finalysis.ingestion..", "com.finalysis.transfer..", "com.finalysis.review..",
                     "com.finalysis.transaction..")
             .because("analytics reads those features' tables in SQL, so their code can change without it");
+
+    /**
+     * The redaction and guard code (phase-6.md §18 decision 5) serves categorization and chat, so it depends on neither,
+     * on no other feature, and on no model: it decides what may leave before any model is involved.
+     */
+    static final ArchRule OUTBOUND_KNOWS_NO_FEATURE = noClasses()
+            .that().resideInAPackage(OUTBOUND)
+            .should().dependOnClassesThat().resideInAnyPackage("com.finalysis.categorize..", "com.finalysis.chat..",
+                    "com.finalysis.ingestion..", "com.finalysis.transfer..", "com.finalysis.review..",
+                    "com.finalysis.transaction..", "com.finalysis.account..", "com.finalysis.analytics..",
+                    "com.finalysis.alert..", "org.springframework.ai..")
+            .because("categorization and chat share it; it must not know either of them");
 
     static final ArchRule ANALYTICS_KNOWS_NO_ALERTS = noClasses()
             .that().resideInAPackage("com.finalysis.analytics..")
@@ -208,6 +222,16 @@ class PackageDependencyTest {
         assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(trendsCall).hasViolation()).isTrue();
         assertThat(ANALYTICS_INTERNALS_ONLY_FOR_ALERTS.evaluate(service).hasViolation())
                 .as("the services are the public contract").isFalse();
+    }
+
+    /** The redaction and guard code depends on no feature; categorization uses it, as chat will. */
+    @Test
+    void outboundCodeKnowsNoFeature() {
+        assertThat(app.contain(Redactor.class)).isTrue();
+        OUTBOUND_KNOWS_NO_FEATURE.check(app);
+
+        JavaClasses violation = new ClassFileImporter().importClasses(com.finalysis.ai.outbound.UsesCategorize.class);
+        assertThat(OUTBOUND_KNOWS_NO_FEATURE.evaluate(violation).hasViolation()).isTrue();
     }
 
     /** The rules catch a violation. */

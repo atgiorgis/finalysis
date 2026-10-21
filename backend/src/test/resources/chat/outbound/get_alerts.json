@@ -1,0 +1,28 @@
+{
+  "from": "2026-01",
+  "to": "2026-03",
+  "items": [],
+  "counts": [
+    {
+      "type": "CATEGORY_SPIKE",
+      "count": 0
+    },
+    {
+      "type": "LARGE_TRANSACTION",
+      "count": 0
+    },
+    {
+      "type": "POSSIBLE_DUPLICATE",
+      "count": 0
+    },
+    {
+      "type": "RECURRING_PRICE_INCREASE",
+      "count": 0
+    },
+    {
+      "type": "NEW_RECURRING",
+      "count": 0
+    }
+  ],
+  "truncated": false
+}

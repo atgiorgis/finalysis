@@ -86,7 +86,8 @@ class ReadOnlyQueriesTest {
                 .filter(c -> c.getSimpleName().endsWith("Service"))
                 .map(JavaClass::getSimpleName).sorted().toList();
         assertThat(services).as("the rule must see the query services, or it checks nothing")
-                .contains("AccountTotalsService", "CategoryTotalsService", "CoverageService", "DrillDownService",
+                .contains("AccountTotalsService", "CategoryTotalsService", "ComparisonService", "CoverageService",
+                        "DrillDownService",
                         "MerchantTotalsService", "MonthlyTotalsService", "RecurringChargesService", "TrendsService");
         assertThat(app.contain(AlertQueryService.class)).isTrue();
         assertThat(QUERY_SERVICES_ARE_READ_ONLY.evaluate(new ClassFileImporter().importClasses(
@@ -130,7 +131,9 @@ class ReadOnlyQueriesTest {
                         int.class),
                 AlertQueryService.class.getMethod("alerts", Optional.class, Optional.class, Optional.class,
                         Optional.class, boolean.class, int.class),
-                AlertQueryService.class.getMethod("alert", String.class))) {
+                AlertQueryService.class.getMethod("alert", String.class),
+                ComparisonService.class.getMethod("compare", ComparisonMeasure.class, Optional.class, Optional.class,
+                        MonthRange.class, MonthRange.class))) {
             Transactional transactional = method.getAnnotation(Transactional.class);
             assertThat(transactional).as(method.getName()).isNotNull();
             assertThat(transactional.readOnly()).as(method.getName()).isTrue();

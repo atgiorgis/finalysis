@@ -1,8 +1,9 @@
 package com.finalysis.categorize;
 
 import com.finalysis.ai.AiProperties;
-import com.finalysis.ai.TextEmbedder;
 import com.finalysis.ai.TextEmbedder.Embedding;
+import com.finalysis.ai.TextEmbedder;
+import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.categorize.AiCategorizer.Status;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -22,8 +23,8 @@ import org.springframework.stereotype.Component;
  * Stage 4 of the pipeline (CAT-03, DAT-06; docs/plans/phase-4.md §1.1, §6, step 8 notes): merchant embeddings, and
  * the similar merchants they find for stage 5.
  *
- * <p><b>What is embedded.</b> The merchant's outbound text: the cleaned merchant through the {@link Redactor} and
- * {@link OutboundPayloadGuard}, by {@link CategorizationPromptBuilder#outboundMerchant}, the same method that writes
+ * <p><b>What is embedded.</b> The merchant's outbound text: the cleaned merchant through the {@link com.finalysis.ai.outbound.Redactor} and
+ * {@link com.finalysis.ai.outbound.OutboundPayloadGuard}, by {@link CategorizationPromptBuilder#outboundMerchant}, the same method that writes
  * the chat model's items and examples. Never the raw description. A person-to-person merchant, or one the guard
  * refuses, is never embedded. The key stays the cleaned {@code txn.merchant}.
  *

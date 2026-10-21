@@ -6,12 +6,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.categorize.AiCategorizationProperties;
 import com.finalysis.categorize.CategorizationModelClient;
-import com.finalysis.categorize.CategorizationPromptBuilder;
 import com.finalysis.categorize.CategorizationPromptBuilder.Candidate;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
-import com.finalysis.categorize.RedactionContext;
+import com.finalysis.categorize.CategorizationPromptBuilder;
 import com.finalysis.categorize.SimilarMerchantProperties;
 import com.finalysis.support.IntegrationTest;
 import com.finalysis.support.NoCloudAiGuard;

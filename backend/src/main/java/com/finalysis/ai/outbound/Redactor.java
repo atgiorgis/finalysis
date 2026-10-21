@@ -1,4 +1,4 @@
-package com.finalysis.categorize;
+package com.finalysis.ai.outbound;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,9 +41,9 @@ public class Redactor {
     private static final Pattern SPACES = Pattern.compile("\\s+");
     private static final String EDGE_PUNCTUATION = "&'./- ";
 
-    private final MerchantCleaningRules rules;
+    private final OutboundRules rules;
 
-    public Redactor(MerchantCleaningRules rules) {
+    public Redactor(OutboundRules rules) {
         this.rules = rules;
     }
 
@@ -55,7 +55,7 @@ public class Redactor {
         if (merchant == null) {
             return null;
         }
-        String text = MerchantCleaner.normalize(merchant);
+        String text = TextNormalizer.normalize(merchant);
         for (Pattern pattern : rules.redactPatterns()) {
             text = pattern.matcher(text).replaceAll(" ");
         }
@@ -90,7 +90,7 @@ public class Redactor {
         if (merchant == null) {
             return false;
         }
-        String text = MerchantCleaner.normalize(merchant);
+        String text = TextNormalizer.normalize(merchant);
         return rules.personToPerson().stream().anyMatch(pattern -> pattern.matcher(text).find());
     }
 
@@ -100,7 +100,7 @@ public class Redactor {
      * with no letter or digit.
      */
     static Pattern phrase(String phrase) {
-        List<String> words = Arrays.stream(WORDS.split(MerchantCleaner.normalize(phrase)))
+        List<String> words = Arrays.stream(WORDS.split(TextNormalizer.normalize(phrase)))
                 .filter(word -> !word.isEmpty())
                 .map(Pattern::quote)
                 .toList();

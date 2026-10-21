@@ -1,0 +1,41 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "latestMonth": "2026-03",
+  "latestCompleteMonth": "2026-03",
+  "accounts": [
+    {
+      "account": "CHECKING-1",
+      "months": [
+        {
+          "ref": "c1",
+          "month": "2026-03",
+          "coverage": "COMPLETE",
+          "income": "2500.85",
+          "spending": "-1399.24",
+          "net": "1101.61",
+          "savingsRatePercent": "44.0",
+          "refundsNet": "0.00",
+          "uncategorized": {
+            "moneyOut": "-8.00",
+            "moneyIn": "0.00",
+            "net": "-8.00",
+            "count": 2
+          },
+          "reviewPending": 0,
+          "unlinkedTransfersNet": "0.00",
+          "dataQuality": {
+            "countedTxns": 13,
+            "uncategorizedCount": 2,
+            "reviewPendingCount": 0,
+            "unlinkedTransferCount": 0,
+            "uncategorizedPercentOfCount": "15.4",
+            "reviewPendingPercentOfCount": "0.0",
+            "uncategorizedPercentOfSpending": "0.6",
+            "flags": []
+          }
+        }
+      ]
+    }
+  ]
+}

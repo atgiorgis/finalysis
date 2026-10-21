@@ -1,0 +1,181 @@
+{
+  "from": "2026-03",
+  "to": "2026-03",
+  "account": null,
+  "coverage": [
+    {
+      "month": "2026-03",
+      "coverage": "COMPLETE"
+    }
+  ],
+  "rows": [
+    {
+      "ref": "c1",
+      "bucket": "INCOME",
+      "category": "Income",
+      "total": {
+        "moneyOut": "0.00",
+        "moneyIn": "2500.00",
+        "net": "2500.00",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "0.00",
+          "moneyIn": "2500.00",
+          "net": "2500.00",
+          "count": 1,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c2",
+      "bucket": "INCOME",
+      "category": "Interest",
+      "total": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.85",
+        "net": "0.85",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "0.00",
+          "moneyIn": "0.85",
+          "net": "0.85",
+          "count": 1,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c3",
+      "bucket": "EXPENSE",
+      "category": "Dining",
+      "total": {
+        "moneyOut": "-42.00",
+        "moneyIn": "0.00",
+        "net": "-42.00",
+        "count": 2
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-42.00",
+          "moneyIn": "0.00",
+          "net": "-42.00",
+          "count": 2,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c4",
+      "bucket": "EXPENSE",
+      "category": "Groceries",
+      "total": {
+        "moneyOut": "-115.50",
+        "moneyIn": "0.00",
+        "net": "-115.50",
+        "count": 2
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-115.50",
+          "moneyIn": "0.00",
+          "net": "-115.50",
+          "count": 2,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c5",
+      "bucket": "EXPENSE",
+      "category": "Housing",
+      "total": {
+        "moneyOut": "-1200.00",
+        "moneyIn": "0.00",
+        "net": "-1200.00",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-1200.00",
+          "moneyIn": "0.00",
+          "net": "-1200.00",
+          "count": 1,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c6",
+      "bucket": "EXPENSE",
+      "category": "Shopping",
+      "total": {
+        "moneyOut": "-23.75",
+        "moneyIn": "0.00",
+        "net": "-23.75",
+        "count": 3
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-23.75",
+          "moneyIn": "0.00",
+          "net": "-23.75",
+          "count": 3,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c7",
+      "bucket": "EXPENSE",
+      "category": "Subscriptions",
+      "total": {
+        "moneyOut": "-9.99",
+        "moneyIn": "0.00",
+        "net": "-9.99",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-9.99",
+          "moneyIn": "0.00",
+          "net": "-9.99",
+          "count": 1,
+          "reviewPending": null
+        }
+      ]
+    },
+    {
+      "ref": "c8",
+      "bucket": "UNCATEGORIZED",
+      "category": null,
+      "total": {
+        "moneyOut": "-8.00",
+        "moneyIn": "0.00",
+        "net": "-8.00",
+        "count": 2
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "moneyOut": "-8.00",
+          "moneyIn": "0.00",
+          "net": "-8.00",
+          "count": 2,
+          "reviewPending": 0
+        }
+      ]
+    }
+  ]
+}

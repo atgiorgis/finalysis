@@ -1,5 +1,6 @@
 package com.finalysis.categorize;
 
+import com.finalysis.ai.outbound.OutboundRules;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -29,13 +30,13 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  * @param stripPatterns replaced by a space wherever they match, in order
  * @param locationStates two-letter codes that end a "store number, city, state" tail
  * @param personToPerson patterns with a {@code service} group and an optional {@code name} group
- * @param locationCityPrefixes outbound only ({@link Redactor}): first words of multi-word city names
- * @param redactPatterns       outbound only ({@link Redactor}): identifiers removed wherever they match
+ * @param locationCityPrefixes outbound only ({@link com.finalysis.ai.outbound.Redactor}): first words of multi-word city names
+ * @param redactPatterns       outbound only ({@link com.finalysis.ai.outbound.Redactor}): identifiers removed wherever they match
  */
 public record MerchantCleaningRules(int version, String fingerprint, List<Pattern> stripPrefixes,
                                     List<Pattern> stripPatterns, Set<String> locationStates,
                                     List<Pattern> personToPerson, Set<String> locationCityPrefixes,
-                                    List<Pattern> redactPatterns) {
+                                    List<Pattern> redactPatterns) implements OutboundRules {
 
     public static final String RESOURCE = "categorize/merchant-cleaning.yml";
 

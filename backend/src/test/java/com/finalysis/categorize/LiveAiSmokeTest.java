@@ -2,6 +2,7 @@ package com.finalysis.categorize;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.CategorizationModelClient.Result;
 import com.finalysis.categorize.CategorizationPromptBuilder.Candidate;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
@@ -24,8 +25,8 @@ import org.springframework.test.context.ActiveProfiles;
  * It runs on Testcontainers with the {@code aws} profile and the AWS CLI profile named in application-aws.yml.
  *
  * <p>The description is synthetic and its merchant appears in no sample, dev or holdout file. It goes through
- * cleaning, the redaction context read from the (empty) test database, the {@link Redactor}, the
- * {@link OutboundPayloadGuard} and the {@link CategorizationPromptBuilder}, exactly as stage 5 will send it. The
+ * cleaning, the redaction context read from the (empty) test database, the {@link com.finalysis.ai.outbound.Redactor}, the
+ * {@link com.finalysis.ai.outbound.OutboundPayloadGuard} and the {@link CategorizationPromptBuilder}, exactly as stage 5 will send it. The
  * test prints one line: the category, the token counts and the latency. Nothing else of the answer is printed.
  */
 @Tag(NoCloudAiGuard.LIVE_TAG)

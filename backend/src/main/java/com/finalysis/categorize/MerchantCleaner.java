@@ -1,9 +1,8 @@
 package com.finalysis.categorize;
 
-import java.text.Normalizer;
+import com.finalysis.ai.outbound.TextNormalizer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
@@ -26,12 +25,9 @@ public class MerchantCleaner {
     /** Longest counterparty kept. */
     public static final int MAX_COUNTERPARTY = 100;
     /** Patterns never see more than this, which bounds their work on hostile input. */
-    static final int MAX_INPUT = 512;
+    static final int MAX_INPUT = TextNormalizer.MAX_INPUT;
     private static final int MAX_PREFIX_ROUNDS = 10;
 
-    private static final Pattern MARKS = Pattern.compile("\\p{M}+");
-    private static final Pattern LINE_BREAKS_AND_TABS = Pattern.compile("[\\r\\n\\t\\u000B\\f\\u0085\\u2028\\u2029]");
-    private static final Pattern CONTROL_AND_FORMAT = Pattern.compile("[\\p{Cc}\\p{Cf}]");
     private static final Pattern SPACES = Pattern.compile("\\s+");
     /** Masked account numbers: XXXXXX1002, ****1002, ...1002. */
     private static final Pattern MASKED_NUMBER = Pattern.compile("(?<![A-Z0-9])(?:X{2,}|\\*{2,}|\\.{3})\\d+");
@@ -75,16 +71,11 @@ public class MerchantCleaner {
     /**
      * Wrapped lines joined with a space; compatibility forms and accents folded (fullwidth letters,
      * CAFÉ → CAFE); curly apostrophes made straight; control and format characters (bidi overrides
-     * included) removed; upper case; single spaces.
+     * included) removed; upper case; single spaces. The body is {@link TextNormalizer}'s, shared with redaction
+     * (docs/plans/phase-6.md §18).
      */
     public static String normalize(String raw) {
-        String text = LINE_BREAKS_AND_TABS.matcher(raw).replaceAll(" ");
-        text = Normalizer.normalize(text, Normalizer.Form.NFKD);
-        text = MARKS.matcher(text).replaceAll("");
-        text = text.replace('‘', '\'').replace('’', '\'');
-        text = CONTROL_AND_FORMAT.matcher(text).replaceAll("");
-        text = SPACES.matcher(text.toUpperCase(Locale.ROOT)).replaceAll(" ").strip();
-        return text.length() > MAX_INPUT ? text.substring(0, MAX_INPUT) : text;
+        return TextNormalizer.normalize(raw);
     }
 
     private String stripPrefixes(String text) {

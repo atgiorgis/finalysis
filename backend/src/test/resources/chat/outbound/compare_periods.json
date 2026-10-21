@@ -1,0 +1,30 @@
+{
+  "ref": "c1",
+  "measure": "SPENDING",
+  "category": null,
+  "account": null,
+  "a": {
+    "from": "2026-03",
+    "to": "2026-03",
+    "value": "1399.24",
+    "months": [
+      {
+        "month": "2026-03",
+        "coverage": "COMPLETE"
+      }
+    ]
+  },
+  "b": {
+    "from": "2026-02",
+    "to": "2026-02",
+    "value": "0.00",
+    "months": [
+      {
+        "month": "2026-02",
+        "coverage": "NONE"
+      }
+    ]
+  },
+  "difference": "1399.24",
+  "changePercent": null
+}

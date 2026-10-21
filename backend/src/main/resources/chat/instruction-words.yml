@@ -1,0 +1,11 @@
+# Merchant names that read as instructions to a model are withheld from the outbound copy (docs/plans/phase-6.md
+# §12.5, InstructionLikeText). Whole words, on the redacted, upper-case merchant text. A name is withheld when it has
+# one strong word, one phrase, or at least weakNeeded weak words. False positives cost a name in one answer, never a
+# total: the user still sees the real merchant in citations. Data, not code: tune it here.
+strong: [IGNORE, INSTRUCTION, INSTRUCTIONS, PROMPT, PROMPTS, SYSTEM, ASSISTANT, DISREGARD, OVERRIDE, JAILBREAK, DEVELOPER]
+phrases: ["YOU ARE", "ACT AS", "PRETEND TO", "FROM NOW ON", "NEW RULES"]
+# Weak: imperative and meta words, and the politeness and absolute words that make a sentence of them (a business name
+# rarely needs two). Added in Phase 6 step 2 after the injection fixture's two slip-past names reached a payload.
+weak: [SAY, TELL, REPEAT, REVEAL, DELETE, DISMISS, SEND, FORGET, ADMIN, MODE, ANSWER, REPORT, PRINT, OUTPUT, RESPOND, REPLY,
+       EXECUTE, MONEY, PLEASE, THANKS, ALWAYS, NEVER, MUST, SHOULD]
+weakNeeded: 2

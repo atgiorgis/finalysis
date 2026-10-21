@@ -1,5 +1,8 @@
 package com.finalysis.categorize;
 
+import com.finalysis.ai.outbound.OutboundPayloadGuard;
+import com.finalysis.ai.outbound.RedactionContext;
+import com.finalysis.ai.outbound.Redactor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
