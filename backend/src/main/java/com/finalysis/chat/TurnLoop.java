@@ -6,6 +6,7 @@ import com.finalysis.chat.grounding.AnswerGrounding;
 import com.finalysis.chat.grounding.FallbackAnswer;
 import com.finalysis.chat.grounding.TurnEvidence;
 import com.finalysis.chat.outbound.OutboundTurn;
+import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.ToolRegistry;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -46,7 +47,7 @@ public class TurnLoop {
     private final ChatProperties limits;
     private final AiPrices prices;
     private final Clock clock;
-    private final int definitionChars;
+    private final ToolRegistry registry;
 
     public TurnLoop(ChatModelClient client, ToolExecutor executor, AnswerGrounding grounding, ChatProperties limits,
                     AiPrices prices, Clock clock, ToolRegistry registry) {
@@ -56,8 +57,7 @@ public class TurnLoop {
         this.limits = limits;
         this.prices = prices;
         this.clock = clock;
-        this.definitionChars = registry.definitions().stream()
-                .mapToInt(d -> d.name().length() + d.description().length() + d.inputSchema().length()).sum();
+        this.registry = registry;
     }
 
     /**
@@ -85,6 +85,8 @@ public class TurnLoop {
         final OutboundTurn turn;
         final String question;
         final Collection<String> names;
+        final List<String> categories;
+        final int definitionChars;
         final List<Message> messages;
         final List<TurnEvidence.Result> results = new ArrayList<>();
         final Optional<AiPrices.Price> price = prices.of(client.modelId());
@@ -106,6 +108,9 @@ public class TurnLoop {
             this.turn = turn;
             this.question = question;
             this.names = names;
+            this.categories = CategoryNamesQuery.sorted(turn.categories());
+            this.definitionChars = registry.definitions(categories).stream()
+                    .mapToInt(d -> d.name().length() + d.description().length() + d.inputSchema().length()).sum();
             this.messages = new ArrayList<>(start);
             this.historyMessages = historyMessages;
         }
@@ -148,7 +153,8 @@ public class TurnLoop {
             }
             ChatModelClient.Reply reply;
             try {
-                reply = client.call(List.copyOf(run.messages), limits.maxOutputTokens(), run.toolResultsInPrompt());
+                reply = client.call(List.copyOf(run.messages), limits.maxOutputTokens(), run.toolResultsInPrompt(),
+                        run.categories);
             } catch (RuntimeException e) {
                 return run.end(AnswerSource.ERROR, run.lastCheck, null, e);
             }
@@ -198,9 +204,9 @@ public class TurnLoop {
             run.hit(LimitHit.TIME);
             return null;
         }
-        int estimate = TokenEstimate.of(run.messages, definitionChars);
+        int estimate = TokenEstimate.of(run.messages, run.definitionChars);
         while (estimate > limits.maxInputTokensPerCall() && (cutOldestHistory(run) || cutOldestResult(run))) {
-            estimate = TokenEstimate.of(run.messages, definitionChars);
+            estimate = TokenEstimate.of(run.messages, run.definitionChars);
         }
         if (estimate > limits.maxInputTokensPerCall()
                 || run.inputForLimits + estimate > limits.maxInputTokensPerTurn()) {

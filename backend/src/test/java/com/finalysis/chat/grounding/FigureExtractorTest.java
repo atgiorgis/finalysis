@@ -44,7 +44,8 @@ class FigureExtractorTest {
             "1,204 transactions|COUNT|EXACT|1204|1,204",
             "2.5 months|COUNT|UNMATCHABLE|2.5|2.5",
             "so far in 2026|COUNT|EXACT|2026|2026",
-            "Q3 was quiet|COUNT|EXACT|3|3"})
+            "Q5 is no quarter|COUNT|EXACT|5|5",
+            "quarter 5 is no quarter|COUNT|EXACT|5|5"})
     void aFigure(String text, Kind kind, Form form, String magnitude, String asWritten) {
         List<Figure> figures = FigureExtractor.extract(text);
 
@@ -63,9 +64,24 @@ class FigureExtractorTest {
             "In August 2026 it posted.", "In Aug. 2026 it posted.", "On Aug 22 it posted.", "On August 22nd it posted.",
             "On 22 August it posted.", "On the 22nd of August it posted.", "On Aug 22, 2026 it posted.",
             "In 2026 August it posted.", "The 3rd largest, the 1st and the 2nd.", "On CARD-1 and CHECKING-2.",
-            "One charge: 1 of them, 0 refunds.", "See [t3] and [c1, a2]."})
+            "One charge: 1 of them, 0 refunds.", "See [t3] and [c1, a2].",
+            // quarter references and their year (step 8b: d-c04's Q2 and Q3 needed the fallback)
+            "Q3 was quiet.", "In q2 and Q4.", "In Q3 2026 it rose.", "In Q3, 2026 it rose.", "In Q3 of 2026.",
+            "In 2026 Q3 it rose.", "In 2026-Q3 it rose.", "In Q3'26 it rose.", "In quarter 3 it rose.",
+            "In the second quarter of 2026.", "In the third quarter, 2026.", "In the 2nd quarter it rose.",
+            "In the last quarter it rose."})
     void notAFigure(String text) {
         assertThat(FigureExtractor.extract(text)).isEmpty();
+    }
+
+    @Test
+    void aQuarterMasksOnlyItselfAndItsYear() {
+        assertThat(FigureExtractor.extract("You spent 956.06 in Q3 compared to 513.31 in Q2, a difference of 442.75."))
+                .extracting(Figure::asWritten).containsExactly("956.06", "513.31", "442.75");
+        assertThat(FigureExtractor.extract("In Q3 2050.00 went out, and 2026 overall."))
+                .extracting(Figure::asWritten).containsExactly("2050.00", "2026");
+        assertThat(FigureExtractor.extract("Q3: 12 transactions; HQ3 is a label; Q32 isn't a quarter"))
+                .extracting(Figure::asWritten).containsExactly("12", "3", "32");
     }
 
     @Test

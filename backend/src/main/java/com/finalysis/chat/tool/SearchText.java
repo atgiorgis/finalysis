@@ -1,6 +1,7 @@
 package com.finalysis.chat.tool;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * A {@code search_transactions} query as the scope prepared it (docs/plans/phase-6.md §4.3): the text that was allowed
@@ -9,13 +10,20 @@ import java.util.List;
  *
  * @param vector        null when no embedding model is configured or the call failed: the search is by name only
  * @param model         the embedding model the vector came from; only vectors of this model are compared
- * @param minSimilarity the cosine similarity a merchant needs to be a candidate by meaning
+ * @param minSimilarity the cosine similarity a merchant or a category needs to be found by meaning
+ * @param categories    the data's category names → ids, for matching categories (step 8b)
  */
 public record SearchText(String outbound, List<String> words, float[] vector, String model, double minSimilarity,
-                         MerchantDirectory merchants) {
+                         MerchantDirectory merchants, Map<String, Long> categories) {
 
     public SearchText {
         words = List.copyOf(words);
+        categories = Map.copyOf(categories);
+    }
+
+    public SearchText(String outbound, List<String> words, float[] vector, String model, double minSimilarity,
+                      MerchantDirectory merchants) {
+        this(outbound, words, vector, model, minSimilarity, merchants, Map.of());
     }
 
     public boolean byMeaning() {

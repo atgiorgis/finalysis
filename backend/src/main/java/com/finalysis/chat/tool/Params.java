@@ -3,11 +3,17 @@ package com.finalysis.chat.tool;
 /** The parameters several tools share, with one wording (docs/plans/phase-6.md §3.2). */
 final class Params {
 
+    /** One month instead of a range (step 8b: models reached for {@code month} on tools that only had a range). */
+    static final ToolParam MONTH = ToolParam.optional("month", new ToolParam.Month(),
+            "One month, yyyy-MM: \"2026-08\" for August 2026. The same as from and to both that month. Not with from "
+                    + "or to.");
     static final ToolParam FROM = ToolParam.optional("from", new ToolParam.Month(),
-            "First month, yyyy-MM. Default: a few months ending at `to`; give it to be sure.");
+            "First month of a range, yyyy-MM: \"2026-06\" for June 2026. Default: 6 months ending at `to`; give it "
+                    + "to be sure. Not with month.");
     static final ToolParam TO = ToolParam.optional("to", new ToolParam.Month(),
-            "Last month, yyyy-MM. Default: the latest month with data (latestMonth in the context block). At most "
-                    + ToolParam.MAX_MONTHS + " months from `from` to `to`, both included.");
+            "Last month of a range, yyyy-MM: \"2026-08\" for August 2026. Default: the latest month with data "
+                    + "(latestMonth in the context block). At most " + ToolParam.MAX_MONTHS + " months from `from` to "
+                    + "`to`, both included. Not with month.");
     static final ToolParam ACCOUNT = ToolParam.optional("account", new ToolParam.Alias(),
             "Only this account, by its alias from the context block (CHECKING-1). Default: every account.");
     static final ToolParam CATEGORY = ToolParam.optional("category", new ToolParam.Category(),

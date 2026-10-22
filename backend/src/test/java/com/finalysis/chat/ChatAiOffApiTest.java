@@ -72,7 +72,7 @@ class ChatAiOffApiTest {
                 .andExpect(jsonPath("$.status").value("OFF"))
                 .andExpect(jsonPath("$.calls").value(0))
                 .andExpect(jsonPath("$.embedded").value(0));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_embedding", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM search_embedding", Integer.class)).isZero();
     }
 
     @Test

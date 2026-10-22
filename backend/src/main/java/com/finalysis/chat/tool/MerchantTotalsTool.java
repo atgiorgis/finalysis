@@ -2,6 +2,7 @@ package com.finalysis.chat.tool;
 
 import static com.finalysis.chat.tool.Params.ACCOUNT;
 import static com.finalysis.chat.tool.Params.FROM;
+import static com.finalysis.chat.tool.Params.MONTH;
 import static com.finalysis.chat.tool.Params.TO;
 
 import com.finalysis.analytics.MonthRange;
@@ -44,7 +45,7 @@ class MerchantTotalsTool implements ChatTool {
 
     @Override
     public List<ToolParam> params() {
-        return List.of(MERCHANTS, FROM, TO, ACCOUNT);
+        return List.of(MERCHANTS, MONTH, FROM, TO, ACCOUNT);
     }
 
     @Override
@@ -60,7 +61,7 @@ class MerchantTotalsTool implements ChatTool {
         int count = 0;
         MonthRange range = null;
         for (MerchantGroup group : arguments.merchants("merchants")) {
-            MerchantSpend spent = spend.read(group, arguments.month("from"), arguments.month("to"),
+            MerchantSpend spent = spend.read(group, arguments.from(), arguments.to(),
                     arguments.id("account"));
             merchants.add(spent);
             combined = combined.add(spent.spent());

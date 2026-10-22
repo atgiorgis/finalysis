@@ -53,6 +53,11 @@ public final class MerchantDirectory {
         return storedByText.getOrDefault(text, List.of());
     }
 
+    /** Every text that may be named, in name order. */
+    public Set<String> texts() {
+        return storedByText.keySet();
+    }
+
     /** The text a stored merchant goes out as, if it may be named. */
     public Optional<String> text(String stored) {
         return Optional.ofNullable(textByStored.get(stored));

@@ -22,13 +22,20 @@ class QuestionRedactorTest {
 
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
-            // account names as whole phrases; institutions also by their distinctive words
+            // account names and institutions as whole phrases, then by their distinctive words (step 8b)
             "what did i spend on my Halden Everyday account?|what did i spend on my CHECKING-1 account?",
             "how much is in halden bank?|how much is in CHECKING-1 or SAVINGS-1?",
             "my Orbit card in july|my CARD-1 card in july",
-            "rainy day fund growth|rainy day fund growth",
             "my Rainy Day Savings account|my SAVINGS-1 account",
+            "is my everyday account low?|is my CHECKING-1 account low?",
+            "Which had more, Everyday or Orbit?|Which had more, CHECKING-1 or CARD-1?",
+            "rainy day fund growth|SAVINGS-1 day fund growth",
+            "the rewards on my orbit rewards|the rewards on my CARD-1 rewards",
+            // words that are never an account by themselves: generic, everyday, partial words
             "the Visa card|the Visa card",
+            "what day did I pay rent?|what day did I pay rent?",
+            "my checking, savings and card account|my checking, savings and card account",
+            "orbits, haldenville and everydays|orbits, haldenville and everydays",
             // last fours as identifiers
             "card ending 2001 spending|card ending CARD-1 spending",
             "card ending in 7311|card ending in SAVINGS-1",
@@ -52,6 +59,42 @@ class QuestionRedactorTest {
 
         assertThat(result.text()).isEqualTo(outbound);
         assertThat(result.sendable()).isTrue();
+    }
+
+    @Test
+    void aWordOfACategoryOrOfANameableMerchantIsNeverAnAccountByItself() {
+        OutboundTurn diningCard = OutboundTurns.withIdentities(List.of(
+                new AccountIdentity(11, "Halden Everyday", "Halden Bank", "7310"),
+                new AccountIdentity(12, "Rainy Day Savings", "Halden Bank", "7311"),
+                new AccountIdentity(13, "Dining Rewards Visa", "Orbit Card Services", "2001")));
+        assertThat(redactor.redact("what did I spend on dining?", diningCard).text())
+                .isEqualTo("what did I spend on dining?");
+        assertThat(redactor.redact("my Dining Rewards Visa in july", diningCard).text())
+                .isEqualTo("my CARD-1 in july");
+
+        OutboundTurn orbitCoffee = OutboundTurns.withMerchants(List.of("ORBIT COFFEE ROASTERS"));
+        assertThat(redactor.redact("how much at orbit coffee?", orbitCoffee).text())
+                .isEqualTo("how much at orbit coffee?");
+        assertThat(redactor.redact("my Orbit Rewards Visa in july", orbitCoffee).text())
+                .isEqualTo("my CARD-1 in july");
+        assertThat(redactor.redact("the halden account", orbitCoffee).text())
+                .isEqualTo("the CHECKING-1 or SAVINGS-1 account");
+    }
+
+    @Test
+    void theSampleAccountsByOneWord() {
+        OutboundTurn sample = OutboundTurns.withIdentities(List.of(
+                new AccountIdentity(11, "Northfield Checking", "Northfield Credit Union", "1001"),
+                new AccountIdentity(12, "Northfield Savings", "Northfield Credit Union", "1002"),
+                new AccountIdentity(13, "Summit Card", "Summit Financial", "3001")));
+        assertThat(redactor.redact("What did I spend on my Summit card in August?", sample).text())
+                .isEqualTo("What did I spend on my CARD-1 in August?");
+        assertThat(redactor.redact("Which card had more spending in June, Northfield or Summit?", sample).text())
+                .isEqualTo("Which card had more spending in June, CHECKING-1 or SAVINGS-1 or CARD-1?");
+        assertThat(redactor.redact("my northfield checking account", sample).text())
+                .isEqualTo("my CHECKING-1 account");
+        assertThat(redactor.redact("the summit of my spending", sample).text())
+                .isEqualTo("the CARD-1 of my spending"); // a known cost: a distinctive word is an account
     }
 
     @Test

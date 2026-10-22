@@ -63,6 +63,16 @@ public class CoverageService {
     }
 
     /**
+     * The months with data: from the month of the first covered day of any account to the month of the last; empty
+     * without statements. Chat's {@code get_alerts} defaults to it (docs/plans/phase-6.md, step 8b).
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public Optional<MonthRange> dataMonths() {
+        CoverageMap map = coverage.load();
+        return map.earliestMonth().flatMap(first -> map.latestMonth().map(last -> new MonthRange(first, last)));
+    }
+
+    /**
      * The household flags of each month of the range, as {@code MonthTotals.dataQuality} has them (§1.6): the
      * figures an alert used come with the flags of their months (§6.1).
      */

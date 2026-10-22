@@ -3,7 +3,9 @@ package com.finalysis.chat.outbound;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.account.AccountRepository;
-import com.finalysis.categorize.MerchantEmbeddingRepository;
+import com.finalysis.ai.SearchDocuments;
+import com.finalysis.categorize.SearchEmbeddingRepository;
+import com.finalysis.support.SearchIndexBuilder;
 import com.finalysis.categorize.MerchantIndexRefresh;
 import com.finalysis.chat.ChatInjectionFixture;
 import com.finalysis.chat.ToolCall;
@@ -53,11 +55,11 @@ class ChatSearchPayloadTest {
     private final OutboundTurnFactory turns;
     private final FakeEmbeddingModel embeddingModel;
     private final MerchantIndexRefresh refresh;
-    private final MerchantEmbeddingRepository embeddings;
+    private final SearchEmbeddingRepository embeddings;
 
     ChatSearchPayloadTest(MockMvc mockMvc, AccountRepository accounts, JdbcTemplate jdbc, JsonMapper json,
                           ToolExecutor executor, OutboundTurnFactory turns, FakeEmbeddingModel embeddingModel,
-                          MerchantIndexRefresh refresh, MerchantEmbeddingRepository embeddings) {
+                          MerchantIndexRefresh refresh, SearchEmbeddingRepository embeddings) {
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
         this.jdbc = jdbc;
         this.json = json;
@@ -70,19 +72,20 @@ class ChatSearchPayloadTest {
 
     @BeforeEach
     void loadAndIndex() throws Exception {
-        jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         new ChatInjectionFixture(support, jdbc, json).load();
-        embeddingModel.reset()
+        new SearchIndexBuilder(jdbc, embeddingModel, refresh)
                 .near("MAPLEWOOD GROCERY", "FOOD", 0.71)
-                .near("RIVERBEND NOODLE BAR", "FOOD", 0.64);
-        refresh.refresh();
+                .near("RIVERBEND NOODLE BAR", "FOOD", 0.64)
+                .build();
         // every hostile merchant that was indexed now sits exactly on the search text
         for (String hostile : ChatInjectionFixture.hostileDescriptions()) {
             jdbc.queryForList("SELECT DISTINCT merchant FROM txn WHERE raw_description = ? AND merchant IS NOT NULL",
                     String.class, hostile).forEach(merchant -> {
-                        if (embeddings.find(merchant, "test-embedding-model").isPresent()) {
-                            embeddings.upsert(merchant, "test-embedding-model", "f".repeat(64),
-                                    embeddingModel.vector("FOOD"));
+                        if (jdbc.queryForObject("SELECT count(*) FROM search_embedding WHERE kind = 'MERCHANT' "
+                                + "AND subject = ?", Integer.class, merchant) > 0) {
+                            embeddings.upsert(SearchDocuments.Kind.MERCHANT, merchant, "test-embedding-model",
+                                    "f".repeat(64), embeddingModel.vector("FOOD"));
                         }
                     });
         }
@@ -90,7 +93,7 @@ class ChatSearchPayloadTest {
 
     @AfterEach
     void cleanUp() {
-        jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         embeddingModel.reset();
         support.deleteCreatedAccounts();
     }
@@ -105,7 +108,7 @@ class ChatSearchPayloadTest {
     @Test
     void bothSearchToolsSendExactlyTheirExpectedPayloads() throws Exception {
         StringBuilder all = new StringBuilder();
-        int indexedHostile = jdbc.queryForObject("SELECT count(*) FROM merchant_embedding WHERE input_sha256 = ?",
+        int indexedHostile = jdbc.queryForObject("SELECT count(*) FROM search_embedding WHERE input_sha256 = ?",
                 Integer.class, "f".repeat(64));
         assertThat(indexedHostile).as("hostile merchants sit on the search text").isGreaterThanOrEqualTo(5);
 

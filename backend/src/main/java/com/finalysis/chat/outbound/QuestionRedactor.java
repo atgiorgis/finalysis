@@ -1,8 +1,10 @@
 package com.finalysis.chat.outbound;
 
 import com.finalysis.chat.ChatProperties;
+import com.finalysis.chat.tool.MerchantDirectory;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,10 +26,14 @@ import org.springframework.stereotype.Component;
  *       when no account has it;</li>
  *   <li>any other run of five or more digits removed;</li>
  *   <li>a registered last four standing alone becomes the alias, unless it reads as a year (2000–2099);</li>
- *   <li>an account's name or institution, as a whole phrase, then each distinctive word of an institution (three
- *       letters or more, not a generic word such as BANK, CARD or SERVICES), becomes the alias of the account or
- *       accounts that have it ({@code CHECKING-1 or SAVINGS-1}). An account's name matches only as a whole phrase:
- *       users name accounts with ordinary words ("Rainy Day"), and institutions are proper nouns;</li>
+ *   <li>an account's name or institution, as a whole phrase, then each distinctive word of a name or an institution,
+ *       becomes the alias of the account or accounts that have it ({@code CHECKING-1 or SAVINGS-1}): "my Summit card"
+ *       and "Apex or Summit" name accounts by one word (step 8b). A distinctive word has three letters or more and is
+ *       none of: a generic account word ({@link #GENERIC}: BANK, CARD, CHECKING, SAVINGS, ACCOUNT, ...), an everyday
+ *       word ({@link #EVERYDAY}: DAY, MONTH, MY, ...), a word of a category name, or a word of a merchant the turn may
+ *       name (such a word leaves the machine as a merchant anyway, and "Amazon" must stay a merchant when a card is
+ *       called "Amazon Prime Visa"). The same alias written twice in a row ("rainy day" → one alias) is written
+ *       once;</li>
  *   <li>a person-to-person counterparty becomes {@code [PERSON]}; a configured redact term {@code [NAME]}.</li>
  * </ol>
  * Amounts, merchants, months and categories are kept. Like the {@code Redactor}, it removes or replaces, never
@@ -55,6 +61,21 @@ public class QuestionRedactor {
             "TRUST", "JOINT", "PERSONAL", "BUSINESS", "PLUS", "REWARDS", "PLATINUM", "GOLD", "CASH", "BACK", "ONLINE",
             "FINANCIAL", "MONEY", "MARKET", "CO", "COMPANY", "INC", "SERVICES", "SERVICE", "GROUP", "HOLDINGS",
             "BANCORP", "FINANCE", "CORP", "CORPORATION", "ASSOCIATION", "ASSN", "LOAN");
+
+    /**
+     * Everyday words a user may give an account ("Rainy Day Savings", "Main Checking", "My Card") that a question uses
+     * in their ordinary sense ("what day", "last month"): never matched alone, only inside the whole name.
+     */
+    static final Set<String> EVERYDAY = Set.of("DAY", "DAYS", "DAILY", "WEEK", "WEEKS", "WEEKLY", "MONTH", "MONTHS",
+            "MONTHLY", "YEAR", "YEARS", "YEARLY", "TODAY", "NOW", "TIME", "MY", "MINE", "OUR", "OURS", "YOUR", "HIS",
+            "HER", "THEIR", "FOR", "WITH", "FROM", "INTO", "OVER", "UNDER", "NOT", "ALL", "ANY", "SOME", "EACH", "ONE",
+            "TWO", "NEW", "OLD", "MAIN", "OTHER", "SPARE", "EXTRA", "HOME", "HOUSE", "FAMILY", "KIDS", "BILLS", "BILL",
+            "FUND", "FUNDS", "SPENDING", "SPEND", "SPENT", "PAY", "PAID", "BUY", "WHAT", "WHEN", "WHERE", "WHICH", "WHO",
+            "HOW", "MUCH", "MANY", "MORE", "LESS", "MOST", "DID", "DOES", "WAS", "WERE", "HAVE", "HAS", "HAD", "GET",
+            "GOT", "LAST", "NEXT", "THIS", "THAT", "THESE", "THOSE", "TOTAL", "BIG", "SMALL", "GOOD", "BEST",
+            "EVERYTHING", "STUFF", "THINGS");
+    private static final Pattern REPEATED_ALIAS = Pattern.compile(
+            "(?<![A-Za-z0-9-])([A-Z][A-Z_]*-\\d+(?: or [A-Z][A-Z_]*-\\d+)*)(?:\\s+\\1)+(?![A-Za-z0-9-])");
 
     private final ChatPayloadGuard guard;
     private final ChatProperties properties;
@@ -109,6 +130,7 @@ public class QuestionRedactor {
                 return phrase.getValue();
             });
         }
+        text = REPEATED_ALIAS.matcher(text).replaceAll("$1");
         for (String counterparty : turn.redaction().counterparties()) {
             Pattern pattern = phrase(counterparty);
             if (pattern != null) {
@@ -132,12 +154,13 @@ public class QuestionRedactor {
     }
 
     /**
-     * Names and institutions as whole phrases first (longest first), then their distinctive words, each mapped to the
-     * alias of every account that has it.
+     * Names and institutions as whole phrases first (longest first), then their distinctive words (see the class
+     * comment), each mapped to the alias of every account that has it.
      */
     private static Map<Pattern, String> accountPhrases(OutboundTurn turn) {
         Map<String, Set<String>> phrases = new LinkedHashMap<>();
         Map<String, Set<String>> words = new LinkedHashMap<>();
+        Set<String> notDistinctive = null;
         for (AccountIdentity identity : turn.identities()) {
             String alias = turn.aliases().alias(identity.id());
             for (String phrase : new String[] {identity.name(), identity.institution()}) {
@@ -145,13 +168,17 @@ public class QuestionRedactor {
                     continue;
                 }
                 phrases.computeIfAbsent(phrase.strip().toUpperCase(Locale.ROOT), p -> new LinkedHashSet<>()).add(alias);
-                if (phrase != identity.institution()) {
-                    continue; // a name's words are the user's own ordinary words ("Rainy Day"): whole phrase only
-                }
                 Matcher word = WORD.matcher(phrase);
                 while (word.find()) {
                     String w = word.group().toUpperCase(Locale.ROOT);
-                    if (w.length() >= 3 && !GENERIC.contains(w) && w.chars().anyMatch(Character::isLetter)) {
+                    if (w.length() < 3 || GENERIC.contains(w) || EVERYDAY.contains(w)
+                            || w.chars().noneMatch(Character::isLetter)) {
+                        continue;
+                    }
+                    if (notDistinctive == null) {
+                        notDistinctive = labelWords(turn);
+                    }
+                    if (!notDistinctive.contains(w)) {
                         words.computeIfAbsent(w, k -> new LinkedHashSet<>()).add(alias);
                     }
                 }
@@ -168,6 +195,14 @@ public class QuestionRedactor {
                 });
         words.forEach((word, aliases) -> patterns.put(phrase(word), String.join(" or ", aliases)));
         return patterns;
+    }
+
+    /** The words of category names and of the merchants the turn may name: labels, never an account by one word. */
+    private static Set<String> labelWords(OutboundTurn turn) {
+        Set<String> labels = new HashSet<>();
+        turn.categories().keySet().forEach(name -> labels.addAll(MerchantDirectory.wordsOf(name)));
+        turn.directory().texts().forEach(text -> labels.addAll(MerchantDirectory.wordsOf(text)));
+        return labels;
     }
 
     private static String lastFour(String digits, Map<String, String> aliasByLastFour, Counts counts, String keyword) {

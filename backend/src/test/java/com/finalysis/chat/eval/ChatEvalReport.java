@@ -119,6 +119,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         md.append("## By category\n\n").append(categoryTable()).append("\n");
         md.append("## Your questions\n\n").append(userSection()).append("\n");
         md.append("## Grounding, refusals, tools\n\n").append(groundingTable()).append("\n");
+        md.append("## Invalid tool arguments\n\n").append(invalidTable()).append("\n");
         md.append("## Cost and latency\n\n").append(usageTable()).append("\n");
         md.append("## Per question\n\n").append(questionTable(run.questions())).append("\n");
         md.append("## Wrong turns\n\n").append(wrongTurns()).append("\n");
@@ -284,6 +285,9 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                     .append(o.limit() == null ? "" : ", limit " + o.limit())
                     .append("; tools ").append(tools(o))
                     .append(o.searchQueries().isEmpty() ? "" : "; searched " + o.searchQueries())
+                    .append(o.invalidArguments().isEmpty() ? "" : "; invalid " + o.invalidArguments().stream()
+                            .map(i -> i.tool() + "." + i.parameter() + " " + i.problem())
+                            .collect(Collectors.joining(", ")))
                     .append(o.citationsFound() == null ? "" : "; expected citations "
                             + (o.citationsFound() ? "present" : "**missing**")).append("\n\n");
             md.append(quote(o.answer() == null ? "(no answer: " + o.problem() + ")" : o.answer()));
@@ -291,6 +295,24 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 md.append("First answer (not shown):\n\n").append(quote(o.rejectedAnswer()));
             }
         }
+        return md.toString();
+    }
+
+    /**
+     * Every problem of the run's invalid tool calls, counted by tool, parameter and problem (step 8b), most frequent
+     * first.
+     */
+    String invalidTable() {
+        Map<String, Long> counts = run.questions().stream().flatMap(q -> q.turns().stream())
+                .flatMap(t -> t.observed().invalidArguments().stream())
+                .collect(Collectors.groupingBy(i -> "| " + i.tool() + " | " + i.parameter() + " | " + i.problem()
+                        + " | ", java.util.TreeMap::new, Collectors.counting()));
+        if (counts.isEmpty()) {
+            return "No tool call had invalid arguments.\n";
+        }
+        StringBuilder md = new StringBuilder("| Tool | Parameter | Problem | Count |\n|---|---|---|---:|\n");
+        counts.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .forEach(e -> md.append(e.getKey()).append(e.getValue()).append(" |\n"));
         return md.toString();
     }
 

@@ -13,6 +13,7 @@ import com.finalysis.chat.outbound.ContextBlockFactory;
 import com.finalysis.chat.outbound.OutboundTurn;
 import com.finalysis.chat.outbound.OutboundTurnFactory;
 import com.finalysis.chat.tool.ToolProblem;
+import com.finalysis.chat.tool.CategoryNamesQuery;
 import com.finalysis.chat.tool.ToolRegistry;
 import com.finalysis.support.ChatIntegrationTest;
 import com.finalysis.support.ImportTestSupport;
@@ -101,7 +102,7 @@ class TurnLoopCutTest {
         OutboundTurn turn = turns.start();
         List<Message> messages = prompt.start(guard.check(context.build(turn, LocalDate.of(2026, 10, 15)), turn), ChatHistory.NONE,
                 guard.checkText("How much did I spend from January to April?"));
-        int definitions = registry.definitions().stream()
+        int definitions = registry.definitions(CategoryNamesQuery.sorted(turn.categories())).stream()
                 .mapToInt(d -> d.name().length() + d.description().length() + d.inputSchema().length()).sum();
         return new Start(turn, messages, TokenEstimate.of(messages, definitions));
     }

@@ -227,6 +227,35 @@ class ToolsMatchEndpointsTest {
                 .as(e.getKey()).isEqualTo(e.getValue()));
     }
 
+    /**
+     * Step 8b: without a period, {@code get_alerts} covers every month with data (the API's own default is 3 months),
+     * from the month of the first covered day to the latest month, and says so in its {@code from} and {@code to}; it
+     * lists exactly the alerts the endpoint lists over that range. {@code month} is one month.
+     */
+    @Test
+    void getAlertsWithoutAPeriodCoversEveryMonthWithData() throws Exception {
+        JsonNode coverage = api("/api/analytics/coverage");
+        String earliest = coverage.get("accounts").valueStream().map(a -> a.get("firstDay").stringValue())
+                .min(String::compareTo).orElseThrow().substring(0, 7);
+        String latest = coverage.get("latestMonth").stringValue();
+
+        JsonNode tool = result("get_alerts", "{\"limit\": 20}");
+        assertThat(tool.get("from").stringValue()).isEqualTo(earliest);
+        assertThat(tool.get("to").stringValue()).isEqualTo(latest);
+        JsonNode api = api("/api/alerts?from=" + earliest + "&to=" + latest + "&limit=20");
+        Function<JsonNode, List<JsonNode>> figures = a -> List.of(a.get("type"), a.get("month"),
+                a.get("basis").get("observed"));
+        assertThat(fields(tool.get("items"), figures)).isNotEmpty().isEqualTo(fields(api.get("items"), figures));
+        assertThat(java.time.YearMonth.parse(earliest)).as("wider than the API's 3-month default")
+                .isBefore(java.time.YearMonth.parse(latest).minusMonths(2));
+
+        JsonNode march = result("get_alerts", "{\"month\": \"2026-03\", \"limit\": 20}");
+        assertThat(march.get("from").stringValue()).isEqualTo("2026-03");
+        assertThat(march.get("to").stringValue()).isEqualTo("2026-03");
+        assertThat(fields(march.get("items"), figures))
+                .isEqualTo(fields(api("/api/alerts?from=2026-03&to=2026-03&limit=20").get("items"), figures));
+    }
+
     @Test
     void getDataCoverageIsTheCoverageEndpoint() throws Exception {
         JsonNode tool = result("get_data_coverage", "{}");

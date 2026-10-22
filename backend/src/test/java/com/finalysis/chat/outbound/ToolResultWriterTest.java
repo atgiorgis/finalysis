@@ -102,10 +102,10 @@ class ToolResultWriterTest {
                 .mapToObj(i -> YearMonth.of(2026, 12).minusMonths(months - 1 - i).toString()).toList();
         FlowView flow = new FlowView("-123.45", "10.00", "-113.45", 7);
         return new CategoryTotalsView(monthNames.getFirst(), monthNames.getLast(), null,
-                monthNames.stream().map(m -> new MonthCoverageView(m, "COMPLETE")).toList(),
+                monthNames.stream().map(m -> new MonthCoverageView(m, "COMPLETE")).toList(), null,
                 IntStream.range(0, rows).mapToObj(r -> new CategoryTotalsView.Row(
                         turn.refs().ref(new RefRegistry.Cell("row " + r, List.of(Map.of("r", "" + r)), Map.of())), "EXPENSE",
-                        "Dining", flow, monthNames.stream().map(m -> new CategoryTotalsView.Cell(m, "-123.45",
+                        "Dining", flow, null, monthNames.stream().map(m -> new CategoryTotalsView.Cell(m, "-123.45",
                                 "10.00", "-113.45", 7, null)).toList())).toList());
     }
 }

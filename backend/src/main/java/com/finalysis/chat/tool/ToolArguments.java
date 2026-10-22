@@ -105,11 +105,27 @@ public final class ToolArguments {
         return (MonthRange) values.get(name);
     }
 
+    /** The range's first month: {@code month} when given, else {@code from}. */
+    public Optional<YearMonth> from() {
+        return month("month").or(() -> month("from"));
+    }
+
+    /** The range's last month: {@code month} when given, else {@code to}. */
+    public Optional<YearMonth> to() {
+        return month("month").or(() -> month("to"));
+    }
+
     /**
-     * The problems of an optional {@code from}–{@code to} pair given both ends: reversed, or longer than
-     * {@value ToolParam#MAX_MONTHS} months. With one end only, the service applies its default and bound.
+     * The problems of the range parameters: {@code month} with {@code from} or {@code to}; then, given both ends, a
+     * reversed {@code from}–{@code to} or one longer than {@value ToolParam#MAX_MONTHS} months. With one end only, the
+     * service applies its default and bound.
      */
     public List<FieldProblem> rangeProblems() {
+        List<FieldProblem> conflicts = new ArrayList<>(conflict("month", "from"));
+        conflicts.addAll(conflict("month", "to"));
+        if (!conflicts.isEmpty()) {
+            return List.copyOf(conflicts);
+        }
         Optional<YearMonth> from = month("from");
         Optional<YearMonth> to = month("to");
         if (from.isEmpty() || to.isEmpty()) {

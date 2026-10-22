@@ -21,12 +21,25 @@ import tools.jackson.databind.json.JsonMapper;
  * applied, then the search index built by categorization's refresh before any question. One dataset at a time: the
  * previous one is deleted first, and seeding refuses a database that still holds txns.
  * <ul>
- *   <li>{@code SAMPLE}: {@code sample-data/statements/} with {@code answer-key.csv}'s categories;</li>
+ *   <li>{@code SAMPLE}: {@code sample-data/statements/} with {@code answer-key.csv}'s categories, and the accounts
+ *       named as a user would name them ({@link #SAMPLE_NAMES}, step 8b), so questions such as "my Summit card" have
+ *       an account name to be redacted to its alias;</li>
  *   <li>{@code FIXTURE}: the analytics fixture ({@code sample-data/analytics/}) with its categories;</li>
  *   <li>{@code INJECTION}: the chat injection fixture ({@code sample-data/chat/injection/}).</li>
  * </ul>
  */
 class ChatEvalSeeder {
+
+    /**
+     * The sample accounts' names and institutions, by slug: fictional, as in the statements (the descriptions say
+     * "APEX VISA AUTOPAY", "SUMMIT CARD ONLINE PMT"). The first dev run seeded "Test 3001" at "Test Bank", so "Summit"
+     * and "Apex" in a question named no account and went out as typed (d-l09, d-c06).
+     */
+    static final Map<String, List<String>> SAMPLE_NAMES = Map.of(
+            "northfield-checking", List.of("Northfield Checking", "Northfield Credit Union"),
+            "northfield-savings", List.of("Northfield Savings", "Northfield Credit Union"),
+            "apex-visa", List.of("Apex Visa", "Apex Bank"),
+            "summit-card", List.of("Summit Card", "Summit Financial"));
 
     private final ImportTestSupport support;
     private final JdbcTemplate jdbc;
@@ -60,6 +73,11 @@ class ChatEvalSeeder {
                 SampleDataImport sample = new SampleDataImport(support, json);
                 Map<String, Long> ids = sample.load();
                 sample.applyAnswerKey(jdbc, ids);
+                ids.forEach((slug, id) -> {
+                    List<String> names = SAMPLE_NAMES.get(slug);
+                    jdbc.update("UPDATE account SET name = ?, institution = ? WHERE id = ?", names.get(0),
+                            names.get(1), id);
+                });
                 yield ids;
             }
             case "FIXTURE" -> new AnalyticsFixture(support, jdbc, json).load().accounts();
@@ -81,6 +99,7 @@ class ChatEvalSeeder {
         jdbc.update("DELETE FROM chat_conversation");
         jdbc.update("DELETE FROM chat_usage");
         jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         support.deleteCreatedAccounts();
     }
 }

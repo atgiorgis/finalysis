@@ -25,27 +25,27 @@ class ToolRegistryTest {
     static List<ChatTool> tools() {
         return List.of(new MonthTotalsTool(null), new CategoryTotalsTool(null), new AccountTotalsTool(null),
                 new TopMerchantsTool(null), new TrendsTool(null), new ComparePeriodsTool(null),
-                new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null),
-                new DataCoverageTool(null), new SearchTransactionsTool(null, null), new MerchantTotalsTool(null));
+                new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null, null),
+                new DataCoverageTool(null), new SearchTransactionsTool(null, null, null), new MerchantTotalsTool(null));
     }
 
-    /** §3.2's parameters per tool; required ones marked with "!". */
+    /** §3.2's parameters per tool, with step 8b's {@code month} on every range tool; required ones marked "!". */
     static final Map<String, List<String>> PLAN = new LinkedHashMap<>();
 
     static {
-        PLAN.put("get_month_totals", List.of("from", "to", "account"));
-        PLAN.put("get_category_totals", List.of("from", "to", "account", "category", "uncategorized"));
-        PLAN.put("get_account_totals", List.of("from", "to"));
-        PLAN.put("get_top_merchants", List.of("from", "to", "account", "category", "limit!"));
+        PLAN.put("get_month_totals", List.of("month", "from", "to", "account"));
+        PLAN.put("get_category_totals", List.of("month", "from", "to", "account", "category", "uncategorized"));
+        PLAN.put("get_account_totals", List.of("month", "from", "to"));
+        PLAN.put("get_top_merchants", List.of("month", "from", "to", "account", "category", "limit!"));
         PLAN.put("get_trends", List.of("month", "account", "category"));
         PLAN.put("compare_periods", List.of("measure!", "category", "account", "a!", "b!"));
         PLAN.put("list_transactions", List.of("month", "from", "to", "bucket", "measure", "account", "category",
                 "merchant", "limit!"));
         PLAN.put("get_recurring_charges", List.of("account", "status!", "limit!"));
-        PLAN.put("get_alerts", List.of("from", "to", "type", "account", "includeDismissed", "limit!"));
+        PLAN.put("get_alerts", List.of("month", "from", "to", "type", "account", "includeDismissed", "limit!"));
         PLAN.put("get_data_coverage", List.of());
-        PLAN.put("search_transactions", List.of("query!", "from", "to", "limit!"));
-        PLAN.put("get_merchant_totals", List.of("merchants!", "from", "to", "account"));
+        PLAN.put("search_transactions", List.of("query!", "month", "from", "to", "limit!"));
+        PLAN.put("get_merchant_totals", List.of("merchants!", "month", "from", "to", "account"));
     }
 
     private final ToolRegistry registry = new ToolRegistry(tools(), JSON);
@@ -115,10 +115,12 @@ class ToolRegistryTest {
         assertThat(JSON.readTree(definition("get_month_totals").inputSchema())).isEqualTo(JSON.readTree("""
                 {"type": "object",
                  "properties": {
+                   "month": {"type": "string", "pattern": "^\\\\d{4}-(0[1-9]|1[0-2])$",
+                             "description": "One month, yyyy-MM: \\"2026-08\\" for August 2026. The same as from and to both that month. Not with from or to."},
                    "from": {"type": "string", "pattern": "^\\\\d{4}-(0[1-9]|1[0-2])$",
-                            "description": "First month, yyyy-MM. Default: a few months ending at `to`; give it to be sure."},
+                            "description": "First month of a range, yyyy-MM: \\"2026-06\\" for June 2026. Default: 6 months ending at `to`; give it to be sure. Not with month."},
                    "to": {"type": "string", "pattern": "^\\\\d{4}-(0[1-9]|1[0-2])$",
-                          "description": "Last month, yyyy-MM. Default: the latest month with data (latestMonth in the context block). At most 24 months from `from` to `to`, both included."},
+                          "description": "Last month of a range, yyyy-MM: \\"2026-08\\" for August 2026. Default: the latest month with data (latestMonth in the context block). At most 24 months from `from` to `to`, both included. Not with month."},
                    "account": {"type": "string", "maxLength": 20,
                                "description": "Only this account, by its alias from the context block (CHECKING-1). Default: every account."}},
                  "required": [],
@@ -126,6 +128,35 @@ class ToolRegistryTest {
         JsonNode measure = JSON.readTree(definition("compare_periods").inputSchema()).get("properties").get("measure");
         assertThat(measure.get("enum").valueStream().map(JsonNode::stringValue)).containsExactly("SPENDING", "INCOME",
                 "NET", "CATEGORY_SPENT", "CATEGORY_RECEIVED");
+    }
+
+    /**
+     * Step 8b: a turn's definitions list the data's category names as the enum of every category parameter, in the
+     * context block's order; nothing else changes. Without names, the parameter stays a bounded string.
+     */
+    @Test
+    void aTurnsDefinitionsListTheCategoryNames() {
+        List<String> names = List.of("Dining", "Groceries", "Refunds & Rebates");
+        List<ToolRegistry.Definition> turn = registry.definitions(names);
+        assertThat(registry.definitions(List.of("Dining", "Groceries", "Refunds & Rebates"))).isSameAs(turn);
+        int withCategory = 0;
+        for (int i = 0; i < turn.size(); i++) {
+            JsonNode plain = JSON.readTree(registry.definitions().get(i).inputSchema());
+            JsonNode listed = JSON.readTree(turn.get(i).inputSchema());
+            JsonNode category = listed.get("properties").get("category");
+            if (category != null) {
+                withCategory++;
+                assertThat(category.get("enum").valueStream().map(JsonNode::stringValue)).containsExactlyElementsOf(names);
+                assertThat(category.has("maxLength")).isFalse();
+                assertThat(plain.get("properties").get("category").get("maxLength").intValue()).isEqualTo(100);
+                ((tools.jackson.databind.node.ObjectNode) listed.get("properties")).remove("category");
+                ((tools.jackson.databind.node.ObjectNode) plain.get("properties")).remove("category");
+            }
+            assertThat(listed).as(turn.get(i).name()).isEqualTo(plain);
+        }
+        assertThat(withCategory).as("get_category_totals, get_top_merchants, get_trends, compare_periods, "
+                + "list_transactions").isEqualTo(5);
+        assertThat(registry.definitions(List.of())).isSameAs(registry.definitions());
     }
 
     /** §3.2: a search is 2 to 60 characters; a merchant total takes 1 to 10 names, each as results show it. */

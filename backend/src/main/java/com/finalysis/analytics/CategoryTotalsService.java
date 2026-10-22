@@ -5,6 +5,7 @@ import com.finalysis.analytics.CategoryTotalsResponse.MonthCoverage;
 import com.finalysis.analytics.CategoryTotalsResponse.Row;
 import com.finalysis.api.InvalidField;
 import com.finalysis.api.InvalidRequestException;
+import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -70,13 +71,16 @@ public class CategoryTotalsService {
         categoryId.ifPresent(references::requireCategory);
         if (range.isEmpty() || map.isEmpty()) {
             return new CategoryTotalsResponse(range.orElse(null), accountId.orElse(null), categoryId.orElse(null),
-                    uncategorized, List.of(), List.of());
+                    uncategorized, List.of(), List.of(), range.isEmpty() ? null : Arithmetic.ZERO);
         }
 
         List<YearMonth> months = range.get().months();
         Map<Long, CategoryRef> categories = references.categories();
         Map<RowKey, Map<YearMonth, List<Cell>>> cellsByRow = new LinkedHashMap<>();
-        for (Cell cell : buckets.find(range.get(), accountId, categoryId)) {
+        List<Cell> found = buckets.find(range.get(), accountId, categoryId);
+        BigDecimal spending = spending(categoryId.isEmpty() ? found
+                : buckets.find(range.get(), accountId, Optional.empty()));
+        for (Cell cell : found) {
             if (uncategorized && cell.bucket() != TxnBucket.UNCATEGORIZED) {
                 continue;
             }
@@ -93,7 +97,7 @@ public class CategoryTotalsService {
             MoneyFlow total = cells.stream().map(CategoryTotalsResponse.Cell::flow)
                     .reduce(MoneyFlow.ZERO, MoneyFlow::plus);
             rows.add(new Row(key.bucket(), key.categoryId() == null ? null : categories.get(key.categoryId()), total,
-                    cells));
+                    cells, share(key.bucket(), total, spending)));
         });
         rows.sort(ORDER);
 
@@ -101,7 +105,34 @@ public class CategoryTotalsService {
                 .map(month -> new MonthCoverage(month, MonthTotalsReader.coverage(map, month, accountId)))
                 .toList();
         return new CategoryTotalsResponse(range.get(), accountId.orElse(null), categoryId.orElse(null), uncategorized,
-                monthCoverage, List.copyOf(rows));
+                monthCoverage, List.copyOf(rows), spending);
+    }
+
+    /**
+     * Total spending of the cells, by {@link MonthTotalsCalculator}'s rule: expenses and refunds net, plus uncategorized
+     * money out. The cells are every category's, so a row's share has the household's (or the account's) spending as
+     * its base.
+     */
+    private static BigDecimal spending(List<Cell> cells) {
+        BigDecimal total = Arithmetic.ZERO;
+        for (Cell cell : cells) {
+            total = total.add(switch (cell.bucket()) {
+                case EXPENSE, REFUND -> cell.flow().net();
+                case UNCATEGORIZED -> cell.flow().moneyOut();
+                default -> BigDecimal.ZERO;
+            });
+        }
+        return total;
+    }
+
+    /** A spending row's part of the total spending, in Java (step 8b: shares are never the model's arithmetic). */
+    private static BigDecimal share(TxnBucket bucket, MoneyFlow total, BigDecimal spending) {
+        BigDecimal part = switch (bucket) {
+            case EXPENSE, REFUND -> total.net();
+            case UNCATEGORIZED -> total.moneyOut();
+            default -> null;
+        };
+        return part == null ? null : Arithmetic.percent(part, spending);
     }
 
     private static CategoryTotalsResponse.Cell cell(TxnBucket bucket, YearMonth month, List<Cell> cells) {

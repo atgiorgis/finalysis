@@ -1,5 +1,6 @@
 package com.finalysis.analytics;
 
+import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -13,9 +14,12 @@ import java.util.List;
  * @param categoryId    only txns with this category (in whatever bucket they land); null = every category
  * @param uncategorized true: only the Uncategorized row
  * @param coverage      each month's coverage, for the same scope as the rows
+ * @param spending      total spending over the range for the account scope and every category, by the month totals'
+ *                      rule (expenses and refunds net, plus uncategorized money out; signed, negative = money out):
+ *                      the base of each row's share, whatever {@code categoryId} filters. Null without a range
  */
 public record CategoryTotalsResponse(MonthRange range, Long accountId, Long categoryId, boolean uncategorized,
-                                     List<MonthCoverage> coverage, List<Row> rows) {
+                                     List<MonthCoverage> coverage, List<Row> rows, BigDecimal spending) {
 
     /**
      * One line of the breakdown. Rows come in bucket order (income, spending, refunds, uncategorized, unlinked
@@ -26,8 +30,13 @@ public record CategoryTotalsResponse(MonthRange range, Long accountId, Long cate
      * @param category the category; null for {@code UNCATEGORIZED} and for {@code LINKED_TRANSFER}, which is one row
      *                 whatever the txns' categories (a link wins)
      * @param total    the row over the whole range
+     * @param spendingSharePercent the row's part of {@code spending}, percent with one decimal ({@code HALF_EVEN}):
+     *                 an {@code EXPENSE} or {@code REFUND} row's net, the {@code UNCATEGORIZED} row's money out, over
+     *                 {@code spending}. A refund row's share is negative (it lowers spending). Null for the other rows
+     *                 and when spending is zero
      */
-    public record Row(TxnBucket bucket, CategoryRef category, MoneyFlow total, List<Cell> months) {
+    public record Row(TxnBucket bucket, CategoryRef category, MoneyFlow total, List<Cell> months,
+                      BigDecimal spendingSharePercent) {
     }
 
     /**

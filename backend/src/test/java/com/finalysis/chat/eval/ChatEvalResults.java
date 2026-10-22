@@ -15,6 +15,14 @@ final class ChatEvalResults {
     private ChatEvalResults() {
     }
 
+    /**
+     * One problem of an invalid tool call, as the model read it (step 8b): the tool (or {@code (unknown)}), the
+     * parameter (or {@code (unknown)} for an invented one, {@code (call)} for the whole call) and the
+     * {@code ToolProblem}.
+     */
+    record InvalidArgument(String tool, String parameter, String problem) {
+    }
+
     /** One tool call of a turn: its name (null for an invented one), status and rows sent. */
     record ToolUse(String name, String status, int rows) {
     }
@@ -28,6 +36,7 @@ final class ChatEvalResults {
      * @param retryFigures   the figures the grounding retry listed, as written (empty without a retry)
      * @param rejectedAnswer the first answer, when the retry replaced it: never shown to a user, kept for review
      * @param searchQueries  the search texts the model sent to {@code search_transactions}
+     * @param invalidArguments every problem of the turn's invalid tool calls, in order
      * @param cost           the app's estimate in dollars (the price file's price for the model)
      * @param millis         wall time of the turn, as the harness measured it
      */
@@ -35,10 +44,11 @@ final class ChatEvalResults {
                        int figuresChecked, int ungrounded, List<ToolUse> tools, LimitHit limit, int rounds,
                        Integer inputTokens, Integer outputTokens, int callsWithoutUsage, BigDecimal cost, long millis,
                        List<String> retryFigures, String rejectedAnswer, List<String> searchQueries,
-                       Boolean citationsFound) {
+                       Boolean citationsFound, List<InvalidArgument> invalidArguments) {
 
         Observation {
             tools = List.copyOf(tools);
+            invalidArguments = List.copyOf(invalidArguments);
             retryFigures = List.copyOf(retryFigures);
             searchQueries = List.copyOf(searchQueries);
         }

@@ -68,17 +68,33 @@ public sealed interface ToolRead {
      * @param range        the months the spending covers; null without candidates or data
      * @param byMeaning    whether the search used a vector (false: by name only)
      */
-    record Search(MonthRange range, List<Candidate> candidates, MerchantSearchQuery.Coverage coverage,
-                  boolean byMeaning) implements ToolRead {
+    record Search(MonthRange range, List<CategoryMatch> categories, List<Candidate> candidates,
+                  MerchantSearchQuery.Coverage coverage, boolean byMeaning) implements ToolRead {
 
         public Search {
+            categories = List.copyOf(categories);
             candidates = List.copyOf(candidates);
         }
 
-        /** How a candidate was found. */
-        public enum Match { NAME, MEANING }
+        public Search(MonthRange range, List<Candidate> candidates, MerchantSearchQuery.Coverage coverage,
+                      boolean byMeaning) {
+            this(range, List.of(), candidates, coverage, byMeaning);
+        }
 
-        /** @param similarity cosine similarity to two decimals; null for a name match */
+        /**
+         * How a candidate was found: its own name ({@code NAME}) or document ({@code MEANING}), or as a merchant of a
+         * category the search matched ({@code CATEGORY}, step 8b).
+         */
+        public enum Match { NAME, MEANING, CATEGORY }
+
+        /** A category the search matched, by its name ({@code NAME}, similarity null) or by meaning. */
+        public record CategoryMatch(String category, Match match, BigDecimal similarity) {
+        }
+
+        /**
+         * @param similarity cosine similarity to two decimals: the merchant's, or for {@code CATEGORY} its category's;
+         *                   null when found by a name
+         */
         public record Candidate(Match match, BigDecimal similarity, MerchantSpend spend) {
         }
     }

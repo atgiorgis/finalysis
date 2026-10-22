@@ -3,6 +3,7 @@ package com.finalysis.chat.tool;
 import static com.finalysis.chat.tool.Params.ACCOUNT;
 import static com.finalysis.chat.tool.Params.CATEGORY;
 import static com.finalysis.chat.tool.Params.FROM;
+import static com.finalysis.chat.tool.Params.MONTH;
 import static com.finalysis.chat.tool.Params.TO;
 
 import com.finalysis.analytics.DrillDownFilter;
@@ -22,8 +23,6 @@ class ListTransactionsTool implements ChatTool {
 
     static final int MAX_LIMIT = 25;
 
-    private static final ToolParam MONTH = ToolParam.optional("month", new ToolParam.Month(),
-            "One month, yyyy-MM. Not with from or to.");
     private static final ToolParam BUCKET = ToolParam.optional("bucket", new ToolParam.Choice(TxnBucket.class),
             "Only this bucket. UNCATEGORIZED not with category.");
     private static final ToolParam MEASURE = ToolParam.optional("measure", new ToolParam.Choice(TrendMeasure.class),
@@ -56,9 +55,7 @@ class ListTransactionsTool implements ChatTool {
 
     @Override
     public List<FieldProblem> check(ToolArguments arguments) {
-        List<FieldProblem> problems = new ArrayList<>(arguments.conflict("month", "from"));
-        problems.addAll(arguments.conflict("month", "to"));
-        problems.addAll(arguments.rangeProblems());
+        List<FieldProblem> problems = new ArrayList<>(arguments.rangeProblems());
         if (arguments.choice("bucket", TxnBucket.class).filter(b -> b == TxnBucket.UNCATEGORIZED).isPresent()) {
             problems.addAll(arguments.conflict("category", "bucket"));
         }

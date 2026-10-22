@@ -2,6 +2,7 @@ package com.finalysis.chat.tool;
 
 import static com.finalysis.chat.tool.Params.ACCOUNT;
 import static com.finalysis.chat.tool.Params.FROM;
+import static com.finalysis.chat.tool.Params.MONTH;
 import static com.finalysis.chat.tool.Params.TO;
 
 import com.finalysis.analytics.MonthlyTotalsService;
@@ -36,7 +37,7 @@ class MonthTotalsTool implements ChatTool {
 
     @Override
     public List<ToolParam> params() {
-        return List.of(FROM, TO, ACCOUNT);
+        return List.of(MONTH, FROM, TO, ACCOUNT);
     }
 
     @Override
@@ -47,7 +48,7 @@ class MonthTotalsTool implements ChatTool {
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ToolRead read(ToolArguments arguments) {
-        return new ToolRead.MonthTotals(months.months(arguments.month("from"), arguments.month("to"),
+        return new ToolRead.MonthTotals(months.months(arguments.from(), arguments.to(),
                 arguments.id("account")));
     }
 }

@@ -50,7 +50,8 @@ class ChatEvalReportTest {
     private static TurnResult result(Turn turn, String answer, boolean retried, String rejected) {
         Observation observed = new Observation(answer, null, AnswerSource.MODEL, GroundingStatus.GROUNDED, retried, 1,
                 0, List.of(new ToolUse("get_category_totals", "OK", 1)), null, retried ? 3 : 2, 1000, 100, 0,
-                new BigDecimal("0.001500"), 1500, retried ? List.of("2026") : List.of(), rejected, List.of(), null);
+                new BigDecimal("0.001500"), 1500, retried ? List.of("2026") : List.of(), rejected, List.of(), null,
+                List.of());
         return new TurnResult(1, turn.ask(), turn.expect(), turn.note(), observed,
                 ChatEvalScoring.score(turn, new Shown(answer, AnswerSource.MODEL, Set.of("get_category_totals"), null),
                         List.of()));

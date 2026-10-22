@@ -289,7 +289,8 @@ erDiagram
 | `transfer_link` | Pairs the outgoing and incoming side of a transfer between the user's own accounts, such as a card payment, or marks one side alone as a transfer to or from an account that isn't in the app. See [Transfers](#transfers-and-the-review-queue). |
 | `transfer_rejection` | A pair the user unlinked or dismissed: detection never proposes it again. |
 | `unparsed_upload` | A PDF that no layout parser recognized: account, file hash and name, reason, and how it was resolved. No bytes or text are kept. |
-| `merchant_embedding` | One embedding per cleaned merchant name, used to find similar merchants for categorization and search. |
+| `merchant_embedding` | One embedding per cleaned merchant name, used to find similar merchants for categorization. |
+| `search_embedding` | The chat search index: one embedding per merchant (its redacted name plus its category name) and per category name, per embedding model. |
 | `alert_dismissal` | Alerts the user dismissed, by stable alert key, with an optional note. Alerts themselves are computed on demand and never stored. See [Alerts](#alerts). |
 
 ### Design decisions

@@ -80,6 +80,17 @@ class ChatQuestionSetsTest {
     static final Map<String, Integer> CATEGORY_COUNTS = orderedMap("LOOKUP", 12, "COMPARISON", 8, "TREND", 6,
             "ALERTS_RECURRING", 6, "SEARCH", 8, "MULTI_TURN", 4, "INJECTION", 6, "CANT_ANSWER", 8);
 
+    /**
+     * The dev set's counts since its revision 2 (step 8b notes): d-x08 moved from can't-answer to comparison when
+     * {@code get_category_totals} gained each category's share of spending. The dev set is for tuning and may change
+     * with a recorded revision; the holdout keeps §13.1's table.
+     */
+    static final Map<String, Integer> DEV_CATEGORY_COUNTS = orderedMap("LOOKUP", 12, "COMPARISON", 9, "TREND", 6,
+            "ALERTS_RECURRING", 6, "SEARCH", 8, "MULTI_TURN", 4, "INJECTION", 6, "CANT_ANSWER", 7);
+
+    /** Each set's version: the dev set's revisions are recorded in its header and the plan; the holdout's is 1. */
+    static final Map<String, Integer> VERSIONS = Map.of("dev", 2, "holdout", 1);
+
     static final Set<String> QUESTION_KEYS = Set.of("id", "author", "category", "dataset", "searchTargets", "turns");
     static final Set<String> TURN_KEYS = Set.of("ask", "expect", "tools", "figures", "forbidden", "citations", "note",
             "dependsOnPrevious");
@@ -105,14 +116,15 @@ class ChatQuestionSetsTest {
         List<Map<String, Object>> questions = questions(set);
 
         assertThat(set.get("set")).isEqualTo(name);
-        assertThat(set.get("version")).isEqualTo(1);
+        assertThat(set.get("version")).isEqualTo(VERSIONS.get(name));
         assertThat(map(set.get("datasets")).keySet()).containsExactlyInAnyOrder("SAMPLE", "FIXTURE", "INJECTION");
         assertThat(questions.stream().map(q -> (String) q.get("id")))
                 .doesNotHaveDuplicates()
                 .allMatch(id -> id.startsWith(name.equals("dev") ? "d-" : "h-"));
         Map<String, Integer> counts = questions.stream()
                 .collect(Collectors.groupingBy(q -> (String) q.get("category"), Collectors.summingInt(q -> 1)));
-        assertThat(counts).containsExactlyInAnyOrderEntriesOf(CATEGORY_COUNTS);
+        assertThat(counts).containsExactlyInAnyOrderEntriesOf(name.equals("dev") ? DEV_CATEGORY_COUNTS
+                : CATEGORY_COUNTS);
 
         for (Map<String, Object> q : questions) {
             String id = (String) q.get("id");
@@ -299,8 +311,9 @@ class ChatQuestionSetsTest {
      *   <li>{@code month}: {@link AnswerKeyOracle#month}'s income, spending, net or savings rate;</li>
      *   <li>{@code merchantSpent}: the counted money-out rows containing any of the words, over the months if given;</li>
      *   <li>{@code row}: the amount of the answer-key rows on that date containing the words (all equal);</li>
-     *   <li>{@code diff}, {@code changePercent} ((a − b) / b × 100, half-even, one decimal), {@code average}
-     *       (half-even, cents), {@code max} over other sources;</li>
+     *   <li>{@code diff}, {@code changePercent} ((a − b) / b × 100, half-even, one decimal), {@code share}
+     *       (a / b × 100, half-even, one decimal), {@code average} (half-even, cents), {@code sum} and {@code max} over
+     *       other sources;</li>
      *   <li>{@code fixtureTotal}, {@code fixtureAlert}: a cell of {@code expected-month-totals.csv} or
      *       {@code expected-alerts.csv}; {@code fixtureRows}, {@code injectionRows}: the key's rows over the months,
      *       by category, bucket, words, account, date and money out, summed or counted.</li>
@@ -345,6 +358,17 @@ class ChatQuestionSetsTest {
                     BigDecimal y = resolve(dataset, map(a.get("b"))).value();
                     yield new Figure(x.subtract(y).multiply(BigDecimal.valueOf(100)).divide(y, 1, RoundingMode.HALF_EVEN)
                             .abs(), "PERCENT");
+                }
+                case "share" -> {
+                    BigDecimal x = resolve(dataset, map(a.get("a"))).value();
+                    BigDecimal y = resolve(dataset, map(a.get("b"))).value();
+                    yield new Figure(x.multiply(BigDecimal.valueOf(100)).divide(y, 1, RoundingMode.HALF_EVEN).abs(),
+                            "PERCENT");
+                }
+                case "sum" -> {
+                    List<Figure> of = list(a.get("of")).stream().map(s -> resolve(dataset, map(s))).toList();
+                    yield new Figure(of.stream().map(Figure::value).reduce(BigDecimal.ZERO, BigDecimal::add),
+                            of.getFirst().kind());
                 }
                 case "average" -> {
                     List<Figure> of = list(a.get("of")).stream().map(s -> resolve(dataset, map(s))).toList();

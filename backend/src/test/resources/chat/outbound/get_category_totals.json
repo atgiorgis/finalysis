@@ -8,6 +8,10 @@
       "coverage": "COMPLETE"
     }
   ],
+  "spending": {
+    "ref": "c9",
+    "amount": "-1399.24"
+  },
   "rows": [
     {
       "ref": "c1",
@@ -19,6 +23,7 @@
         "net": "2500.00",
         "count": 1
       },
+      "spendingSharePercent": null,
       "months": [
         {
           "month": "2026-03",
@@ -40,6 +45,7 @@
         "net": "0.85",
         "count": 1
       },
+      "spendingSharePercent": null,
       "months": [
         {
           "month": "2026-03",
@@ -61,6 +67,7 @@
         "net": "-42.00",
         "count": 2
       },
+      "spendingSharePercent": "3.0",
       "months": [
         {
           "month": "2026-03",
@@ -82,6 +89,7 @@
         "net": "-115.50",
         "count": 2
       },
+      "spendingSharePercent": "8.3",
       "months": [
         {
           "month": "2026-03",
@@ -103,6 +111,7 @@
         "net": "-1200.00",
         "count": 1
       },
+      "spendingSharePercent": "85.8",
       "months": [
         {
           "month": "2026-03",
@@ -124,6 +133,7 @@
         "net": "-23.75",
         "count": 3
       },
+      "spendingSharePercent": "1.7",
       "months": [
         {
           "month": "2026-03",
@@ -145,6 +155,7 @@
         "net": "-9.99",
         "count": 1
       },
+      "spendingSharePercent": "0.7",
       "months": [
         {
           "month": "2026-03",
@@ -166,6 +177,7 @@
         "net": "-8.00",
         "count": 2
       },
+      "spendingSharePercent": "0.6",
       "months": [
         {
           "month": "2026-03",

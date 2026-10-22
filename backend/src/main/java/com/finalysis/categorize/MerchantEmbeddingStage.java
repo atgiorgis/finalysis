@@ -101,6 +101,21 @@ public class MerchantEmbeddingStage {
         static EmbeddingRunResult off() {
             return new EmbeddingRunResult(Status.OFF, 0, 0, 0, 0, 0, 0, 0);
         }
+
+        /**
+         * Two runs as one: counts added; the status the worse of the two (a failure, then the cap, then done; off
+         * only when both were off).
+         */
+        EmbeddingRunResult plus(EmbeddingRunResult other) {
+            Status status = status() == Status.OFF ? other.status() : other.status() == Status.OFF ? status()
+                    : status() == Status.STOPPED_ON_ERROR || other.status() == Status.STOPPED_ON_ERROR
+                    ? Status.STOPPED_ON_ERROR
+                    : status() == Status.CAP_REACHED || other.status() == Status.CAP_REACHED ? Status.CAP_REACHED
+                    : Status.DONE;
+            return new EmbeddingRunResult(status, merchants + other.merchants, cached + other.cached,
+                    embedded + other.embedded, calls + other.calls, callsWithoutUsage + other.callsWithoutUsage,
+                    inputTokens + other.inputTokens, remaining + other.remaining);
+        }
     }
 
     /**
@@ -146,7 +161,7 @@ public class MerchantEmbeddingStage {
         Map<String, String> stored = embeddings.inputHashes(model);
         Map<String, float[]> fresh = new HashMap<>();
         EmbeddingRunResult result = embedMissing(textByMerchant, model, stored, properties.maxEmbeddingsPerRun(),
-                fresh);
+                fresh, (merchant, sha, vector) -> embeddings.upsert(merchant, model, sha, vector));
 
         Map<String, float[]> vectors = new HashMap<>();
         for (String merchant : itemMerchants) {
@@ -173,14 +188,43 @@ public class MerchantEmbeddingStage {
         }
         String model = embedder.modelId();
         EmbeddingRunResult result = embedMissing(textByMerchant, model, embeddings.inputHashes(model), cap,
-                new HashMap<>());
+                new HashMap<>(), (merchant, sha, vector) -> embeddings.upsert(merchant, model, sha, vector));
         log(logLabel, result);
         return result;
     }
 
+    /** Where {@link #embedInto} keeps vectors: what it holds per key for the model, and how it stores one. */
+    public interface Store {
+
+        /** The SHA-256 of the text each key's current vector was made from, for this model. */
+        Map<String, String> inputHashes(String model);
+
+        void upsert(String key, String model, String inputSha256, float[] vector);
+    }
+
+    /**
+     * Embeds every text of {@code textByKey} whose key has no vector of the current model for that text in
+     * {@code store}, in the map's order, at most {@code cap} calls, on this stage's path (same hash, embedder, AI-06 line
+     * per call, failure handling): the chat search index (docs/plans/phase-6.md step 8b). Doesn't log its counts: the
+     * caller logs one line for all its runs ({@link #log}). Makes no call when AI is off.
+     */
+    public EmbeddingRunResult embedInto(Map<String, String> textByKey, int cap, Store store) {
+        if (!embedder.enabled()) {
+            return EmbeddingRunResult.off();
+        }
+        String model = embedder.modelId();
+        return embedMissing(textByKey, model, store.inputHashes(model), cap, new HashMap<>(),
+                (key, sha, vector) -> store.upsert(key, model, sha, vector));
+    }
+
+    private interface Upsert {
+        void upsert(String key, String inputSha256, float[] vector);
+    }
+
     /** The calls: each merchant whose text's hash isn't the stored one, until {@code cap} calls or a failure. */
     private EmbeddingRunResult embedMissing(Map<String, String> textByMerchant, String model,
-                                            Map<String, String> stored, int cap, Map<String, float[]> fresh) {
+                                            Map<String, String> stored, int cap, Map<String, float[]> fresh,
+                                            Upsert upsert) {
         List<Map.Entry<String, String>> needed = new ArrayList<>();
         int cached = 0;
         for (Map.Entry<String, String> entry : textByMerchant.entrySet()) {
@@ -216,7 +260,7 @@ public class MerchantEmbeddingStage {
             } else {
                 callsWithoutUsage++;
             }
-            embeddings.upsert(entry.getKey(), model, sha256(entry.getValue()), embedding.vector());
+            upsert.upsert(entry.getKey(), sha256(entry.getValue()), embedding.vector());
             fresh.put(entry.getKey(), embedding.vector());
             done++;
         }
@@ -224,7 +268,7 @@ public class MerchantEmbeddingStage {
                 inputTokens, needed.size() - done);
     }
 
-    private static void log(String label, EmbeddingRunResult result) {
+    static void log(String label, EmbeddingRunResult result) {
         log.info("{}: status={} merchants={} cached={} embedded={} calls={} callsWithoutUsage={} inputTokens={} "
                         + "remaining={}", label, result.status(), result.merchants(), result.cached(),
                 result.embedded(), result.calls(), result.callsWithoutUsage(), result.inputTokens(),

@@ -139,6 +139,36 @@ class MonthlyTotalsTest {
                 .doesNotContain("Refunds & Rebates");
     }
 
+    /**
+     * Phase 6 step 8b: the range's total spending is the month totals' spending, and each spending row's share of it
+     * is computed here (half-even, one decimal), over every category even when one category is asked for. By hand for
+     * March: spending −1,809.48; Shopping −63.00 → 3.5%; Refunds &amp; Rebates +15.00 → −0.8% (it lowers spending).
+     */
+    @Test
+    void eachSpendingRowHasItsShareOfTheRangesSpending() {
+        Optional<YearMonth> march = Optional.of(MAR);
+        CategoryTotalsResponse all = categories.categories(march, march, Optional.empty(), Optional.empty(), false);
+
+        assertThat(all.spending()).isEqualTo(money("-1809.48")).isEqualTo(month(MAR).spending());
+        assertThat(row(all, TxnBucket.EXPENSE, "Shopping").spendingSharePercent()).isEqualByComparingTo("3.5");
+        assertThat(row(all, TxnBucket.REFUND, "Refunds & Rebates").spendingSharePercent())
+                .isEqualByComparingTo("-0.8");
+        assertThat(rows(all, TxnBucket.INCOME)).allSatisfy(r -> assertThat(r.spendingSharePercent()).isNull());
+        assertThat(rows(all, TxnBucket.LINKED_TRANSFER)).allSatisfy(r -> assertThat(r.spendingSharePercent()).isNull());
+
+        long shopping = jdbc.queryForObject("SELECT id FROM category WHERE name = 'Shopping'", Long.class);
+        CategoryTotalsResponse one = categories.categories(march, march, Optional.empty(), Optional.of(shopping),
+                false);
+        assertThat(one.spending()).as("the base is all spending, not the category's").isEqualTo(money("-1809.48"));
+        assertThat(row(one, TxnBucket.EXPENSE, "Shopping").spendingSharePercent()).isEqualByComparingTo("3.5");
+
+        CategoryTotalsResponse range = categories();
+        BigDecimal spending = range.range().months().stream().map(m -> month(m).spending())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(range.spending()).as("a range's spending is its months' spending added up")
+                .isEqualByComparingTo(spending);
+    }
+
     /** §1.3: both uncategorized txns count in spending; one of them waits in the review queue. */
     @Test
     void uncategorizedTxnsCountBySignWithTheirReviewPendingCount() {

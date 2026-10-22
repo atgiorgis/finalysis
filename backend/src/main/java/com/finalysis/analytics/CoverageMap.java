@@ -65,13 +65,18 @@ final class CoverageMap {
         return lastCoveredDay().map(YearMonth::from);
     }
 
+    /** The month of the first covered day of any account: where the household's data starts. */
+    Optional<YearMonth> earliestMonth() {
+        return covered.values().stream().map(spans -> YearMonth.from(spans.getFirst().start()))
+                .min(YearMonth::compareTo);
+    }
+
     /** The latest household month that is {@code COMPLETE}, looking back no further than the earliest statement. */
     Optional<YearMonth> latestCompleteMonth() {
         if (isEmpty()) {
             return Optional.empty();
         }
-        YearMonth earliest = covered.values().stream().map(spans -> YearMonth.from(spans.getFirst().start()))
-                .min(YearMonth::compareTo).orElseThrow();
+        YearMonth earliest = earliestMonth().orElseThrow();
         for (YearMonth month = latestMonth().orElseThrow(); !month.isBefore(earliest); month = month.minusMonths(1)) {
             if (status(month) == Coverage.COMPLETE) {
                 return Optional.of(month);

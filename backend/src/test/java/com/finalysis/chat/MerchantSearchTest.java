@@ -9,7 +9,8 @@ import com.finalysis.analytics.DrillDownService;
 import com.finalysis.analytics.MerchantTotalsResponse;
 import com.finalysis.analytics.MerchantTotalsService;
 import com.finalysis.analytics.TrendMeasure;
-import com.finalysis.categorize.MerchantEmbeddingRepository;
+import com.finalysis.ai.SearchDocuments;
+import com.finalysis.categorize.SearchEmbeddingRepository;
 import com.finalysis.categorize.MerchantIndexRefresh;
 import com.finalysis.chat.outbound.OutboundTurn;
 import com.finalysis.chat.outbound.OutboundTurnFactory;
@@ -18,6 +19,7 @@ import com.finalysis.chat.tool.RefRegistry;
 import com.finalysis.support.ChatIntegrationTest;
 import com.finalysis.support.FakeEmbeddingModel;
 import com.finalysis.support.ImportTestSupport;
+import com.finalysis.support.SearchIndexBuilder;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
@@ -63,13 +65,13 @@ class MerchantSearchTest {
     private final OutboundTurnFactory turns;
     private final FakeEmbeddingModel embeddingModel;
     private final MerchantIndexRefresh refresh;
-    private final MerchantEmbeddingRepository embeddings;
+    private final SearchEmbeddingRepository index;
     private final MerchantTotalsService merchantTotals;
     private final DrillDownService drillDown;
 
     MerchantSearchTest(MockMvc mockMvc, AccountRepository accounts, JdbcTemplate jdbc, JsonMapper json,
                        ToolExecutor executor, OutboundTurnFactory turns, FakeEmbeddingModel embeddingModel,
-                       MerchantIndexRefresh refresh, MerchantEmbeddingRepository embeddings,
+                       MerchantIndexRefresh refresh, SearchEmbeddingRepository index,
                        MerchantTotalsService merchantTotals, DrillDownService drillDown) {
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
         this.fixture = new AnalyticsFixture(support, jdbc, json);
@@ -79,7 +81,7 @@ class MerchantSearchTest {
         this.turns = turns;
         this.embeddingModel = embeddingModel;
         this.refresh = refresh;
-        this.embeddings = embeddings;
+        this.index = index;
         this.merchantTotals = merchantTotals;
         this.drillDown = drillDown;
     }
@@ -91,20 +93,19 @@ class MerchantSearchTest {
 
     @AfterAll
     void deleteAccounts() {
-        jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         embeddingModel.reset();
         support.deleteCreatedAccounts();
     }
 
     @BeforeEach
     void fillTheIndex() {
-        jdbc.update("DELETE FROM merchant_embedding");
-        embeddingModel.reset()
+        assertThat(new SearchIndexBuilder(jdbc, embeddingModel, refresh)
                 .near("FIXTURE DINER", "RESTAURANT", 0.82)
                 .near("FIXTURE GROCER", "RESTAURANT", 0.55)
                 .near("FIXTURE BOOKSHOP", "RESTAURANT", 0.30)
-                .near("CLOUDBOX STORAGE", "DINER", 0.70);
-        assertThat(refresh.refresh().embedded()).isPositive();
+                .near("CLOUDBOX STORAGE", "DINER", 0.70)
+                .build().embedded()).isPositive();
     }
 
     private ToolOutcome call(OutboundTurn turn, String tool, String arguments) {
@@ -182,6 +183,87 @@ class MerchantSearchTest {
         assertThat(embeddingModel.inputs().getLast()).isEqualTo("RESTAURANT");
     }
 
+    /** Shopping's merchants over the fixture's months, by spending, as {@code get_top_merchants} lists them. */
+    private List<String> shoppingMerchants() {
+        long shopping = jdbc.queryForObject("SELECT id FROM category WHERE name = 'Shopping'", Long.class);
+        return merchantTotals.merchants(Optional.of(FROM), Optional.of(TO), Optional.empty(), Optional.of(shopping),
+                10).items().stream().map(MerchantTotalsResponse.MerchantTotal::merchant)
+                .filter(java.util.Objects::nonNull).toList();
+    }
+
+    /**
+     * Step 8b: a category whose document is near the search is listed, and its merchants become candidates
+     * ({@code CATEGORY}, at the category's similarity), by spending, so the model can pick the ones that fit by name.
+     */
+    @Test
+    void aCategoryNearTheSearchOffersItsMerchants() {
+        new SearchIndexBuilder(jdbc, embeddingModel, refresh).categoryNear("Shopping", "THINGS I BOUGHT", 0.60)
+                .build();
+        OutboundTurn turn = turns.start();
+
+        JsonNode result = result(turn, "search_transactions", "{\"query\": \"things I bought\", " + RANGE
+                + ", \"limit\": 10}");
+
+        assertThat(result.get("categories")).hasSize(1);
+        assertThat(result.get("categories").get(0).get("category").stringValue()).isEqualTo("Shopping");
+        assertThat(result.get("categories").get(0).get("match").stringValue()).isEqualTo("MEANING");
+        assertThat(result.get("categories").get(0).get("similarity").stringValue()).isEqualTo("0.60");
+        assertThat(merchants(result)).isNotEmpty().containsExactlyElementsOf(shoppingMerchants());
+        for (JsonNode candidate : result.get("candidates")) {
+            assertThat(candidate.get("match").stringValue()).isEqualTo("CATEGORY");
+            assertThat(candidate.get("similarity").stringValue()).isEqualTo("0.60");
+            MerchantTotalsResponse.MerchantTotal top = top(candidate.get("merchant").stringValue(), Optional.empty());
+            assertThat(candidate.get("spent").stringValue()).isEqualTo(top.spent().toPlainString());
+            assertThat(fromDrillDowns(turn, candidate.get("ref").stringValue(), "spent"))
+                    .isEqualByComparingTo(top.spent());
+        }
+    }
+
+    /** At one ranking: merchants by their own similarity and a category's merchants at its, nearest first. */
+    @Test
+    void aCategorysMerchantsRankByTheCategorysSimilarity() {
+        new SearchIndexBuilder(jdbc, embeddingModel, refresh)
+                .near("FIXTURE DINER", "RESTAURANT", 0.82)
+                .near("FIXTURE GROCER", "RESTAURANT", 0.55)
+                .categoryNear("Shopping", "RESTAURANT", 0.60)
+                .build();
+
+        JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", " + RANGE
+                + ", \"limit\": 10}");
+
+        List<String> expected = new java.util.ArrayList<>(List.of("FIXTURE DINER"));
+        expected.addAll(shoppingMerchants());
+        expected.add("FIXTURE GROCER");
+        assertThat(merchants(result)).containsExactlyElementsOf(expected);
+    }
+
+    /** A search holding a category's name lists it by name and offers its merchants without a similarity. */
+    @Test
+    void aCategoryNamedInTheSearchOffersItsMerchants() {
+        JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"shopping\", " + RANGE
+                + ", \"limit\": 10}");
+
+        assertThat(result.get("categories").get(0).get("category").stringValue()).isEqualTo("Shopping");
+        assertThat(result.get("categories").get(0).get("match").stringValue()).isEqualTo("NAME");
+        assertThat(result.get("categories").get(0).get("similarity").isNull()).isTrue();
+        assertThat(merchants(result)).containsExactlyElementsOf(shoppingMerchants());
+        assertThat(result.get("candidates")).allSatisfy(c -> assertThat(c.get("similarity").isNull()).isTrue());
+    }
+
+    /** Step 8b: one month instead of a range, and never both. */
+    @Test
+    void oneMonthInsteadOfARange() {
+        JsonNode result = result(turns.start(), "search_transactions",
+                "{\"query\": \"restaurant\", \"month\": \"2026-03\", \"limit\": 10}");
+        assertThat(result.get("from").stringValue()).isEqualTo("2026-03");
+        assertThat(result.get("to").stringValue()).isEqualTo("2026-03");
+
+        ToolOutcome both = call(turns.start(), "search_transactions",
+                "{\"query\": \"restaurant\", \"month\": \"2026-03\", \"from\": \"2026-01\", \"limit\": 10}");
+        assertThat(both.status()).isEqualTo(ToolStatus.INVALID_ARGUMENTS);
+        assertThat(both.json()).contains("conflictsWith");
+    }
+
     @Test
     void nameMatchesComeFirstWithoutASimilarityThenMeaning() {
         JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"diner\", \"limit\": 10}");
@@ -203,7 +285,8 @@ class MerchantSearchTest {
     @Test
     void onlyVectorsOfTheSearchTextsModelAreCompared() {
         // STREAMCO stored with another model's vector equal to the search's own: similarity 1.00, but not comparable
-        embeddings.upsert("STREAMCO", "other-embedding-model", "0".repeat(64), embeddingModel.vector("RESTAURANT"));
+        index.upsert(SearchDocuments.Kind.MERCHANT, "STREAMCO", "other-embedding-model", "0".repeat(64),
+                embeddingModel.vector("RESTAURANT"));
 
         JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", \"limit\": 10}");
 
@@ -214,8 +297,8 @@ class MerchantSearchTest {
     void coverageIsCountedInSql() {
         int merchants = jdbc.queryForObject("SELECT count(DISTINCT merchant) FROM txn WHERE merchant IS NOT NULL",
                 Integer.class);
-        int indexed = jdbc.queryForObject("SELECT count(*) FROM merchant_embedding e WHERE e.model = ? "
-                + "AND EXISTS (SELECT 1 FROM txn t WHERE t.merchant = e.merchant)", Integer.class, MODEL);
+        int indexed = jdbc.queryForObject("SELECT count(*) FROM search_embedding e WHERE e.kind = 'MERCHANT' "
+                + "AND e.model = ? AND EXISTS (SELECT 1 FROM txn t WHERE t.merchant = e.subject)", Integer.class, MODEL);
 
         JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", \"limit\": 1}");
 
@@ -223,7 +306,7 @@ class MerchantSearchTest {
         assertThat(result.get("indexedMerchants").intValue()).isEqualTo(indexed).isLessThanOrEqualTo(merchants)
                 .isPositive();
 
-        jdbc.update("DELETE FROM merchant_embedding WHERE merchant = 'FIXTURE DINER'");
+        jdbc.update("DELETE FROM search_embedding WHERE subject = 'FIXTURE DINER'");
         JsonNode after = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", \"limit\": 10}");
         assertThat(after.get("indexedMerchants").intValue()).isEqualTo(indexed - 1);
         assertThat(merchants(after)).as("an unindexed merchant isn't found by meaning").containsExactly(

@@ -187,10 +187,22 @@ public class OutboundProjector {
     // ------------------------------------------------------------------ get_category_totals
 
     public CategoryTotalsView categoryTotals(CategoryTotalsResponse r, OutboundTurn turn) {
+        // the rows' refs first, so they number as before the spending total existed (step 8b)
+        List<CategoryTotalsView.Row> rows = r.rows().stream()
+                .map(row -> categoryRow(row, r.range(), r.accountId(), turn)).toList();
+        CategoryTotalsView.Spending spending = null;
+        if (r.spending() != null) {
+            Map<String, String> spent = params("from", r.range().from().toString(), "to", r.range().to().toString(),
+                    "measure", "SPENT", "accountId", id(r.accountId()));
+            String ref = turn.refs().ref(new RefRegistry.Cell("All spending · " + r.range().from() + "–"
+                    + r.range().to() + scope(r.accountId(), turn), List.of(spent),
+                    Map.of("amount", FigureBasis.sum(NET, spent))));
+            spending = new CategoryTotalsView.Spending(ref, money(r.spending()));
+        }
         return new CategoryTotalsView(month(r.range().from()), month(r.range().to()),
                 turn.aliases().aliasOrNull(r.accountId()),
                 r.coverage().stream().map(c -> new MonthCoverageView(c.month().toString(), c.coverage().name())).toList(),
-                r.rows().stream().map(row -> categoryRow(row, r.range(), r.accountId(), turn)).toList());
+                spending, rows);
     }
 
     private CategoryTotalsView.Row categoryRow(CategoryTotalsResponse.Row row, MonthRange range, Long accountId,
@@ -210,9 +222,11 @@ public class OutboundProjector {
             flowFigures(figures, "months[" + c.month() + "].", month);
             figures.put("months[" + c.month() + "].reviewPending", FigureBasis.derived(month));
         }
+        figures.put("spendingSharePercent", FigureBasis.derived(drill, params("from", range.from().toString(), "to",
+                range.to().toString(), "measure", "SPENT", "accountId", id(accountId))));
         String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill), figures));
         return new CategoryTotalsView.Row(ref, row.bucket().name(), category(row.category()), flow(row.total()),
-                row.months().stream().map(c -> new CategoryTotalsView.Cell(c.month().toString(),
+                percent(row.spendingSharePercent()), row.months().stream().map(c -> new CategoryTotalsView.Cell(c.month().toString(),
                         money(c.flow().moneyOut()), money(c.flow().moneyIn()), money(c.flow().net()), c.flow().count(),
                         c.reviewPending())).toList());
     }
@@ -387,6 +401,8 @@ public class OutboundProjector {
     public SearchView search(ToolRead.Search r, OutboundTurn turn) {
         return new SearchView(month(r.range() == null ? null : r.range().from()),
                 month(r.range() == null ? null : r.range().to()), r.byMeaning(),
+                r.categories().stream().map(c -> new SearchView.CategoryMatch(c.category(), c.match().name(),
+                        ratio(c.similarity()))).toList(),
                 r.candidates().stream().map(c -> new SearchView.Candidate(spendRef(c.spend(), null, turn),
                         turn.merchant(c.spend().parts().getFirst().merchant()), c.match().name(),
                         ratio(c.similarity()), category(c.spend().category()), money(c.spend().spent()),

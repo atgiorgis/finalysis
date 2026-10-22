@@ -24,7 +24,7 @@ class ChatEvalMetricsTest {
                 : null, source, source == AnswerSource.MODEL ? GroundingStatus.GROUNDED : null, retried, 1, 0,
                 List.of(new ToolUse("get_month_totals", "OK", 1)), limit, retried ? 3 : 2, input, output,
                 input == null ? 2 : 0, cost == null ? null : new BigDecimal(cost), millis, retryFigures, null,
-                List.of(), null);
+                List.of(), null, List.of());
     }
 
     private static TurnScore score(boolean correct, boolean refusal, boolean toolChoice, List<String> forbidden) {

@@ -1,9 +1,9 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 8 done (step notes); next: the owner's dev runs and search sweep, the settings and model
-choice from them (a small follow-up commit), the one holdout run, then step 9. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.63).
+in this file. Steps 1 to 8 and 8b (fixes from the first dev run) done (step notes); next: the owner's sweep and dev
+runs on 8b, the settings and model choice from them (a small follow-up commit), the one holdout run, then step 9. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.64).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -890,11 +890,13 @@ Sonnet 5.5.
 - **A bare year is a figure** ("so far in 2026"): §5.2 masks a year only beside a month name or in a date, so such an
   answer is retried unless the question or a call's arguments held the number (step 4). The eval will show how often.
 - **Unknown names in questions** are sent as typed, unless they are counterparties or configured redact terms.
+- **A distinctive word of an account's name is an alias** wherever it appears ("the summit of my spending"), step 8b;
+  everyday, generic, category and merchant words are spared.
 - **Search knows merchants, not descriptions**, and only redacted text: two merchants that redact to one text look
   alike, and a withheld merchant is found only by its category or by listing transactions. A text standing for more
   than 20 stored merchants can't be searched or totalled by name. Search embeddings aren't in the chat cost caps.
-- **No averages over arbitrary ranges, shares or rates** beyond the trends and comparisons; such questions are
-  refused.
+- **No averages over arbitrary ranges or per-day rates** beyond the trends and comparisons; such questions are
+  refused. A category's share of spending is answered since step 8b (`spendingSharePercent`).
 - **No streaming**; a slow turn shows nothing until it is done.
 - **Answers about months with flagged data** carry `dataNotes`, but whether the sentence mentions them depends on the
   model.
@@ -910,8 +912,9 @@ Sonnet 5.5.
 
 ## Backlog (proposed)
 
-- Prompt caching of the fixed prefix on Bedrock (once Spring AI's Converse support is confirmed).
-- Service methods for range averages, shares of total and per-day rates, so those questions can be answered.
+- Prompt caching of the fixed prefix on Bedrock: Spring AI 2.0.1 supports it (step 8b notes); needs cache tokens in
+  usage, prices and limits, and a smoke call.
+- Service methods for range averages and per-day rates, so those questions can be answered (shares: step 8b).
 - A SELECT-only database role for chat.
 - SSE progress events (Phase 7).
 - `propose_goal_draft` and the advisor note (Phase 7, §11).
@@ -1739,12 +1742,138 @@ on `arn:aws:bedrock:us-east-1:<account>:inference-profile/<us. profile id>` and
 `arn:aws:bedrock:*::foundation-model/<foundation id>` (the profile id without `us.`). Then the price file entry, then the
 smoke test, then the dev run.
 
+### Step 8b notes: fixes from the first dev run
+
+Done: "Phase 6 step 8b: fixes from the first dev run". Backend 3,114 tests (Maven summary; 3,081 + 33), 0 failures,
+0 skipped; frontend 4. Requirements v1.64. V23. Prompt `chat-4`. Mocks only, no live call, `NoCloudAiGuard` in force.
+Everything was fixed against the dev set; the holdout was not opened.
+
+**The run it answers.** The owner's first dev run (Haiku 4.5, commit `0de5269`, dirty tree): 46/58 questions, 54/66
+turns, 954,455 input and 12,860 output tokens, $1.02. The sweep found 8/25 targets at 0.30. The result files stay
+uncommitted, as asked.
+
+**Findings before any change**
+- **d-l09, d-c06 ("my Summit card", "Apex or Summit") were partly the harness.** The eval seeded the sample accounts as
+  `Test 3001` at `Test Bank` (`ImportTestSupport.account`), so no account was called Summit or Apex and the question
+  went out as typed. The seeder now names them as a user would (`ChatEvalSeeder.SAMPLE_NAMES`: Northfield Checking and
+  Northfield Savings at Northfield Credit Union, Apex Visa at Apex Bank, Summit Card at Summit Financial), before the
+  index is built. The redactor change below is still needed: "Apex or Summit" is one word each.
+- **d-s04 (162.31 instead of 175.85): the default range, not a second CVS merchant.** There is one CVS merchant. Its six
+  rows run 2026-04-16 to 2026-09-16; 175.85 − 162.31 = 13.54, the 2026-04-16 row. Search called without `from` takes the
+  analytics default, 6 months ending at the latest month (2026-10), so May to October, and April is left out. The same
+  cause gives d-s08's 319.96 (May to August's four 79.99 bills; April's is outside) and touches every search question
+  without a period, whose expected figures are over all data. **Not changed** (as asked): the proposal is that
+  `search_transactions` and `get_merchant_totals` default to every month with data, as `get_alerts` now does (one
+  `defaultFrom`, 24 months at most), with the default stated in their descriptions. Your call.
+- **Invalid first tool calls: 18 of 81 calls.** By tool: `get_category_totals` 11 (d-l01, d-l02, d-l07, d-l08, d-l10,
+  d-l11, d-m01 ×2, d-m02, d-m04 ×2), `search_transactions` 4 (d-s03, d-s06, d-s07 ×2), `get_top_merchants` 2 (d-m01,
+  d-i03), `get_alerts` 1 (d-a05). **The run's JSON records statuses, not reasons** (the problems went to the model only),
+  so reasons are inferred: every one of the 18 comes from a question naming one month, sent to a tool that took only
+  `from`/`to` (a `month` argument is `UNKNOWN_PARAMETER`); the category-totals ones also name a category in the user's
+  words ("dining", "grocery", "refunds", "uncategorized"), which is `NOT_A_CATEGORY` unless written exactly. Tools that
+  had `month` (`get_trends`, `list_transactions`, `compare_periods`) were never invalid. A missing `limit` (`REQUIRED`) is
+  the other possible cause for search, top merchants and alerts. Both inferred causes are fixed below; the eval now
+  records every problem (tool, parameter, `ToolProblem`), so the next run counts them exactly. If `REQUIRED limit` shows
+  up, a stated default for `limit` is the next lever.
+
+**Built**
+- **Search by meaning (CHT-02), the design.** Titan doesn't place a brand near what it is, so search embeds richer
+  documents in an index of its own:
+  - **V23 `search_embedding`**: `(kind, subject, model)`, `kind` `MERCHANT` or `CATEGORY`, the document's SHA-256, HNSW.
+    Categorization's `merchant_embedding` is untouched: its similar-merchant examples compare merchant text with merchant
+    text, and a document carrying a category would leak the label into that comparison.
+  - **Documents** (`ai.SearchDocuments`): a merchant is its redacted, guard-checked outbound text plus its category,
+    `SHELL OIL (Transportation)` (the category of most of its rows, ties to the newest, decision 28; no category, the bare
+    text); a category is its name. Both parts have already passed the guard (`allowsMerchant` via categorization's
+    `outboundMerchant`, `allowsCategory`), and category names may leave under SEC-01. A new majority category is a new
+    document, embedded again at the next refresh.
+  - **`MerchantIndexRefresh`** stays the only writer (`categorize.SearchEmbeddingRepository`): categories first (few),
+    then merchants, one cap for both, one log line; `MerchantEmbeddingStage.embedInto` runs any keyed texts on the
+    stage's path (hash, embedder, AI-06 line, failure handling).
+  - **`search_transactions`** returns `categories` it matched (by name: every word of the name in the search; or by
+    meaning at or above the floor; at most 3) and offers each one's merchants, by spending over the range, as candidates
+    with `match: CATEGORY` at the category's similarity (by name: no similarity). Ranking: name matches, a named
+    category's merchants, then merchant hits and category merchants together, nearest first (a merchant's own hit first
+    at a tie). The model keeps the candidates that fit by name ("rideshare" → the ride services among Transportation's),
+    or uses `get_category_totals` when the user meant the category. The prompt and description say so (`chat-4`).
+  - The floor stays **0.40, provisional**: the sweep measures it on the new documents (the sweep's arithmetic still holds:
+    a candidate's similarity is its own or its category's, and the list stays nearest first).
+- **Account names in questions (SEC-01).** Any distinctive word of a name or an institution maps to its alias (three
+  letters or more, not a generic account word, not an everyday word such as DAY or MONTH, not a word of a category name,
+  not a word of a merchant the turn may name). Whole phrases still go first; an alias written twice in a row is written
+  once ("rainy day fund" → `SAVINGS-1 day fund`, DAY being everyday). The name never leaves.
+- **`get_alerts`** without `from` covers every month with data (from the month of the first covered day, at most 24
+  months back from `to`), stated in its description; the result's `from` and `to` were already the range covered.
+  `CoverageService.dataMonths()` (read-only; the first to the last month with data) gives the span, since `latestMonth()` is the alerts' alone (`PackageDependencyTest`). The alerts API keeps its 3-month default.
+- **Quarters (CHT-04).** `Q3`, `Q3 2026`, `Q3, 2026`, `2026 Q3`, `2026-Q3`, `Q3'26`, `quarter 3`, `second quarter of 2026`,
+  `2nd quarter` and their years are masked as non-figures; `Q5`, `quarter 5` and an amount right after a quarter
+  (`Q3 2050.00`) stay figures.
+- **Fewer invalid calls (CHT-01).** `month` on every range tool (`get_month_totals`, `get_category_totals`,
+  `get_account_totals`, `get_top_merchants`, `get_alerts`, `search_transactions`, `get_merchant_totals`; it was on
+  `list_transactions` already), not with `from` or `to` (`rangeProblems`); month examples in the descriptions; each
+  turn's schemas list the data's category names as the `category` enum (`ToolRegistry.definitions(categories)`, cached
+  for the last list; the token estimate counts the enum). Java still checks every name.
+- **Shares (ANA-01, d-x08).** `CategoryTotalsService` returns the range's `spending` (every category, by the month
+  totals' rule, whatever category was asked for) and each expense, refund and uncategorized row's
+  `spendingSharePercent` (`Arithmetic.percent`, half-even, one decimal; a refund's is negative). The chat view carries
+  both, the total by its own ref (`All spending · range`, the `measure=SPENT` drill-down), the share as a derived
+  figure; the fallback line shows the share.
+- **The eval** records each invalid call's problems (`ChatCallRecorder`, from the error results the model read) in the
+  JSON and a new "Invalid tool arguments" table, and names the sample accounts (above).
+- **Dev set revision 2** (`sample-data/chat/dev.yml`, header; the holdout and its pin are unchanged): d-x08 moves to
+  COMPARISON with the share 50.4 (Housing 11,100.00 of 22,025.41, April to September; new `share` and `sum` sources in
+  `ChatQuestionSetsTest`, recomputed from the answer key); d-s08 also accepts the total over all data, 399.95. The dev
+  counts are now comparison 9 and can't-answer 7; the holdout keeps §13.1's table.
+
+**Prompt caching on Bedrock (report only, nothing built)**
+- **It is available here.** Spring AI 2.0.1's Converse model (`BedrockChatOptions.cacheOptions`, `BedrockCacheOptions`
+  with strategies `SYSTEM_ONLY`, `TOOLS_ONLY`, `SYSTEM_AND_TOOLS`, `CONVERSATION_HISTORY`, TTL 5 minutes or 1 hour) adds
+  Bedrock `cachePoint` blocks and reads `cacheReadInputTokens` and `cacheWriteInputTokens` back into the response
+  metadata (read from the jar's bytecode; not run). Our options are merged onto the model's own `BedrockChatOptions`
+  (`ChatRoleOptions`), so it is one option there, `SYSTEM_AND_TOOLS`.
+- **Prices:** a cache write costs 1.25× input (5-minute TTL; 2× for 1 hour), a read 0.1×. **Minimum:** Haiku 4.5 caches
+  only a prefix of 4,096 tokens or more; ours (tools, system prompt, context block) is about 5,950 by the model's own
+  count (a one-round turn reported about 6,005 input tokens), so it qualifies; newer models' minimums are lower. Order is
+  tools → system → messages, so the tool definitions (stable per category list) and the system prompt cache first; the
+  `<summary>` system message of a long conversation would end the cached system part early.
+- **What it would have saved on this run:** about 5,950 of each call's tokens are the fixed prefix, 151 calls: 898k of
+  the 954k input tokens. With 5-minute caching (three writes, one per dataset's prefix, the rest reads) input falls to
+  about 166k token-equivalents: $0.17 instead of $0.95, so the run would cost about $0.23 instead of $1.02 (−77%). In
+  use, a turn averages 2.3 calls within seconds, so even with a cold cache at every question its input falls about 40%
+  (1.25× once, then 0.1×); a single-call turn pays 25% more on the prefix.
+- **What building it needs:** the option; usage that adds the cache read and write tokens (Bedrock's `inputTokens`
+  excludes them) priced at 0.1× and 1.25× in `AiPrices`, the ledger and the per-call and per-turn token limits; a smoke
+  call that shows `cacheReadInputTokens` above 0 on the second call. Backlog, as before, now with the support confirmed.
+
+**Decisions beyond the plan**
+- **A separate search index** instead of richer text in `merchant_embedding` (above). Search texts and documents are
+  still only redacted, guard-checked text and category names.
+- **Category words and merchant words never map to an account alone.** A card called "Amazon Prime Visa" must leave
+  "how much at amazon" a merchant question; such a word leaves the machine as a merchant anyway. A distinctive word can
+  still be an ordinary word ("the summit of my spending" → `CARD-1`): the known cost of matching single words (§15).
+- **The everyday-word list** (DAY, MONTH, MY, BILLS, FUND, ...) is fixed in code, not configuration.
+- **The context block is unchanged**: the category enum is in the schemas, the names still in `<context>`.
+- **Shares live in analytics**, not in the projection: a figure a question needs is added to a service (§3.1).
+- **`get_category_totals`' spending ref is issued after the rows**, so row refs number as before.
+- **Not done, proposed:** the search and merchant-total default range (d-s04, above); a default `limit` if the next
+  run shows `REQUIRED`.
+
+**Rerun** (`backend/`, Docker, the AWS CLI profile): the sweep, then the three dev runs (each model needs its price-file
+entry; the uncommitted `model-prices.json` has Haiku 5.5 and Sonnet 5.5):
+
+```sh
+caffeinate -i ./mvnw test -Pchat-eval -Deval.run=sweep -Deval.set=dev
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-5-5
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-5-5
+```
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
 | CHT-01 | 3, 5 | `*ToolTest`, `ChatServiceTest` |
-| CHT-02 | 6 | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest` |
+| CHT-02 | 6, 8b | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
 | CHT-04 | 4, 5 | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |

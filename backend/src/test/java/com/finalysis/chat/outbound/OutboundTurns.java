@@ -28,13 +28,28 @@ final class OutboundTurns {
         return turn(Set.of());
     }
 
+    /** As {@link #turn()}, with these stored merchants in the data (each named by its redacted text). */
+    static OutboundTurn withMerchants(List<String> storedMerchants) {
+        return turn(Set.of(), IDENTITIES, storedMerchants);
+    }
+
+    /** As {@link #turn()}, with these identities for accounts 11, 12 and 13. */
+    static OutboundTurn withIdentities(List<AccountIdentity> identities) {
+        return turn(Set.of(), identities, List.of());
+    }
+
     static OutboundTurn turn(Set<String> counterparties) {
+        return turn(counterparties, IDENTITIES, List.of());
+    }
+
+    private static OutboundTurn turn(Set<String> counterparties, List<AccountIdentity> identities,
+                                     List<String> storedMerchants) {
         AccountAliases aliases = AccountAliases.of(List.of(new AccountAliases.Account(11, "CHECKING", false),
                 new AccountAliases.Account(12, "SAVINGS", false), new AccountAliases.Account(13, "CREDIT_CARD", false)));
         RedactionContext context = new RedactionContext(Set.of("7310", "7311", "2001"),
-                List.of("Halden Everyday", "Halden Bank", "Rainy Day Savings", "Orbit Rewards Visa",
-                        "Orbit Card Services"), counterparties);
-        return new OutboundTurn(aliases, context, IDENTITIES, Map.of("Dining", 1L, "Groceries", 2L), MERCHANTS,
-                List::of, null);
+                identities.stream().flatMap(i -> java.util.stream.Stream.of(i.name(), i.institution())).toList(),
+                counterparties);
+        return new OutboundTurn(aliases, context, identities, Map.of("Dining", 1L, "Groceries", 2L), MERCHANTS,
+                () -> storedMerchants, null);
     }
 }

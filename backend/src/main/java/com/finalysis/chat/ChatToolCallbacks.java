@@ -2,6 +2,7 @@ package com.finalysis.chat;
 
 import com.finalysis.chat.tool.ToolRegistry;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.DefaultToolDefinition;
@@ -16,17 +17,37 @@ import org.springframework.stereotype.Component;
 @Component
 public class ChatToolCallbacks {
 
+    private final ToolRegistry registry;
     private final List<ToolCallback> callbacks;
+    private volatile Map.Entry<List<ToolRegistry.Definition>, List<ToolCallback>> forCategories =
+            Map.entry(List.of(), List.of());
 
     public ChatToolCallbacks(ToolRegistry registry) {
-        this.callbacks = registry.definitions().stream()
+        this.registry = registry;
+        this.callbacks = of(registry.definitions());
+    }
+
+    /** The definitions without category names (no enum). */
+    public List<ToolCallback> callbacks() {
+        return callbacks;
+    }
+
+    /** The definitions a turn sends, with the data's category names as an enum ({@link ToolRegistry#definitions(List)}). */
+    public List<ToolCallback> callbacks(List<String> categories) {
+        List<ToolRegistry.Definition> definitions = registry.definitions(categories);
+        Map.Entry<List<ToolRegistry.Definition>, List<ToolCallback>> cached = forCategories;
+        if (cached.getKey() != definitions) {
+            cached = Map.entry(definitions, of(definitions));
+            forCategories = cached;
+        }
+        return cached.getValue();
+    }
+
+    private static List<ToolCallback> of(List<ToolRegistry.Definition> definitions) {
+        return definitions.stream()
                 .map(d -> (ToolCallback) new Refusing(new DefaultToolDefinition(d.name(), d.description(),
                         d.inputSchema())))
                 .toList();
-    }
-
-    public List<ToolCallback> callbacks() {
-        return callbacks;
     }
 
     /** Carries a definition; never runs. */

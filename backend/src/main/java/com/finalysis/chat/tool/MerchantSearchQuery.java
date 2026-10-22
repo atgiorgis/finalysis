@@ -7,9 +7,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Chat's read-only SQL over the merchant index (CHT-02; docs/plans/phase-6.md §4.3): the nearest merchants to a search
- * vector, the index's coverage, and the distinct merchants the turn's directory is built from. It never writes: the
- * index is filled by categorization's {@code MerchantIndexRefresh}, which chat may not reach (SEC-03).
+ * Chat's read-only SQL over the search index (CHT-02; docs/plans/phase-6.md §4.3, step 8b: V23's
+ * {@code search_embedding}): the nearest merchants and the nearest categories to a search vector, the index's coverage,
+ * and the distinct merchants the turn's directory is built from. It never writes: the index is filled by
+ * categorization's {@code MerchantIndexRefresh}, which chat may not reach (SEC-03).
  *
  * <p>Only vectors of the query's own embedding model are compared ({@code model} on every query), even when two models
  * share a dimension count. The vector is bound as pgvector's text form and cast, so the tools need no driver type; the
@@ -25,17 +26,32 @@ public class MerchantSearchQuery {
     static final int POOL = 40;
 
     static final String NEAREST_SQL = """
-            SELECT merchant, round((1 - distance)::numeric, 2) AS similarity
+            SELECT subject AS merchant, round((1 - distance)::numeric, 2) AS similarity
             FROM (
-                SELECT merchant, embedding <=> CAST(:embedding AS vector) AS distance
-                FROM merchant_embedding
-                WHERE model = :model
+                SELECT subject, embedding <=> CAST(:embedding AS vector) AS distance
+                FROM search_embedding
+                WHERE kind = 'MERCHANT' AND model = :model
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :pool
             ) n
             WHERE 1 - distance >= :minSimilarity
-              AND EXISTS (SELECT 1 FROM txn t WHERE t.merchant = n.merchant)
-            ORDER BY distance, merchant
+              AND EXISTS (SELECT 1 FROM txn t WHERE t.merchant = n.subject)
+            ORDER BY distance, subject
+            """;
+
+    /** Categories still in the data; few, so the index scan's pool covers them all. */
+    static final String NEAREST_CATEGORIES_SQL = """
+            SELECT subject AS category, round((1 - distance)::numeric, 2) AS similarity
+            FROM (
+                SELECT subject, embedding <=> CAST(:embedding AS vector) AS distance
+                FROM search_embedding
+                WHERE kind = 'CATEGORY' AND model = :model
+                ORDER BY embedding <=> CAST(:embedding AS vector)
+                LIMIT :pool
+            ) n
+            WHERE 1 - distance >= :minSimilarity
+              AND EXISTS (SELECT 1 FROM category c WHERE c.name = n.subject)
+            ORDER BY distance, subject
             """;
 
     private final JdbcClient jdbc;
@@ -64,13 +80,30 @@ public class MerchantSearchQuery {
                 .list();
     }
 
+    /** A category near the query, with its cosine similarity to two decimals. */
+    public record CategoryHit(String category, BigDecimal similarity) {
+    }
+
+    /** Categories at least {@code minSimilarity} from the vector, nearest first, at most {@value #POOL}. */
+    @Transactional(readOnly = true)
+    public List<CategoryHit> nearestCategories(float[] vector, String model, double minSimilarity) {
+        return jdbc.sql(NEAREST_CATEGORIES_SQL)
+                .param("embedding", vectorText(vector))
+                .param("model", model)
+                .param("pool", POOL)
+                .param("minSimilarity", minSimilarity)
+                .query((rs, row) -> new CategoryHit(rs.getString("category"), rs.getBigDecimal("similarity")))
+                .list();
+    }
+
     /** Counted in SQL (§4.3 point 6), so the model can say results may be incomplete. */
     @Transactional(readOnly = true)
     public Coverage coverage(String model) {
         return jdbc.sql("""
                 SELECT count(*) AS merchants,
-                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM merchant_embedding e
-                                                      WHERE e.merchant = m.merchant AND e.model = :model)) AS indexed
+                       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM search_embedding e
+                                                      WHERE e.kind = 'MERCHANT' AND e.subject = m.merchant
+                                                        AND e.model = :model)) AS indexed
                 FROM (SELECT DISTINCT merchant FROM txn WHERE merchant IS NOT NULL) m""")
                 .param("model", model)
                 .query((rs, row) -> new Coverage(rs.getInt("merchants"), rs.getInt("indexed")))

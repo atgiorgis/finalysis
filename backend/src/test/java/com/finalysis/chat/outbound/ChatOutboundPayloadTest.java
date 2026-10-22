@@ -186,7 +186,7 @@ public class ChatOutboundPayloadTest {
                 + "\"b\": {\"month\": \"2026-02\"}}");
         calls.put("list_transactions", "{\"month\": \"2026-03\", \"limit\": 25}");
         calls.put("get_recurring_charges", "{\"status\": \"ALL\", \"limit\": 25}");
-        calls.put("get_alerts", "{\"limit\": 20}");
+        calls.put("get_alerts", "{\"from\": \"2026-01\", \"to\": \"2026-03\", \"limit\": 20}");
         calls.put("get_data_coverage", "{}");
 
         StringBuilder all = new StringBuilder();

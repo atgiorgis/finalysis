@@ -62,6 +62,6 @@ public class SearchTextOutbound {
             }
         }
         return Optional.of(new SearchText(text, words, vector, embedder.modelId(), properties.minSimilarity(),
-                merchants));
+                merchants, turn.categories()));
     }
 }

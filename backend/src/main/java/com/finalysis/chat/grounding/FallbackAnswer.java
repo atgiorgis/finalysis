@@ -69,7 +69,8 @@ public final class FallbackAnswer {
             case CategoryTotalsView v -> v.rows().stream().map(row -> join(
                     row.category() != null ? row.category() : label(row.bucket()), span(v.from(), v.to()),
                     v.account(), "money out " + magnitude(row.total().moneyOut()),
-                    "money in " + magnitude(row.total().moneyIn()), count(row.total().count()))
+                    "money in " + magnitude(row.total().moneyIn()), count(row.total().count()),
+                    row.spendingSharePercent() == null ? null : row.spendingSharePercent() + "% of spending")
                     + marker(row.ref())).toList();
             case TopMerchantsView v -> {
                 List<String> lines = new ArrayList<>(v.items().stream().map(m -> join(

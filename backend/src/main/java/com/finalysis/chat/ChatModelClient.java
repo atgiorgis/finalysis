@@ -90,7 +90,12 @@ public class ChatModelClient {
      * @throws RuntimeException      whatever the model client throws; the call is logged with the class name first
      */
     public Reply call(List<Message> messages, int maxOutputTokens, int toolResults) {
-        return send(messages, maxOutputTokens, tools.callbacks(), ROLE, toolResults);
+        return call(messages, maxOutputTokens, toolResults, List.of());
+    }
+
+    /** As {@link #call(List, int, int)}, with the turn's category names as the tools' category enum. */
+    public Reply call(List<Message> messages, int maxOutputTokens, int toolResults, List<String> categories) {
+        return send(messages, maxOutputTokens, tools.callbacks(categories), ROLE, toolResults);
     }
 
     /**

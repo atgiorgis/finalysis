@@ -17,7 +17,10 @@
 # Source kinds: spent, received, count, month, merchantSpent, row, diff, changePercent, average, max (SAMPLE);
 # fixtureTotal, fixtureAlert, fixtureRows (FIXTURE); injectionRows (INJECTION). Semantics in ChatQuestionSetsTest.
 set: dev
-version: 1
+version: 2
+# Revisions (docs/plans/phase-6.md, step 8b notes; dev only, the holdout is untouched):
+#   2 (2026-10-22, after the first dev run): d-x08 becomes a COMPARISON answered by get_category_totals' share of
+#     spending (computed in Java); d-s08 also accepts the internet bill's total over all data.
 datasets:
   SAMPLE: {today: "2026-10-15", data: "sample-data/statements, categories from answer-key.csv; the last covered day is 2026-10-14, April to September have rows"}
   FIXTURE: {today: "2026-04-15", data: "sample-data/analytics, categories from categories.csv"}
@@ -461,7 +464,8 @@ questions:
         tools: [[search_transactions], [get_recurring_charges]]
         figures:
           - - {value: "79.99", source: {row: {date: "2026-08-12", contains: "SKYWAVE"}}}
-        note: "the same 79.99 every month"
+          - - {value: "399.95", source: {merchantSpent: {contains: ["SKYWAVE"]}}}
+        note: "the same 79.99 every month; revision 2: the total over all data is accepted too"
   - id: d-m01
     author: assistant
     category: MULTI_TURN
@@ -685,11 +689,12 @@ questions:
         figures: []
   - id: d-x08
     author: assistant
-    category: CANT_ANSWER
+    category: COMPARISON
     dataset: SAMPLE
     turns:
       - ask: "What percent of my spending went to rent this year?"
-        expect: REFUSAL
-        tools: [[], [get_data_coverage], [get_month_totals]]
-        figures: []
-        note: "a share of total: no tool computes one in Phase 6 (§3.3)"
+        expect: ANSWER
+        tools: [[get_category_totals]]
+        figures:
+          - - {value: "50.4", source: {share: {a: {spent: {category: "Housing", from: "2026-01", to: "2026-10"}}, b: {sum: {of: [{month: {month: "2026-04", field: "spending"}}, {month: {month: "2026-05", field: "spending"}}, {month: {month: "2026-06", field: "spending"}}, {month: {month: "2026-07", field: "spending"}}, {month: {month: "2026-08", field: "spending"}}, {month: {month: "2026-09", field: "spending"}}]}}}}}
+        note: "revision 2: Housing's share of all spending in 2026 (April to September have rows), from get_category_totals' spendingSharePercent; was a refusal before the share existed"

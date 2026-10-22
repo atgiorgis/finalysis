@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.finalysis.ai.ChatSearchProperties;
+import com.finalysis.ai.SearchDocuments;
+import com.finalysis.ai.outbound.OutboundPayloadGuard;
 import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AiCategorizer.Status;
 import com.finalysis.categorize.MerchantEmbeddingStage.EmbeddingRunResult;
@@ -42,13 +44,14 @@ class MerchantIndexRefreshTest {
     private final FakeEmbeddingModel embeddingModel;
     private final MerchantIndexRefresh refresh;
     private final MerchantEmbeddingStage stage;
+    private final SearchEmbeddingRepository index;
     private final CategorizationPromptBuilder outbound;
     private final RedactionContextQuery redaction;
     private final PlatformTransactionManager transactions;
     private final MockMvc mockMvc;
 
     MerchantIndexRefreshTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeEmbeddingModel embeddingModel,
-                             MerchantIndexRefresh refresh, MerchantEmbeddingStage stage,
+                             MerchantIndexRefresh refresh, MerchantEmbeddingStage stage, SearchEmbeddingRepository index,
                              CategorizationPromptBuilder outbound, RedactionContextQuery redaction,
                              PlatformTransactionManager transactions, MockMvc mockMvc) {
         this.jdbc = jdbc;
@@ -56,6 +59,7 @@ class MerchantIndexRefreshTest {
         this.embeddingModel = embeddingModel;
         this.refresh = refresh;
         this.stage = stage;
+        this.index = index;
         this.outbound = outbound;
         this.redaction = redaction;
         this.transactions = transactions;
@@ -66,6 +70,7 @@ class MerchantIndexRefreshTest {
     void insertCases() {
         embeddingModel.reset();
         jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         rows.account("Index Test Checking", "CHECKING", "4343");
         new String(ImportTestSupport.sample(CASES), StandardCharsets.UTF_8).lines().skip(1)
                 .map(line -> line.split(",", -1))
@@ -75,8 +80,19 @@ class MerchantIndexRefreshTest {
     @AfterEach
     void cleanUp() {
         jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         rows.deleteAccounts();
         embeddingModel.reset();
+    }
+
+    /** Every category name is a search document of its own (step 8b). */
+    private int categories() {
+        return jdbc.queryForObject("SELECT count(*) FROM category", Integer.class);
+    }
+
+    /** What a refresh embeds from scratch: the categories, then the sendable merchants. */
+    private int documents() {
+        return categories() + sendableMerchants();
     }
 
     private int sendableMerchants() {
@@ -85,27 +101,57 @@ class MerchantIndexRefreshTest {
     }
 
     @Test
-    void everySendableMerchantIsEmbeddedOnceAsItsOutboundText(CapturedOutput output) {
+    void everySendableMerchantIsEmbeddedOnceAsItsOutboundTextAndEveryCategoryAsItsName(CapturedOutput output) {
         EmbeddingRunResult result = refresh.refresh();
 
         assertThat(result.status()).isEqualTo(Status.DONE);
-        assertThat(result.merchants()).isEqualTo(sendableMerchants());
+        assertThat(result.merchants()).isEqualTo(documents());
         assertThat(result.embedded()).isEqualTo(result.merchants()).isEqualTo(result.calls());
         assertThat(result.remaining()).isZero();
         assertThat(embeddingModel.inputs()).hasSize(result.calls()).doesNotHaveDuplicates()
-                .contains("QUORVANE BAKEHOUSE", "PELTRIDGE BAKEHOUSE", "VANTERHOLM OVENS")
+                .contains("QUORVANE BAKEHOUSE", "PELTRIDGE BAKEHOUSE", "VANTERHOLM OVENS", "Dining", "Transportation")
                 .allSatisfy(text -> assertThat(text).doesNotContain("7700224466", "INDN", "JANE", "ZELLE", "CO ID",
                         "3QM7L2"));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_embedding WHERE merchant LIKE 'ZELLE%'",
+        assertThat(embeddingModel.inputs().subList(0, categories())).as("categories first")
+                .containsExactlyInAnyOrderElementsOf(jdbc.queryForList("SELECT name FROM category", String.class));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM search_embedding WHERE subject LIKE 'ZELLE%'",
                 Integer.class)).isZero();
-        // the stored hash is the hash of the outbound text, as categorization's own vectors
-        assertThat(jdbc.queryForObject("SELECT input_sha256 FROM merchant_embedding WHERE merchant = ?",
-                String.class, "QUORVANE BAKEHOUSE")).isEqualTo(MerchantEmbeddingStage.sha256("QUORVANE BAKEHOUSE"));
+        // the stored hash is the hash of the document: the outbound text alone while the merchant has no category
+        assertThat(jdbc.queryForObject("SELECT input_sha256 FROM search_embedding WHERE kind = 'MERCHANT' "
+                + "AND subject = ?", String.class, "QUORVANE BAKEHOUSE"))
+                .isEqualTo(MerchantEmbeddingStage.sha256("QUORVANE BAKEHOUSE"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM search_embedding WHERE kind = 'CATEGORY'",
+                Integer.class)).isEqualTo(categories());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_embedding", Integer.class))
+                .as("categorization's own vectors are neither read nor written").isZero();
         assertThat(output).containsPattern("ai call role=embedding model=" + AiIntegrationTest.EMBEDDING_MODEL
                 + " items=1 inputTokens=\\d+ ms=\\d+ outcome=OK");
         assertThat(output).contains("Search index refresh: status=DONE merchants=" + result.merchants());
-        assertThat(output.getOut().lines().filter(l -> l.contains("Search index refresh")))
+        assertThat(output.getOut().lines().filter(l -> l.contains("Search index refresh"))).hasSize(1)
                 .allSatisfy(line -> assertThat(line).doesNotContain("BAKEHOUSE"));
+    }
+
+    /**
+     * Step 8b: a merchant's document carries the category of most of its rows (ties to the newest row's), and a new
+     * majority category is a new document, embedded again at the next refresh.
+     */
+    @Test
+    void aMerchantsDocumentCarriesItsCategoryAndChangesWithIt() {
+        jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Dining'), category_source = 'USER'
+                WHERE merchant = 'QUORVANE BAKEHOUSE'""");
+        refresh.refresh();
+        assertThat(embeddingModel.inputs()).contains(SearchDocuments.merchant("QUORVANE BAKEHOUSE", "Dining"))
+                .contains("QUORVANE BAKEHOUSE (Dining)").doesNotContain("QUORVANE BAKEHOUSE");
+
+        jdbc.update("""
+                UPDATE txn SET category_id = (SELECT id FROM category WHERE name = 'Groceries'), category_source = 'USER'
+                WHERE merchant = 'QUORVANE BAKEHOUSE'""");
+        embeddingModel.reset();
+        EmbeddingRunResult again = refresh.refresh();
+
+        assertThat(again.embedded()).isOne();
+        assertThat(embeddingModel.inputs()).containsExactly("QUORVANE BAKEHOUSE (Groceries)");
     }
 
     @Test
@@ -116,14 +162,14 @@ class MerchantIndexRefreshTest {
         EmbeddingRunResult again = refresh.refresh();
 
         assertThat(again.calls()).isZero();
-        assertThat(again.cached()).isEqualTo(again.merchants());
+        assertThat(again.cached()).isEqualTo(again.merchants()).isEqualTo(documents());
         assertThat(embeddingModel.inputs()).hasSize(calls);
     }
 
     @Test
     void vectorsOfAnotherModelDontCountAsIndexed() {
         refresh.refresh();
-        jdbc.update("UPDATE merchant_embedding SET model = 'retired-model' WHERE merchant = 'QUORVANE BAKEHOUSE'");
+        jdbc.update("UPDATE search_embedding SET model = 'retired-model' WHERE subject = 'QUORVANE BAKEHOUSE'");
         embeddingModel.reset();
 
         EmbeddingRunResult result = refresh.refresh();
@@ -134,14 +180,14 @@ class MerchantIndexRefreshTest {
 
     @Test
     void theCapLeavesTheRestForTheNextRefresh() {
-        MerchantIndexRefresh capped = new MerchantIndexRefresh(stage, outbound, redaction,
-                new ChatSearchProperties(0.40, 2), jdbc, transactions);
+        MerchantIndexRefresh capped = new MerchantIndexRefresh(stage, index, new OutboundPayloadGuard(), outbound,
+                redaction, new ChatSearchProperties(0.40, 2), jdbc, transactions);
 
         EmbeddingRunResult first = capped.refresh();
 
         assertThat(first.status()).isEqualTo(Status.CAP_REACHED);
         assertThat(first.calls()).isEqualTo(2);
-        assertThat(first.remaining()).isEqualTo(sendableMerchants() - 2);
+        assertThat(first.remaining()).isEqualTo(documents() - 2);
         assertThat(capped.refresh().embedded()).isEqualTo(2);
     }
 
@@ -153,8 +199,9 @@ class MerchantIndexRefreshTest {
 
         assertThat(failed.status()).isEqualTo(Status.STOPPED_ON_ERROR);
         assertThat(failed.embedded()).isZero();
+        assertThat(failed.calls()).as("the first call fails, nothing more is tried").isOne();
         embeddingModel.reset();
-        assertThat(refresh.refresh().embedded()).isEqualTo(sendableMerchants());
+        assertThat(refresh.refresh().embedded()).isEqualTo(documents());
     }
 
     @Test
@@ -162,9 +209,9 @@ class MerchantIndexRefreshTest {
         mockMvc.perform(post("/api/chat/search-index/refresh"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("DONE"))
-                .andExpect(jsonPath("$.embedded").value(sendableMerchants()))
+                .andExpect(jsonPath("$.embedded").value(documents()))
                 .andExpect(jsonPath("$.length()").value(8));
-        assertThat(List.of(jdbc.queryForObject("SELECT count(*) FROM merchant_embedding", Integer.class)))
-                .containsExactly(sendableMerchants());
+        assertThat(List.of(jdbc.queryForObject("SELECT count(*) FROM search_embedding", Integer.class)))
+                .containsExactly(documents());
     }
 }

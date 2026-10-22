@@ -14,6 +14,7 @@ import com.finalysis.chat.grounding.GroundingStatus;
 import com.finalysis.chat.tool.FigureBasis;
 import com.finalysis.support.ChatIntegrationTest;
 import com.finalysis.support.FakeEmbeddingModel;
+import com.finalysis.support.SearchIndexBuilder;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.MutableClock;
 import com.finalysis.support.ScriptedChatModel;
@@ -82,16 +83,15 @@ class ChatSearchTurnTest {
     @BeforeAll
     void importAndIndex() throws Exception {
         fixture.load();
-        jdbc.update("DELETE FROM merchant_embedding");
-        embeddingModel.reset()
+        new SearchIndexBuilder(jdbc, embeddingModel, refresh)
                 .near("FIXTURE DINER", "RESTAURANT", 0.82)
-                .near("FIXTURE GROCER", "RESTAURANT", 0.55);
-        refresh.refresh();
+                .near("FIXTURE GROCER", "RESTAURANT", 0.55)
+                .build();
     }
 
     @AfterAll
     void cleanUp() {
-        jdbc.update("DELETE FROM merchant_embedding");
+        jdbc.update("DELETE FROM search_embedding");
         embeddingModel.reset();
         support.deleteCreatedAccounts();
     }

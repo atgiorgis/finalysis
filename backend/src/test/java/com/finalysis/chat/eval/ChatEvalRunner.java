@@ -165,7 +165,7 @@ class ChatEvalRunner {
                     : e.getBody().getType().toString().replace("urn:finalysis:problem:", "");
             return new Observation(null, type, AnswerSource.ERROR, null, false, 0, 0, List.of(), null, calls.calls(),
                     null, null, 0, null, millis(start), calls.retryFigures(), calls.rejectedAnswer(),
-                    calls.searchQueries(), null);
+                    calls.searchQueries(), null, calls.invalidArguments());
         }
         long millis = millis(start);
         TurnCalls calls = recorder.end();
@@ -177,7 +177,7 @@ class ChatEvalRunner {
                 response.limitHit(), usage.rounds(), usage.inputTokens(), usage.outputTokens(),
                 usage.callsWithoutUsage(), usage.estimatedCost() == null ? null : new BigDecimal(usage.estimatedCost()),
                 millis, calls.retryFigures(), calls.rejectedAnswer(), calls.searchQueries(),
-                citationsFound(turn.citations(), response.citations(), seeded.accounts()));
+                citationsFound(turn.citations(), response.citations(), seeded.accounts()), calls.invalidArguments());
     }
 
     /** Whether every expected row is among the turn's cited transactions; null when none is expected. */

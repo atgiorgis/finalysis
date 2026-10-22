@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
  *   <li>a day or a year 2000–2099 next to a month name ({@code Aug 22}, {@code 22 August}, {@code August 2026},
  *       {@code Aug 22, 2026});</li>
  *   <li>ordinals ({@code 1st}, {@code 3rd}) and the numbers inside alias tokens ({@code CARD-1});</li>
+ *   <li>quarter references and their year: {@code Q3}, {@code Q3 2026}, {@code 2026 Q3}, {@code Q3'26},
+ *       {@code quarter 3}, {@code second quarter of 2026};</li>
  *   <li>labels this turn sent that contain only whole numbers (a merchant {@code 7-ELEVEN}, a category name), given
  *       by the caller; a label with a decimal, a {@code $} or a {@code %} is never masked;</li>
  *   <li>the whole numbers 0 and 1 as counts.</li>
@@ -41,6 +43,9 @@ public final class FigureExtractor {
             + ",?\\s+(?:of\\s+)?(?<year>20\\d{2})(?!\\d)");
     private static final Pattern YEAR_MONTH = Pattern.compile("(?i)(?<!\\d)(?<year>20\\d{2})\\s+" + MONTH_NAME + "\\b");
     private static final Pattern ORDINAL = Pattern.compile("(?i)(?<!\\d)\\d+(?:st|nd|rd|th)\\b");
+    private static final Pattern QUARTER = Pattern.compile("(?i)(?<![\\p{L}\\d])(?:(?:20\\d{2}\\s*[-/]?\\s*)?Q[1-4]"
+            + "(?:\\s*(?:,|of)?\\s*(?:20\\d{2}|'\\d{2})(?![.,]\\d))?|quarter\\s+[1-4]|(?:first|second|third|fourth|last|1st|2nd|3rd|4th)"
+            + "\\s+quarter(?:\\s*,?\\s*(?:of\\s+)?20\\d{2}(?![.,]\\d))?)(?![\\p{L}\\d])");
     private static final Pattern ALIAS = Pattern.compile("\\b[A-Z][A-Z_]*-\\d+\\b");
 
     private static final Pattern NUMBER = Pattern.compile(
@@ -73,6 +78,7 @@ public final class FigureExtractor {
         maskDays(masked, DAY_MONTH);
         mask(masked, MONTH_YEAR, "year");
         mask(masked, YEAR_MONTH, "year");
+        mask(masked, QUARTER, null);
         mask(masked, ORDINAL, null);
         mask(masked, ALIAS, null);
         for (String label : labels) {
