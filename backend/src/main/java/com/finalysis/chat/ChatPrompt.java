@@ -28,10 +28,12 @@ import org.springframework.stereotype.Component;
 public class ChatPrompt {
 
     /**
-     * Stored with every turn; changes whenever the system prompt or the message layout does. chat-1 was step 5; chat-2
-     * adds the routing rules for search (step 6); chat-3 adds the summary and the recent turns (step 7).
+     * Stored with every turn; changes whenever the system prompt, the tool descriptions or the message layout does.
+     * chat-1 was step 5; chat-2 adds the routing rules for search (step 6); chat-3 adds the summary and the recent turns
+     * (step 7); chat-4 the step 8b fixes; chat-5 search and merchant totals over every month with data by default, and
+     * the cache points after the tools and the context block (step 8c).
      */
-    public static final String VERSION = "chat-4";
+    public static final String VERSION = "chat-5";
 
     static final String RESOURCE = "chat/system-prompt.txt";
     /** Where the history starts in {@link #start}'s messages: after the system prompt and the context block. */

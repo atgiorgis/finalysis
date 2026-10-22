@@ -1,5 +1,6 @@
 package com.finalysis.ai.bedrock;
 
+import com.finalysis.ai.PromptCache;
 import java.time.Duration;
 import org.springframework.ai.model.bedrock.autoconfigure.BedrockAwsConnectionProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -49,6 +50,12 @@ public class BedrockClientConfiguration {
             http.socketTimeout(connection.getSocketTimeout());
         }
         return client(credentials, region.getRegion(), connection.getTimeout(), http.build());
+    }
+
+    /** Cache points for chat's fixed prefix (docs/plans/phase-6.md step 8c). */
+    @Bean
+    PromptCache bedrockPromptCache() {
+        return new BedrockPromptCache();
     }
 
     /** The client with this retry strategy; tests pass a fake HTTP client. */

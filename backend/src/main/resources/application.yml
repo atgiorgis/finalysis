@@ -86,6 +86,11 @@ finalysis:
       # Off in every profile (no profile file overrides it): with AI on, an import never starts cloud calls by
       # itself; run the AI with POST /api/categorization/run. True runs it in the background after each import.
       run-after-import: false
+    # The chat role (docs/plans/phase-6.md §2.3). No temperature unless set here: a 5.5-generation model may refuse one.
+    chat:
+      # Cache chat's fixed prefix (tool definitions, system prompt, context block; step 8c) for a main model whose
+      # price has cache-read-per-million and cache-write-per-million. Never the summary, history, question or results.
+      prompt-cache: true
     # Embeddings and similar-merchant examples (CAT-03, docs/plans/phase-4.md §6, step 8 notes).
     embedding:
       dimensions: 1024        # must match merchant_embedding's vector(1024); checked at startup when AI is on

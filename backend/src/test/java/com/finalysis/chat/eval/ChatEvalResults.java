@@ -37,12 +37,16 @@ final class ChatEvalResults {
      * @param rejectedAnswer the first answer, when the retry replaced it: never shown to a user, kept for review
      * @param searchQueries  the search texts the model sent to {@code search_transactions}
      * @param invalidArguments every problem of the turn's invalid tool calls, in order
+     * @param inputTokens    input tokens outside the cached prefix, as reported (step 8c)
+     * @param cacheReadTokens  cached-prefix tokens read; 0 without caching
+     * @param cacheWriteTokens cached-prefix tokens written; 0 without caching
      * @param cost           the app's estimate in dollars (the price file's price for the model)
      * @param millis         wall time of the turn, as the harness measured it
      */
     record Observation(String answer, String problem, AnswerSource source, GroundingStatus grounding, boolean retried,
                        int figuresChecked, int ungrounded, List<ToolUse> tools, LimitHit limit, int rounds,
-                       Integer inputTokens, Integer outputTokens, int callsWithoutUsage, BigDecimal cost, long millis,
+                       Integer inputTokens, Integer outputTokens, int cacheReadTokens, int cacheWriteTokens,
+                       int callsWithoutUsage, BigDecimal cost, long millis,
                        List<String> retryFigures, String rejectedAnswer, List<String> searchQueries,
                        Boolean citationsFound, List<InvalidArgument> invalidArguments) {
 
@@ -91,10 +95,12 @@ final class ChatEvalResults {
      * A whole run.
      *
      * @param settings        every chat and AI setting of the context, by property name
+     * @param promptCaching   whether chat cached its fixed prefix, as the app decided it at the end of the run
+     *                        ({@code ChatModelClient.PromptCaching}: {@code ON}, or why not; step 8c)
      * @param ledgerCost      every chat call's cost as the usage ledger summed it (turns and conversation summaries)
      * @param stopped         why the run stopped before the last question, or null when it finished
      */
-    record Run(String set, String setSha256, int setVersion, String model, String promptVersion,
+    record Run(String set, String setSha256, int setVersion, String model, String promptCaching, String promptVersion,
                String systemPromptSha256, String pricesSource, Map<String, String> todayByDataset,
                Map<String, String> settings, List<IndexBuild> index, List<QuestionResult> questions,
                BigDecimal ledgerCost, String stopped, long wallMillis) {

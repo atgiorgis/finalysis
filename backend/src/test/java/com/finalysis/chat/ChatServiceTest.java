@@ -159,8 +159,8 @@ class ChatServiceTest {
             assertThat(tool.rows()).isPositive();
         });
         // usage: 1000 + 1200 in, 50 + 80 out, at $1 and $5 per million
-        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", 2, 2200, 130, 0,
-                "0.002850"));
+        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", 2, 2200, 130, 0, 0,
+                0, "0.002850"));
         assertThat(response.limitHit()).isNull();
         // March 2026 failed reconciliation on the checking account: a data note, local ids only
         assertThat(response.dataNotes()).isNotEmpty();
@@ -304,7 +304,7 @@ class ChatServiceTest {
         assertThat(response.grounding().retried()).isTrue();
         assertThat(model.prompts().get(2).getInstructions().getLast().getText()).isEqualTo(TurnLoop.CUT_ANSWER_RETRY);
         assertThat(output).contains("ai call role=chat model=test-main-model items=1 inputTokens=1200 "
-                + "outputTokens=1500 ms=").contains("outcome=LIMIT");
+                + "cacheReadTokens=0 cacheWriteTokens=0 outputTokens=1500 ms=").contains("outcome=LIMIT");
     }
 
     @Test
@@ -491,6 +491,32 @@ class ChatServiceTest {
                 .doesNotContain("synthetic failure");
     }
 
+    /**
+     * Step 8c: cached-prefix tokens are priced apart (read $0.10, write $1.25 per million here) and kept apart from
+     * the uncached input everywhere: the response, the turn, the ledger and the AI-06 line.
+     */
+    @Test
+    void cachedPrefixTokensArePricedApartAndRecorded(CapturedOutput output) {
+        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)).usage(400, 50, 0, 5600),
+                text(GROUNDED).usage(600, 80, 5600, 0));
+
+        ChatTurnResponse response = ask("How much did I spend in March?");
+
+        // 400 + 50×5 + 5600×1.25 = 7650, then 600 + 80×5 + 5600×0.10 = 1560: $0.009210
+        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", 2, 1000, 130, 5600, 5600,
+                0, "0.009210"));
+        assertThat(storedTurn()).containsEntry("input_tokens", 1000).containsEntry("cache_read_tokens", 5600)
+                .containsEntry("cache_write_tokens", 5600)
+                .containsEntry("estimated_cost", new java.math.BigDecimal("0.009210"));
+        assertThat(jdbc.queryForMap("SELECT input_tokens, cache_read_tokens, cache_write_tokens, estimated_cost "
+                + "FROM chat_usage WHERE kind = 'TURN' ORDER BY id DESC LIMIT 1"))
+                .containsEntry("input_tokens", 1000).containsEntry("cache_read_tokens", 5600)
+                .containsEntry("cache_write_tokens", 5600)
+                .containsEntry("estimated_cost", new java.math.BigDecimal("0.009210"));
+        assertThat(output).contains("items=0 inputTokens=400 cacheReadTokens=0 cacheWriteTokens=5600 outputTokens=50")
+                .contains("items=1 inputTokens=600 cacheReadTokens=5600 cacheWriteTokens=0 outputTokens=80");
+    }
+
     /** AI-06: one line per model call, with role chat, the tool results in the prompt and the tokens; no content. */
     @Test
     void everyCallWritesItsTokenLine(CapturedOutput output) {
@@ -498,8 +524,10 @@ class ChatServiceTest {
 
         ask("How much did I spend in March?");
 
-        assertThat(output).contains("ai call role=chat model=test-main-model items=0 inputTokens=1000 outputTokens=50")
-                .contains("ai call role=chat model=test-main-model items=1 inputTokens=1200 outputTokens=80")
+        assertThat(output).contains("ai call role=chat model=test-main-model items=0 inputTokens=1000 cacheReadTokens=0 "
+                + "cacheWriteTokens=0 outputTokens=50")
+                .contains("ai call role=chat model=test-main-model items=1 inputTokens=1200 cacheReadTokens=0 "
+                + "cacheWriteTokens=0 outputTokens=80")
                 .contains("chat tool tool=get_month_totals status=OK rows=")
                 .contains("chat turn conversation=" + conversation + " turn=1 source=MODEL grounding=GROUNDED");
         assertThat(output.getAll().lines().filter(l -> l.contains("ai call role=chat"))).hasSize(2);

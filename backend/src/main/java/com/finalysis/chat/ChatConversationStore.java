@@ -59,6 +59,7 @@ public class ChatConversationStore {
                           int ungrounded, LimitHit limitHit, List<Citation> citations, Map<String, Long> aliasMap,
                           String model,
                           String promptVersion, int rounds, int toolCalls, Integer inputTokens, Integer outputTokens,
+                          Integer cacheReadTokens, Integer cacheWriteTokens,
                           int callsWithoutUsage, BigDecimal estimatedCost, long millis, String error,
                           OffsetDateTime createdAt, List<NewToolCall> calls) {
 
@@ -71,19 +72,23 @@ public class ChatConversationStore {
     public record StoredTurn(int seq, String question, String outboundQuestion, String answer, AnswerSource source,
                              String groundingStatus, boolean retried, int figuresChecked, int ungrounded,
                              LimitHit limitHit, String citations, String model, int rounds, int toolCalls,
-                             Integer inputTokens, Integer outputTokens, int callsWithoutUsage,
+                             Integer inputTokens, Integer outputTokens, Integer cacheReadTokens,
+                             Integer cacheWriteTokens, int callsWithoutUsage,
                              BigDecimal estimatedCost, long millis, OffsetDateTime createdAt) {
     }
 
     /**
      * One ledger row: what a turn, a conversation summary or a monthly summary cost. Counts only.
      *
-     * @param inputTokens  reported input tokens summed; null when no call reported usage
-     * @param outputTokens reported output tokens summed; null when no call reported usage
-     * @param cost         estimated cost; null when the model has no price
+     * @param inputTokens      reported input tokens outside a cached prefix, summed; null when no call reported usage
+     * @param outputTokens     reported output tokens summed; null when no call reported usage
+     * @param cacheReadTokens  cached-prefix tokens read, summed (step 8c); null when no call reported usage
+     * @param cacheWriteTokens cached-prefix tokens written, summed; null when no call reported usage
+     * @param cost             estimated cost, each kind of token at its own price; null when the model has no price
      */
     public record Usage(UsageKind kind, String model, int calls, Integer inputTokens, Integer outputTokens,
-                        int callsWithoutUsage, BigDecimal cost, OffsetDateTime at) {
+                        Integer cacheReadTokens, Integer cacheWriteTokens, int callsWithoutUsage, BigDecimal cost,
+                        OffsetDateTime at) {
     }
 
     /**
@@ -158,8 +163,8 @@ public class ChatConversationStore {
         return jdbc.sql("""
                         SELECT seq, question, outbound_question, answer, answer_source, grounding_status, retried,
                                figures_checked, ungrounded, limit_hit, citations::text AS citations, model, rounds,
-                               tool_calls, input_tokens, output_tokens, calls_without_usage, estimated_cost, millis,
-                               created_at
+                               tool_calls, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                               calls_without_usage, estimated_cost, millis, created_at
                         FROM chat_turn WHERE conversation_id = :id ORDER BY seq""")
                 .param("id", conversationId)
                 .query((rs, n) -> new StoredTurn(rs.getInt("seq"), rs.getString("question"),
@@ -169,7 +174,8 @@ public class ChatConversationStore {
                         rs.getString("limit_hit") == null ? null : LimitHit.valueOf(rs.getString("limit_hit")),
                         rs.getString("citations"), rs.getString("model"), rs.getInt("rounds"),
                         rs.getInt("tool_calls"), rs.getObject("input_tokens", Integer.class),
-                        rs.getObject("output_tokens", Integer.class), rs.getInt("calls_without_usage"),
+                        rs.getObject("output_tokens", Integer.class), rs.getObject("cache_read_tokens", Integer.class),
+                        rs.getObject("cache_write_tokens", Integer.class), rs.getInt("calls_without_usage"),
                         rs.getBigDecimal("estimated_cost"), rs.getLong("millis"),
                         rs.getObject("created_at", OffsetDateTime.class)))
                 .list();
@@ -197,11 +203,12 @@ public class ChatConversationStore {
                         INSERT INTO chat_turn (conversation_id, seq, question, outbound_question, answer, answer_source,
                             grounding_status, retried, figures_checked, ungrounded, limit_hit, citations, alias_map,
                             model, prompt_version, rounds, tool_calls, input_tokens, output_tokens,
-                            calls_without_usage, estimated_cost, millis, error, created_at)
+                            cache_read_tokens, cache_write_tokens, calls_without_usage, estimated_cost, millis, error,
+                            created_at)
                         VALUES (:conversation, :seq, :question, :outbound, :answer, :source, :grounding, :retried,
                             :figures, :ungrounded, :limit, CAST(:citations AS jsonb), CAST(:aliases AS jsonb), :model,
-                            :prompt, :rounds, :toolCalls, :input, :output, :withoutUsage, :cost, :millis, :error,
-                            :createdAt)
+                            :prompt, :rounds, :toolCalls, :input, :output, :cacheRead, :cacheWrite, :withoutUsage,
+                            :cost, :millis, :error, :createdAt)
                         RETURNING id""")
                 .param("conversation", turn.conversationId()).param("seq", seq)
                 .param("question", turn.question()).param("outbound", turn.outboundQuestion())
@@ -214,6 +221,7 @@ public class ChatConversationStore {
                 .param("model", turn.model()).param("prompt", turn.promptVersion())
                 .param("rounds", turn.rounds()).param("toolCalls", turn.toolCalls())
                 .param("input", turn.inputTokens()).param("output", turn.outputTokens())
+                .param("cacheRead", turn.cacheReadTokens()).param("cacheWrite", turn.cacheWriteTokens())
                 .param("withoutUsage", turn.callsWithoutUsage()).param("cost", turn.estimatedCost())
                 .param("millis", (int) Math.min(Integer.MAX_VALUE, turn.millis())).param("error", turn.error())
                 .param("createdAt", turn.createdAt())
@@ -231,7 +239,8 @@ public class ChatConversationStore {
                     .update();
         }
         recordUsage(new Usage(UsageKind.TURN, turn.model(), turn.rounds(), turn.inputTokens(), turn.outputTokens(),
-                turn.callsWithoutUsage(), turn.estimatedCost(), turn.createdAt()));
+                turn.cacheReadTokens(), turn.cacheWriteTokens(), turn.callsWithoutUsage(), turn.estimatedCost(),
+                turn.createdAt()));
         String title = turn.question().strip();
         if (title.length() > TITLE_LENGTH) {
             title = title.substring(0, TITLE_LENGTH);
@@ -269,11 +278,13 @@ public class ChatConversationStore {
     @Transactional
     public void recordUsage(Usage usage) {
         jdbc.sql("""
-                        INSERT INTO chat_usage (kind, model, calls, input_tokens, output_tokens, calls_without_usage,
-                            estimated_cost, created_at)
-                        VALUES (:kind, :model, :calls, :input, :output, :withoutUsage, :cost, :at)""")
+                        INSERT INTO chat_usage (kind, model, calls, input_tokens, output_tokens, cache_read_tokens,
+                            cache_write_tokens, calls_without_usage, estimated_cost, created_at)
+                        VALUES (:kind, :model, :calls, :input, :output, :cacheRead, :cacheWrite, :withoutUsage, :cost,
+                            :at)""")
                 .param("kind", usage.kind().name()).param("model", usage.model()).param("calls", usage.calls())
                 .param("input", usage.inputTokens()).param("output", usage.outputTokens())
+                .param("cacheRead", usage.cacheReadTokens()).param("cacheWrite", usage.cacheWriteTokens())
                 .param("withoutUsage", usage.callsWithoutUsage()).param("cost", usage.cost()).param("at", usage.at())
                 .update();
     }

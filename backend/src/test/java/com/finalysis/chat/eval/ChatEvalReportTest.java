@@ -49,7 +49,7 @@ class ChatEvalReportTest {
 
     private static TurnResult result(Turn turn, String answer, boolean retried, String rejected) {
         Observation observed = new Observation(answer, null, AnswerSource.MODEL, GroundingStatus.GROUNDED, retried, 1,
-                0, List.of(new ToolUse("get_category_totals", "OK", 1)), null, retried ? 3 : 2, 1000, 100, 0,
+                0, List.of(new ToolUse("get_category_totals", "OK", 1)), null, retried ? 3 : 2, 1000, 100, 0, 0, 0,
                 new BigDecimal("0.001500"), 1500, retried ? List.of("2026") : List.of(), rejected, List.of(), null,
                 List.of());
         return new TurnResult(1, turn.ask(), turn.expect(), turn.note(), observed,
@@ -65,7 +65,7 @@ class ChatEvalReportTest {
                 new QuestionResult("h-u01", "LOOKUP", "user", true, "SAMPLE", 1, List.of(result(
                         set.question("h-u01").turns().getFirst(), "You spent $400.00 on groceries.\nThat's all.", true,
                         "So far in 2026 you spent $400.00."))));
-        Run run = new Run("holdout", "abc", 1, "test-model", "chat-3", "def", "the price file",
+        Run run = new Run("holdout", "abc", 1, "test-model", "ON", "chat-3", "def", "the price file",
                 Map.of("SAMPLE", "2026-10-15"), Map.of("finalysis.chat.max-rounds", "5"),
                 List.of(new IndexBuild("SAMPLE", "OK", 40, 40, 0, 1, 0)), questions, new BigDecimal("0.003000"), null,
                 5000);
@@ -116,10 +116,33 @@ class ChatEvalReportTest {
                 .doesNotContain("h-l01");
     }
 
+    /**
+     * Step 8c: the report says whether the run was cached, and splits input tokens into uncached, cache reads and
+     * writes; caching asked for with no cached token reported is called out.
+     */
+    @Test
+    void theReportSaysWhetherTheRunWasCachedAndSplitsTheInput() {
+        String md = report().markdown();
+
+        assertThat(md).contains("- Prompt caching: on (tools, system prompt, context block; 5-minute TTL), but no "
+                        + "cached tokens were reported")
+                .contains("| Prompt caching | ON |")
+                .contains("| Input tokens: uncached / cache read / cache write | 2000 / 0 / 0 |")
+                .contains("**Caching was asked for, but the model reported no cached tokens**");
+
+        ChatEvalSet set = set();
+        Run off = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-5", "def", "p", Map.of(), Map.of(),
+                List.of(), List.of(), BigDecimal.ZERO, null, 0);
+        assertThat(ChatEvalReport.of(GIT, STARTED, set, off).markdown())
+                .contains("- Prompt caching: off (the price file lists no cache prices for this model); every call "
+                        + "uncached")
+                .doesNotContain("Caching was asked for");
+    }
+
     @Test
     void aSetWithoutUserQuestionsSaysSo() {
         ChatEvalSet set = set();
-        Run run = new Run("dev", "abc", 1, "m", "chat-3", "def", "p", Map.of(), Map.of(), List.of(), List.of(),
+        Run run = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-3", "def", "p", Map.of(), Map.of(), List.of(), List.of(),
                 BigDecimal.ZERO, "run budget reached", 0);
 
         String md = ChatEvalReport.of(GIT, STARTED, set, run).markdown();

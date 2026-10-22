@@ -132,7 +132,7 @@ class MonthlySummaryTest {
                 .contains("\"totals\"").contains("\"trends\"").contains("\"alerts\"").contains("\"recurring\"")
                 .doesNotContain("accountId").doesNotContain("5201");
         assertThat(output).contains("ai call role=summary model=test-main-model items=4 inputTokens=1200 "
-                + "outputTokens=80").contains("chat monthly summary month=2026-01 source=MODEL grounding=GROUNDED");
+                + "cacheReadTokens=0 cacheWriteTokens=0 outputTokens=80").contains("chat monthly summary month=2026-01 source=MODEL grounding=GROUNDED");
     }
 
     @Test

@@ -107,6 +107,34 @@ class ChatSettingsTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** Step 8c: cached-prefix reads and writes at their own prices; a call's worst case before it is sent. */
+    @Test
+    void cachedPrefixTokensCostTheirOwnPrices() {
+        AiPrices.Price haiku = new AiPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00"),
+                new BigDecimal("0.10"), new BigDecimal("1.25"));
+
+        assertThat(haiku.cachePriced()).isTrue();
+        // 420 + 12×5 + 5,920×0.10 + 0×1.25 = 1,072 → $0.001072
+        assertThat(haiku.cost(420, 12, 5_920, 0)).isEqualByComparingTo("0.001072");
+        // the first call writes: 420 + 60 + 5,920×1.25 = 7,880 → $0.007880
+        assertThat(haiku.cost(420, 12, 0, 5_920)).isEqualByComparingTo("0.007880");
+        assertThat(haiku.cost(6_340, 12)).isEqualByComparingTo(haiku.cost(6_340, 12, 0, 0));
+        // worst case: every estimated token at the dearer of input and write when caching, and the output cap
+        assertThat(haiku.worstCase(6_000, 1_500, true)).isEqualByComparingTo("0.015000");
+        assertThat(haiku.worstCase(6_000, 1_500, false)).isEqualByComparingTo("0.013500");
+
+        // without cache prices: never asked to cache; reported cache tokens never look cheaper than input
+        AiPrices.Price plain = new AiPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00"));
+        assertThat(plain.cachePriced()).isFalse();
+        assertThat(plain.cost(0, 0, 1_000_000, 1_000_000)).isEqualByComparingTo("3.000000");
+        assertThat(plain.worstCase(6_000, 1_500, true)).isEqualByComparingTo("0.013500");
+
+        assertThatThrownBy(() -> new AiPrices.Price(BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("0.10"), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AiPrices.Price(BigDecimal.ONE, BigDecimal.ONE, new BigDecimal("-0.1"),
+                BigDecimal.ONE)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     /** The cost limits and the evaluation estimate from the same numbers. */
     @Test
     void theAwsProfilesPricesEqualTheEvaluationsPriceFile() throws Exception {
@@ -122,7 +150,11 @@ class ChatSettingsTest {
         Map<String, AiPrices.Price> expected = new HashMap<>();
         file.get("models").properties().forEach(e -> expected.put(e.getKey(), new AiPrices.Price(
                 new BigDecimal(e.getValue().get("inputPerMillionUsd").stringValue()),
-                new BigDecimal(e.getValue().get("outputPerMillionUsd").stringValue()))));
+                new BigDecimal(e.getValue().get("outputPerMillionUsd").stringValue()),
+                e.getValue().has("cacheReadPerMillionUsd")
+                        ? new BigDecimal(e.getValue().get("cacheReadPerMillionUsd").stringValue()) : null,
+                e.getValue().has("cacheWritePerMillionUsd")
+                        ? new BigDecimal(e.getValue().get("cacheWritePerMillionUsd").stringValue()) : null)));
 
         assertThat(prices.prices()).isNotEmpty();
         prices.prices().forEach((model, price) -> {
@@ -130,7 +162,15 @@ class ChatSettingsTest {
             assertThat(price.inputPerMillion()).as(model).isEqualByComparingTo(expected.get(model).inputPerMillion());
             assertThat(price.outputPerMillion()).as(model)
                     .isEqualByComparingTo(expected.get(model).outputPerMillion());
+            assertThat(price.cachePriced()).as(model + " cache prices").isEqualTo(expected.get(model).cachePriced());
+            if (price.cachePriced()) {
+                assertThat(price.cacheReadPerMillion()).as(model)
+                        .isEqualByComparingTo(expected.get(model).cacheReadPerMillion());
+                assertThat(price.cacheWritePerMillion()).as(model)
+                        .isEqualByComparingTo(expected.get(model).cacheWritePerMillion());
+            }
         });
-        assertThat(prices.of("us.anthropic.claude-haiku-4-5-20251001-v1:0")).isPresent();
+        assertThat(prices.of("us.anthropic.claude-haiku-4-5-20251001-v1:0")).hasValueSatisfying(
+                haiku -> assertThat(haiku.cachePriced()).isTrue());
     }
 }

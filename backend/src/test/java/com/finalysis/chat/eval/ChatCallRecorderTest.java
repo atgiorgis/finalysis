@@ -57,7 +57,7 @@ class ChatCallRecorderTest {
         assertThat(calls.rejectedAnswer()).isEqualTo("So far in 2026 you spent $45.10.");
 
         recorder.begin();
-        assertThat(recorder.end()).isEqualTo(new TurnCalls(0, List.of(), null, List.of(), List.of()));
+        assertThat(recorder.end()).isEqualTo(new TurnCalls(0, List.of(), null, List.of(), List.of(), List.of()));
         assertThat(recorder.totalCalls()).isEqualTo(3);
     }
 

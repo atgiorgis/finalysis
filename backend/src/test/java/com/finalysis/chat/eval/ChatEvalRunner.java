@@ -2,6 +2,7 @@ package com.finalysis.chat.eval;
 
 import com.finalysis.chat.AnswerSource;
 import com.finalysis.chat.ChatPrompt;
+import com.finalysis.chat.ChatModelClient;
 import com.finalysis.chat.ChatService;
 import com.finalysis.chat.ChatTurnResponse;
 import com.finalysis.chat.citation.Citation;
@@ -57,15 +58,17 @@ class ChatEvalRunner {
             "spring.ai.bedrock.aws.region", "spring.ai.bedrock.aws.timeout", "spring.ai.model.");
 
     private final ChatService chat;
+    private final ChatModelClient client;
     private final ChatEvalSeeder seeder;
     private final ChatCallRecorder recorder;
     private final MutableClock clock;
     private final JdbcTemplate jdbc;
     private final ConfigurableEnvironment environment;
 
-    ChatEvalRunner(ChatService chat, ChatEvalSeeder seeder, ChatCallRecorder recorder, MutableClock clock,
-                   JdbcTemplate jdbc, ConfigurableEnvironment environment) {
+    ChatEvalRunner(ChatService chat, ChatModelClient client, ChatEvalSeeder seeder, ChatCallRecorder recorder,
+                   MutableClock clock, JdbcTemplate jdbc, ConfigurableEnvironment environment) {
         this.chat = chat;
+        this.client = client;
         this.seeder = seeder;
         this.recorder = recorder;
         this.clock = clock;
@@ -124,7 +127,8 @@ class ChatEvalRunner {
             ledger = ledger.add(ledgerCost());
         }
         seeder.clear();
-        return new Run(set.name(), set.sha256(), set.version(), model, ChatPrompt.VERSION,
+        return new Run(set.name(), set.sha256(), set.version(), model, client.promptCaching().name(),
+                ChatPrompt.VERSION,
                 ChatEvalSet.sha256(resource("chat/system-prompt.txt")), prices.source(), today, settings(environment),
                 index, results, ledger, stopped, (System.nanoTime() - start) / 1_000_000);
     }
@@ -164,7 +168,7 @@ class ChatEvalRunner {
             String type = e.getBody().getType() == null ? String.valueOf(e.getStatusCode().value())
                     : e.getBody().getType().toString().replace("urn:finalysis:problem:", "");
             return new Observation(null, type, AnswerSource.ERROR, null, false, 0, 0, List.of(), null, calls.calls(),
-                    null, null, 0, null, millis(start), calls.retryFigures(), calls.rejectedAnswer(),
+                    null, null, 0, 0, 0, null, millis(start), calls.retryFigures(), calls.rejectedAnswer(),
                     calls.searchQueries(), null, calls.invalidArguments());
         }
         long millis = millis(start);
@@ -175,7 +179,8 @@ class ChatEvalRunner {
                 response.grounding().ungrounded(),
                 response.tools().stream().map(t -> new ToolUse(t.name(), t.status().name(), t.rows())).toList(),
                 response.limitHit(), usage.rounds(), usage.inputTokens(), usage.outputTokens(),
-                usage.callsWithoutUsage(), usage.estimatedCost() == null ? null : new BigDecimal(usage.estimatedCost()),
+                Objects.requireNonNullElse(usage.cacheReadTokens(), 0),
+                Objects.requireNonNullElse(usage.cacheWriteTokens(), 0), usage.callsWithoutUsage(), usage.estimatedCost() == null ? null : new BigDecimal(usage.estimatedCost()),
                 millis, calls.retryFigures(), calls.rejectedAnswer(), calls.searchQueries(),
                 citationsFound(turn.citations(), response.citations(), seeded.accounts()), calls.invalidArguments());
     }

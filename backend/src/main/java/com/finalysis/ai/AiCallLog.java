@@ -10,7 +10,9 @@ import org.slf4j.LoggerFactory;
  * class name ({@code error=SdkClientException}). Token counts the provider didn't report are written as {@code n/a},
  * never as 0, so a missing count can't pass for a free call. An embedding call has no output tokens, so its line has
  * none: <pre>ai call role=embedding model=&lt;id&gt; items=1 inputTokens=7 ms=210 outcome=OK</pre>
- * A chat round's {@code items} is the number of tool results in its prompt (docs/plans/phase-6.md §8).
+ * A chat round's {@code items} is the number of tool results in its prompt (docs/plans/phase-6.md §8). A chat call
+ * also writes its cached-prefix tokens (step 8c), read and written, apart from {@code inputTokens}, which counts only
+ * the tokens outside the cached prefix: <pre>... inputTokens=412 cacheReadTokens=5930 cacheWriteTokens=0 ...</pre>
  */
 public final class AiCallLog {
 
@@ -39,6 +41,22 @@ public final class AiCallLog {
         } else {
             log.info("ai call role={} model={} items={} inputTokens={} outputTokens={} ms={} outcome={} error={}",
                     role, model, items, count(inputTokens), count(outputTokens), millis, outcome,
+                    error.getClass().getSimpleName());
+        }
+    }
+
+    /** A chat call's line, with its cached-prefix tokens (step 8c). */
+    public static void record(String role, String model, int items, Integer inputTokens, Integer outputTokens,
+                              int cacheReadTokens, int cacheWriteTokens, long millis, Outcome outcome,
+                              Throwable error) {
+        if (error == null) {
+            log.info("ai call role={} model={} items={} inputTokens={} cacheReadTokens={} cacheWriteTokens={} "
+                            + "outputTokens={} ms={} outcome={}", role, model, items, count(inputTokens),
+                    cacheReadTokens, cacheWriteTokens, count(outputTokens), millis, outcome);
+        } else {
+            log.info("ai call role={} model={} items={} inputTokens={} cacheReadTokens={} cacheWriteTokens={} "
+                            + "outputTokens={} ms={} outcome={} error={}", role, model, items, count(inputTokens),
+                    cacheReadTokens, cacheWriteTokens, count(outputTokens), millis, outcome,
                     error.getClass().getSimpleName());
         }
     }

@@ -26,7 +26,7 @@ class ToolRegistryTest {
         return List.of(new MonthTotalsTool(null), new CategoryTotalsTool(null), new AccountTotalsTool(null),
                 new TopMerchantsTool(null), new TrendsTool(null), new ComparePeriodsTool(null),
                 new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null, null),
-                new DataCoverageTool(null), new SearchTransactionsTool(null, null, null), new MerchantTotalsTool(null));
+                new DataCoverageTool(null), new SearchTransactionsTool(null, null, null, null), new MerchantTotalsTool(null, null));
     }
 
     /** §3.2's parameters per tool, with step 8b's {@code month} on every range tool; required ones marked "!". */

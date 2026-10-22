@@ -1,19 +1,28 @@
 package com.finalysis.chat;
 
 import com.finalysis.ai.AiCallLog;
+import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.ChatRoleOptions;
+import com.finalysis.ai.ChatRoleProperties;
+import com.finalysis.ai.PromptCache;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.ObjectProvider;
@@ -33,6 +42,13 @@ import org.springframework.stereotype.Component;
  *
  * <p>Every call writes one {@link AiCallLog} line with role {@value #ROLE}: tokens, the tool results in the prompt as
  * {@code items}, the outcome ({@code LIMIT} when the answer stopped at the output cap), never content.
+ *
+ * <p><b>Prompt caching</b> (step 8c). A chat round asks the provider to cache its fixed prefix: the tool definitions,
+ * the system prompt and the context block ({@link PromptCache}); never the summary, the history, the question or the
+ * turn's tool results. Only when {@code finalysis.ai.chat.prompt-cache} is on, the model has cache prices, and the
+ * provider can place cache points ({@link #promptCaching}). If the provider refuses the cache points for a model, the
+ * call is sent once more without them, and that model runs uncached until the app restarts. The summaries'
+ * calls ({@link #complete}) are never cached: their prompts differ every time.
  */
 @Component
 public class ChatModelClient {
@@ -41,17 +57,57 @@ public class ChatModelClient {
     public static final String SUMMARY_ROLE = "chat-summary";
     public static final String MONTHLY_ROLE = "summary";
 
+    /** The cached prefix ends after the system prompt and the context block ({@link ChatPrompt#start}). */
+    static final int CACHED_SYSTEM_MESSAGES = ChatPrompt.HISTORY_START;
+
+    private static final Logger log = LoggerFactory.getLogger(ChatModelClient.class);
+
     private final ObjectProvider<ChatModel> chatModel;
     private final AiProperties ai;
     private final ChatRoleOptions options;
     private final ChatToolCallbacks tools;
+    private final ChatRoleProperties role;
+    private final AiPrices prices;
+    private final ObjectProvider<PromptCache> promptCache;
+    /** Models whose provider refused cache points since the app started. */
+    private final Set<String> refusedCaching = ConcurrentHashMap.newKeySet();
 
     public ChatModelClient(ObjectProvider<ChatModel> chatModel, AiProperties ai, ChatRoleOptions options,
-                           ChatToolCallbacks tools) {
+                           ChatToolCallbacks tools, ChatRoleProperties role, AiPrices prices,
+                           ObjectProvider<PromptCache> promptCache) {
         this.chatModel = chatModel;
         this.ai = ai;
         this.options = options;
         this.tools = tools;
+        this.role = role;
+        this.prices = prices;
+        this.promptCache = promptCache;
+    }
+
+    /** Whether chat's rounds cache their fixed prefix, and why not (step 8c). */
+    public enum PromptCaching {
+        ON,
+        /** {@code finalysis.ai.chat.prompt-cache} is false. */
+        OFF_SETTING,
+        /** The main model has no cache prices, so chat doesn't ask it to cache. */
+        OFF_NO_CACHE_PRICES,
+        /** The provider has no cache points (no {@link PromptCache}). */
+        OFF_PROVIDER,
+        /** The provider refused cache points for this model; its calls go uncached. */
+        OFF_REFUSED
+    }
+
+    public PromptCaching promptCaching() {
+        if (!role.promptCache()) {
+            return PromptCaching.OFF_SETTING;
+        }
+        if (prices.of(modelId()).filter(AiPrices.Price::cachePriced).isEmpty()) {
+            return PromptCaching.OFF_NO_CACHE_PRICES;
+        }
+        if (promptCache.getIfAvailable() == null) {
+            return PromptCaching.OFF_PROVIDER;
+        }
+        return refusedCaching.contains(modelId()) ? PromptCaching.OFF_REFUSED : PromptCaching.ON;
     }
 
     /**
@@ -60,12 +116,16 @@ public class ChatModelClient {
      * @param message      the assistant message to append to the next round, unchanged but for the joined text
      * @param toolCalls    the tool calls, in order, with the model's ids; empty for an answer
      * @param text         the answer's text; may be blank
-     * @param cut          the model stopped at the output-token cap
-     * @param inputTokens  null when the provider didn't report usage
-     * @param outputTokens null when the provider didn't report usage
+     * @param cut              the model stopped at the output-token cap
+     * @param inputTokens      input tokens outside a cached prefix; null when the provider didn't report usage
+     * @param outputTokens     null when the provider didn't report usage
+     * @param cacheReadTokens  prefix tokens read from the cache; 0 when none or not reported
+     * @param cacheWriteTokens prefix tokens written to the cache; 0 when none or not reported
+     * @param cached           the call asked for caching
      */
     public record Reply(AssistantMessage message, List<AssistantMessage.ToolCall> toolCalls, String text, boolean cut,
-                        Integer inputTokens, Integer outputTokens, long millis) {
+                        Integer inputTokens, Integer outputTokens, int cacheReadTokens, int cacheWriteTokens,
+                        boolean cached, long millis) {
 
         public Reply {
             toolCalls = List.copyOf(toolCalls);
@@ -95,7 +155,8 @@ public class ChatModelClient {
 
     /** As {@link #call(List, int, int)}, with the turn's category names as the tools' category enum. */
     public Reply call(List<Message> messages, int maxOutputTokens, int toolResults, List<String> categories) {
-        return send(messages, maxOutputTokens, tools.callbacks(categories), ROLE, toolResults);
+        return send(messages, maxOutputTokens, tools.callbacks(categories), ROLE, toolResults,
+                promptCaching() == PromptCaching.ON);
     }
 
     /**
@@ -106,22 +167,40 @@ public class ChatModelClient {
      * @param items the log line's items: turns folded, or records sent
      */
     public Reply complete(List<Message> messages, int maxOutputTokens, String role, int items) {
-        return send(messages, maxOutputTokens, List.of(), role, items);
+        return send(messages, maxOutputTokens, List.of(), role, items, false);
     }
 
     private Reply send(List<Message> messages, int maxOutputTokens, List<ToolCallback> callbacks, String role,
-                       int toolResults) {
+                       int toolResults, boolean cache) {
         ChatModel model = chatModel.getIfAvailable();
         if (!ai.enabled() || model == null) {
             throw new IllegalStateException("AI is off");
         }
         String modelId = modelId();
+        ChatOptions callOptions = options.options(model, maxOutputTokens, callbacks);
+        boolean cached = false;
+        if (cache) {
+            int system = (int) messages.stream().filter(m -> m.getMessageType() == MessageType.SYSTEM).count();
+            try {
+                callOptions = promptCache.getObject().withCachePoints(callOptions, system,
+                        Math.min(CACHED_SYSTEM_MESSAGES, system));
+                cached = true;
+            } catch (IllegalArgumentException e) {
+                // a layout the provider can't mark (no system message, or more after the context block than the
+                // summary): this call goes uncached
+            }
+        }
         long start = System.nanoTime();
         ChatResponse response;
         try {
-            response = model.call(new Prompt(messages, options.options(model, maxOutputTokens, callbacks)));
+            response = model.call(new Prompt(messages, callOptions));
         } catch (RuntimeException e) {
             AiCallLog.record(role, modelId, toolResults, null, null, millisSince(start), AiCallLog.Outcome.ERROR, e);
+            if (cached && promptCache.getObject().refusedCaching(e)) {
+                refusedCaching.add(modelId);
+                log.warn("prompt cache refused by the provider for model={}; its chat calls go uncached", modelId);
+                return send(messages, maxOutputTokens, callbacks, role, toolResults, false);
+            }
             throw e;
         }
         long millis = millisSince(start);
@@ -129,13 +208,15 @@ public class ChatModelClient {
         boolean reported = reported(usage);
         Integer input = reported ? usage.getPromptTokens() : null;
         Integer output = reported ? usage.getCompletionTokens() : null;
+        int cacheRead = reported ? tokens(usage.getCacheReadInputTokens()) : 0;
+        int cacheWrite = reported ? tokens(usage.getCacheWriteInputTokens()) : 0;
 
         List<Generation> generations = response == null ? List.of() : response.getResults().stream()
                 .filter(g -> g != null && g.getOutput() != null).toList();
         if (generations.isEmpty()) {
             InvalidReplyException invalid = new InvalidReplyException();
-            AiCallLog.record(role, modelId, toolResults, input, output, millis, AiCallLog.Outcome.INVALID_OUTPUT,
-                    invalid);
+            AiCallLog.record(role, modelId, toolResults, input, output, cacheRead, cacheWrite, millis,
+                    AiCallLog.Outcome.INVALID_OUTPUT, invalid);
             throw invalid;
         }
         List<AssistantMessage.ToolCall> calls = new ArrayList<>();
@@ -161,9 +242,10 @@ public class ChatModelClient {
             AssistantMessage base = Objects.requireNonNullElse(carrier, generations.getLast().getOutput());
             message = base.mutate().content(text).toolCalls(calls).build();
         }
-        AiCallLog.record(role, modelId, toolResults, input, output, millis,
+        AiCallLog.record(role, modelId, toolResults, input, output, cacheRead, cacheWrite, millis,
                 cut && calls.isEmpty() ? AiCallLog.Outcome.LIMIT : AiCallLog.Outcome.OK, null);
-        return new Reply(message, calls, text, cut && calls.isEmpty(), input, output, millis);
+        return new Reply(message, calls, text, cut && calls.isEmpty(), input, output, cacheRead, cacheWrite, cached,
+                millis);
     }
 
     /** The model stopped at the output cap: Converse says {@code max_tokens}, other providers {@code length}. */
@@ -178,14 +260,21 @@ public class ChatModelClient {
 
     /**
      * Whether the provider reported usage. Spring AI stands in {@link EmptyUsage} (zeros) when it has none; a call that
-     * sent a prompt never used zero input tokens, so zero input means "not reported", never "free".
+     * sent a prompt never used zero input tokens, so zero input (cached prefix included) means "not reported", never
+     * "free".
      */
     static boolean reported(Usage usage) {
         if (usage == null || usage instanceof EmptyUsage) {
             return false;
         }
         Integer input = usage.getPromptTokens();
-        return input != null && input > 0 && usage.getCompletionTokens() != null;
+        return input != null && input >= 0 && usage.getCompletionTokens() != null
+                && (long) input + tokens(usage.getCacheReadInputTokens())
+                + tokens(usage.getCacheWriteInputTokens()) > 0;
+    }
+
+    private static int tokens(Long count) {
+        return count == null || count < 0 ? 0 : (int) Math.min(Integer.MAX_VALUE, count);
     }
 
     private static long millisSince(long start) {

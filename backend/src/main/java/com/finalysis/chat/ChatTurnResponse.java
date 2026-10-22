@@ -35,11 +35,14 @@ public record ChatTurnResponse(long conversationId, int turn, String answer, Ans
     }
 
     /**
-     * @param inputTokens   reported, summed; null when no call reported usage
-     * @param estimatedCost dollars, six decimals; null when the model has no price
+     * @param inputTokens      reported input tokens outside a cached prefix, summed; null when no call reported usage
+     * @param cacheReadTokens  the fixed prefix's tokens read from the provider's cache (step 8c); null as inputTokens
+     * @param cacheWriteTokens the fixed prefix's tokens written to the cache; null as inputTokens
+     * @param estimatedCost    dollars, six decimals, each kind of token at its own price; null when the model has no
+     *                         price
      */
-    public record Usage(String model, int rounds, Integer inputTokens, Integer outputTokens, int callsWithoutUsage,
-                        String estimatedCost) {
+    public record Usage(String model, int rounds, Integer inputTokens, Integer outputTokens, Integer cacheReadTokens,
+                        Integer cacheWriteTokens, int callsWithoutUsage, String estimatedCost) {
     }
 
     /**

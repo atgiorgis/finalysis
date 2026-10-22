@@ -67,11 +67,19 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
     }
 
     /**
+     * @param inputTokens       input tokens outside the cached prefix (step 8c)
+     * @param cacheReadTokens   cached-prefix tokens read
+     * @param cacheWriteTokens  cached-prefix tokens written
      * @param cost              the app's estimates summed over the turns (dollars, six decimals)
      * @param callsWithoutUsage model calls that reported no usage: the app counts each at its worst case
      */
-    record Usage(long inputTokens, long outputTokens, int callsWithoutUsage, BigDecimal cost, int rounds,
-                 int toolCalls) {
+    record Usage(long inputTokens, long outputTokens, long cacheReadTokens, long cacheWriteTokens,
+                 int callsWithoutUsage, BigDecimal cost, int rounds, int toolCalls) {
+
+        /** Every input token the model read: outside the cached prefix, read from the cache, written to it. */
+        long allInputTokens() {
+            return inputTokens + cacheReadTokens + cacheWriteTokens;
+        }
     }
 
     record Latency(long meanTurnMillis, long medianTurnMillis, long maxTurnMillis, long meanQuestionMillis,
@@ -144,6 +152,8 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
     private static Usage usage(List<TurnResult> turns) {
         long input = 0;
         long output = 0;
+        long cacheRead = 0;
+        long cacheWrite = 0;
         int withoutUsage = 0;
         int rounds = 0;
         int toolCalls = 0;
@@ -152,12 +162,15 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
             Observation o = turn.observed();
             input += o.inputTokens() == null ? 0 : o.inputTokens();
             output += o.outputTokens() == null ? 0 : o.outputTokens();
+            cacheRead += o.cacheReadTokens();
+            cacheWrite += o.cacheWriteTokens();
             withoutUsage += o.callsWithoutUsage();
             rounds += o.rounds();
             toolCalls += o.tools().size();
             cost = cost.add(o.cost() == null ? BigDecimal.ZERO : o.cost());
         }
-        return new Usage(input, output, withoutUsage, cost.setScale(6, RoundingMode.HALF_EVEN), rounds, toolCalls);
+        return new Usage(input, output, cacheRead, cacheWrite, withoutUsage, cost.setScale(6, RoundingMode.HALF_EVEN),
+                rounds, toolCalls);
     }
 
     private static Latency latency(List<QuestionResult> questions, List<TurnResult> turns) {

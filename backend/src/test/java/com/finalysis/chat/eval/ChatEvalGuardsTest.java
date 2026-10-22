@@ -26,9 +26,9 @@ class ChatEvalGuardsTest {
 
     private static final Path HOLDOUT = ImportTestSupport.SAMPLE_DATA.resolve("chat/holdout.yml");
     private static final GitState CLEAN = new GitState("0123456789abcdef0123456789abcdef01234567", false);
-    private static final ChatEvalPrices PRICES = new ChatEvalPrices("test", Map.of(
-            "priced-chat-model", new ChatEvalPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00")),
-            "an-embedding-model", new ChatEvalPrices.Price(new BigDecimal("0.02"), BigDecimal.ZERO)));
+    private static final ChatEvalPrices PRICES = new ChatEvalPrices("test", null, Map.of(
+            "priced-chat-model", new ChatEvalPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00"), null, null),
+            "an-embedding-model", new ChatEvalPrices.Price(new BigDecimal("0.02"), BigDecimal.ZERO, null, null)));
 
     @TempDir
     Path results;

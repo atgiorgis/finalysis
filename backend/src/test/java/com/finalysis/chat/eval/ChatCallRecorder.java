@@ -12,6 +12,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -25,7 +26,8 @@ import tools.jackson.databind.json.JsonMapper;
  * Wraps every {@link ChatModel} of the evaluation's context (docs/plans/phase-6.md step 8) so the harness can see what
  * the turn response doesn't carry: the figures a grounding retry listed (for the bare-year count), the answer that retry
  * replaced, the search texts the model sent, and why a tool call was invalid (step 8b: each problem of an
- * {@code INVALID_ARGUMENTS} result as the model read it, by tool, parameter and {@link ToolProblem}). In memory only;
+ * {@code INVALID_ARGUMENTS} result as the model read it, by tool, parameter and {@link ToolProblem}), and each call's
+ * reported tokens, cached-prefix tokens apart (step 8c). In memory only;
  * nothing is logged. The wrapper delegates every call
  * and the options unchanged, so the app's path is the one measured.
  */
@@ -35,7 +37,14 @@ class ChatCallRecorder implements BeanPostProcessor {
 
     /** What the calls of one turn showed. */
     record TurnCalls(int calls, List<String> retryFigures, String rejectedAnswer, List<String> searchQueries,
-                     List<InvalidArgument> invalidArguments) {
+                     List<InvalidArgument> invalidArguments, List<CallUsage> usages) {
+    }
+
+    /**
+     * One call's reported tokens, in call order (step 8c: the caching smoke test reads the second call's cache reads).
+     * Null counts were not reported.
+     */
+    record CallUsage(Integer inputTokens, Long cacheReadTokens, Long cacheWriteTokens) {
     }
 
     private int calls;
@@ -43,6 +52,7 @@ class ChatCallRecorder implements BeanPostProcessor {
     private final List<String> retryFigures = new ArrayList<>();
     private final List<String> searchQueries = new ArrayList<>();
     private final List<InvalidArgument> invalidArguments = new ArrayList<>();
+    private final List<CallUsage> usages = new ArrayList<>();
     private final Set<String> seenResults = new HashSet<>();
     private String lastAnswer;
     private String rejectedAnswer;
@@ -58,6 +68,7 @@ class ChatCallRecorder implements BeanPostProcessor {
         retryFigures.clear();
         searchQueries.clear();
         invalidArguments.clear();
+        usages.clear();
         seenResults.clear();
         lastAnswer = null;
         rejectedAnswer = null;
@@ -65,7 +76,7 @@ class ChatCallRecorder implements BeanPostProcessor {
 
     synchronized TurnCalls end() {
         return new TurnCalls(calls, List.copyOf(retryFigures), rejectedAnswer, List.copyOf(searchQueries),
-                List.copyOf(invalidArguments));
+                List.copyOf(invalidArguments), List.copyOf(usages));
     }
 
     /** Chat calls since the context started (the retrieval sweep expects none). */
@@ -99,6 +110,9 @@ class ChatCallRecorder implements BeanPostProcessor {
         if (response == null) {
             return;
         }
+        Usage usage = response.getMetadata() == null ? null : response.getMetadata().getUsage();
+        usages.add(usage == null ? new CallUsage(null, null, null) : new CallUsage(usage.getPromptTokens(),
+                usage.getCacheReadInputTokens(), usage.getCacheWriteInputTokens()));
         List<String> texts = new ArrayList<>();
         for (Generation generation : response.getResults()) {
             AssistantMessage message = generation == null ? null : generation.getOutput();

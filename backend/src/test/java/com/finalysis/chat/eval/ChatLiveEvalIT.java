@@ -88,10 +88,7 @@ class ChatLiveEvalIT {
     @DynamicPropertySource
     static void model(DynamicPropertyRegistry registry) {
         registry.add("finalysis.ai.roles.main", () -> model);
-        registry.add("finalysis.ai.prices[" + model + "].input-per-million",
-                () -> prices.chat(model).orElseThrow().inputPerMillionUsd());
-        registry.add("finalysis.ai.prices[" + model + "].output-per-million",
-                () -> prices.chat(model).orElseThrow().outputPerMillionUsd());
+        prices.register(registry, model);
     }
 
     @Test

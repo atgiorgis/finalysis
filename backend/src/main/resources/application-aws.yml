@@ -43,7 +43,10 @@ finalysis:
     # Dollars per million tokens, for chat's cost limits (docs/plans/phase-6.md §8). The same values as the evaluation's
     # price file (src/test/resources/eval/model-prices.json; ChatPricesTest checks they agree). Check the AWS Bedrock
     # pricing page before relying on an estimate. A main model without a price stops startup while a cost limit is on.
+    # Cache prices (step 8c): a cached-prefix read and a 5-minute cache write; without them chat doesn't cache.
     prices:
       "[us.anthropic.claude-haiku-4-5-20251001-v1:0]":
         input-per-million: 1.00
         output-per-million: 5.00
+        cache-read-per-million: 0.10
+        cache-write-per-million: 1.25

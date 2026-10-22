@@ -16,6 +16,8 @@ public final class UsageTally {
     private int calls;
     private Integer inputTokens;
     private Integer outputTokens;
+    private int cacheReadTokens;
+    private int cacheWriteTokens;
     private int callsWithoutUsage;
     private BigDecimal cost;
 
@@ -31,19 +33,17 @@ public final class UsageTally {
 
     public void add(ChatModelClient.Reply reply, int estimate, int maxOutputTokens) {
         calls++;
-        long input;
-        long output;
         if (reply.usageReported()) {
-            input = reply.inputTokens();
-            output = reply.outputTokens();
             inputTokens = (inputTokens == null ? 0 : inputTokens) + reply.inputTokens();
             outputTokens = (outputTokens == null ? 0 : outputTokens) + reply.outputTokens();
+            cacheReadTokens += reply.cacheReadTokens();
+            cacheWriteTokens += reply.cacheWriteTokens();
+            price.ifPresent(p -> cost = cost.add(p.cost(reply.inputTokens(), reply.outputTokens(),
+                    reply.cacheReadTokens(), reply.cacheWriteTokens())));
         } else {
-            input = estimate;
-            output = maxOutputTokens;
             callsWithoutUsage++;
+            price.ifPresent(p -> cost = cost.add(p.cost(estimate, maxOutputTokens)));
         }
-        price.ifPresent(p -> cost = cost.add(p.cost(input, output)));
     }
 
     public int calls() {
@@ -58,6 +58,14 @@ public final class UsageTally {
         return outputTokens;
     }
 
+    public int cacheReadTokens() {
+        return cacheReadTokens;
+    }
+
+    public int cacheWriteTokens() {
+        return cacheWriteTokens;
+    }
+
     public int callsWithoutUsage() {
         return callsWithoutUsage;
     }
@@ -67,8 +75,13 @@ public final class UsageTally {
         return cost;
     }
 
+    /** Null when no call reported usage, as the input tokens. */
+    private Integer cacheTokens(int tokens) {
+        return inputTokens == null ? null : tokens;
+    }
+
     public ChatConversationStore.Usage toUsage(UsageKind kind, String model, OffsetDateTime at) {
-        return new ChatConversationStore.Usage(kind, model, calls, inputTokens, outputTokens, callsWithoutUsage, cost,
-                at);
+        return new ChatConversationStore.Usage(kind, model, calls, inputTokens, outputTokens,
+                cacheTokens(cacheReadTokens), cacheTokens(cacheWriteTokens), callsWithoutUsage, cost, at);
     }
 }

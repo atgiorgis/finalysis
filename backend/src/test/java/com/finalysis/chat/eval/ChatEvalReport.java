@@ -87,7 +87,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
 
     String consoleSummary() {
         return "Chat eval: " + run.set() + ", model " + run.model() + " (commit " + commit + (dirty ? ", dirty" : "")
-                + ")\n\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
+                + ")\nPrompt caching: " + caching() + "\n\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
     }
 
     String markdown() {
@@ -104,6 +104,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         md.append("- Today by dataset: ").append(run.todayByDataset().entrySet().stream()
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "))).append("\n");
         md.append("- Prices: ").append(run.pricesSource()).append("\n");
+        md.append("- Prompt caching: ").append(caching()).append("\n");
         if (run.stopped() != null) {
             md.append("- **Stopped early:** ").append(run.stopped()).append("\n");
         }
@@ -215,7 +216,11 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         return "| Measure | Value |\n|---|---:|\n"
                 + "| Model rounds | " + u.rounds() + " |\n"
                 + "| Tool calls | " + u.toolCalls() + " |\n"
-                + "| Input / output tokens | " + u.inputTokens() + " / " + u.outputTokens() + " |\n"
+                + "| Prompt caching | " + run.promptCaching() + " |\n"
+                + "| Input tokens: uncached / cache read / cache write | " + u.inputTokens() + " / "
+                + u.cacheReadTokens() + " / " + u.cacheWriteTokens() + " |\n"
+                + "| Input tokens read from the cache | " + cachedShare(u) + " |\n"
+                + "| Output tokens | " + u.outputTokens() + " |\n"
                 + "| Calls without usage | " + u.callsWithoutUsage() + " |\n"
                 + "| Estimated cost, turns (USD) | " + money(u.cost()) + " |\n"
                 + "| Estimated cost, usage ledger (USD, turns and summaries) | " + money(run.ledgerCost()) + " |\n"
@@ -223,12 +228,46 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 + seconds(l.medianTurnMillis()) + " / " + seconds(l.maxTurnMillis()) + " |\n"
                 + "| Question latency mean / max (s) | " + seconds(l.meanQuestionMillis()) + " / "
                 + seconds(l.maxQuestionMillis()) + " |\n\n"
-                + "Search embeddings (a few Titan tokens per search) and the index build are outside these costs (§8).\n";
+                + "Search embeddings (a few Titan tokens per search) and the index build are outside these costs (§8). "
+                + "Uncached input tokens are the provider's own count outside the cached prefix (tools, system prompt, "
+                + "context block); cache reads and writes are priced apart, as the price file lists them.\n"
+                + (cachingSilent(u) ? "\n**Caching was asked for, but the model reported no cached tokens**: it may not "
+                + "cache through this provider, or the prefix is below its minimum (Haiku 4.5: 4,096 tokens). The run "
+                + "was priced as uncached.\n" : "");
+    }
+
+    /** The caching line of the run's identity: on, or off and why (step 8c). */
+    String caching() {
+        String status = run.promptCaching();
+        if (status == null) {
+            return "not recorded";
+        }
+        return switch (status) {
+            case "ON" -> cachingSilent(metrics.usage()) ? "on (tools, system prompt, context block; 5-minute TTL), "
+                    + "but no cached tokens were reported" : "on (tools, system prompt, context block; 5-minute TTL)";
+            case "OFF_SETTING" -> "off (finalysis.ai.chat.prompt-cache is false); every call uncached";
+            case "OFF_NO_CACHE_PRICES" -> "off (the price file lists no cache prices for this model); every call "
+                    + "uncached";
+            case "OFF_PROVIDER" -> "off (the provider has no cache points); every call uncached";
+            case "OFF_REFUSED" -> "off (the provider refused cache points for this model; those calls were sent "
+                    + "again uncached)";
+            default -> status;
+        };
+    }
+
+    private boolean cachingSilent(ChatEvalMetrics.Usage u) {
+        return "ON".equals(run.promptCaching()) && u.cacheReadTokens() + u.cacheWriteTokens() == 0
+                && u.inputTokens() > 0;
+    }
+
+    private static String cachedShare(ChatEvalMetrics.Usage u) {
+        return u.allInputTokens() == 0 ? "–" : BigDecimal.valueOf(u.cacheReadTokens() * 100)
+                .divide(BigDecimal.valueOf(u.allInputTokens()), 1, java.math.RoundingMode.HALF_EVEN) + "%";
     }
 
     private static String questionTable(List<QuestionResult> questions) {
         StringBuilder table = new StringBuilder("| Question | Category | Correct | Turns | Tools ok | Sources "
-                + "| Retried | Limit | Tokens in / out | Cost (USD) | Time (s) |\n"
+                + "| Retried | Limit | Tokens in (cached) / out | Cost (USD) | Time (s) |\n"
                 + "|---|---|---|---:|---:|---|---:|---|---:|---:|---:|\n");
         for (QuestionResult q : questions) {
             List<Observation> o = q.turns().stream().map(TurnResult::observed).toList();
@@ -242,7 +281,8 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                     .append(o.stream().map(Observation::limit).filter(l -> l != null).map(String::valueOf)
                             .collect(Collectors.joining(", "))).append(" | ")
                     .append(o.stream().mapToLong(x -> x.inputTokens() == null ? 0 : x.inputTokens()).sum())
-                    .append(" / ")
+                    .append(" (").append(o.stream().mapToLong(x -> x.cacheReadTokens() + x.cacheWriteTokens()).sum())
+                    .append(") / ")
                     .append(o.stream().mapToLong(x -> x.outputTokens() == null ? 0 : x.outputTokens()).sum())
                     .append(" | ").append(money(o.stream().map(x -> x.cost() == null ? BigDecimal.ZERO : x.cost())
                             .reduce(BigDecimal.ZERO, BigDecimal::add)))

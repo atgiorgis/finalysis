@@ -6,6 +6,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.test.context.DynamicPropertyRegistry;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -15,13 +16,17 @@ import tools.jackson.databind.json.JsonMapper;
  * turn cost limits and the reported cost use the same figures.
  *
  * @param source where the prices come from, and when they were checked; recorded with the results
+ * @param note   what the owner noted about them (which are list prices, as of when; step 8c)
  */
-record ChatEvalPrices(String source, Map<String, Price> models) {
+record ChatEvalPrices(String source, String note, Map<String, Price> models) {
 
     static final String RESOURCE = "eval/model-prices.json";
 
-    /** US dollars per million tokens. */
-    record Price(BigDecimal inputPerMillionUsd, BigDecimal outputPerMillionUsd) {
+    /**
+     * US dollars per million tokens; the cache prices (step 8c) are null for a model chat doesn't cache for.
+     */
+    record Price(BigDecimal inputPerMillionUsd, BigDecimal outputPerMillionUsd, BigDecimal cacheReadPerMillionUsd,
+                 BigDecimal cacheWritePerMillionUsd) {
     }
 
     ChatEvalPrices {
@@ -36,6 +41,21 @@ record ChatEvalPrices(String source, Map<String, Price> models) {
             return JsonMapper.builder().build().readValue(in, ChatEvalPrices.class);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Gives the app the file's price for a chat model ({@code finalysis.ai.prices[<id>]}), cache prices included when
+     * the file lists them, so the turn cost limits and the reported cost use the same figures.
+     */
+    void register(DynamicPropertyRegistry registry, String model) {
+        Price price = chat(model).orElseThrow();
+        String key = "finalysis.ai.prices[" + model + "].";
+        registry.add(key + "input-per-million", price::inputPerMillionUsd);
+        registry.add(key + "output-per-million", price::outputPerMillionUsd);
+        if (price.cacheReadPerMillionUsd() != null && price.cacheWritePerMillionUsd() != null) {
+            registry.add(key + "cache-read-per-million", price::cacheReadPerMillionUsd);
+            registry.add(key + "cache-write-per-million", price::cacheWritePerMillionUsd);
         }
     }
 

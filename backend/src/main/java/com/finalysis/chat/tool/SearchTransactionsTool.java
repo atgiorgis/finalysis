@@ -1,6 +1,5 @@
 package com.finalysis.chat.tool;
 
-import static com.finalysis.chat.tool.Params.FROM;
 import static com.finalysis.chat.tool.Params.MONTH;
 import static com.finalysis.chat.tool.Params.TO;
 
@@ -39,8 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       ({@link MerchantSpendReader}).</li>
  * </ol>
  * The matched categories are listed too, so the model can answer with {@code get_category_totals} when the user meant
- * the whole category. The search text was redacted, checked and embedded when the arguments were parsed, outside this
- * read.
+ * the whole category. Without a period the search covers every month with data ({@link DataMonths}, step 8c), so
+ * "how much have I spent at the pharmacy?" is over all of it. The search text was redacted, checked and embedded when
+ * the arguments were parsed, outside this read.
  */
 @Component
 class SearchTransactionsTool implements ChatTool {
@@ -56,12 +56,14 @@ class SearchTransactionsTool implements ChatTool {
     private final MerchantSearchQuery search;
     private final MerchantSpendReader spend;
     private final MerchantTotalsService merchantTotals;
+    private final DataMonths dataMonths;
 
     SearchTransactionsTool(MerchantSearchQuery search, MerchantSpendReader spend,
-                           MerchantTotalsService merchantTotals) {
+                           MerchantTotalsService merchantTotals, DataMonths dataMonths) {
         this.search = search;
         this.spend = spend;
         this.merchantTotals = merchantTotals;
+        this.dataMonths = dataMonths;
     }
 
     @Override
@@ -76,13 +78,14 @@ class SearchTransactionsTool implements ChatTool {
                 + "matched category; keep it only if it fits), similarity (not a figure for the answer), category, "
                 + "spent (a positive amount = money out after refunds) and count over the range. Then call "
                 + "get_merchant_totals with the ones that fit for their combined total, list_transactions with one, or "
-                + "get_category_totals for a whole category. indexedMerchants below merchants, or byMeaning false, "
-                + "means the search may have missed some.";
+                + "get_category_totals for a whole category. Without month or from: every month with data; from and "
+                + "to say which. indexedMerchants below merchants, or byMeaning false: the search may have missed "
+                + "some.";
     }
 
     @Override
     public List<ToolParam> params() {
-        return List.of(QUERY, MONTH, FROM, TO, Params.limit(MAX_LIMIT));
+        return List.of(QUERY, MONTH, Params.ALL_DATA_FROM, TO, Params.limit(MAX_LIMIT));
     }
 
     @Override
@@ -99,8 +102,9 @@ class SearchTransactionsTool implements ChatTool {
     public ToolRead read(ToolArguments arguments) {
         SearchText query = arguments.search("query");
         int limit = arguments.number("limit");
-        Optional<YearMonth> from = arguments.from();
-        Optional<YearMonth> to = arguments.to();
+        DataMonths.Range months = dataMonths.resolve(arguments);
+        Optional<YearMonth> from = months.from();
+        Optional<YearMonth> to = months.to();
         List<ToolRead.Search.CategoryMatch> categories = categories(query);
 
         Map<String, Found> found = new LinkedHashMap<>();
@@ -129,7 +133,7 @@ class SearchTransactionsTool implements ChatTool {
         byMeaning.forEach(f -> found.putIfAbsent(f.text(), f));
 
         List<ToolRead.Search.Candidate> candidates = new ArrayList<>();
-        MonthRange range = null;
+        MonthRange range = months.covered().orElse(null);
         for (Found f : found.values()) {
             if (candidates.size() == limit) {
                 break;

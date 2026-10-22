@@ -130,7 +130,7 @@ public class ChatService {
                         GroundingStatus.valueOf(t.groundingStatus()), t.figuresChecked(), t.retried(), t.ungrounded()),
                 refreshed(t.citations()), t.limitHit(),
                 new ChatTurnResponse.Usage(t.model(), t.rounds(), t.inputTokens(), t.outputTokens(),
-                        t.callsWithoutUsage(), money(t.estimatedCost())),
+                        t.cacheReadTokens(), t.cacheWriteTokens(), t.callsWithoutUsage(), money(t.estimatedCost())),
                 t.createdAt())).toList();
         return new ConversationResponses.Detail(conversation.id(), conversation.title(), conversation.createdAt(),
                 conversation.updatedAt(), stored);
@@ -222,6 +222,7 @@ public class ChatService {
                 result.retried(), figures, ungrounded, result.limit(), shown, turn.aliases().asMap(), client.modelId(),
                 ChatPrompt.VERSION,
                 result.rounds(), result.toolCalls(), result.inputTokens(), result.outputTokens(),
+                cacheTokens(result, result.cacheReadTokens()), cacheTokens(result, result.cacheWriteTokens()),
                 result.callsWithoutUsage(), result.cost(), millis,
                 result.error() == null ? null : result.error().getClass().getSimpleName(),
                 now.toOffsetDateTime().truncatedTo(ChronoUnit.MICROS),
@@ -244,7 +245,9 @@ public class ChatService {
                         r.outcome().tool() == null ? null : r.outcome().tool().wire(), r.outcome().status(),
                         r.outcome().rows(), r.outcome().millis())).toList(),
                 new ChatTurnResponse.Usage(client.modelId(), result.rounds(), result.inputTokens(),
-                        result.outputTokens(), result.callsWithoutUsage(), money(result.cost())),
+                        result.outputTokens(), cacheTokens(result, result.cacheReadTokens()),
+                        cacheTokens(result, result.cacheWriteTokens()), result.callsWithoutUsage(),
+                        money(result.cost())),
                 result.limit(),
                 new ChatTurnResponse.Redactions(outbound.aliasesUsed(), outbound.identifiersRemoved(),
                         turn.withheldMerchants(), turn.refusedMerchants()));
@@ -264,6 +267,11 @@ public class ChatService {
     private List<Citation> refreshed(String stored) {
         List<Citation> read = json.readValue(stored, CITATIONS);
         return read.stream().map(citations::refresh).toList();
+    }
+
+    /** A turn's cached-prefix tokens; null when no call reported usage, as its input tokens (step 8c). */
+    private static Integer cacheTokens(TurnLoop.Result result, int tokens) {
+        return result.inputTokens() == null ? null : tokens;
     }
 
     private static String money(BigDecimal cost) {

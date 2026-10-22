@@ -281,7 +281,9 @@ public class MonthlySummaryService {
                         check.ungrounded().size()),
                 cited.citations(), sent.records().notes(),
                 usage == null || usage.calls() == 0 ? null : new ChatTurnResponse.Usage(client.modelId(),
-                        usage.calls(), usage.inputTokens(), usage.outputTokens(), usage.callsWithoutUsage(),
+                        usage.calls(), usage.inputTokens(), usage.outputTokens(),
+                        usage.inputTokens() == null ? null : usage.cacheReadTokens(),
+                        usage.inputTokens() == null ? null : usage.cacheWriteTokens(), usage.callsWithoutUsage(),
                         money(usage.cost())));
     }
 

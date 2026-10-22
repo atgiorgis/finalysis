@@ -15,7 +15,9 @@ import org.springframework.test.context.TestPropertySource;
  * {@link IntegrationTest} for the chat loop (docs/plans/phase-6.md §14): AI on (mode CLOUD) with a
  * {@link ScriptedChatModel} as the only chat model, a {@link FakeEmbeddingModel}, and a {@link MutableClock} as the
  * {@code Clock}, starting at the sample data's "today". No {@code aws} profile, so no Bedrock client exists and
- * {@link NoCloudAiGuard} stays in force. The main model is priced like Haiku 4.5, so the cost limits are on. Test classes
+ * {@link NoCloudAiGuard} stays in force. The main model is priced like Haiku 4.5, cache prices included, so the cost
+ * limits are on; with no provider cache points, chat never asks it to cache (step 8c), but a scripted call may still
+ * report cached tokens to test their pricing. Test classes
  * share the context: reset the model and the clock before each test.
  */
 @Target(ElementType.TYPE)
@@ -30,7 +32,9 @@ import org.springframework.test.context.TestPropertySource;
         "finalysis.ai.roles.embedding=test-embedding-model",
         "finalysis.ai.roles.main=" + ChatIntegrationTest.MAIN_MODEL,
         "finalysis.ai.prices[" + ChatIntegrationTest.MAIN_MODEL + "].input-per-million=1.00",
-        "finalysis.ai.prices[" + ChatIntegrationTest.MAIN_MODEL + "].output-per-million=5.00"})
+        "finalysis.ai.prices[" + ChatIntegrationTest.MAIN_MODEL + "].output-per-million=5.00",
+        "finalysis.ai.prices[" + ChatIntegrationTest.MAIN_MODEL + "].cache-read-per-million=0.10",
+        "finalysis.ai.prices[" + ChatIntegrationTest.MAIN_MODEL + "].cache-write-per-million=1.25"})
 public @interface ChatIntegrationTest {
 
     String MAIN_MODEL = "test-main-model";

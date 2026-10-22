@@ -35,3 +35,18 @@ Results of the opt-in chat evaluation (`docs/plans/phase-6.md` §13, step 8 note
 
 The chat holdout is evaluated once: a holdout run refuses to start while any `chat-holdout-*` file exists here (the
 categorization holdout's `holdout-*` files don't count), and it needs `-Deval.holdout.confirm=true` and a clean tree.
+
+### Run 1: the baseline before the step 8b fixes
+
+The first dev run and the first sweep, committed in step 8c as the baseline for the comparison write-up. They ran on
+commit `0de5269` (step 8, the evaluation harness; the files say the working tree was dirty), dev set version 1,
+prompt `chat-3`, before any of step 8b's fixes (search index, account-name words, `month` on every range tool,
+shares, quarters) and step 8c's (search and merchant totals over every month with data, prompt caching):
+
+- [chat-dev-0de526931d87-20261022T113958Z.md](chat-dev-0de526931d87-20261022T113958Z.md) (and `.json`): Haiku 4.5,
+  46 of 58 questions and 54 of 66 turns correct, 954,455 input and 12,860 output tokens, $1.02, uncached;
+- [chat-sweep-dev-0de526931d87-20261022T114528Z.md](chat-sweep-dev-0de526931d87-20261022T114528Z.md) (and `.json`):
+  the search floor sweep on Titan's bare merchant texts, 8 of 25 targets found at 0.30.
+
+They are evidence, not a target: later dev runs are compared with them, and they are never edited. Runs from step 8c on
+also record whether prompt caching was on and split input tokens into uncached, cache reads and cache writes.

@@ -68,15 +68,18 @@ public class TurnLoop {
      * @param fallback     the fallback's text with its ref markers ({@code FALLBACK}); else null
      * @param limit        the first limit reached, or null
      * @param error        the model call's failure ({@code ERROR}); else null
-     * @param inputTokens  reported input tokens summed; null when no call reported usage
-     * @param inputForLimits input tokens counted against the per-turn cap: reported, or estimated for a call without
-     *                     usage
+     * @param inputTokens  reported input tokens outside a cached prefix, summed; null when no call reported usage
+     * @param cacheReadTokens  cached-prefix tokens read, summed (step 8c)
+     * @param cacheWriteTokens cached-prefix tokens written, summed
+     * @param inputForLimits input tokens counted against the per-turn cap: reported (cached prefix included, since the
+     *                     model reads it all the same), or estimated for a call without usage
      * @param outputTokens reported output tokens summed; null when no call reported usage
      * @param cost         estimated cost; null when the model has no price
      */
     public record Result(AnswerSource source, AnswerCheck check, String fallback, boolean retried, LimitHit limit,
                          TurnEvidence evidence, int rounds, int toolCalls, Integer inputTokens, Integer outputTokens,
-                         long inputForLimits, int callsWithoutUsage, BigDecimal cost, RuntimeException error) {
+                         int cacheReadTokens, int cacheWriteTokens, long inputForLimits, int callsWithoutUsage,
+                         BigDecimal cost, RuntimeException error) {
     }
 
     /** One turn's running state. */
@@ -95,6 +98,8 @@ public class TurnLoop {
         int toolCalls;
         Integer inputTokens;
         Integer outputTokens;
+        int cacheReadTokens;
+        int cacheWriteTokens;
         int callsWithoutUsage;
         long inputForLimits;
         BigDecimal cost = price.isPresent() ? BigDecimal.ZERO : null;
@@ -132,7 +137,7 @@ public class TurnLoop {
 
         Result end(AnswerSource source, AnswerCheck check, String fallback, RuntimeException error) {
             return new Result(source, check, fallback, retried, limit, evidence(), rounds, toolCalls, inputTokens,
-                    outputTokens, inputForLimits, callsWithoutUsage, cost, error);
+                    outputTokens, cacheReadTokens, cacheWriteTokens, inputForLimits, callsWithoutUsage, cost, error);
         }
     }
 
@@ -214,7 +219,8 @@ public class TurnLoop {
             return null;
         }
         if (limits.maxTurnCost().signum() > 0 && run.price.isPresent()
-                && run.cost.add(run.price.get().cost(estimate, limits.maxOutputTokens()))
+                && run.cost.add(run.price.get().worstCase(estimate, limits.maxOutputTokens(),
+                client.promptCaching() == ChatModelClient.PromptCaching.ON))
                 .compareTo(limits.maxTurnCost()) > 0) {
             run.hit(LimitHit.COST);
             return null;
@@ -222,22 +228,28 @@ public class TurnLoop {
         return estimate;
     }
 
-    /** Usage of one call; a call without usage counts at its input estimate and the output cap (§8). */
+    /**
+     * Usage of one call; a call without usage counts at its input estimate and the output cap (§8), at the dearer of the
+     * input and the cache-write price when it asked for caching. Cached-prefix tokens count against the input caps like
+     * any other input token, and cost their own prices (step 8c).
+     */
     private void account(Run run, ChatModelClient.Reply reply, int estimate) {
-        long input;
-        long output;
         if (reply.usageReported()) {
-            input = reply.inputTokens();
-            output = reply.outputTokens();
+            long input = reply.inputTokens();
+            long output = reply.outputTokens();
             run.inputTokens = (run.inputTokens == null ? 0 : run.inputTokens) + reply.inputTokens();
             run.outputTokens = (run.outputTokens == null ? 0 : run.outputTokens) + reply.outputTokens();
+            run.cacheReadTokens += reply.cacheReadTokens();
+            run.cacheWriteTokens += reply.cacheWriteTokens();
+            run.inputForLimits += input + reply.cacheReadTokens() + reply.cacheWriteTokens();
+            run.price.ifPresent(p -> run.cost = run.cost.add(p.cost(input, output, reply.cacheReadTokens(),
+                    reply.cacheWriteTokens())));
         } else {
-            input = estimate;
-            output = limits.maxOutputTokens();
             run.callsWithoutUsage++;
+            run.inputForLimits += estimate;
+            run.price.ifPresent(p -> run.cost = run.cost.add(p.worstCase(estimate, limits.maxOutputTokens(),
+                    reply.cached())));
         }
-        run.inputForLimits += input;
-        run.price.ifPresent(p -> run.cost = run.cost.add(p.cost(input, output)));
     }
 
     /** Runs the reply's tool calls in order (or skips them past a limit) and appends both messages. */

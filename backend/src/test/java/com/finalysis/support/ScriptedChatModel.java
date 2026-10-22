@@ -29,11 +29,22 @@ public class ScriptedChatModel implements ChatModel {
 
     /** One call's answer. */
     public record Step(Function<Prompt, List<Generation>> generations, Integer inputTokens, Integer outputTokens,
-                       RuntimeException failure, Consumer<Prompt> before) {
+                       Long cacheReadTokens, Long cacheWriteTokens, RuntimeException failure,
+                       Consumer<Prompt> before) {
+
+        Step(Function<Prompt, List<Generation>> generations, Integer inputTokens, Integer outputTokens,
+             RuntimeException failure, Consumer<Prompt> before) {
+            this(generations, inputTokens, outputTokens, null, null, failure, before);
+        }
 
         /** The same step reporting usage. */
         public Step usage(int input, int output) {
             return new Step(generations, input, output, failure, before);
+        }
+
+        /** The same step reporting usage with cached-prefix tokens read and written (step 8c). */
+        public Step usage(int input, int output, long cacheRead, long cacheWrite) {
+            return new Step(generations, input, output, cacheRead, cacheWrite, failure, before);
         }
 
         /** The same step reporting no usage. */
@@ -43,7 +54,8 @@ public class ScriptedChatModel implements ChatModel {
 
         /** Runs something first (e.g. moves a clock), then answers. */
         public Step after(Consumer<Prompt> action) {
-            return new Step(generations, inputTokens, outputTokens, failure, action);
+            return new Step(generations, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, failure,
+                    action);
         }
     }
 
@@ -150,7 +162,8 @@ public class ScriptedChatModel implements ChatModel {
         }
         ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder();
         if (step.inputTokens() != null) {
-            metadata.usage(new DefaultUsage(step.inputTokens(), step.outputTokens()));
+            metadata.usage(new DefaultUsage(step.inputTokens(), step.outputTokens(), null, null,
+                    step.cacheReadTokens(), step.cacheWriteTokens()));
         }
         return new ChatResponse(step.generations().apply(prompt), metadata.build());
     }

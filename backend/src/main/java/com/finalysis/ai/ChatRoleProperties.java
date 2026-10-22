@@ -1,13 +1,16 @@
 package com.finalysis.ai;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * The chat role's sampling ({@code finalysis.ai.chat.*}, docs/plans/phase-6.md §2.3). Unset means the provider's
  * default: a 5.5-generation model may refuse sampling options, so chat sends a temperature only when one is set here.
+ *
+ * @param promptCache cache the fixed prefix (tools, system prompt, context block; step 8c) for a model with cache prices
  */
 @ConfigurationProperties("finalysis.ai.chat")
-public record ChatRoleProperties(Double temperature) {
+public record ChatRoleProperties(Double temperature, @DefaultValue("true") boolean promptCache) {
 
     public ChatRoleProperties {
         if (temperature != null && (temperature < 0 || temperature > 1)) {

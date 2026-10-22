@@ -1,0 +1,1093 @@
+{
+  "commit" : "0de526931d87d2aec4d86934603171ace6c7221e",
+  "dirty" : true,
+  "startedAt" : "2026-10-22T11:45:28.282531Z",
+  "embeddingModel" : "amazon.titan-embed-text-v2:0",
+  "settings" : {
+    "finalysis.ai.categorization.batch-size" : "25",
+    "finalysis.ai.categorization.max-items-per-run" : "500",
+    "finalysis.ai.categorization.min-confidence" : "0.8",
+    "finalysis.ai.categorization.run-after-import" : "false",
+    "finalysis.ai.embedding.dimensions" : "1024",
+    "finalysis.ai.examples.direct-assignment" : "false",
+    "finalysis.ai.examples.direct-min-similarity" : "0.97",
+    "finalysis.ai.examples.k" : "5",
+    "finalysis.ai.examples.max-embeddings-per-run" : "500",
+    "finalysis.ai.examples.max-examples-per-batch" : "50",
+    "finalysis.ai.examples.min-similarity" : "0.65",
+    "finalysis.ai.mode" : "CLOUD",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].input-per-million" : "1.0",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].output-per-million" : "5.0",
+    "finalysis.ai.provider" : "bedrock",
+    "finalysis.ai.roles.categorization" : "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "finalysis.ai.roles.embedding" : "amazon.titan-embed-text-v2:0",
+    "finalysis.ai.roles.main" : "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "finalysis.ai.roles.vision" : "",
+    "finalysis.chat.max-daily-cost" : "1.0",
+    "finalysis.chat.max-input-tokens-per-call" : "12000",
+    "finalysis.chat.max-input-tokens-per-turn" : "40000",
+    "finalysis.chat.max-output-tokens" : "1500",
+    "finalysis.chat.max-rounds" : "5",
+    "finalysis.chat.max-tool-calls" : "8",
+    "finalysis.chat.max-turn-cost" : "0.05",
+    "finalysis.chat.max-turn-time" : "45s",
+    "finalysis.chat.retention-days" : "90",
+    "finalysis.chat.search.max-embeddings-per-run" : "500",
+    "finalysis.chat.search.min-similarity" : "0.30",
+    "spring.ai.bedrock.aws.region" : "us-east-1",
+    "spring.ai.bedrock.aws.timeout" : "30s",
+    "spring.ai.bedrock.converse.chat.options.max-tokens" : "2000",
+    "spring.ai.bedrock.converse.chat.options.model" : "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "spring.ai.bedrock.converse.chat.options.temperature" : "0.0",
+    "spring.ai.bedrock.titan.embedding.input-type" : "TEXT",
+    "spring.ai.bedrock.titan.embedding.model" : "amazon.titan-embed-text-v2:0",
+    "spring.ai.model.chat" : "bedrock-converse",
+    "spring.ai.model.embedding" : "bedrock-titan"
+  },
+  "sweep" : {
+    "set" : "dev",
+    "setSha256" : "3ad77c175edead5c78d0617d384aab77c177acd2a93aa3b9cee8550c0605682d",
+    "index" : [ {
+      "dataset" : "SAMPLE",
+      "status" : "DONE",
+      "merchants" : 30,
+      "embedded" : 30,
+      "cached" : 0,
+      "calls" : 30,
+      "remaining" : 0
+    } ],
+    "queries" : [ {
+      "question" : "d-s01",
+      "query" : "rideshare",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s01",
+      "query" : "ride share",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "LYFT RIDE",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "LYFT RIDE" ],
+        "found" : [ "LYFT" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "LYFT RIDE" ],
+        "found" : [ "LYFT" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "LYFT RIDE" ],
+        "found" : [ "LYFT" ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "LYFT RIDE" ],
+        "found" : [ "LYFT" ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s01",
+      "query" : "taxi",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s02",
+      "query" : "food delivery",
+      "targets" : [ "DOORDASH" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s02",
+      "query" : "delivery",
+      "targets" : [ "DOORDASH" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "gas",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "gas station",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "fuel",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s04",
+      "query" : "pharmacy",
+      "targets" : [ "CVS" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CVS/PHARMACY",
+        "match" : "NAME",
+        "similarity" : null
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s04",
+      "query" : "drugstore",
+      "targets" : [ "CVS" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CVS/PHARMACY",
+        "match" : "MEANING",
+        "similarity" : 0.33
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "burrito",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "burrito place",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "mexican restaurant",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "ramen",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "NAME",
+        "similarity" : null
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "ramen restaurant",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "japanese restaurant",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "MEANING",
+        "similarity" : 0.37
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "phone bill",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "phone",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.33
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "TARGET" ],
+        "found" : [ ],
+        "others" : 1
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "mobile carrier",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "NAME",
+        "similarity" : null
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet bill",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.33
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet provider",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    } ],
+    "floors" : [ {
+      "floor" : 0.30,
+      "queries" : 22,
+      "queriesAllFound" : 7,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 8,
+      "candidates" : 9,
+      "others" : 1
+    }, {
+      "floor" : 0.35,
+      "queries" : 22,
+      "queriesAllFound" : 5,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 6,
+      "candidates" : 6,
+      "others" : 0
+    }, {
+      "floor" : 0.40,
+      "queries" : 22,
+      "queriesAllFound" : 4,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 5,
+      "candidates" : 5,
+      "others" : 0
+    }, {
+      "floor" : 0.45,
+      "queries" : 22,
+      "queriesAllFound" : 4,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 5,
+      "candidates" : 5,
+      "others" : 0
+    }, {
+      "floor" : 0.50,
+      "queries" : 22,
+      "queriesAllFound" : 4,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 4,
+      "candidates" : 4,
+      "others" : 0
+    }, {
+      "floor" : 0.55,
+      "queries" : 22,
+      "queriesAllFound" : 3,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 3,
+      "candidates" : 3,
+      "others" : 0
+    }, {
+      "floor" : 0.60,
+      "queries" : 22,
+      "queriesAllFound" : 3,
+      "questions" : 8,
+      "questionsAllFound" : 3,
+      "targets" : 25,
+      "targetsFound" : 3,
+      "candidates" : 3,
+      "others" : 0
+    } ],
+    "highestLossless" : 0.30
+  }
+}

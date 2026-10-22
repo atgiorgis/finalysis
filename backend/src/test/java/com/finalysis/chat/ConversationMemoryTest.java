@@ -273,7 +273,7 @@ class ConversationMemoryTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_usage WHERE kind = 'CONVERSATION_SUMMARY'",
                 Integer.class)).isEqualTo(1);
         assertThat(output).contains("ai call role=chat-summary model=test-main-model items=3 inputTokens=1200 "
-                + "outputTokens=80").contains("chat summary conversation=" + conversation + " folded=3 outcome=FOLDED");
+                + "cacheReadTokens=0 cacheWriteTokens=0 outputTokens=80").contains("chat summary conversation=" + conversation + " folded=3 outcome=FOLDED");
 
         // the eighth turn: the summary, then the four turns after it, and no earlier figure anywhere
         int before = model.prompts().size();
@@ -411,6 +411,7 @@ class ConversationMemoryTest {
                 .isEqualByComparingTo(spent);
         assertThat(jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE table_name = "
                 + "'chat_usage'", String.class)).containsExactlyInAnyOrder("id", "kind", "model", "calls",
-                "input_tokens", "output_tokens", "calls_without_usage", "estimated_cost", "created_at");
+                "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "calls_without_usage",
+                "estimated_cost", "created_at");
     }
 }

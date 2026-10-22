@@ -60,10 +60,7 @@ class LiveChatSmokeTest {
         ChatEvalPrices prices = ChatEvalPrices.load();
         ChatEvalGuards.model(model, prices);
         registry.add("finalysis.ai.roles.main", () -> model);
-        registry.add("finalysis.ai.prices[" + model + "].input-per-million",
-                () -> prices.chat(model).orElseThrow().inputPerMillionUsd());
-        registry.add("finalysis.ai.prices[" + model + "].output-per-million",
-                () -> prices.chat(model).orElseThrow().outputPerMillionUsd());
+        prices.register(registry, model);
     }
 
     @Test
@@ -74,10 +71,12 @@ class LiveChatSmokeTest {
             ChatTurnResponse turn = chat.ask(chat.create().id(), QUESTION);
 
             System.out.printf("chat-smoke model=%s source=%s grounding=%s retried=%s rounds=%d tools=[%s] limit=%s "
-                            + "inputTokens=%s outputTokens=%s cost=%s%n", turn.usage().model(), turn.answerSource(),
+                            + "inputTokens=%s cacheReadTokens=%s cacheWriteTokens=%s outputTokens=%s cost=%s%n",
+                    turn.usage().model(), turn.answerSource(),
                     turn.grounding().status(), turn.grounding().retried(), turn.usage().rounds(),
                     turn.tools().stream().map(t -> t.name() + ":" + t.status()).collect(Collectors.joining(",")),
-                    turn.limitHit(), turn.usage().inputTokens(), turn.usage().outputTokens(),
+                    turn.limitHit(), turn.usage().inputTokens(), turn.usage().cacheReadTokens(),
+                    turn.usage().cacheWriteTokens(), turn.usage().outputTokens(),
                     turn.usage().estimatedCost());
             assertThat(turn.answerSource()).isIn(AnswerSource.MODEL, AnswerSource.FALLBACK);
             assertThat(turn.tools()).as("at least one tool ran").anyMatch(t -> t.status() == ToolStatus.OK);

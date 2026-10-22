@@ -10,6 +10,13 @@ final class Params {
     static final ToolParam FROM = ToolParam.optional("from", new ToolParam.Month(),
             "First month of a range, yyyy-MM: \"2026-06\" for June 2026. Default: 6 months ending at `to`; give it "
                     + "to be sure. Not with month.");
+    /**
+     * {@code from} on the tools whose question usually has no period (alerts since step 8b; search and merchant totals
+     * since step 8c): without it they cover every month with data, as {@link DataMonths} works it out.
+     */
+    static final ToolParam ALL_DATA_FROM = ToolParam.optional("from", new ToolParam.Month(),
+            "First month of a range, yyyy-MM: \"2026-06\" for June 2026. Default: the first month with data (at most "
+                    + ToolParam.MAX_MONTHS + " months before `to`), so everything is covered. Not with month.");
     static final ToolParam TO = ToolParam.optional("to", new ToolParam.Month(),
             "Last month of a range, yyyy-MM: \"2026-08\" for August 2026. Default: the latest month with data "
                     + "(latestMonth in the context block). At most " + ToolParam.MAX_MONTHS + " months from `from` to "

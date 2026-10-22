@@ -1,9 +1,11 @@
 # Phase 6 plan: chatbot
 
 Status: **approved** (2026-10-20) with the answers under "Decisions at approval" (§18), which override anything older
-in this file. Steps 1 to 8 and 8b (fixes from the first dev run) done (step notes); next: the owner's sweep and dev
-runs on 8b, the settings and model choice from them (a small follow-up commit), the one holdout run, then step 9. Branch `v1`, starting after tag `phase-5-done` and the leftovers commit (`c9ef192`).
-Requirements as of `docs/requirements.md` v1.54 (now v1.64).
+in this file. Steps 1 to 8, 8b (fixes from the first dev run) and 8c (search default range, prompt caching, a clean
+tree) done (step notes); next: the owner's caching smoke checks, sweep and dev runs on 8c, the settings and model choice
+from them (a small follow-up commit), the one holdout run, then step 9. Branch `v1`, starting after tag
+`phase-5-done` and the leftovers commit (`c9ef192`).
+Requirements as of `docs/requirements.md` v1.54 (now v1.65).
 
 Scope: CHT-01 (spending questions through read-only tools), CHT-02 (meaning-based search over merchants and
 transactions with pgvector), CHT-03 (routing between numeric tools, search, or both), CHT-04 (number grounding),
@@ -517,6 +519,10 @@ CREATE TABLE chat_tool_call (
   without a price makes the cost limits fail closed: chat refuses to start with a clear message unless
   `max-turn-cost` and `max-daily-cost` are explicitly set to 0 (off). A call without usage counts at the per-call
   input estimate and the output cap, so a missing count can never make a turn look free.
+- **Prompt caching (step 8c).** A model whose price also has `cache-read-per-million` and `cache-write-per-million`
+  caches the fixed prefix (tools, system prompt, context block); its cache reads and writes are costed at those prices,
+  and count against the per-turn input cap like any input token. Before a call, the worst case prices every estimated
+  input token at the dearer of input and cache write.
 - **Token log (AI-06):** every model call writes the existing line with its own role:
   `ai call role=chat model=<id> items=<tool results in the prompt> inputTokens= outputTokens= ms= outcome=`; the
   summary call `role=chat-summary`; the monthly summary `role=summary`; search embeddings `role=embedding`
@@ -912,8 +918,6 @@ Sonnet 5.5.
 
 ## Backlog (proposed)
 
-- Prompt caching of the fixed prefix on Bedrock: Spring AI 2.0.1 supports it (step 8b notes); needs cache tokens in
-  usage, prices and limits, and a smoke call.
 - Service methods for range averages and per-day rates, so those questions can be answered (shares: step 8b).
 - A SELECT-only database role for chat.
 - SSE progress events (Phase 7).
@@ -1868,12 +1872,112 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-5-5
 ```
 
+### Step 8c notes: search default range, prompt caching, a clean tree
+
+Done: "Phase 6 step 8c: search default range, prompt caching, clean tree". Backend 3,130 tests (Maven summary;
+3,114 + 16), 0 failures, 0 skipped; frontend 4. Requirements v1.65. V24. Prompt `chat-5`. Mocks only, no live call,
+`NoCloudAiGuard` in force; the holdout was not opened.
+
+**1. Search default range (CHT-01, CHT-02).** `search_transactions` and `get_merchant_totals` without `month` or
+`from` cover every month with data, as `get_alerts` has since 8b: from the first month with data to `to` (or the latest
+month), at most 24 months. One rule for the three tools, `chat.tool.DataMonths` (`get_alerts`' 8b code, moved), and
+one wording, `Params.ALL_DATA_FROM`. The descriptions say "Without month or from: every month with data; from and to say
+which" (the search description had to lose a few words to stay under the 700-character cap). The result's `from` and
+`to` give the range covered, now also when no merchant was found (they were the first candidate's before). `month` is
+still one month; `to` alone ends the range. On the sample data (`SearchDefaultRangeTest`, seeded as the eval seeds it,
+the expected figures read from `dev.yml` itself): d-s04's pharmacy is 175.85 (CVS, six rows; the 6-month default gave
+162.31) and d-s08's internet bill 399.95 (SKYWAVE, five bills); the data runs from March to October 2026.
+
+**2. Prompt caching (AI-05, AI-06).**
+- **What is cached.** The fixed prefix every round of every conversation on the same data and day starts with: the tool
+  definitions (stable for one category list), the system prompt and the context block. Never the conversation's
+  summary, its earlier turns, the question or the turn's tool calls and results; `CONVERSATION_HISTORY` is never used. A
+  cache entry only matches a byte-identical prefix, so nothing can pass from one conversation to another through it.
+- **How.** `ai.PromptCache` (provider-neutral) with the one implementation in `ai.bedrock`, `BedrockPromptCache`, a bean
+  of the Bedrock configuration: Spring AI 2.0.1's `BedrockCacheOptions`, strategy `SYSTEM_AND_TOOLS`, 5-minute TTL.
+  Spring AI puts one `cachePoint` after the last tool and one after a system block: the last, or with
+  `multiBlockSystemCaching` the second-to-last (read from the jar's bytecode). Our system blocks are [system prompt,
+  context] or [system prompt, context, summary], so `ChatModelClient` asks for "the first two system messages" and the
+  implementation picks the flag that puts the point right after the context block either way. Any other layout is sent
+  uncached rather than failing. The summaries' calls (`complete`) are never cached.
+- **When.** `ChatModelClient.promptCaching()`: `ON` only when `finalysis.ai.chat.prompt-cache` is true (the default),
+  the main model's price has both cache prices, and the provider has cache points; otherwise `OFF_SETTING`,
+  `OFF_NO_CACHE_PRICES` or `OFF_PROVIDER`, and every call goes out uncached, as before. If Bedrock answers a call with
+  cache points with a `ValidationException` naming the cache, the call is logged as `ERROR`, sent once more without
+  them, and that model stays uncached until restart (`OFF_REFUSED`); any other error is thrown as before. So a model
+  that can't cache still works.
+- **Usage and cost.** Bedrock's `inputTokens` excludes the cached prefix; Spring AI reports `cacheReadInputTokens` and
+  `cacheWriteInputTokens` on its `Usage`. A reply carries all three; each kind is costed at its own price
+  (`AiPrices.Price.cost(input, output, cacheRead, cacheWrite)`); before a call, the worst case is every estimated token at
+  the dearer of input and cache write, plus the output cap. Cache tokens count against the per-turn input cap
+  (40,000) like any input token, since the model reads them all the same; the per-call estimate is unchanged. Cache
+  tokens reported for a model without cache prices (chat never asks it) would count at the most they could cost, a read
+  as input and a write at twice input, never cheaper.
+- **Where it shows.** The `role=chat` line: `inputTokens= cacheReadTokens= cacheWriteTokens= outputTokens=`;
+  `chat_turn` and `chat_usage` gain `cache_read_tokens` and `cache_write_tokens` (V24; null when no usage was reported,
+  as `input_tokens`); the turn API's `usage` gains `cacheReadTokens` and `cacheWriteTokens`.
+- **Prices.** `finalysis.ai.prices.<id>.cache-read-per-million` and `cache-write-per-million` (both or neither), in the
+  `aws` profile for Haiku 4.5 (0.10, 1.25), equal to the price file (`ChatSettingsTest` compares the cache prices too).
+  The price file gains `cacheReadPerMillionUsd` and `cacheWritePerMillionUsd` for the three Claude models (0.1× and 1.25×
+  input) and a `note`: Haiku 5.5 and Sonnet 5.5 are list prices as of 2026-10-22, being checked by the owner against
+  the Bedrock pricing page. Titan has none. Phase 4's loader ignores the new fields (checked).
+- **The eval.** `-Deval.model` gets its cache prices from the file with the rest (`ChatEvalPrices.register`). Each turn
+  records cache reads and writes; the report's identity says whether the run was cached ("on (tools, system prompt,
+  context block; 5-minute TTL)", or "off" and why), the cost table splits input into uncached / cache read / cache write
+  and the share read from the cache, the per-question table shows cached tokens, and a run asked to cache whose model
+  reported no cached token says so in bold (a model that doesn't cache through Bedrock, or a prefix below its minimum:
+  4,096 tokens for Haiku 4.5, 512 for the 5.5 models; ours is about 5,950).
+- **Smoke check.** `LivePromptCacheSmokeTest` (`-Pai-smoke`, tag `live-ai`, `-Deval.model` required): one turn on the
+  analytics fixture; it fails unless caching is `ON`, the first call wrote (or read) the prefix and the second call read
+  it (`cacheReadTokens` > 0). One line per call, counts only. The recorder now keeps each call's usage.
+
+**3. A clean tree for the holdout.** The owner's price file entries are committed with the cache prices and the note;
+the four run-1 files (`chat-dev-0de526931d87-20261022T113958Z` and `chat-sweep-dev-0de526931d87-20261022T114528Z`,
+`.json` and `.md`) are committed as the baseline before 8b, as `docs/eval/README.md` says.
+
+**Tests** (mocks only): `BedrockPromptCacheTest` (8: Spring AI's real Converse model over an in-process HTTP client; the
+request Bedrock would get has one cache point after the tools and one after the context block, before the summary, none
+in the messages; cached tokens read back; no cache points without cache prices, without a provider, or for a summary;
+a cache point Bedrock refuses is dropped and the call sent again; another validation error is not taken for one; a
+layout the provider can't mark is refused before any call), `SearchDefaultRangeTest` (4), `ChatServiceTest` (+1: cache
+tokens priced apart, stored in the turn and the ledger, logged), `ChatSettingsTest` (+1: cache prices and the worst
+case; the `aws` profile's cache prices equal the file's), `ChatEvalMetricsTest` (+1), `ChatEvalReportTest` (+1). Changed:
+the log-line assertions (chat, chat-summary, summary), `ConversationMemoryTest`'s ledger columns, `ToolRegistryTest`'s constructors, the eval's records.
+
+**Decisions beyond the plan**
+- **Caching is per model, by its prices.** A model without cache prices is never asked to cache, so an unpriced cache
+  token can't happen in normal use; the switch `finalysis.ai.chat.prompt-cache` turns it off for all.
+- **A refused cache point is retried once without it**, in `ChatModelClient`, the only retry outside the AWS SDK's: the
+  provider's own refusal is recognised only in `ai.bedrock` (`PromptCache.refusedCaching`), so chat names no provider.
+- **5-minute TTL**, not 1 hour: questions arrive seconds apart in a turn and in the eval; a 1-hour write costs 2×.
+- **V24 rather than folding cache tokens into `input_tokens`**: the ledger keeps what each cost was made of.
+- **Prompt `chat-5`**: the version now also changes with the tool descriptions and the cache points.
+- **The `aws` profile prices only Haiku 4.5**, its main role; Haiku 5.5 and Sonnet 5.5 are priced for the eval from the
+  file, and join the profile with the model choice.
+
+**What caching should save** (step 8b's estimate, unchanged): about 5,950 of a call's tokens are the prefix; a dev run
+should pay one write per dataset and reads after, so its input cost falls by about three quarters. A run's report now
+shows the real split.
+
+**Commands** (`backend/`, Docker, the AWS CLI profile), in order: the caching smoke check per model, the sweep, then
+the dev runs:
+
+```sh
+caffeinate -i ./mvnw test -Pai-smoke -Dtest=LivePromptCacheSmokeTest -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0
+caffeinate -i ./mvnw test -Pai-smoke -Dtest=LivePromptCacheSmokeTest -Deval.model=us.anthropic.claude-haiku-5-5
+caffeinate -i ./mvnw test -Pai-smoke -Dtest=LivePromptCacheSmokeTest -Deval.model=us.anthropic.claude-sonnet-5-5
+caffeinate -i ./mvnw test -Pchat-eval -Deval.run=sweep -Deval.set=dev
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-5-5
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-5-5
+```
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
-| CHT-01 | 3, 5 | `*ToolTest`, `ChatServiceTest` |
-| CHT-02 | 6, 8b | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest` |
+| CHT-01 | 3, 5, 8c | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest` |
+| CHT-02 | 6, 8b, 8c | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
 | CHT-04 | 4, 5 | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
@@ -1882,7 +1986,7 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 | SEC-01, SEC-08 | 2, 5 | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest` |
 | SEC-02 | 2, 5, 8 | `InstructionLikeTextTest`, injection scripted turns, eval injection category |
 | SEC-03 | 1, 3 | `ChatReadOnlyTest`, `ReadOnlyQueriesTest`, Postgres refusal |
-| AI-01, AI-05, AI-06 | 5 | `AiModeTest`, limits tests, log assertions |
+| AI-01, AI-05, AI-06 | 5, 8c | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c) |
 
 ---
 

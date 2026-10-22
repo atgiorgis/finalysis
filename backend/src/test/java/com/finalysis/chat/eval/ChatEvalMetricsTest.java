@@ -22,7 +22,7 @@ class ChatEvalMetricsTest {
                                         LimitHit limit, Integer input, Integer output, String cost, long millis) {
         return new Observation(source == AnswerSource.ERROR ? null : "text", source == AnswerSource.ERROR ? "ERROR"
                 : null, source, source == AnswerSource.MODEL ? GroundingStatus.GROUNDED : null, retried, 1, 0,
-                List.of(new ToolUse("get_month_totals", "OK", 1)), limit, retried ? 3 : 2, input, output,
+                List.of(new ToolUse("get_month_totals", "OK", 1)), limit, retried ? 3 : 2, input, output, 0, 0,
                 input == null ? 2 : 0, cost == null ? null : new BigDecimal(cost), millis, retryFigures, null,
                 List.of(), null, List.of());
     }
@@ -127,6 +127,31 @@ class ChatEvalMetricsTest {
         assertThat(metrics.latency().medianTurnMillis()).as("1000, 2000 x4, 4000, 6000").isEqualTo(2000);
         assertThat(metrics.latency().maxQuestionMillis()).isEqualTo(6000);
         assertThat(metrics.latency().meanQuestionMillis()).as("2000+6000+6000+2000+2000+1000 / 6").isEqualTo(3167);
+    }
+
+    /** Step 8c: cached-prefix reads and writes are summed apart from the uncached input. */
+    @Test
+    void cachedTokensAreSummedApart() {
+        Observation write = cached(observed(AnswerSource.MODEL, false, List.of(), null, 400, 50, "0.007650", 1000),
+                0, 5600);
+        Observation read = cached(observed(AnswerSource.MODEL, false, List.of(), null, 600, 80, "0.001560", 1000),
+                5600, 0);
+        ChatEvalMetrics metrics = ChatEvalMetrics.of(List.of(new QuestionResult("d-l01", "LOOKUP", "assistant", false,
+                "SAMPLE", 2, List.of(turn(Expect.ANSWER, write, score(true, false, true, List.of())),
+                turn(Expect.ANSWER, read, score(true, false, true, List.of()))))), List.of());
+
+        assertThat(metrics.usage().inputTokens()).isEqualTo(1000);
+        assertThat(metrics.usage().cacheReadTokens()).isEqualTo(5600);
+        assertThat(metrics.usage().cacheWriteTokens()).isEqualTo(5600);
+        assertThat(metrics.usage().allInputTokens()).isEqualTo(12_200);
+        assertThat(metrics.usage().cost()).isEqualByComparingTo("0.009210");
+    }
+
+    private static Observation cached(Observation o, int read, int write) {
+        return new Observation(o.answer(), o.problem(), o.source(), o.grounding(), o.retried(), o.figuresChecked(),
+                o.ungrounded(), o.tools(), o.limit(), o.rounds(), o.inputTokens(), o.outputTokens(), read, write,
+                o.callsWithoutUsage(), o.cost(), o.millis(), o.retryFigures(), o.rejectedAnswer(), o.searchQueries(),
+                o.citationsFound(), o.invalidArguments());
     }
 
     @Test

@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.finalysis.ai.AiMode;
+import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.ChatRoleOptions;
 import com.finalysis.ai.ChatRoleProperties;
+import com.finalysis.ai.PromptCache;
 import com.finalysis.ai.bedrock.BedrockClientConfiguration;
 import com.finalysis.chat.tool.ToolRegistryTestSupport;
 import java.io.ByteArrayInputStream;
@@ -130,7 +132,7 @@ class BedrockToolCallsTest {
             """;
 
     /** As the aws profile builds it: Spring AI's model over the app's Bedrock client, with temperature 0.0 by default. */
-    private static BedrockProxyChatModel model(SdkHttpClient http) {
+    static BedrockProxyChatModel model(SdkHttpClient http) {
         return BedrockProxyChatModel.builder()
                 .bedrockRuntimeClient(BedrockClientConfiguration.client(
                         StaticCredentialsProvider.create(AwsBasicCredentials.create("test-key-id", "test-secret")),
@@ -145,12 +147,20 @@ class BedrockToolCallsTest {
     }
 
     private static ChatModelClient client(ChatModel model, Double temperature) {
+        return client(model, temperature, new AiPrices(Map.of()), null);
+    }
+
+    /** The client over this model; {@code cache} null is a provider without cache points. */
+    static ChatModelClient client(ChatModel model, Double temperature, AiPrices prices, PromptCache cache) {
         AiProperties ai = new AiProperties(AiMode.CLOUD, "bedrock",
                 new AiProperties.Roles("test-main-model", "test-categorization-model", "test-embedding-model", ""),
                 true);
+        ChatRoleProperties role = new ChatRoleProperties(temperature, true);
         return new ChatModelClient(new StaticListableBeanFactory(Map.of("chatModel", model))
-                .getBeanProvider(ChatModel.class), ai, new ChatRoleOptions(ai, new ChatRoleProperties(temperature)),
-                new ChatToolCallbacks(ToolRegistryTestSupport.registry()));
+                .getBeanProvider(ChatModel.class), ai, new ChatRoleOptions(ai, role),
+                new ChatToolCallbacks(ToolRegistryTestSupport.registry()), role, prices,
+                new StaticListableBeanFactory(cache == null ? Map.of() : Map.of("promptCache", cache))
+                        .getBeanProvider(PromptCache.class));
     }
 
     private static List<Message> question() {
