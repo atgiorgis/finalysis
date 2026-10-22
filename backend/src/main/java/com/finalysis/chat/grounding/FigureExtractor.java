@@ -20,6 +20,9 @@ import java.util.regex.Pattern;
  *   <li>ordinals ({@code 1st}, {@code 3rd}) and the numbers inside alias tokens ({@code CARD-1});</li>
  *   <li>quarter references and their year: {@code Q3}, {@code Q3 2026}, {@code 2026 Q3}, {@code Q3'26},
  *       {@code quarter 3}, {@code second quarter of 2026};</li>
+ *   <li>list numbers (step 8d): {@code 1.} or {@code 1)} starting a line, but only in a numbered list that counts up
+ *       from 1 ({@code 1.}, {@code 2.}, {@code 3.}); a number that starts a line without such a list, like a lone
+ *       {@code 150.}, stays a figure;</li>
  *   <li>labels this turn sent that contain only whole numbers (a merchant {@code 7-ELEVEN}, a category name), given
  *       by the caller; a label with a decimal, a {@code $} or a {@code %} is never masked;</li>
  *   <li>the whole numbers 0 and 1 as counts.</li>
@@ -47,6 +50,7 @@ public final class FigureExtractor {
             + "(?:\\s*(?:,|of)?\\s*(?:20\\d{2}|'\\d{2})(?![.,]\\d))?|quarter\\s+[1-4]|(?:first|second|third|fourth|last|1st|2nd|3rd|4th)"
             + "\\s+quarter(?:\\s*,?\\s*(?:of\\s+)?20\\d{2}(?![.,]\\d))?)(?![\\p{L}\\d])");
     private static final Pattern ALIAS = Pattern.compile("\\b[A-Z][A-Z_]*-\\d+\\b");
+    private static final Pattern LIST_NUMBER = Pattern.compile("(?m)^[ \\t]*(?<n>\\d{1,3})[.)](?=[ \\t]+\\S)");
 
     private static final Pattern NUMBER = Pattern.compile(
             "(?<open>\\()?(?<sign>[-−])?(?<cur>\\$)?(?<sign2>[-−])?"
@@ -81,6 +85,7 @@ public final class FigureExtractor {
         mask(masked, QUARTER, null);
         mask(masked, ORDINAL, null);
         mask(masked, ALIAS, null);
+        maskListNumbers(masked);
         for (String label : labels) {
             maskLabel(masked, label);
         }
@@ -140,6 +145,35 @@ public final class FigureExtractor {
             } else if (m.group(group) != null) {
                 blank(text, m.start(group), m.end(group));
             }
+        }
+    }
+
+    /**
+     * The numbers of numbered lists: line-start markers in runs that count up by one from 1, at least two long. A
+     * marker outside such a run is left alone, so it is checked like any other figure.
+     */
+    private static void maskListNumbers(char[] text) {
+        Matcher m = LIST_NUMBER.matcher(new String(text));
+        List<int[]> run = new ArrayList<>();
+        while (m.find()) {
+            int n = Integer.parseInt(m.group("n"));
+            int[] marker = {m.start("n"), m.end()};
+            if (n == 1) {
+                blankRun(text, run);
+                run = new ArrayList<>(List.of(marker));
+            } else if (!run.isEmpty() && n == run.size() + 1) {
+                run.add(marker);
+            } else {
+                blankRun(text, run);
+                run = new ArrayList<>();
+            }
+        }
+        blankRun(text, run);
+    }
+
+    private static void blankRun(char[] text, List<int[]> run) {
+        if (run.size() >= 2) {
+            run.forEach(marker -> blank(text, marker[0], marker[1]));
         }
     }
 

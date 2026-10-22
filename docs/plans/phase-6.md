@@ -923,6 +923,8 @@ Sonnet 5.5.
 - SSE progress events (Phase 7).
 - `propose_goal_draft` and the advisor note (Phase 7, §11).
 - The Phase 5 backlog's missing-bill check would give chat "is a bill late?" for free.
+- A less conservative round estimate (step 8d): today every estimated input token is priced at the cache-write rate,
+  although a cached prefix is mostly read at a tenth of the input price.
 
 ---
 
@@ -1972,21 +1974,105 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-5-5
 ```
 
+### Step 8d notes: fixes from dev run 2
+
+Done: "Phase 6 step 8d: fixes from dev run 2". Backend 3,178 tests (Maven summary; 3,130 + 48), 0 failures, 0 skipped; frontend 4. Requirements v1.66. Prompt `chat-6`. Dev set
+revision 3. Mocks only, no live call, `NoCloudAiGuard` in force; the chat holdout was not opened and the categorization
+holdout not run.
+
+Inputs: the owner's sweep and Haiku 4.5 run 2 on step 8c (committed, `docs/eval/README.md` "Run 2"), and a Sonnet 4.6
+run that made no model call (not committed).
+
+**1. Cost limit against the model (AI-05).**
+- **Cause, confirmed.** Before each round, `TurnLoop` prices that round's estimated input at the dearer of the input
+  and cache-write prices (caching was on) plus the whole output cap, and refuses the round if the turn would pass
+  `max-turn-cost`. At Sonnet 4.6's prices (input $3, cache write $3.75, output $15) the output cap alone is $0.0225, so
+  any round over about 7,330 estimated tokens passes $0.05; the fixed prefix is about 5,950, and every dev turn stopped
+  on `COST` before its first call. The arithmetic differs slightly from the first reading (12,000 + 1,500 at the plain
+  input price, $0.0585): the loop uses the round's own estimate, at the cache-write price.
+- **The estimator is conservative, and unchanged in this step**: it prices every input token at the cache-write rate,
+  although a cached prefix is mostly read at a tenth of the input price. Revisiting it is a Backlog item.
+- **Fail fast.** `ChatStartupCheck` asks the loop's own code (`TurnLoop.roundWorstCase` and `roundFits`, shared, not
+  copied) whether the largest round the token limit lets through (`max-input-tokens-per-call`, 12,000) fits in
+  `max-turn-cost`, with the caching the loop will use. If not, startup fails naming the model, both amounts and the
+  setting: Sonnet 4.6 at the defaults is $0.0675 against $0.05; Haiku 4.5 is $0.0225. A setup startup passes can never
+  have its first round refused on cost (`ChatSettingsTest` checks startup and the loop agree over a grid of prices,
+  limits and caching). The eval and the smoke tests start the same context, so they refuse before seeding or any call.
+- **`-Deval.maxTurnCost=<usd>`** (eval only): the setting's rules (at least 0, at most 6 decimals), set for that run's
+  context and recorded in the report header ("Turn cost limit: $0.10 (-Deval.maxTurnCost, this run only ...)") and the
+  JSON (`maxTurnCost`, `maxTurnCostOverridden`). The app default stays 0.05.
+- **The shown answer names the limit.** A turn a limit stopped before any tool returned data shows "I stopped before
+  getting any data from your records: this question reached the cost limit per question. Please try again, or ask a
+  narrower question." (one wording per limit, no figure), not "I can't answer that from your data". With data, the
+  fallback rows are shown as before.
+- **Eval scoring.** A turn a limit stopped is never a correct refusal, and one stopped before any data is never correct
+  at all; both are scored `limit-stopped (<LIMIT>)` and counted in the summary's new "Limit-stopped" column. The Sonnet
+  run had counted 10 such turns as correct refusals.
+
+**2. Direction and meaning (CHT-01).** Grounding checks figures, not what is said about them.
+- `compare_periods` gains `higherPeriod`: the higher side's own label (`2026-03`, `2026-Q3` for a calendar quarter,
+  `2026-01 to 2026-04` otherwise) or `SAME`, from the sign of `difference` in Java. One field, the period's label: d-c08
+  went wrong mapping a and b back to months. `difference` stays signed (a − b). New guard kind `PERIOD`.
+- `get_trends`: `changeAmount` and `changePercent` are renamed `changeFromPreviousMonth` and
+  `changePercentFromPreviousMonth` (the old names are gone from the tool; the ANA-03 endpoint is unchanged), and each
+  trailing average gains `differenceFromAverage` (the month's amount less the average, subtracted in Java, with its
+  figure basis for citations). d-t06 had called the month-over-month $175.00 the change from the 3-month average; the
+  difference is $158.33.
+- The fallback says "higher: 2026-03" and lists each average with its difference (in words, "three-month", so no new
+  figure appears).
+- **Phrase checks in the eval**, opt-in per turn: `says` (regular expressions, case ignored, at least one must match)
+  and `neverSays` (none may). Dev set revision 3 uses them on d-c08 (March named as higher in either word order, "more
+  in March" or "March was higher"; February named as higher, or March as lower, fails) and d-t06 (the $175.00 or 350%
+  called a change from the 3-month average fails). Tested on run 2's own answers (both fail) and three or four correct
+  phrasings each (all pass). The holdout is untouched.
+
+**3. List numbers (CHT-04).** `1.`, `2.` (or `1)`) starting a line are not figures when they form a numbered list
+counting up from 1, at least two long; a lone `150.` at a line start, a list starting at 2, a skipped number or a number
+mid-line stays a figure. d-a03 had fallen back over [2, 3, 4, 5, 7].
+
+**4. d-s05's "30" (CHT-02).** The search result's `merchants: 30` (distinct merchants in all of the data) sat beside
+the candidates and was read as "found 30 merchants". The counts are now nested as `searchIndex: {merchantsInData,
+searchableByMeaning}` and sent only when the index is incomplete; with a full index there is no stray count to quote.
+
+**5. Prompt `chat-6`.** When a search finds nothing that fits, search once more with well-known brand names for that
+kind of business (no brand is named in the prompt, so it isn't tuned to the dev targets); never say "Let me check..."
+without calling a tool in the same reply; say which period was higher from `higherPeriod`; a change from the previous
+month is not a difference from an average.
+
+Not changed: the search floor stays 0.40; d-x06 stays a counted miss.
+
+**Tests**: `ChatSettingsTest` (+2), `FallbackAnswerTest` (+5), `ChatServiceTest` (+1), `FigureExtractorTest` (+7),
+`ChatEvalScoringTest` (+13), `ChatEvalGuardsTest` (+1), `ChatPayloadGuardTest` (+8), `ComparisonAndTrendLabelsTest`
+(new, 11), `ToolsMatchEndpointsTest` (higherPeriod either way round, differenceFromAverage against the endpoint),
+`MerchantSearchTest` (searchIndex only when incomplete), `ChatEvalReportTest` (header, column); `ChatQuestionSetsTest`
+takes revision 3. The hand-checked payloads (`compare_periods.json`, `get_trends.json`, `search_transactions.json`)
+follow the new fields. `ChatTurnPayloadTest` runs with `max-input-tokens-per-call` 16,000: its eight tools' results in
+one round now come to just over 12,000 estimated tokens, and the loop would cut the oldest before sending it (correct
+behaviour, but the test is about every payload going out checked). The search description was reworded to stay
+under the 700-character cap.
+
+**Commands** (`backend/`), after review:
+
+```sh
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-4-6 -Deval.maxTurnCost=0.10
+```
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
-| CHT-01 | 3, 5, 8c | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest` |
-| CHT-02 | 6, 8b, 8c | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest` |
+| CHT-01 | 3, 5, 8c, 8d | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest` |
+| CHT-02 | 6, 8b, 8c, 8d | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
-| CHT-04 | 4, 5 | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
+| CHT-04 | 4, 5, 8b, 8d | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
 | CHT-06 | 7 | `ConversationMemoryTest` |
 | ANA-05 | 7 | `MonthlySummaryTest` |
 | SEC-01, SEC-08 | 2, 5 | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest` |
 | SEC-02 | 2, 5, 8 | `InstructionLikeTextTest`, injection scripted turns, eval injection category |
 | SEC-03 | 1, 3 | `ChatReadOnlyTest`, `ReadOnlyQueriesTest`, Postgres refusal |
-| AI-01, AI-05, AI-06 | 5, 8c | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c) |
+| AI-01, AI-05, AI-06 | 5, 8c, 8d | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c, 8d) |
 
 ---
 

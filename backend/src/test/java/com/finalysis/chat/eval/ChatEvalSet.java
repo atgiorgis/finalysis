@@ -62,16 +62,33 @@ record ChatEvalSet(String name, int version, String sha256, Map<String, Dataset>
      * @param figures   alternatives: a correct answer has every figure of one
      * @param forbidden figures that must not appear
      * @param citations rows that must be among the citations
+     * @param says      phrase check (step 8d), optional: regular expressions, case ignored; an answer turn is correct
+     *                  only if at least one matches the shown answer
+     * @param neverSays regular expressions, case ignored, none of which may match the shown answer
      */
     record Turn(String ask, Expect expect, List<Set<String>> tools, List<List<ExpectedFigure>> figures,
-                List<ExpectedFigure> forbidden, List<Locator> citations, String note, boolean dependsOnPrevious) {
+                List<ExpectedFigure> forbidden, List<Locator> citations, String note, boolean dependsOnPrevious,
+                List<Pattern> says, List<Pattern> neverSays) {
 
         Turn {
             tools = tools.stream().map(Set::copyOf).toList();
             figures = figures.stream().map(List::copyOf).toList();
             forbidden = List.copyOf(forbidden);
             citations = List.copyOf(citations);
+            says = List.copyOf(says);
+            neverSays = List.copyOf(neverSays);
         }
+
+        /** A turn without phrase checks. */
+        Turn(String ask, Expect expect, List<Set<String>> tools, List<List<ExpectedFigure>> figures,
+             List<ExpectedFigure> forbidden, List<Locator> citations, String note, boolean dependsOnPrevious) {
+            this(ask, expect, tools, figures, forbidden, citations, note, dependsOnPrevious, List.of(), List.of());
+        }
+    }
+
+    /** A phrase check's expression, case and Unicode case ignored. */
+    static Pattern phrase(String regex) {
+        return Pattern.compile(regex, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     }
 
     /** A figure's kind follows its written form (the files' header): two decimals, one decimal, or none. */
@@ -160,8 +177,14 @@ record ChatEvalSet(String name, int version, String sha256, Map<String, Dataset>
                         c.get("date") == null ? null : LocalDate.parse(string(c.get("date"))),
                         string(c.get("contains"))))
                 .toList();
-        return new Turn(string(turn.get("ask")), Expect.valueOf(string(turn.get("expect"))), tools, figures, forbidden,
-                citations, string(turn.get("note")), Boolean.TRUE.equals(turn.get("dependsOnPrevious")));
+        Expect expect = Expect.valueOf(string(turn.get("expect")));
+        List<Pattern> says = strings(turn.get("says")).stream().map(ChatEvalSet::phrase).toList();
+        List<Pattern> neverSays = strings(turn.get("neverSays")).stream().map(ChatEvalSet::phrase).toList();
+        if (expect == Expect.REFUSAL && !says.isEmpty()) {
+            throw new IllegalArgumentException("A refusal turn takes no says: " + turn.get("ask"));
+        }
+        return new Turn(string(turn.get("ask")), expect, tools, figures, forbidden, citations,
+                string(turn.get("note")), Boolean.TRUE.equals(turn.get("dependsOnPrevious")), says, neverSays);
     }
 
     static String sha256(byte[] bytes) {

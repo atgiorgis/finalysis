@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -160,5 +161,19 @@ class ChatEvalGuardsTest {
 
         assertThat(state.commit()).matches("[0-9a-f]{40}");
         assertThat(GitState.readOrUnknown(notARepository)).isEqualTo(GitState.UNKNOWN);
+    }
+
+    /** Step 8d: {@code -Deval.maxTurnCost} follows the setting's own rules; empty keeps the app's. */
+    @Test
+    void theTurnCostOverrideIsDollarsByTheSettingsRules() {
+        assertThat(ChatEvalGuards.maxTurnCost(null)).isNull();
+        assertThat(ChatEvalGuards.maxTurnCost(" ")).isNull();
+        assertThat(ChatEvalGuards.maxTurnCost("0.10")).isEqualByComparingTo("0.10");
+        assertThat(ChatEvalGuards.maxTurnCost("0")).isEqualByComparingTo("0");
+        for (String bad : List.of("-0.01", "0.0000001", "ten cents")) {
+            assertThatThrownBy(() -> ChatEvalGuards.maxTurnCost(bad))
+                    .isInstanceOf(EvalRefusedException.class)
+                    .hasMessageContaining("-Deval.maxTurnCost");
+        }
     }
 }

@@ -218,14 +218,27 @@ public class TurnLoop {
             run.hit(LimitHit.TOKENS);
             return null;
         }
-        if (limits.maxTurnCost().signum() > 0 && run.price.isPresent()
-                && run.cost.add(run.price.get().worstCase(estimate, limits.maxOutputTokens(),
-                client.promptCaching() == ChatModelClient.PromptCaching.ON))
-                .compareTo(limits.maxTurnCost()) > 0) {
+        if (run.price.isPresent() && !roundFits(run.cost, roundWorstCase(run.price.get(), estimate, limits,
+                client.promptCaching() == ChatModelClient.PromptCaching.ON), limits)) {
             run.hit(LimitHit.COST);
             return null;
         }
         return estimate;
+    }
+
+    /**
+     * The most one round can cost before it is sent: its estimated input and the output cap
+     * ({@link AiPrices.Price#worstCase}). Shared with {@link ChatStartupCheck}, which asks it about the largest round
+     * the token limit lets through, so startup never passes a setup this loop would refuse.
+     */
+    static BigDecimal roundWorstCase(AiPrices.Price price, int estimatedInputTokens, ChatProperties limits,
+                                     boolean caching) {
+        return price.worstCase(estimatedInputTokens, limits.maxOutputTokens(), caching);
+    }
+
+    /** Whether a round whose worst case is {@code worstCase} may start after {@code spent}; always with the limit off. */
+    static boolean roundFits(BigDecimal spent, BigDecimal worstCase, ChatProperties limits) {
+        return limits.maxTurnCost().signum() == 0 || spent.add(worstCase).compareTo(limits.maxTurnCost()) <= 0;
     }
 
     /**
@@ -317,6 +330,6 @@ public class TurnLoop {
 
     private Result fallback(Run run) {
         TurnEvidence evidence = run.evidence();
-        return run.end(AnswerSource.FALLBACK, run.lastCheck, FallbackAnswer.render(evidence), null);
+        return run.end(AnswerSource.FALLBACK, run.lastCheck, FallbackAnswer.render(evidence, run.limit), null);
     }
 }

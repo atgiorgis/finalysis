@@ -50,3 +50,20 @@ shares, quarters) and step 8c's (search and merchant totals over every month wit
 
 They are evidence, not a target: later dev runs are compared with them, and they are never edited. Runs from step 8c on
 also record whether prompt caching was on and split input tokens into uncached, cache reads and cache writes.
+
+### Run 2: after steps 8b and 8c
+
+The second sweep and dev run, committed in step 8d. They ran on commit `2e354e2` (step 8c; working tree dirty with the
+owner's price file edits, committed with them), dev set version 2, prompt `chat-5`, prompt caching on:
+
+- [chat-sweep-dev-2e354e2fc5d5-20261022T175440Z.md](chat-sweep-dev-2e354e2fc5d5-20261022T175440Z.md) (and `.json`):
+  search on the step 8b documents, 11 of 25 targets found at 0.30 and 6 at 0.40 (the floor stays 0.40);
+- [chat-dev-2e354e2fc5d5-20261022T175514Z.md](chat-dev-2e354e2fc5d5-20261022T175514Z.md) (and `.json`): Haiku 4.5,
+  55 of 58 questions and 63 of 66 turns correct, 83,840 uncached input, 975,921 cache-read, 2,271 cache-write and
+  10,947 output tokens, $0.24.
+
+A Sonnet 4.6 run from the same session is not committed: every turn stopped on the cost limit before its first model
+call, so it measured that setting, not the model. The check prices a round's estimated input at the cache-write price
+plus the whole 1,500-token output cap; at Sonnet 4.6's prices any round over about 7,330 estimated tokens passes $0.05,
+and every first round of the dev set is larger (the fixed prefix alone is about 5,950 tokens). Step 8d makes such a setup refuse to start and scores a limit-stopped turn as
+never correct.

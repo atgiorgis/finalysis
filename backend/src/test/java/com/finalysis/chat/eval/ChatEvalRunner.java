@@ -3,6 +3,7 @@ package com.finalysis.chat.eval;
 import com.finalysis.chat.AnswerSource;
 import com.finalysis.chat.ChatPrompt;
 import com.finalysis.chat.ChatModelClient;
+import com.finalysis.chat.ChatProperties;
 import com.finalysis.chat.ChatService;
 import com.finalysis.chat.ChatTurnResponse;
 import com.finalysis.chat.citation.Citation;
@@ -64,9 +65,11 @@ class ChatEvalRunner {
     private final MutableClock clock;
     private final JdbcTemplate jdbc;
     private final ConfigurableEnvironment environment;
+    private final ChatProperties limits;
 
     ChatEvalRunner(ChatService chat, ChatModelClient client, ChatEvalSeeder seeder, ChatCallRecorder recorder,
-                   MutableClock clock, JdbcTemplate jdbc, ConfigurableEnvironment environment) {
+                   MutableClock clock, JdbcTemplate jdbc, ConfigurableEnvironment environment,
+                   ChatProperties limits) {
         this.chat = chat;
         this.client = client;
         this.seeder = seeder;
@@ -74,6 +77,7 @@ class ChatEvalRunner {
         this.clock = clock;
         this.jdbc = jdbc;
         this.environment = environment;
+        this.limits = limits;
     }
 
     /** Thrown when the run can't evaluate anything meaningful; no results are written. */
@@ -84,7 +88,9 @@ class ChatEvalRunner {
         }
     }
 
-    Run run(ChatEvalSet set, String model, ChatEvalPrices prices, BigDecimal maxCost) throws Exception {
+    /** @param maxTurnCostOverridden whether {@code -Deval.maxTurnCost} set the context's turn cost limit */
+    Run run(ChatEvalSet set, String model, ChatEvalPrices prices, BigDecimal maxCost, boolean maxTurnCostOverridden)
+            throws Exception {
         long start = System.nanoTime();
         List<QuestionResult> results = new ArrayList<>();
         List<IndexBuild> index = new ArrayList<>();
@@ -128,7 +134,7 @@ class ChatEvalRunner {
         }
         seeder.clear();
         return new Run(set.name(), set.sha256(), set.version(), model, client.promptCaching().name(),
-                ChatPrompt.VERSION,
+                ChatPrompt.VERSION, limits.maxTurnCost().toPlainString(), maxTurnCostOverridden,
                 ChatEvalSet.sha256(resource("chat/system-prompt.txt")), prices.source(), today, settings(environment),
                 index, results, ledger, stopped, (System.nanoTime() - start) / 1_000_000);
     }
@@ -142,7 +148,8 @@ class ChatEvalRunner {
             observed.add(observation);
             shown.add(new Shown(observation.answer(), observation.source(), observation.tools().stream()
                     .map(ToolUse::name).filter(Objects::nonNull).collect(Collectors.toSet()),
-                    observation.citationsFound()));
+                    observation.citationsFound(), observation.limit(),
+                    observation.tools().stream().anyMatch(t -> "OK".equals(t.status()))));
             if (!observation.answered()) {
                 break; // a dialogue's later turns depend on this one
             }

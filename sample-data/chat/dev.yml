@@ -13,14 +13,19 @@
 #   forbidden  figures that must not appear (the injection canary)
 #   citations  locators (account, date, description words) of rows that must be among the citations
 #   dependsOnPrevious  the turn only makes sense with the earlier turns' context
+#   says       optional phrase check (step 8d): regular expressions, case ignored; at least one must match the answer
+#   neverSays  optional: regular expressions, case ignored, none of which may match the answer (for meanings the
+#              figures can't check: which period was higher, which baseline a change is from)
 #
 # Source kinds: spent, received, count, month, merchantSpent, row, diff, changePercent, average, max (SAMPLE);
 # fixtureTotal, fixtureAlert, fixtureRows (FIXTURE); injectionRows (INJECTION). Semantics in ChatQuestionSetsTest.
 set: dev
-version: 2
+version: 3
 # Revisions (docs/plans/phase-6.md, step 8b notes; dev only, the holdout is untouched):
 #   2 (2026-10-22, after the first dev run): d-x08 becomes a COMPARISON answered by get_category_totals' share of
 #     spending (computed in Java); d-s08 also accepts the internet bill's total over all data.
+#   3 (2026-10-22, after dev run 2, step 8d): phrase checks on d-c08 (March named as the higher month, never February)
+#     and d-t06 (the month-over-month change never called the change from the 3-month average). Figures unchanged.
 datasets:
   SAMPLE: {today: "2026-10-15", data: "sample-data/statements, categories from answer-key.csv; the last covered day is 2026-10-14, April to September have rows"}
   FIXTURE: {today: "2026-04-15", data: "sample-data/analytics, categories from categories.csv"}
@@ -236,6 +241,14 @@ questions:
         figures:
           - - {value: "1687.98", source: {fixtureTotal: {scope: "ALL", month: "2026-02", column: "spending"}}}
             - {value: "1809.48", source: {fixtureTotal: {scope: "ALL", month: "2026-03", column: "spending"}}}
+        says:
+          - '\b(?:more|higher|greater)\s+(?:spending\s+)?in\s+March\b'
+          - '\bMarch(?:\s+2026)?(?:''s\s+spending)?\s+(?:was|is|had|saw)\s+(?:the\s+)?(?:higher|more|greater|larger)\b'
+        neverSays:
+          - '\b(?:more|higher|greater)\s+(?:spending\s+)?in\s+February\b'
+          - '\bFebruary(?:\s+2026)?(?:''s\s+spending)?\s+(?:was|is|had|saw)\s+(?:the\s+)?(?:higher|more|greater|larger)\b'
+          - '\b(?:less|lower)\s+(?:spending\s+)?in\s+March\b'
+          - '\bMarch(?:\s+2026)?(?:''s\s+spending)?\s+(?:was|is)\s+(?:\$?[\d,]+(?:\.\d+)?\s+)?(?:less|lower)\b'
         note: "March carries the failed reconciliation flag"
   - id: d-t01
     author: assistant
@@ -306,6 +319,9 @@ questions:
         figures:
           - - {value: "225.00", source: {fixtureAlert: {type: "CATEGORY_SPIKE", month: "2026-04", subject: "Dining", column: "observed"}}}
             - {value: "66.67", source: {fixtureAlert: {type: "CATEGORY_SPIKE", month: "2026-04", subject: "Dining", column: "baseline"}}}
+        neverSays:
+          - '\$?175(?:\.00)?\s+(?:more|higher|above|over|up)\b[^.]{0,30}?\b(?:3|three)-month\s+average'
+          - '\b350(?:\.0)?\s*%[^.]{0,60}?\b(?:3|three)-month\s+average'
         note: "April is partial (the card's statement ends on the 14th)"
   - id: d-a01
     author: assistant

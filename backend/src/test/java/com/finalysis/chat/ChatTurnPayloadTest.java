@@ -45,7 +45,10 @@ import tools.jackson.databind.json.JsonMapper;
 @ChatIntegrationTest
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
-@TestPropertySource(properties = "logging.level.com.finalysis=DEBUG")
+// Step 8d: every tool's result whole in one round is now just over the default 12,000 estimated tokens, and the loop
+// would cut the oldest (get_month_totals) before it is sent; this test is about every payload going out checked.
+@TestPropertySource(properties = {"logging.level.com.finalysis=DEBUG",
+        "finalysis.chat.max-input-tokens-per-call=16000"})
 class ChatTurnPayloadTest {
 
     static final String QUESTION = "How much did I spend on my " + ChatInjectionFixture.NAME + " at "

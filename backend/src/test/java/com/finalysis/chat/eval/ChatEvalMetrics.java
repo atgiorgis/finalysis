@@ -22,10 +22,11 @@ import java.util.function.Predicate;
  * @param all         every question
  * @param byCategory  per category, in the set's order
  * @param userWritten the owner's own questions only
+ * @param limitStopped turns a limit stopped that are scored as limit-stopped (step 8d): never correct
  */
 record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWritten, Grounding grounding,
                        Refusals refusals, Injection injection, Citations citations, Map<LimitHit, Integer> limits,
-                       Usage usage, Latency latency) {
+                       int limitStopped, Usage usage, Latency latency) {
 
     /**
      * @param fallbacksCorrect correct turns whose shown answer was the Java fallback (counted in turnsCorrect too)
@@ -103,7 +104,7 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
                         count(turns, t -> !t.score().forbidden().isEmpty())),
                 new Citations(count(turns, t -> t.observed().citationsFound() != null),
                         count(turns, t -> Boolean.TRUE.equals(t.observed().citationsFound()))),
-                limits(turns), usage(turns), latency(questions, turns));
+                limits(turns), count(turns, t -> t.score().limitStopped()), usage(turns), latency(questions, turns));
     }
 
     static Totals totals(List<QuestionResult> questions) {

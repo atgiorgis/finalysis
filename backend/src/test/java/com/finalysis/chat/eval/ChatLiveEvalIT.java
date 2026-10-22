@@ -30,6 +30,7 @@ import org.springframework.test.context.TestPropertySource;
  * the only switch that lifts {@link NoCloudAiGuard} for this class.
  * <pre>
  * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=&lt;id&gt;
+ * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=&lt;id&gt; -Deval.maxTurnCost=0.10
  * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=holdout -Deval.holdout.confirm=true -Deval.model=&lt;id&gt;
  * </pre>
  *
@@ -37,7 +38,9 @@ import org.springframework.test.context.TestPropertySource;
  * (the price file must list it), and for the holdout {@link ChatEvalGuards} (pinned hash, confirmation, no earlier chat
  * holdout results, clean tree). The app's own limits apply to every turn, with the model's price from the price file;
  * only the daily cap is replaced by the run budget {@code -Deval.max-cost} (dollars), since a run is about 70
- * conversations on one pinned day. Only synthetic data is sent, and only what the chat guard allows.
+ * conversations on one pinned day. {@code -Deval.maxTurnCost} (dollars, step 8d) sets the turn cost limit for this run
+ * only, recorded in the report's header; the context's startup check refuses a model whose largest round passes the
+ * limit before anything is seeded or sent. Only synthetic data is sent, and only what the chat guard allows.
  */
 @Tag(NoCloudAiGuard.CHAT_EVAL_TAG)
 @EnabledIfSystemProperty(named = NoCloudAiGuard.CHAT_EVAL_PROPERTY, matches = "true")
@@ -60,6 +63,7 @@ class ChatLiveEvalIT {
     private static String model;
     private static ChatEvalPrices prices;
     private static BigDecimal maxCost;
+    private static BigDecimal maxTurnCost;
     private static GitState git;
     private static Instant startedAt;
 
@@ -75,6 +79,7 @@ class ChatLiveEvalIT {
         prices = ChatEvalPrices.load();
         model = ChatEvalGuards.model(System.getProperty("eval.model", ""), prices);
         maxCost = new BigDecimal(System.getProperty("eval.max-cost", "5.00"));
+        maxTurnCost = ChatEvalGuards.maxTurnCost(System.getProperty(ChatEvalGuards.MAX_TURN_COST_PROPERTY));
         if (set.equals(ChatEvalGuards.HOLDOUT)) {
             git = ChatEvalGuards.checkHoldout(setFile(set), Boolean.getBoolean(ChatEvalGuards.CONFIRM_PROPERTY),
                     RESULTS, () -> GitState.read(REPOSITORY));
@@ -89,12 +94,15 @@ class ChatLiveEvalIT {
     static void model(DynamicPropertyRegistry registry) {
         registry.add("finalysis.ai.roles.main", () -> model);
         prices.register(registry, model);
+        if (maxTurnCost != null) {
+            registry.add("finalysis.chat.max-turn-cost", maxTurnCost::toPlainString);
+        }
     }
 
     @Test
     void evaluate() throws Exception {
         ChatEvalSet questions = ChatEvalSet.load(setFile(set));
-        Run run = runner.run(questions, model, prices, maxCost);
+        Run run = runner.run(questions, model, prices, maxCost, maxTurnCost != null);
         ChatEvalReport report = ChatEvalReport.of(git, startedAt, questions, run);
         List<Path> files = report.write(RESULTS);
         System.out.println(report.consoleSummary());

@@ -1,6 +1,7 @@
 package com.finalysis.chat.eval;
 
 import com.finalysis.chat.AnswerSource;
+import com.finalysis.chat.LimitHit;
 import com.finalysis.chat.eval.ChatEvalSet.Expect;
 import com.finalysis.chat.eval.ChatEvalSet.ExpectedFigure;
 import com.finalysis.chat.eval.ChatEvalSet.FigureKind;
@@ -36,6 +37,11 @@ import java.util.stream.IntStream;
  *   <li><b>A refusal turn</b> is correct only when the shown answer has no figure at all and reads as a refusal
  *       ({@link #isRefusal}). The system prompt prescribes no fixed phrase, so a refusal is any of a fixed list of
  *       wordings ("can't tell", "don't have", "no data", "only answer questions about", ...), with no figure.</li>
+ *   <li><b>Phrase checks</b> (step 8d), opt-in per turn, where the figures can be right and the meaning wrong ("February
+ *       was higher" with both months' totals): at least one {@code says} expression must match the shown answer, and
+ *       no {@code neverSays} expression may.</li>
+ *   <li><b>Limit-stopped turns</b> (step 8d): a turn a limit stopped is never a correct refusal, and one stopped before
+ *       any tool returned data is never correct at all; both are reported as limit-stopped.</li>
  *   <li><b>Scoring notes</b> where figures alone can't decide ({@link #READINGS}): a dialogue whose turns accept
  *       several readings of a word must keep one reading across its turns, unless the first turn gave several or asked
  *       which one was meant (then a clarifying question also counts).</li>
@@ -62,6 +68,7 @@ final class ChatEvalScoring {
     private static final Pattern ONE = Pattern.compile("(?i)(?<![\\d.,$])1(?![\\d.,%])|\\bone\\b|\\ba single\\b");
     private static final Pattern ZERO = Pattern.compile("(?i)(?<![\\d.,$])0(?![\\d.,%])|\\bzero\\b|\\bno\\b|\\bnone\\b");
     private static final Pattern BARE_YEAR = Pattern.compile("20\\d{2}");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private ChatEvalScoring() {
     }
@@ -72,11 +79,19 @@ final class ChatEvalScoring {
      * @param answer         the shown text, or null when the turn failed (a model error or a refused request)
      * @param tools          the names of the tools the turn called (an invented name is not one)
      * @param citationsFound whether every expected citation is among the turn's; null when none is expected
+     * @param limit          the first limit the turn reached, or null
+     * @param data           whether any tool call of the turn returned data ({@code OK})
      */
-    record Shown(String answer, AnswerSource source, Set<String> tools, Boolean citationsFound) {
+    record Shown(String answer, AnswerSource source, Set<String> tools, Boolean citationsFound, LimitHit limit,
+                 boolean data) {
 
         Shown {
             tools = Set.copyOf(tools);
+        }
+
+        /** A turn no limit stopped. */
+        Shown(String answer, AnswerSource source, Set<String> tools, Boolean citationsFound) {
+            this(answer, source, tools, citationsFound, null, true);
         }
     }
 
@@ -87,9 +102,11 @@ final class ChatEvalScoring {
      * @param figures    every figure found in the shown answer, as written
      * @param forbidden  the forbidden figures that appeared
      * @param clarifying no figure and a question mark: the answer asks something back
+     * @param limitStopped a limit stopped the turn, and it expected a refusal or got no data (never correct)
      */
     record TurnScore(boolean correct, String reason, List<Integer> matched, List<String> figures,
-                     List<String> forbidden, boolean refusal, boolean clarifying, boolean toolChoice) {
+                     List<String> forbidden, boolean refusal, boolean clarifying, boolean toolChoice,
+                     boolean limitStopped) {
 
         TurnScore {
             matched = List.copyOf(matched);
@@ -97,8 +114,14 @@ final class ChatEvalScoring {
             forbidden = List.copyOf(forbidden);
         }
 
+        TurnScore(boolean correct, String reason, List<Integer> matched, List<String> figures,
+                  List<String> forbidden, boolean refusal, boolean clarifying, boolean toolChoice) {
+            this(correct, reason, matched, figures, forbidden, refusal, clarifying, toolChoice, false);
+        }
+
         TurnScore with(boolean correct, String reason) {
-            return new TurnScore(correct, reason, matched, figures, forbidden, refusal, clarifying, toolChoice);
+            return new TurnScore(correct, reason, matched, figures, forbidden, refusal, clarifying, toolChoice,
+                    limitStopped);
         }
     }
 
@@ -133,6 +156,10 @@ final class ChatEvalScoring {
         boolean refusal = figures.isEmpty() && isRefusal(text);
         boolean clarifying = figures.isEmpty() && text.contains("?");
 
+        if (shown.limit() != null && (turn.expect() == Expect.REFUSAL || !shown.data())) {
+            return new TurnScore(false, "limit-stopped (" + shown.limit() + ")", matched, written, forbidden, refusal,
+                    clarifying, toolChoice, true);
+        }
         if (turn.expect() == Expect.REFUSAL) {
             if (!figures.isEmpty()) {
                 return new TurnScore(false, "a refusal was expected; the answer has figures " + written, matched,
@@ -150,8 +177,23 @@ final class ChatEvalScoring {
                     + turn.figures().stream().map(a -> a.stream().map(ExpectedFigure::text).toList()).toList()
                     + ", found " + written, matched, written, forbidden, refusal, clarifying, toolChoice);
         }
+        String phrases = phraseProblem(turn, text);
+        if (phrases != null) {
+            return new TurnScore(false, phrases, matched, written, forbidden, refusal, clarifying, toolChoice);
+        }
         return new TurnScore(true, turn.figures().isEmpty() ? "answered (no figure expected)" : "correct", matched,
                 written, forbidden, refusal, clarifying, toolChoice);
+    }
+
+    /** Why the answer fails the turn's phrase checks, or null when it passes (or has none). */
+    static String phraseProblem(Turn turn, String answer) {
+        String text = WHITESPACE.matcher(answer.replace('’', '\'')).replaceAll(" ");
+        if (!turn.says().isEmpty() && turn.says().stream().noneMatch(p -> p.matcher(text).find())) {
+            return "says none of " + turn.says().stream().map(Pattern::pattern).toList();
+        }
+        List<String> said = turn.neverSays().stream().filter(p -> p.matcher(text).find()).map(Pattern::pattern)
+                .toList();
+        return said.isEmpty() ? null : "says what it must not: " + said;
     }
 
     /**

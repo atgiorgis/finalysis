@@ -73,14 +73,14 @@ class SearchTransactionsTool implements ChatTool {
 
     @Override
     public String description() {
-        return "Finds the merchants that match what the user describes, by name and by meaning. Returns the "
-                + "categories it matched, then candidates: merchant, match (NAME, MEANING, or CATEGORY: a merchant of a "
-                + "matched category; keep it only if it fits), similarity (not a figure for the answer), category, "
-                + "spent (a positive amount = money out after refunds) and count over the range. Then call "
-                + "get_merchant_totals with the ones that fit for their combined total, list_transactions with one, or "
-                + "get_category_totals for a whole category. Without month or from: every month with data; from and "
-                + "to say which. indexedMerchants below merchants, or byMeaning false: the search may have missed "
-                + "some.";
+        return "Finds merchants matching what the user describes, by name and meaning. Returns matched categories, "
+                + "then candidates: merchant, match (NAME, MEANING, or CATEGORY: a merchant of a matched category; "
+                + "keep it only if it fits), similarity (not a figure), category, spent (a positive amount = money "
+                + "out after refunds) and count over the range. Then: get_merchant_totals with the ones that fit "
+                + "(combined total), list_transactions with one, or get_category_totals for a whole category. Without "
+                + "month or from: every month with data; from and to say which. searchIndex (only when some merchants "
+                + "can't be found by meaning; it counts the index, not this search) or byMeaning false: it may have "
+                + "missed some.";
     }
 
     @Override

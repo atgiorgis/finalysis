@@ -192,8 +192,8 @@ class CitationTest {
         assertThat(sums).as("every kind of summed figure was checked").contains("income", "spending", "net",
                 "refundsNet", "uncategorized.moneyOut", "uncategorized.count", "unlinkedTransfersNet",
                 "dataQuality.countedTxns", "total.net", "total.moneyOut", "total.count", "months[].net",
-                "months[].moneyIn", "spent", "count", "amount", "previousMonth", "changeAmount", "a.value", "b.value",
-                "difference");
+                "months[].moneyIn", "spent", "count", "amount", "previousMonth", "changeFromPreviousMonth", "a.value",
+                "b.value", "difference");
     }
 
     @Test

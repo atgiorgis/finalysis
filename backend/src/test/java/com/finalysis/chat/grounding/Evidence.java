@@ -105,8 +105,9 @@ final class Evidence {
                 List.of(), false)), List.of(new AlertsView.Count("CATEGORY_SPIKE", 1)), false);
         String c1 = e.cell("Shopping · 2026-08");
         TrendsView trends = new TrendsView("2026-08", null, "Shopping", List.of(new TrendsView.Row(c1, "CATEGORY",
-                "EXPENSE", "Shopping", "SPENT", "1183.67", "301.20", "882.47", "293.0", new AverageView("244.42", 3, 3),
-                new AverageView("230.10", 6, 6), "198.00", "COMPLETE")));
+                "EXPENSE", "Shopping", "SPENT", "1183.67", "301.20", "882.47", "293.0",
+                new TrendsView.TrailingAverage("244.42", 3, 3, "939.25"),
+                new TrendsView.TrailingAverage("230.10", 6, 6, "953.57"), "198.00", "COMPLETE")));
         return e.result(ToolName.GET_ALERTS, "{\"limit\": 5}", alerts)
                 .result(ToolName.GET_TRENDS, "{\"month\": \"2026-08\", \"category\": \"Shopping\"}", trends);
     }

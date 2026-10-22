@@ -65,7 +65,7 @@ class ChatEvalReportTest {
                 new QuestionResult("h-u01", "LOOKUP", "user", true, "SAMPLE", 1, List.of(result(
                         set.question("h-u01").turns().getFirst(), "You spent $400.00 on groceries.\nThat's all.", true,
                         "So far in 2026 you spent $400.00."))));
-        Run run = new Run("holdout", "abc", 1, "test-model", "ON", "chat-3", "def", "the price file",
+        Run run = new Run("holdout", "abc", 1, "test-model", "ON", "chat-3", "0.10", true, "def", "the price file",
                 Map.of("SAMPLE", "2026-10-15"), Map.of("finalysis.chat.max-rounds", "5"),
                 List.of(new IndexBuild("SAMPLE", "OK", 40, 40, 0, 1, 0)), questions, new BigDecimal("0.003000"), null,
                 5000);
@@ -104,7 +104,10 @@ class ChatEvalReportTest {
                 .contains("First answer (not shown):\n\n> So far in 2026 you spent $400.00.")
                 .contains("retried for [2026]")
                 .contains("- Expected: 477.94 (a note)")
-                .contains("**h-u01 turn 1**: missing figures");
+                .contains("**h-u01 turn 1**: missing figures")
+                .contains("- Turn cost limit: $0.10 (-Deval.maxTurnCost, this run only; the app's setting is "
+                        + "unchanged)")
+                .contains("| Limits reached | Limit-stopped |");
     }
 
     @Test
@@ -131,18 +134,19 @@ class ChatEvalReportTest {
                 .contains("**Caching was asked for, but the model reported no cached tokens**");
 
         ChatEvalSet set = set();
-        Run off = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-5", "def", "p", Map.of(), Map.of(),
+        Run off = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-5", "0.05", false, "def", "p", Map.of(), Map.of(),
                 List.of(), List.of(), BigDecimal.ZERO, null, 0);
         assertThat(ChatEvalReport.of(GIT, STARTED, set, off).markdown())
                 .contains("- Prompt caching: off (the price file lists no cache prices for this model); every call "
                         + "uncached")
-                .doesNotContain("Caching was asked for");
+                .doesNotContain("Caching was asked for")
+                .contains("- Turn cost limit: $0.05 (the app's setting)");
     }
 
     @Test
     void aSetWithoutUserQuestionsSaysSo() {
         ChatEvalSet set = set();
-        Run run = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-3", "def", "p", Map.of(), Map.of(), List.of(), List.of(),
+        Run run = new Run("dev", "abc", 1, "m", "OFF_NO_CACHE_PRICES", "chat-3", "0.05", false, "def", "p", Map.of(), Map.of(), List.of(), List.of(),
                 BigDecimal.ZERO, "run budget reached", 0);
 
         String md = ChatEvalReport.of(GIT, STARTED, set, run).markdown();

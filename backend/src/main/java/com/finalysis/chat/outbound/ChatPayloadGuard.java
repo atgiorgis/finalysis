@@ -58,6 +58,8 @@ public class ChatPayloadGuard {
     private static final Pattern SIMILARITY = Pattern.compile("0\\.\\d{2}|1\\.00");
     private static final Pattern NUMBER = Pattern.compile("-?\\d{1,10}(?:\\.\\d{1,2})?");
     private static final Pattern MONTH = Pattern.compile("\\d{4}-(?:0[1-9]|1[0-2])");
+    private static final String YEAR_MONTH = "\\d{4}-(?:0[1-9]|1[0-2])";
+    private static final Pattern PERIOD = Pattern.compile(YEAR_MONTH + "(?: to " + YEAR_MONTH + ")?|\\d{4}-Q[1-4]|SAME");
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern ENUM = Pattern.compile("[A-Z][A-Z0-9_]{0,40}");
     private static final Pattern REF = Pattern.compile("[tcas][1-9]\\d{0,3}");
@@ -250,6 +252,7 @@ public class ChatPayloadGuard {
             case SIMILARITY -> SIMILARITY.matcher((String) value).matches();
             case NUMBER -> NUMBER.matcher((String) value).matches();
             case MONTH -> MONTH.matcher((String) value).matches();
+            case PERIOD -> PERIOD.matcher((String) value).matches();
             case DATE -> isDate((String) value);
             case CATEGORY -> guard.allowsCategory((String) value);
             case MERCHANT -> turn.merchantMayGo((String) value);

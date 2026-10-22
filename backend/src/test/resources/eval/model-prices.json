@@ -1,8 +1,9 @@
 {
   "source": "docs/plans/phase-4.md §4.5 and §11.1, docs/plans/phase-6.md §2.1 (on-demand, us-east-1, Anthropic list prices). Check the AWS Bedrock pricing page before relying on an estimate. Keyed by the exact Bedrock id: the chat evaluation (-Deval.model) and the chat smoke tests refuse a chat model not listed here, and give the app this price for its cost limits; a model not listed gets no estimate.",
-  "note": "Haiku 5.5 and Sonnet 5.5: list prices as of 2026-10-22, entered by the owner, who is checking them against the AWS Bedrock pricing page. Cache prices (step 8c), per million tokens of the cached prefix: a read is 0.1x the input price and a write 1.25x (5-minute TTL), for all three Claude models; chat asks a model to cache only when both are listed. Titan has none and is never cached.",
+  "note": "Haiku 5.5, Sonnet 5.5 and Sonnet 4.6: list prices as of 2026-10-22, entered by the owner, who is checking them against the AWS Bedrock pricing page. Haiku 5.5 and Sonnet 5.5 are listed but not yet available to this AWS account (access request pending). Cache prices (step 8c), per million tokens of the cached prefix: a read is 0.1x the input price and a write 1.25x (5-minute TTL), for all Claude models; chat asks a model to cache only when both are listed. Titan has none and is never cached.",
   "models": {
     "us.anthropic.claude-haiku-4-5-20251001-v1:0": { "inputPerMillionUsd": "1.00", "outputPerMillionUsd": "5.00", "cacheReadPerMillionUsd": "0.10", "cacheWritePerMillionUsd": "1.25" },
+    "us.anthropic.claude-sonnet-4-6": { "inputPerMillionUsd": "3.00", "outputPerMillionUsd": "15.00", "cacheReadPerMillionUsd": "0.30", "cacheWritePerMillionUsd": "3.75" },
     "us.anthropic.claude-haiku-5-5":  { "inputPerMillionUsd": "0.11", "outputPerMillionUsd": "0.55", "cacheReadPerMillionUsd": "0.011", "cacheWritePerMillionUsd": "0.1375" },
     "us.anthropic.claude-sonnet-5-5": { "inputPerMillionUsd": "2.20", "outputPerMillionUsd": "11.00", "cacheReadPerMillionUsd": "0.22", "cacheWritePerMillionUsd": "2.75" },
     "amazon.titan-embed-text-v2:0": { "inputPerMillionUsd": "0.02", "outputPerMillionUsd": "0" }

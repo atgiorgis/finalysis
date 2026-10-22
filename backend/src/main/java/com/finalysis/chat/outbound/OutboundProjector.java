@@ -284,8 +284,8 @@ public class OutboundProjector {
         String ref = turn.refs().ref(new RefRegistry.Cell(label, List.of(drill), trendFigures(row, rows, month)));
         return new TrendsView.Row(ref, row.line().name(), row.bucket() == null ? null : row.bucket().name(),
                 category(row.category()), row.measure().name(), money(row.amount()), money(row.previousMonth()),
-                money(row.changeAmount()), percent(row.changePercent()), average(row.trailing3()),
-                average(row.trailing6()), money(row.sameMonthLastYear()),
+                money(row.changeAmount()), percent(row.changePercent()), trailing(row.amount(), row.trailing3()),
+                trailing(row.amount(), row.trailing6()), money(row.sameMonthLastYear()),
                 row.monthCoverage() == null ? null : row.monthCoverage().name());
     }
 
@@ -302,8 +302,8 @@ public class OutboundProjector {
         Map<String, FigureBasis> figures = new HashMap<>();
         figures.put("amount", FigureBasis.sum(NET, List.of(at)));
         figures.put("previousMonth", FigureBasis.sum(NET, List.of(previous)));
-        figures.put("changeAmount", FigureBasis.sum(NET, List.of(at, previous.negated())));
-        figures.put("changePercent", FigureBasis.derived(List.of(at, previous)));
+        figures.put("changeFromPreviousMonth", FigureBasis.sum(NET, List.of(at, previous.negated())));
+        figures.put("changePercentFromPreviousMonth", FigureBasis.derived(List.of(at, previous)));
         figures.put("sameMonthLastYear", FigureBasis.sum(NET, List.of(lastYear)));
         for (int months : new int[] {3, 6}) {
             FigureBasis trailing = FigureBasis.derived(with(rows, "from", month.minusMonths(months).toString(),
@@ -311,6 +311,9 @@ public class OutboundProjector {
             for (String field : List.of("amount", "monthsUsed", "monthsWanted")) {
                 figures.put("trailing" + months + "." + field, trailing);
             }
+            figures.put("trailing" + months + ".differenceFromAverage", FigureBasis.derived(List.of(at,
+                    new FigureBasis.Term(sign, with(rows, "from", month.minusMonths(months).toString(),
+                            "to", month.minusMonths(1).toString())))));
         }
         return figures;
     }
@@ -333,7 +336,31 @@ public class OutboundProjector {
                         "changePercent", FigureBasis.derived(both))));
         return new ComparisonView(ref, r.measure().name(), category(r.category()),
                 turn.aliases().aliasOrNull(r.accountId()), side(r.a()), side(r.b()), money(r.difference()),
-                percent(r.changePercent()));
+                higherPeriod(r), percent(r.changePercent()));
+    }
+
+    /** The higher side's own label, or {@code SAME}, from the sign of {@code a − b}; null without a difference. */
+    static String higherPeriod(ComparisonResponse r) {
+        if (r.difference() == null) {
+            return null;
+        }
+        return switch (r.difference().signum()) {
+            case 1 -> periodLabel(r.a().range());
+            case -1 -> periodLabel(r.b().range());
+            default -> "SAME";
+        };
+    }
+
+    /** {@code 2026-03} for one month, {@code 2026-Q3} for a calendar quarter, else {@code 2026-01 to 2026-04}. */
+    static String periodLabel(MonthRange range) {
+        if (range.from().equals(range.to())) {
+            return range.from().toString();
+        }
+        int first = range.from().getMonthValue();
+        if (range.length() == 3 && first % 3 == 1) {
+            return range.from().getYear() + "-Q" + (first / 3 + 1);
+        }
+        return range.from() + " to " + range.to();
     }
 
     /**
@@ -407,7 +434,8 @@ public class OutboundProjector {
                         turn.merchant(c.spend().parts().getFirst().merchant()), c.match().name(),
                         ratio(c.similarity()), category(c.spend().category()), money(c.spend().spent()),
                         c.spend().count())).toList(),
-                r.coverage().merchants(), r.coverage().indexed());
+                r.coverage().indexed() < r.coverage().merchants()
+                        ? new SearchView.SearchIndex(r.coverage().merchants(), r.coverage().indexed()) : null);
     }
 
     // ------------------------------------------------------------------ get_merchant_totals
@@ -546,6 +574,15 @@ public class OutboundProjector {
 
     private static FlowView flow(MoneyFlow f) {
         return f == null ? null : new FlowView(money(f.moneyOut()), money(f.moneyIn()), money(f.net()), f.count());
+    }
+
+    /** A trend row's trailing average with the month's difference from it, subtracted here in Java (step 8d). */
+    static TrendsView.TrailingAverage trailing(BigDecimal amount, Average a) {
+        if (a == null) {
+            return null;
+        }
+        BigDecimal difference = amount == null || a.amount() == null ? null : amount.subtract(a.amount());
+        return new TrendsView.TrailingAverage(money(a.amount()), a.monthsUsed(), a.monthsWanted(), money(difference));
     }
 
     private static AverageView average(Average a) {

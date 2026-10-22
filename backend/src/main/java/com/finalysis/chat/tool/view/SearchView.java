@@ -2,6 +2,7 @@ package com.finalysis.chat.tool.view;
 
 import static com.finalysis.chat.tool.view.OutboundKind.*;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 
 /**
@@ -9,13 +10,24 @@ import java.util.List;
  * first, each with what it spent over the range (a positive amount = money out after refunds) by its ref; and how much
  * of the data search by meaning covers. The search text itself is never sent back.
  *
- * @param byMeaning        false when the search used names only (no embedding model, or its call failed)
- * @param merchants        distinct merchants in the data
- * @param indexedMerchants of those, the ones search by meaning can find
+ * @param byMeaning   false when the search used names only (no embedding model, or its call failed)
+ * @param searchIndex only when search by meaning can't yet find every merchant in the data; left out otherwise.
+ *                    Step 8d: its counts were a bare {@code merchants: 30} beside the candidates, which the model read
+ *                    as "found 30 merchants" (dev run 2, d-s05); nested, named for what they count, and sent only when
+ *                    they matter
  */
 public record SearchView(@Outbound(MONTH) String from, @Outbound(MONTH) String to, @Outbound(FLAG) Boolean byMeaning,
                          List<CategoryMatch> categories, List<Candidate> candidates,
-                         @Outbound(COUNT) Integer merchants, @Outbound(COUNT) Integer indexedMerchants) {
+                         @JsonInclude(JsonInclude.Include.NON_NULL) SearchIndex searchIndex) {
+
+    /**
+     * The search index against the data, not this search's results.
+     *
+     * @param merchantsInData     distinct merchants in all of the data
+     * @param searchableByMeaning of those, the ones search by meaning can find (fewer than {@code merchantsInData})
+     */
+    public record SearchIndex(@Outbound(COUNT) Integer merchantsInData, @Outbound(COUNT) Integer searchableByMeaning) {
+    }
 
     /** A category the search matched: by its name ({@code NAME}) or by meaning ({@code MEANING}, with similarity). */
     public record CategoryMatch(@Outbound(CATEGORY) String category, @Outbound(ENUM) String match,

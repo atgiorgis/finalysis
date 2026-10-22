@@ -31,8 +31,10 @@ class TrendsTool implements ChatTool {
     public String description() {
         return "One month against earlier ones, per line (total spending, total income, uncategorized, each category): "
                 + "amount as a positive magnitude (measure SPENT = money out after refunds, RECEIVED = money in), the "
-                + "previous month, changeAmount and changePercent from it, the trailing 3- and 6-month averages over "
-                + "complete months (with how many months counted) and the same month a year earlier.";
+                + "previous month with changeFromPreviousMonth and changePercentFromPreviousMonth (month over "
+                + "month), the trailing 3- and 6-month averages over complete months (with how many months counted, "
+                + "and differenceFromAverage: this month's amount minus that average, positive when above it) and the "
+                + "same month a year earlier. A change from the previous month is not a difference from an average.";
     }
 
     @Override

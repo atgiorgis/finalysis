@@ -235,8 +235,9 @@ class AnswerGroundingTest {
                     .extracting(GroundedSet.Value::ref, GroundedSet.Value::field)
                     .containsExactly(org.assertj.core.groups.Tuple.tuple("t1", "amount"));
             assertThat(set.values()).filteredOn(v -> "c1".equals(v.ref())).extracting(GroundedSet.Value::field)
-                    .contains("amount", "previousMonth", "changeAmount", "changePercent", "trailing3.amount",
-                            "trailing3.monthsUsed", "sameMonthLastYear");
+                    .contains("amount", "previousMonth", "changeFromPreviousMonth", "changePercentFromPreviousMonth",
+                            "trailing3.amount", "trailing3.monthsUsed", "trailing3.differenceFromAverage",
+                            "sameMonthLastYear");
             assertThat(set.values()).filteredOn(v -> "a1".equals(v.ref())).extracting(GroundedSet.Value::field)
                     .contains("basis.observed.value", "basis.settings[0].value.value", "details.increasePercent",
                             "details.baseline.amount");

@@ -3,6 +3,7 @@ package com.finalysis.chat.eval;
 import com.finalysis.account.AccountRepository;
 import com.finalysis.categorize.MerchantIndexRefresh;
 import com.finalysis.chat.ChatModelClient;
+import com.finalysis.chat.ChatProperties;
 import com.finalysis.chat.ChatService;
 import com.finalysis.support.MutableClock;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -35,7 +36,7 @@ class ChatEvalBeans {
     @Bean
     ChatEvalRunner chatEvalRunner(ChatService chat, ChatModelClient client, ChatEvalSeeder seeder,
                                   ChatCallRecorder recorder, MutableClock clock, JdbcTemplate jdbc,
-                                  ConfigurableEnvironment environment) {
-        return new ChatEvalRunner(chat, client, seeder, recorder, clock, jdbc, environment);
+                                  ConfigurableEnvironment environment, ChatProperties limits) {
+        return new ChatEvalRunner(chat, client, seeder, recorder, clock, jdbc, environment, limits);
     }
 }

@@ -382,6 +382,23 @@ class ChatServiceTest {
         assertThat(response.usage().rounds()).isEqualTo(2);
     }
 
+    /** Step 8d: a limit before any tool data is named in the answer, not shown as "I can't answer that". */
+    @Test
+    void aLimitBeforeAnyDataSaysWhichLimitWasReached() {
+        String invalid = "{\"month\": \"2026-13\"}";
+        for (int i = 0; i < 5; i++) {
+            model.then(model.toolCalls(call("get_month_totals", invalid)));
+        }
+
+        ChatTurnResponse response = ask("How much did I spend in March?");
+
+        assertThat(response.limitHit()).isEqualTo(LimitHit.ROUNDS);
+        assertThat(response.answerSource()).isEqualTo(AnswerSource.FALLBACK);
+        assertThat(response.answer()).isEqualTo("I stopped before getting any data from your records: this question "
+                + "reached the limit on model calls per question. Please try again, or ask a narrower question.");
+        assertThat(storedTurn()).containsEntry("limit_hit", "ROUNDS");
+    }
+
     @Test
     void theTurnCostLimitStopsBeforeACallThatCouldPassIt() {
         // 30,000 in and 4,000 out at $1 and $5 per million: $0.05 spent, so any further call would pass $0.05

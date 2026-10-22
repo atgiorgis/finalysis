@@ -21,6 +21,11 @@ public enum OutboundKind {
     DATE,
     /** A month, {@code yyyy-MM}. */
     MONTH,
+    /**
+     * A period's own label (step 8d): a month {@code 2026-03}, a calendar quarter {@code 2026-Q3}, a range
+     * {@code 2026-01 to 2026-04}, or {@code SAME}.
+     */
+    PERIOD,
     /** A category name (public, seeded or user-chosen labels). */
     CATEGORY,
     /** A merchant's outbound text: redacted and guard-checked, or {@code MERCHANT WITHHELD}. */

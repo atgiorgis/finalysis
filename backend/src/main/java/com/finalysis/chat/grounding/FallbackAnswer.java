@@ -1,5 +1,6 @@
 package com.finalysis.chat.grounding;
 
+import com.finalysis.chat.LimitHit;
 import com.finalysis.chat.ToolStatus;
 import com.finalysis.chat.tool.view.AccountTotalsView;
 import com.finalysis.chat.tool.view.AlertsView;
@@ -31,11 +32,15 @@ import java.util.stream.Collectors;
  * safe as the payloads, should it ever be shown to a model as history. Every figure is a value of a result, formatted
  * with thousands separators; money out is shown as a magnitude beside its word ("spending 2,345.67"), net keeps its
  * sign. No model is involved and nothing is computed.
+ *
+ * <p>With no data to show, a turn a limit stopped says which limit, never "I can't answer that from your data" (step
+ * 8d): the question may well be answerable, the turn just ran out of room. These lines hold no figure.
  */
 public final class FallbackAnswer {
 
     static final String HEADER = "I couldn't confirm every figure in my answer, so here is what the data returned:";
     static final String NOTHING = "I can't answer that from your data.";
+    static final String STOPPED = "I stopped before getting any data from your records: ";
     /** At most this many lines, then one line saying how many were left out. */
     static final int MAX_LINES = 20;
 
@@ -45,6 +50,11 @@ public final class FallbackAnswer {
     }
 
     public static String render(TurnEvidence evidence) {
+        return render(evidence, null);
+    }
+
+    /** @param limit the first limit the turn reached, or null */
+    public static String render(TurnEvidence evidence, LimitHit limit) {
         List<String> lines = new ArrayList<>();
         for (TurnEvidence.Result r : evidence.results()) {
             if (r.outcome().status() == ToolStatus.OK && r.outcome().view() != null) {
@@ -52,13 +62,24 @@ public final class FallbackAnswer {
             }
         }
         if (lines.isEmpty()) {
-            return NOTHING;
+            return limit == null ? NOTHING : STOPPED + stopped(limit);
         }
         List<String> shown = new ArrayList<>(lines.subList(0, Math.min(MAX_LINES, lines.size())));
         if (lines.size() > MAX_LINES) {
             shown.add("(" + (lines.size() - MAX_LINES) + " more rows not shown)");
         }
         return HEADER + "\n" + shown.stream().map(l -> "- " + l).collect(Collectors.joining("\n"));
+    }
+
+    /** Which limit, in words; no figure, so the line needs no grounding. */
+    static String stopped(LimitHit limit) {
+        return switch (limit) {
+            case COST -> "this question reached the cost limit per question.";
+            case TOKENS -> "this question reached the size limit for what can be sent per question.";
+            case TIME -> "this question reached the time limit per question.";
+            case ROUNDS -> "this question reached the limit on model calls per question.";
+            case TOOL_CALLS -> "this question reached the limit on data lookups per question.";
+        } + " Please try again, or ask a narrower question.";
     }
 
     static List<String> lines(Record view) {
@@ -84,14 +105,19 @@ public final class FallbackAnswer {
                     row.category() != null ? row.category() : label(row.line()), month(v.month()), v.account(),
                     ("SPENT".equals(row.measure()) ? "spent " : "received ") + signed(row.amount()),
                     row.previousMonth() == null ? null : "previous month " + signed(row.previousMonth()),
-                    row.changeAmount() == null ? null : "change " + signed(row.changeAmount())
-                            + (row.changePercent() == null ? "" : " (" + row.changePercent() + "%)"))
+                    row.changeFromPreviousMonth() == null ? null : "change from previous month "
+                            + signed(row.changeFromPreviousMonth())
+                            + (row.changePercentFromPreviousMonth() == null ? ""
+                                    : " (" + row.changePercentFromPreviousMonth() + "%)"),
+                    trailing("three-month", row.trailing3()), trailing("six-month", row.trailing6()))
                     + marker(row.ref())).toList();
             case ComparisonView v -> List.of(join(label(v.measure()) + (v.category() == null ? "" : " " + v.category()),
                     v.account(), span(v.a().from(), v.a().to()) + " " + signed(v.a().value()),
                     span(v.b().from(), v.b().to()) + " " + signed(v.b().value()),
                     "difference " + signed(v.difference())
-                            + (v.changePercent() == null ? "" : " (" + v.changePercent() + "%)"))
+                            + (v.changePercent() == null ? "" : " (" + v.changePercent() + "%)"),
+                    v.higherPeriod() == null ? null : "SAME".equals(v.higherPeriod()) ? "the same"
+                            : "higher: " + v.higherPeriod())
                     + marker(v.ref()));
             case TransactionsView v -> {
                 List<String> lines = new ArrayList<>();
@@ -142,6 +168,12 @@ public final class FallbackAnswer {
     private static String txnLine(TxnView t) {
         return join(t.date(), t.merchant() == null ? "(no merchant)" : t.merchant(), signed(t.amount()), t.account())
                 + marker(t.ref());
+    }
+
+    private static String trailing(String name, TrendsView.TrailingAverage average) {
+        return average == null || average.amount() == null ? null : name + " average " + signed(average.amount())
+                + (average.differenceFromAverage() == null ? ""
+                        : ", difference from it " + signed(average.differenceFromAverage()));
     }
 
     private static String quantity(AlertsView.Quantity q) {

@@ -302,13 +302,16 @@ class MerchantSearchTest {
 
         JsonNode result = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", \"limit\": 1}");
 
-        assertThat(result.get("merchants").intValue()).isEqualTo(merchants);
-        assertThat(result.get("indexedMerchants").intValue()).isEqualTo(indexed).isLessThanOrEqualTo(merchants)
-                .isPositive();
+        // step 8d: the counts go only when the index is incomplete, nested and named apart from the results
+        assertThat(indexed).isEqualTo(merchants);
+        assertThat(result.has("searchIndex")).isFalse();
+        assertThat(result.has("merchants")).isFalse();
+        assertThat(result.has("indexedMerchants")).isFalse();
 
         jdbc.update("DELETE FROM search_embedding WHERE subject = 'FIXTURE DINER'");
         JsonNode after = result(turns.start(), "search_transactions", "{\"query\": \"restaurant\", \"limit\": 10}");
-        assertThat(after.get("indexedMerchants").intValue()).isEqualTo(indexed - 1);
+        assertThat(after.get("searchIndex").get("merchantsInData").intValue()).isEqualTo(merchants);
+        assertThat(after.get("searchIndex").get("searchableByMeaning").intValue()).isEqualTo(indexed - 1);
         assertThat(merchants(after)).as("an unindexed merchant isn't found by meaning").containsExactly(
                 "FIXTURE GROCER");
     }

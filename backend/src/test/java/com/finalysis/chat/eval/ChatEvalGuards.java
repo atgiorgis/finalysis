@@ -2,6 +2,7 @@ package com.finalysis.chat.eval;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,8 @@ final class ChatEvalGuards {
 
     static final String HOLDOUT_SHA256 = "25ee03caab9e7ac8b3df26c37367f8a5c7d2bf1a454ed509aa033e700b4a3ad8";
     static final String CONFIRM_PROPERTY = "eval.holdout.confirm";
+    /** Step 8d: the turn cost limit for this run only, in dollars; the app's setting is unchanged. */
+    static final String MAX_TURN_COST_PROPERTY = "eval.maxTurnCost";
     static final String DEV = "dev";
     static final String HOLDOUT = "holdout";
     /** Results are {@code chat-<set>-<commit12>-<timestamp>.json} and {@code .md}. */
@@ -153,5 +156,27 @@ final class ChatEvalGuards {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * {@code -Deval.maxTurnCost}: empty for the app's own setting, else dollars by the setting's own rules (at least 0,
+     * at most 6 decimals; 0 turns the limit off). The context's startup check then refuses a model whose largest round
+     * passes it, as it would in the app.
+     */
+    static BigDecimal maxTurnCost(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        BigDecimal dollars;
+        try {
+            dollars = new BigDecimal(value.strip());
+        } catch (NumberFormatException e) {
+            throw new EvalRefusedException("-D" + MAX_TURN_COST_PROPERTY + " must be dollars, such as 0.10: " + value);
+        }
+        if (dollars.signum() < 0 || dollars.scale() > 6) {
+            throw new EvalRefusedException("-D" + MAX_TURN_COST_PROPERTY
+                    + " must be at least 0 dollars, with at most 6 decimals: " + value);
+        }
+        return dollars;
     }
 }

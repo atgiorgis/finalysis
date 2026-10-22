@@ -39,7 +39,8 @@ class ComparePeriodsTool implements ChatTool {
     @Override
     public String description() {
         return "Compares one measure between two periods: each side's value with its months' coverage, the "
-                + "difference (a − b) and changePercent (null when b is 0), computed exactly. SPENDING and "
+                + "difference (a − b), higherPeriod (the label of the period with the higher value, or SAME: use it "
+                + "to say which period was higher) and changePercent (null when b is 0), computed exactly. SPENDING and "
                 + "CATEGORY_SPENT are positive amounts (money out after refunds), INCOME and CATEGORY_RECEIVED money "
                 + "in, NET is signed (income minus spending). Use it for any difference or percent change; never compute "
                 + "one yourself.";

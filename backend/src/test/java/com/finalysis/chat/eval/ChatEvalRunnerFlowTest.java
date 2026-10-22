@@ -75,7 +75,7 @@ class ChatEvalRunnerFlowTest {
                 text("You spent $3,638.53 in June."),
                 text("I can't tell your credit score from your data."));
 
-        Run run = runner.run(set, ChatIntegrationTest.MAIN_MODEL, ChatEvalPrices.load(), new BigDecimal("5.00"));
+        Run run = runner.run(set, ChatIntegrationTest.MAIN_MODEL, ChatEvalPrices.load(), new BigDecimal("5.00"), false);
 
         assertThat(model.remaining()).isZero();
         assertThat(run.index()).singleElement().satisfies(index -> {
@@ -102,7 +102,7 @@ class ChatEvalRunnerFlowTest {
         assertThat(run.ledgerCost()).isPositive();
         assertThat(run.settings()).containsKey("finalysis.chat.max-rounds")
                 .containsEntry("finalysis.ai.roles.main", ChatIntegrationTest.MAIN_MODEL);
-        assertThat(run.promptVersion()).isEqualTo("chat-5");
+        assertThat(run.promptVersion()).isEqualTo("chat-6");
 
         ChatEvalMetrics metrics = ChatEvalMetrics.of(run.questions(), List.of("LOOKUP", "CANT_ANSWER"));
         assertThat(metrics.grounding().bareYearRetries()).isEqualTo(1);

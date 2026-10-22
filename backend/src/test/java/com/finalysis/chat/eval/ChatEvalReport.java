@@ -87,7 +87,8 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
 
     String consoleSummary() {
         return "Chat eval: " + run.set() + ", model " + run.model() + " (commit " + commit + (dirty ? ", dirty" : "")
-                + ")\nPrompt caching: " + caching() + "\n\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
+                + ")\nPrompt caching: " + caching() + "\nTurn cost limit: $" + run.maxTurnCost()
+                + (run.maxTurnCostOverridden() ? " (-Deval.maxTurnCost)" : "") + "\n\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
     }
 
     String markdown() {
@@ -105,6 +106,9 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "))).append("\n");
         md.append("- Prices: ").append(run.pricesSource()).append("\n");
         md.append("- Prompt caching: ").append(caching()).append("\n");
+        md.append("- Turn cost limit: $").append(run.maxTurnCost()).append(run.maxTurnCostOverridden()
+                ? " (-Deval.maxTurnCost, this run only; the app's setting is unchanged)" : " (the app's setting)")
+                .append("\n");
         if (run.stopped() != null) {
             md.append("- **Stopped early:** ").append(run.stopped()).append("\n");
         }
@@ -112,7 +116,9 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         md.append("Scoring is deterministic (no model judges): an answer turn is correct when every figure of one "
                 + "listed alternative appears in the shown answer by the grounding rule (exact, or whole dollars and "
                 + "percents rounded half-even) and no forbidden figure does; a refusal turn when the answer has no "
-                + "figure and refuses. A question is correct when all of its turns are. Every figure of a shown answer "
+                + "figure and refuses; a turn with phrase checks also needs one of its says expressions and none of "
+                + "its neverSays. A turn a limit stopped is never a correct refusal, nor correct at all without tool "
+                + "data (limit-stopped). A question is correct when all of its turns are. Every figure of a shown answer "
                 + "is grounded: the model's answer passed the check or the Java fallback was shown; correct turns "
                 + "answered by a fallback are counted apart. Costs are the app's estimates from the price file; a call "
                 + "without usage is counted at its worst case.\n\n");
@@ -145,8 +151,8 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         Totals all = metrics.all();
         ChatEvalMetrics.Grounding g = metrics.grounding();
         return "| Questions correct | Turns correct | of which fallbacks | First-try grounded | Model answer shown "
-                + "| Fallbacks shown | Failed | Tool choice | Limits reached | Bare-year retries | Cost (USD) "
-                + "| Mean turn (s) |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+                + "| Fallbacks shown | Failed | Tool choice | Limits reached | Limit-stopped | Bare-year retries "
+                + "| Cost (USD) | Mean turn (s) |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
                 + "| " + all.questionsCorrect() + " / " + all.questions() + " (" + pct(all.questionsCorrectPct()) + ")"
                 + " | " + all.turnsCorrect() + " / " + all.turns() + " (" + pct(all.turnsCorrectPct()) + ")"
                 + " | " + all.fallbacksCorrect()
@@ -155,6 +161,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 + " | " + g.fallbacks() + " | " + g.failed()
                 + " | " + all.toolChoice() + " (" + pct(all.toolChoicePct()) + ")"
                 + " | " + metrics.limits().values().stream().mapToInt(Integer::intValue).sum()
+                + " | " + metrics.limitStopped()
                 + " | " + g.bareYearRetries() + " of " + g.retries() + " retries"
                 + " | " + money(metrics.usage().cost())
                 + " | " + seconds(metrics.latency().meanTurnMillis()) + " |\n";

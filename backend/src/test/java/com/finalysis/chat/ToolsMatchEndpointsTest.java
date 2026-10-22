@@ -9,6 +9,7 @@ import com.finalysis.analytics.AnalyticsFixture;
 import com.finalysis.chat.outbound.OutboundTurnFactory;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -153,14 +154,36 @@ class ToolsMatchEndpointsTest {
         JsonNode tool = result("get_trends", "{\"month\": \"2026-03\"}");
         JsonNode api = api("/api/analytics/trends?month=2026-03");
 
+        Function<JsonNode, List<JsonNode>> apiFigures = r -> List.of(r.get("line"), r.get("measure"),
+                r.get("amount"), r.get("previousMonth"), r.get("changeAmount"), r.get("changePercent"),
+                r.get("trailing3").get("amount"), r.get("trailing6").get("amount"), r.get("sameMonthLastYear"));
+        // step 8d: the tool names the month-over-month change apart from the averages
         Function<JsonNode, List<JsonNode>> figures = r -> List.of(r.get("line"), r.get("measure"), r.get("amount"),
-                r.get("previousMonth"), r.get("changeAmount"), r.get("changePercent"), r.get("trailing3").get("amount"),
-                r.get("trailing6").get("amount"), r.get("sameMonthLastYear"));
-        assertThat(fields(tool.get("rows"), figures)).isEqualTo(fields(api.get("rows"), figures));
+                r.get("previousMonth"), r.get("changeFromPreviousMonth"), r.get("changePercentFromPreviousMonth"),
+                r.get("trailing3").get("amount"), r.get("trailing6").get("amount"), r.get("sameMonthLastYear"));
+        assertThat(fields(tool.get("rows"), figures)).isEqualTo(fields(api.get("rows"), apiFigures));
+        assertThat(tool.get("rows").valueStream().filter(r -> r.has("changeAmount") || r.has("changePercent")))
+                .isEmpty();
+        // and each average's difference is the month's amount less the endpoint's average, exactly
+        for (int i = 0; i < api.get("rows").size(); i++) {
+            JsonNode apiRow = api.get("rows").get(i);
+            JsonNode toolRow = tool.get("rows").get(i);
+            for (String trailing : List.of("trailing3", "trailing6")) {
+                JsonNode average = apiRow.get(trailing).get("amount");
+                JsonNode difference = toolRow.get(trailing).get("differenceFromAverage");
+                if (average == null || average.isNull()) {
+                    assertThat(difference == null || difference.isNull()).isTrue();
+                } else {
+                    assertThat(new BigDecimal(difference.stringValue())).isEqualByComparingTo(
+                            new BigDecimal(apiRow.get("amount").stringValue())
+                                    .subtract(new BigDecimal(average.stringValue())));
+                }
+            }
+        }
 
         JsonNode dining = result("get_trends", "{\"month\": \"2026-03\", \"category\": \"Dining\"}");
         JsonNode diningApi = api("/api/analytics/trends?month=2026-03&categoryId=" + this.dining);
-        assertThat(fields(dining.get("rows"), figures)).isEqualTo(fields(diningApi.get("rows"), figures));
+        assertThat(fields(dining.get("rows"), figures)).isEqualTo(fields(diningApi.get("rows"), apiFigures));
     }
 
     @Test
@@ -175,6 +198,13 @@ class ToolsMatchEndpointsTest {
         assertThat(tool.get("b").get("value")).isEqualTo(spending.get("previousMonth"));
         assertThat(tool.get("difference")).isEqualTo(spending.get("changeAmount"));
         assertThat(tool.get("changePercent")).isEqualTo(spending.get("changePercent"));
+        BigDecimal difference = new BigDecimal(tool.get("difference").stringValue());
+        assertThat(tool.get("higherPeriod").stringValue()).as("step 8d: the higher period's own label")
+                .isEqualTo(difference.signum() > 0 ? "2026-03" : difference.signum() < 0 ? "2026-02" : "SAME");
+        JsonNode swapped = result("compare_periods", "{\"measure\": \"SPENDING\", \"a\": {\"month\": \"2026-02\"}, "
+                + "\"b\": {\"month\": \"2026-03\"}}");
+        assertThat(swapped.get("higherPeriod")).as("the label, whichever side it is on")
+                .isEqualTo(tool.get("higherPeriod"));
 
         JsonNode diningTrend = api("/api/analytics/trends?month=2026-03&categoryId=" + dining).get("rows").valueStream()
                 .filter(r -> r.get("line").stringValue().equals("CATEGORY")

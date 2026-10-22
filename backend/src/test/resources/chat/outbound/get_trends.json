@@ -11,17 +11,19 @@
       "measure": "SPENT",
       "amount": "1399.24",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -34,17 +36,19 @@
       "measure": "SPENT",
       "amount": "42.00",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -57,17 +61,19 @@
       "measure": "SPENT",
       "amount": "115.50",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -80,17 +86,19 @@
       "measure": "SPENT",
       "amount": "1200.00",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -103,17 +111,19 @@
       "measure": "SPENT",
       "amount": "23.75",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -126,17 +136,19 @@
       "measure": "SPENT",
       "amount": "9.99",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -149,17 +161,19 @@
       "measure": "SPENT",
       "amount": "8.00",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -172,17 +186,19 @@
       "measure": "RECEIVED",
       "amount": "2500.85",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -195,17 +211,19 @@
       "measure": "RECEIVED",
       "amount": "2500.00",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"
@@ -218,17 +236,19 @@
       "measure": "RECEIVED",
       "amount": "0.85",
       "previousMonth": null,
-      "changeAmount": null,
-      "changePercent": null,
+      "changeFromPreviousMonth": null,
+      "changePercentFromPreviousMonth": null,
       "trailing3": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 3
+        "monthsWanted": 3,
+        "differenceFromAverage": null
       },
       "trailing6": {
         "amount": null,
         "monthsUsed": 0,
-        "monthsWanted": 6
+        "monthsWanted": 6,
+        "differenceFromAverage": null
       },
       "sameMonthLastYear": null,
       "monthCoverage": "COMPLETE"

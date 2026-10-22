@@ -129,4 +129,51 @@ class FigureExtractorTest {
         assertThat(FigureExtractor.extract("SHOP $5 and UP 10%", labels)).extracting(Figure::asWritten)
                 .containsExactly("$5", "10%");
     }
+
+    // ------------------------------------------------------------------ list numbers (step 8d)
+
+    private static List<String> written(String answer) {
+        return FigureExtractor.extract(answer).stream().map(Figure::asWritten).toList();
+    }
+
+    /** Dev run 2's d-a03 fell back over the list numbers [2, 3, 4, 5, 7]. */
+    @Test
+    void theNumbersOfANumberedListAreNotFigures() {
+        String answer = """
+                You pay these active monthly bills [s1, s2, s3, s4, s5, s6, s7]:
+
+                1. **Parkside Property Mgmt Rent Pmt** - $1,850.00 (Housing)
+                2. **Metro Power Co Online Pmt** - $114.64 last month (Utilities)
+                3. **Clearline Wireless Autopay** - $68.90 last month (Utilities)
+                4. **City of Arlington Water Util Pmt** - $47.98 last month (Utilities)
+                5. **Netflix.com** - $15.49 (Subscriptions)
+                6. **Spotify USA** - $12.99 last month (Subscriptions)
+                7. **Google Google One** - $2.99 (Subscriptions)
+
+                Your largest recurring expense is rent at $1,850.""";
+
+        assertThat(written(answer)).containsExactly("$1,850.00", "$114.64", "$68.90", "$47.98", "$15.49", "$12.99",
+                "$2.99", "$1,850");
+    }
+
+    @Test
+    void listsWithParenthesesIndentsAndASecondListAreMasked() {
+        assertThat(written("Top two:\n  1) Rent $1,850.00\n  2) Power $114.64\nAnd:\n1. Water 47.98\n2. Phone 68.90"))
+                .containsExactly("$1,850.00", "$114.64", "47.98", "68.90");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            // a lone number starting a line is still a figure
+            "You spent\\n150. That was the most.|150",
+            // a list that doesn't count up from 1 is no list
+            "2. Rent\\n3. Power|2,3",
+            "1. Rent\\n3. Power|3",
+            // the number itself must be followed by text, and a decimal is never a list number
+            "1. Rent\\n2.50 on fees|2.50",
+            // a list number mid-line is not one
+            "See item 1. and item 2. here|2"})
+    void numbersOutsideACountingListStayFigures(String answer, String expected) {
+        assertThat(written(answer.replace("\\n", "\n"))).containsExactly(expected.split(","));
+    }
 }

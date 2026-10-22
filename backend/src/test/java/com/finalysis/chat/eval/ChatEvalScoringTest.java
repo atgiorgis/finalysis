@@ -3,6 +3,7 @@ package com.finalysis.chat.eval;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.chat.AnswerSource;
+import com.finalysis.chat.LimitHit;
 import com.finalysis.chat.eval.ChatEvalScoring.Shown;
 import com.finalysis.chat.eval.ChatEvalScoring.TurnScore;
 import com.finalysis.chat.eval.ChatEvalSet.Expect;
@@ -12,10 +13,13 @@ import com.finalysis.chat.eval.ChatEvalSet.Turn;
 import com.finalysis.chat.grounding.AnswerCheck;
 import com.finalysis.chat.grounding.AnswerGrounding;
 import com.finalysis.chat.grounding.FigureExtractor;
+import com.finalysis.support.ImportTestSupport;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * The scoring rules (docs/plans/phase-6.md §13.3, step 8) on hand-written answers: no model, no database. Each rule is
@@ -269,5 +273,124 @@ class ChatEvalScoringTest {
         assertThat(figures.stream().filter(ChatEvalScoring::bareYear)).containsExactly("2026");
         assertThat(ChatEvalScoring.retryFigures("What did I spend in 2026?")).isEmpty();
         assertThat(ChatEvalScoring.bareYear("2,026")).isFalse();
+    }
+
+    // ------------------------------------------------------------------ limit-stopped turns (step 8d)
+
+    private static Shown stopped(String text, LimitHit limit, boolean data) {
+        return new Shown(text, AnswerSource.FALLBACK, Set.of(), null, limit, data);
+    }
+
+    /** The Sonnet 4.6 dev run: every turn stopped on COST before its first call, and refusals were counted correct. */
+    @Test
+    void aTurnALimitStoppedIsNeverACorrectRefusal() {
+        TurnScore before = ChatEvalScoring.score(refusal(), stopped("I can't answer that from your data.",
+                LimitHit.COST, false), LABELS);
+        assertThat(before.correct()).isFalse();
+        assertThat(before.limitStopped()).isTrue();
+        assertThat(before.reason()).isEqualTo("limit-stopped (COST)");
+
+        // even with data, a limit is never a correct refusal
+        assertThat(ChatEvalScoring.score(refusal(), stopped("There are no transactions in March 2025.",
+                LimitHit.TOOL_CALLS, true), LABELS).correct()).isFalse();
+        // and the same answer with no limit is one
+        assertThat(score(refusal(), "There are no transactions in March 2025.").correct()).isTrue();
+    }
+
+    @Test
+    void anAnswerTurnStoppedBeforeAnyDataIsLimitStopped() {
+        TurnScore none = ChatEvalScoring.score(answer(List.of(figures("190.10"))), stopped("I stopped before getting "
+                + "any data from your records: this question reached the time limit per question.", LimitHit.TIME,
+                false), LABELS);
+        assertThat(none.correct()).isFalse();
+        assertThat(none.limitStopped()).isTrue();
+        assertThat(none.reason()).isEqualTo("limit-stopped (TIME)");
+
+        // a limit after the data came back: the fallback's figures are scored as usual
+        TurnScore withData = ChatEvalScoring.score(answer(List.of(figures("190.10"))), stopped("Here is what the data "
+                + "returned: Dining spent 190.10 [1].", LimitHit.ROUNDS, true), LABELS);
+        assertThat(withData.correct()).isTrue();
+        assertThat(withData.limitStopped()).isFalse();
+    }
+
+    // ------------------------------------------------------------------ phrase checks (step 8d, dev revision 3)
+
+    private static Turn devTurn(String id) {
+        return ChatEvalSet.load(ImportTestSupport.SAMPLE_DATA.resolve("chat/dev.yml")).question(id).turns().getFirst();
+    }
+
+    private static TurnScore scoreDev(String id, String answer) {
+        return ChatEvalScoring.score(devTurn(id), new Shown(answer, AnswerSource.MODEL,
+                Set.of("compare_periods", "get_trends"), null), LABELS);
+    }
+
+    /** Dev run 2's d-c08: both totals right, February named as the higher month. */
+    @Test
+    void d_c08_run2sAnswerFailsThePhraseCheck() {
+        TurnScore score = scoreDev("d-c08", "You spent more in February 2026 than in March 2026. In February you spent "
+                + "$1,687.98, and in March you spent $1,809.48, so March was $121.50 less than February [1]. "
+                + "However, there was a failed reconciliation on your checking account in March, so that data should "
+                + "be reviewed for accuracy.");
+
+        assertThat(score.matched()).containsExactly(0);
+        assertThat(score.correct()).isFalse();
+        assertThat(score.reason()).startsWith("says none of");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "You spent more in March 2026: $1,809.48, against $1,687.98 in February [c1].",
+            "March 2026 was higher, at $1,809.48 compared with $1,687.98 in February [c1].",
+            "Spending was higher in March ($1,809.48) than in February ($1,687.98) [c1]. March has a failed "
+                    + "reconciliation, so check that month.",
+            "March's spending was higher: $1,809.48 vs $1,687.98 in February [c1]."})
+    void d_c08_marchNamedAsHigherInEitherOrderPasses(String answer) {
+        TurnScore score = scoreDev("d-c08", answer);
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+    }
+
+    @Test
+    void d_c08_februaryNamedAsHigherFailsEvenWhenMarchIsAlsoNamed() {
+        TurnScore score = scoreDev("d-c08", "February was higher than March? No: you spent more in March, $1,809.48 "
+                + "against $1,687.98 [c1].");
+
+        assertThat(score.correct()).isFalse();
+        assertThat(score.reason()).startsWith("says what it must not");
+    }
+
+    /** Dev run 2's d-t06: the month-over-month change called the change from the 3-month average. */
+    @Test
+    void d_t06_run2sAnswerFailsThePhraseCheck() {
+        TurnScore score = scoreDev("d-t06", "In April 2026, you spent $225.00 on dining, which was $175.00 more than "
+                + "your 3-month average of $66.67 [1]. That's an increase of 350% compared to the trailing 3-month "
+                + "average [1].\n\nNote: April's data is partial, so these figures may not reflect all your dining "
+                + "transactions for that month.");
+
+        assertThat(score.matched()).containsExactly(0);
+        assertThat(score.correct()).isFalse();
+        assertThat(score.reason()).startsWith("says what it must not");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "You spent $225.00 on dining in April 2026, $158.33 more than your 3-month average of $66.67 [t1]. April "
+                    + "is partial.",
+            "Dining in April 2026 was $225.00 against a 3-month average of $66.67 [t1]; it was $175.00 more than "
+                    + "the month before [t1].",
+            "April 2026 dining: $225.00, well above the 3-month average of $66.67 [t1], though April is partial."})
+    void d_t06_correctPhrasingsPass(String answer) {
+        TurnScore score = scoreDev("d-t06", answer);
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+    }
+
+    @Test
+    void phraseChecksIgnoreCaseAndCurlyApostrophes() {
+        Turn turn = new Turn("q", Expect.ANSWER, List.of(), List.of(), List.of(), List.of(), null, false,
+                List.of(ChatEvalSet.phrase("march's spending was higher")), List.of());
+
+        assertThat(ChatEvalScoring.phraseProblem(turn, "MARCH’S   spending was higher")).isNull();
+        assertThat(ChatEvalScoring.phraseProblem(turn, "February was higher")).startsWith("says none of");
     }
 }

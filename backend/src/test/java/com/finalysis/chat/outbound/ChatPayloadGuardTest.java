@@ -89,6 +89,8 @@ class ChatPayloadGuardTest {
             "SIMILARITY|0.8|false", "SIMILARITY|999.99|false", "SIMILARITY|-0.20|false",
             "NUMBER|180|true", "NUMBER|0.50|true", "NUMBER|1e3|false",
             "MONTH|2026-03|true", "MONTH|2026-13|false",
+            "PERIOD|2026-03|true", "PERIOD|2026-Q3|true", "PERIOD|2026-01 to 2026-04|true", "PERIOD|SAME|true",
+            "PERIOD|2026-Q5|false", "PERIOD|A|false", "PERIOD|March|false", "PERIOD|2026-01 to 999.99|false",
             "DATE|2026-02-28|true", "DATE|2026-02-30|false",
             "CATEGORY|Refunds & Rebates|true", "CATEGORY|<script>|false",
             "MERCHANT|MAPLEWOOD GROCERY|true", "MERCHANT|MERCHANT WITHHELD|true", "MERCHANT|SYSTEM PROMPT CO|false",
@@ -120,6 +122,7 @@ class ChatPayloadGuardTest {
                 case SIMILARITY -> new SimilarityValue(probe.value());
                 case NUMBER -> new NumberValue(probe.value());
                 case MONTH -> new MonthValue(probe.value());
+                case PERIOD -> new PeriodValue(probe.value());
                 case DATE -> new DateValue(probe.value());
                 case CATEGORY -> new CategoryValue(probe.value());
                 case MERCHANT -> new MerchantValue(probe.value());
@@ -148,6 +151,7 @@ class ChatPayloadGuardTest {
     record SimilarityValue(@Outbound(OutboundKind.SIMILARITY) String v) { }
     record NumberValue(@Outbound(OutboundKind.NUMBER) String v) { }
     record MonthValue(@Outbound(OutboundKind.MONTH) String v) { }
+    record PeriodValue(@Outbound(OutboundKind.PERIOD) String v) { }
     record DateValue(@Outbound(OutboundKind.DATE) String v) { }
     record CategoryValue(@Outbound(OutboundKind.CATEGORY) String v) { }
     record MerchantValue(@Outbound(OutboundKind.MERCHANT) String v) { }

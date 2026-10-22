@@ -99,8 +99,11 @@ final class ChatEvalResults {
      *                        ({@code ChatModelClient.PromptCaching}: {@code ON}, or why not; step 8c)
      * @param ledgerCost      every chat call's cost as the usage ledger summed it (turns and conversation summaries)
      * @param stopped         why the run stopped before the last question, or null when it finished
+     * @param maxTurnCost     the turn cost limit the run used, in dollars as written ({@code 0} is off; step 8d)
+     * @param maxTurnCostOverridden whether {@code -Deval.maxTurnCost} set it for this run
      */
     record Run(String set, String setSha256, int setVersion, String model, String promptCaching, String promptVersion,
+               String maxTurnCost, boolean maxTurnCostOverridden,
                String systemPromptSha256, String pricesSource, Map<String, String> todayByDataset,
                Map<String, String> settings, List<IndexBuild> index, List<QuestionResult> questions,
                BigDecimal ledgerCost, String stopped, long wallMillis) {

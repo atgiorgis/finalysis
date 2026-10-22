@@ -81,16 +81,80 @@ class ChatSettingsTest {
     void anUnpricedMainModelFailsStartupWhileACostLimitIsOn() {
         AiPrices none = new AiPrices(Map.of());
 
-        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, none, ChatLimits.defaults()))
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, none, ChatLimits.defaults(), false))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("no price for the main model main-model")
                 .hasMessageContaining("max-turn-cost and finalysis.chat.max-daily-cost to 0");
         ChatStartupCheck.verify(CLOUD, none, new ChatProperties(List.of(), 5, 8, 12_000, 40_000, 1_500,
-                Duration.ofSeconds(45), BigDecimal.ZERO, BigDecimal.ZERO, 90));
+                Duration.ofSeconds(45), BigDecimal.ZERO, BigDecimal.ZERO, 90), false);
         ChatStartupCheck.verify(CLOUD, new AiPrices(Map.of("main-model",
-                new AiPrices.Price(BigDecimal.ONE, new BigDecimal("5")))), ChatLimits.defaults());
+                new AiPrices.Price(BigDecimal.ONE, new BigDecimal("5")))), ChatLimits.defaults(), true);
         ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null),
-                true), none, ChatLimits.defaults());
+                true), none, ChatLimits.defaults(), false);
+    }
+
+    private static final AiPrices.Price SONNET_4_6 = new AiPrices.Price(new BigDecimal("3.00"),
+            new BigDecimal("15.00"), new BigDecimal("0.30"), new BigDecimal("3.75"));
+    private static final AiPrices.Price HAIKU_4_5 = new AiPrices.Price(new BigDecimal("1.00"),
+            new BigDecimal("5.00"), new BigDecimal("0.10"), new BigDecimal("1.25"));
+
+    private static AiPrices mainAt(AiPrices.Price price) {
+        return new AiPrices(Map.of("main-model", price));
+    }
+
+    /**
+     * Step 8d: the Sonnet 4.6 dev run stopped every turn on COST before its first call. The largest round the token
+     * limit lets through (12,000 in at the cache-write price, 1,500 out) is $0.0675, above $0.05; startup now refuses.
+     */
+    @Test
+    void aModelWhoseLargestRoundPassesTheTurnCostFailsStartup() {
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), ChatLimits.defaults(), true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("main-model")
+                .hasMessageContaining("$0.0675")
+                .hasMessageContaining("at the cache-write price")
+                .hasMessageContaining("finalysis.chat.max-turn-cost $0.05")
+                .hasMessageContaining("raise finalysis.chat.max-turn-cost to at least 0.0675");
+        // uncached: 12,000 × $3 + 1,500 × $15 = $0.0585, still above
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), ChatLimits.defaults(), false))
+                .hasMessageContaining("$0.0585");
+        // Haiku 4.5: 12,000 × $1.25 + 1,500 × $5 = $0.0225
+        ChatStartupCheck.verify(CLOUD, mainAt(HAIKU_4_5), ChatLimits.defaults(), true);
+        // the turn limit off, or raised to the round's worst case
+        ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0"), true);
+        ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0.0675"), true);
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0.067499"), true))
+                .isInstanceOf(IllegalStateException.class);
+        // AI off: nothing to check
+        ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles("main-model", null, null,
+                null), true), mainAt(SONNET_4_6), ChatLimits.defaults(), true);
+    }
+
+    /** Startup and the loop share one check: a setup startup passes lets the loop's largest first round through. */
+    @Test
+    void startupAndTheLoopPriceTheLargestRoundAlike() {
+        for (AiPrices.Price price : List.of(SONNET_4_6, HAIKU_4_5)) {
+            for (String cap : List.of("0.02", "0.05", "0.0585", "0.0675", "0.10")) {
+                for (boolean caching : List.of(true, false)) {
+                    ChatProperties limits = withTurnCost(cap);
+                    boolean loopLetsItThrough = TurnLoop.roundFits(BigDecimal.ZERO, TurnLoop.roundWorstCase(price,
+                            limits.maxInputTokensPerCall(), limits, caching), limits);
+                    boolean startupPasses;
+                    try {
+                        ChatStartupCheck.verify(CLOUD, mainAt(price), limits, caching);
+                        startupPasses = true;
+                    } catch (IllegalStateException e) {
+                        startupPasses = false;
+                    }
+                    assertThat(startupPasses).as("%s at %s, caching %s", price, cap, caching)
+                            .isEqualTo(loopLetsItThrough);
+                }
+            }
+        }
+    }
+
+    private static ChatProperties withTurnCost(String dollars) {
+        return bind(Map.of("finalysis.chat.max-turn-cost", dollars));
     }
 
     @Test
