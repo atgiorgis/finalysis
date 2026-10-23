@@ -1,0 +1,180 @@
+{
+  "counts": {
+    "statements": 1,
+    "unparsedUploads": 0,
+    "transferCandidates": 0,
+    "competingCandidates": 0,
+    "possibleMatches": 0,
+    "suggestedOneSidedTransfers": 8,
+    "aiCategoryReviews": 0,
+    "notTransferUncategorized": 0
+  },
+  "items": [
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-268",
+      "txn": {
+        "id": 268,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 21,
+        "txnDate": "2026-09-02",
+        "postDate": "2026-09-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-258",
+      "txn": {
+        "id": 258,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 20,
+        "txnDate": "2026-08-02",
+        "postDate": "2026-08-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-248",
+      "txn": {
+        "id": 248,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 19,
+        "txnDate": "2026-07-02",
+        "postDate": "2026-07-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-238",
+      "txn": {
+        "id": 238,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 18,
+        "txnDate": "2026-06-02",
+        "postDate": "2026-06-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "STATEMENT",
+      "statementId": 18,
+      "accountId": 1,
+      "accountName": "Northfield Bank Checking",
+      "fileName": "northfield-checking_2026-06.ofx",
+      "periodStart": "2026-06-01",
+      "periodEnd": "2026-06-30",
+      "balanceCheck": "FAILED",
+      "warnings": [
+        "reconciliation failed: continuity: statement 2's closingBalance + rows = closingBalance: expected 9135.55, actual 9125.55, difference -10.00"
+      ],
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-2",
+      "txn": {
+        "id": 2,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 1,
+        "txnDate": "2026-04-02",
+        "postDate": "2026-04-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-52",
+      "txn": {
+        "id": 52,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-02",
+        "postDate": null,
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-54",
+      "txn": {
+        "id": 54,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-09",
+        "postDate": null,
+        "amount": "-842.17",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "APEX VISA AUTOPAY"
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-60",
+      "txn": {
+        "id": 60,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-25",
+        "postDate": null,
+        "amount": "-512.40",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "SUMMIT CARD ONLINE PMT"
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "since": "2026-10-23T12:00:00Z"
+    }
+  ]
+}

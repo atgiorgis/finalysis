@@ -1,0 +1,135 @@
+{
+  "range": {
+    "from": "2026-09",
+    "to": "2026-09"
+  },
+  "accountId": null,
+  "categoryId": null,
+  "limit": 10,
+  "items": [
+    {
+      "merchant": "PARKSIDE PROPERTY MGMT RENT PMT",
+      "spent": "1850.00",
+      "count": 1,
+      "firstDate": "2026-09-01",
+      "lastDate": "2026-09-01",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "TARGET",
+      "spent": "264.33",
+      "count": 2,
+      "firstDate": "2026-09-15",
+      "lastDate": "2026-09-18",
+      "category": {
+        "id": 5,
+        "name": "Shopping",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "SAFEWAY",
+      "spent": "217.12",
+      "count": 3,
+      "firstDate": "2026-09-06",
+      "lastDate": "2026-09-23",
+      "category": {
+        "id": 2,
+        "name": "Groceries",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "TRADER JOE S",
+      "spent": "172.51",
+      "count": 3,
+      "firstDate": "2026-09-03",
+      "lastDate": "2026-09-30",
+      "category": {
+        "id": 2,
+        "name": "Groceries",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "CHIPOTLE",
+      "spent": "165.10",
+      "count": 5,
+      "firstDate": "2026-09-03",
+      "lastDate": "2026-09-21",
+      "category": {
+        "id": 1,
+        "name": "Dining",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "AMZN MKTP US",
+      "spent": "130.42",
+      "count": 2,
+      "firstDate": "2026-09-07",
+      "lastDate": "2026-09-24",
+      "category": {
+        "id": 5,
+        "name": "Shopping",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "BLUE BEAN CAFE",
+      "spent": "129.04",
+      "count": 4,
+      "firstDate": "2026-09-01",
+      "lastDate": "2026-09-16",
+      "category": {
+        "id": 1,
+        "name": "Dining",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "SHELL OIL",
+      "spent": "122.30",
+      "count": 3,
+      "firstDate": "2026-09-13",
+      "lastDate": "2026-09-17",
+      "category": {
+        "id": 7,
+        "name": "Transportation",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "METRO POWER CO ONLINE PMT",
+      "spent": "114.64",
+      "count": 1,
+      "firstDate": "2026-09-18",
+      "lastDate": "2026-09-18",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      }
+    },
+    {
+      "merchant": "GIANT FOOD",
+      "spent": "88.31",
+      "count": 2,
+      "firstDate": "2026-09-26",
+      "lastDate": "2026-09-28",
+      "category": {
+        "id": 2,
+        "name": "Groceries",
+        "kind": "EXPENSE"
+      }
+    }
+  ],
+  "othersSpent": "295.30",
+  "othersCount": 11,
+  "totalSpent": "3549.07",
+  "totalCount": 37
+}

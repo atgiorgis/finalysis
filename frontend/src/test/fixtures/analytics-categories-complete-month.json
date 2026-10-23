@@ -1,0 +1,311 @@
+{
+  "range": {
+    "from": "2026-09",
+    "to": "2026-09"
+  },
+  "accountId": null,
+  "categoryId": null,
+  "uncategorized": false,
+  "coverage": [
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE"
+    }
+  ],
+  "rows": [
+    {
+      "bucket": "INCOME",
+      "category": {
+        "id": 9,
+        "name": "Income",
+        "kind": "INCOME"
+      },
+      "total": {
+        "moneyOut": "0.00",
+        "moneyIn": "4900.24",
+        "net": "4900.24",
+        "count": 2
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "0.00",
+            "moneyIn": "4900.24",
+            "net": "4900.24",
+            "count": 2
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": null
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 1,
+        "name": "Dining",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-356.91",
+        "moneyIn": "0.00",
+        "net": "-356.91",
+        "count": 11
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-356.91",
+            "moneyIn": "0.00",
+            "net": "-356.91",
+            "count": 11
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 10.1
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 2,
+        "name": "Groceries",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-477.94",
+        "moneyIn": "0.00",
+        "net": "-477.94",
+        "count": 8
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-477.94",
+            "moneyIn": "0.00",
+            "net": "-477.94",
+            "count": 8
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 13.5
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 3,
+        "name": "Health",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-38.38",
+        "moneyIn": "0.00",
+        "net": "-38.38",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-38.38",
+            "moneyIn": "0.00",
+            "net": "-38.38",
+            "count": 1
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 1.1
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-1850.00",
+        "moneyIn": "0.00",
+        "net": "-1850.00",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-1850.00",
+            "moneyIn": "0.00",
+            "net": "-1850.00",
+            "count": 1
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 52.1
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 5,
+        "name": "Shopping",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-394.75",
+        "moneyIn": "0.00",
+        "net": "-394.75",
+        "count": 4
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-394.75",
+            "moneyIn": "0.00",
+            "net": "-394.75",
+            "count": 4
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 11.1
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 6,
+        "name": "Subscriptions",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-31.47",
+        "moneyIn": "0.00",
+        "net": "-31.47",
+        "count": 3
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-31.47",
+            "moneyIn": "0.00",
+            "net": "-31.47",
+            "count": 3
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 0.9
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 7,
+        "name": "Transportation",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-168.10",
+        "moneyIn": "0.00",
+        "net": "-168.10",
+        "count": 6
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-168.10",
+            "moneyIn": "0.00",
+            "net": "-168.10",
+            "count": 6
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 4.7
+    },
+    {
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "total": {
+        "moneyOut": "-231.52",
+        "moneyIn": "0.00",
+        "net": "-231.52",
+        "count": 3
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-231.52",
+            "moneyIn": "0.00",
+            "net": "-231.52",
+            "count": 3
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": 6.5
+    },
+    {
+      "bucket": "UNLINKED_TRANSFER",
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER"
+      },
+      "total": {
+        "moneyOut": "-500.00",
+        "moneyIn": "0.00",
+        "net": "-500.00",
+        "count": 1
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-500.00",
+            "moneyIn": "0.00",
+            "net": "-500.00",
+            "count": 1
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": null
+    },
+    {
+      "bucket": "LINKED_TRANSFER",
+      "category": null,
+      "total": {
+        "moneyOut": "-1403.46",
+        "moneyIn": "1403.46",
+        "net": "0.00",
+        "count": 4
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "flow": {
+            "moneyOut": "-1403.46",
+            "moneyIn": "1403.46",
+            "net": "0.00",
+            "count": 4
+          },
+          "reviewPending": null
+        }
+      ],
+      "spendingSharePercent": null
+    }
+  ],
+  "spending": -3549.07
+}

@@ -1,0 +1,125 @@
+{
+  "lastCoveredDay": "2026-10-14",
+  "latestMonth": "2026-10",
+  "latestCompleteMonth": "2026-09",
+  "accounts": [
+    {
+      "accountId": 1,
+      "name": "Northfield Bank Checking",
+      "firstDay": "2026-04-01",
+      "closedOn": null,
+      "covered": [
+        {
+          "start": "2026-04-01",
+          "end": "2026-09-30"
+        }
+      ],
+      "gaps": [
+        {
+          "start": "2026-10-01",
+          "end": "2026-10-14"
+        }
+      ],
+      "flaggedStatements": [
+        {
+          "statementId": 1,
+          "periodStart": "2026-04-01",
+          "periodEnd": "2026-04-30",
+          "flag": "BALANCE_UNVERIFIED",
+          "reviewedAt": null
+        },
+        {
+          "statementId": 2,
+          "periodStart": "2026-05-01",
+          "periodEnd": "2026-05-31",
+          "flag": "RECONCILIATION_FAILED",
+          "reviewedAt": "2026-10-23T12:00:00Z"
+        },
+        {
+          "statementId": 18,
+          "periodStart": "2026-06-01",
+          "periodEnd": "2026-06-30",
+          "flag": "RECONCILIATION_FAILED",
+          "reviewedAt": null
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "accountId": 2,
+      "name": "Northfield Bank Savings",
+      "firstDay": null,
+      "closedOn": null,
+      "covered": [],
+      "gaps": [],
+      "flaggedStatements": [],
+      "truncated": false
+    },
+    {
+      "accountId": 3,
+      "name": "Apex Visa (travel card)",
+      "firstDay": "2026-04-04",
+      "closedOn": null,
+      "covered": [
+        {
+          "start": "2026-04-04",
+          "end": "2026-10-14"
+        }
+      ],
+      "gaps": [],
+      "flaggedStatements": [],
+      "truncated": false
+    },
+    {
+      "accountId": 4,
+      "name": "Summit Cash Card",
+      "firstDay": "2026-04-01",
+      "closedOn": null,
+      "covered": [
+        {
+          "start": "2026-04-01",
+          "end": "2026-04-28"
+        },
+        {
+          "start": "2026-05-01",
+          "end": "2026-09-30"
+        }
+      ],
+      "gaps": [
+        {
+          "start": "2026-04-29",
+          "end": "2026-04-30"
+        },
+        {
+          "start": "2026-10-01",
+          "end": "2026-10-14"
+        }
+      ],
+      "flaggedStatements": [
+        {
+          "statementId": 5,
+          "periodStart": "2026-04-01",
+          "periodEnd": "2026-04-28",
+          "flag": "BALANCE_UNVERIFIED",
+          "reviewedAt": null
+        }
+      ],
+      "truncated": false
+    },
+    {
+      "accountId": 5,
+      "name": "Northfield Checking (imported twice)",
+      "firstDay": "2026-04-01",
+      "closedOn": "2026-04-30",
+      "covered": [
+        {
+          "start": "2026-04-01",
+          "end": "2026-04-30"
+        }
+      ],
+      "gaps": [],
+      "flaggedStatements": [],
+      "truncated": false
+    }
+  ]
+}

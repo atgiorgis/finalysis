@@ -1,0 +1,308 @@
+{
+  "range": {
+    "from": "2026-05",
+    "to": "2026-10"
+  },
+  "accountId": null,
+  "latestMonth": "2026-10",
+  "latestCompleteMonth": "2026-09",
+  "months": [
+    {
+      "month": "2026-05",
+      "coverage": "COMPLETE",
+      "income": "7350.30",
+      "spending": "-3431.35",
+      "net": "3918.95",
+      "savingsRatePercent": "53.3",
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "linkedTransfers": {
+        "moneyOut": "-1027.94",
+        "moneyIn": "527.94",
+        "net": "-500.00",
+        "count": 5
+      },
+      "netChange": "3418.95",
+      "txnCount": 41,
+      "dataQuality": {
+        "countedTxns": 36,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 0,
+        "uncategorizedPercentOfCount": "0.0",
+        "reviewPendingPercentOfCount": "0.0",
+        "uncategorizedPercentOfSpending": "0.0",
+        "flags": [
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 2,
+            "reviewedAt": "2026-10-23T12:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "month": "2026-06",
+      "coverage": "COMPLETE",
+      "income": "4899.65",
+      "spending": "-3638.53",
+      "net": "1261.12",
+      "savingsRatePercent": "25.7",
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "-500.00",
+        "moneyIn": "0.00",
+        "net": "-500.00",
+        "count": 1
+      },
+      "linkedTransfers": {
+        "moneyOut": "-1375.56",
+        "moneyIn": "1375.56",
+        "net": "0.00",
+        "count": 4
+      },
+      "netChange": "761.12",
+      "txnCount": 43,
+      "dataQuality": {
+        "countedTxns": 38,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 1,
+        "uncategorizedPercentOfCount": "0.0",
+        "reviewPendingPercentOfCount": "0.0",
+        "uncategorizedPercentOfSpending": "0.0",
+        "flags": [
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 18,
+            "reviewedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "month": "2026-07",
+      "coverage": "COMPLETE",
+      "income": "4903.39",
+      "spending": "-3497.62",
+      "net": "1405.77",
+      "savingsRatePercent": "28.7",
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "-500.00",
+        "moneyIn": "0.00",
+        "net": "-500.00",
+        "count": 1
+      },
+      "linkedTransfers": {
+        "moneyOut": "-1360.21",
+        "moneyIn": "1360.21",
+        "net": "0.00",
+        "count": 4
+      },
+      "netChange": "905.77",
+      "txnCount": 43,
+      "dataQuality": {
+        "countedTxns": 38,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 1,
+        "uncategorizedPercentOfCount": "0.0",
+        "reviewPendingPercentOfCount": "0.0",
+        "uncategorizedPercentOfSpending": "0.0",
+        "flags": []
+      }
+    },
+    {
+      "month": "2026-08",
+      "coverage": "COMPLETE",
+      "income": "4900.09",
+      "spending": "-4473.10",
+      "net": "426.99",
+      "savingsRatePercent": "8.7",
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "-500.00",
+        "moneyIn": "0.00",
+        "net": "-500.00",
+        "count": 1
+      },
+      "linkedTransfers": {
+        "moneyOut": "-1625.04",
+        "moneyIn": "1625.04",
+        "net": "0.00",
+        "count": 4
+      },
+      "netChange": "-73.01",
+      "txnCount": 45,
+      "dataQuality": {
+        "countedTxns": 40,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 1,
+        "uncategorizedPercentOfCount": "0.0",
+        "reviewPendingPercentOfCount": "0.0",
+        "uncategorizedPercentOfSpending": "0.0",
+        "flags": []
+      }
+    },
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE",
+      "income": "4900.24",
+      "spending": "-3549.07",
+      "net": "1351.17",
+      "savingsRatePercent": "27.6",
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "-500.00",
+        "moneyIn": "0.00",
+        "net": "-500.00",
+        "count": 1
+      },
+      "linkedTransfers": {
+        "moneyOut": "-1403.46",
+        "moneyIn": "1403.46",
+        "net": "0.00",
+        "count": 4
+      },
+      "netChange": "851.17",
+      "txnCount": 44,
+      "dataQuality": {
+        "countedTxns": 39,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 1,
+        "uncategorizedPercentOfCount": "0.0",
+        "reviewPendingPercentOfCount": "0.0",
+        "uncategorizedPercentOfSpending": "0.0",
+        "flags": []
+      }
+    },
+    {
+      "month": "2026-10",
+      "coverage": "PARTIAL",
+      "income": "0.00",
+      "spending": "0.00",
+      "net": "0.00",
+      "savingsRatePercent": null,
+      "refunds": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "uncategorized": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "unlinkedTransfers": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "linkedTransfers": {
+        "moneyOut": "0.00",
+        "moneyIn": "0.00",
+        "net": "0.00",
+        "count": 0
+      },
+      "netChange": "0.00",
+      "txnCount": 0,
+      "dataQuality": {
+        "countedTxns": 0,
+        "uncategorizedCount": 0,
+        "reviewPendingCount": 0,
+        "unlinkedTransferCount": 0,
+        "uncategorizedPercentOfCount": null,
+        "reviewPendingPercentOfCount": null,
+        "uncategorizedPercentOfSpending": null,
+        "flags": [
+          {
+            "type": "PARTIAL_COVERAGE",
+            "accountId": 1,
+            "statementId": null,
+            "reviewedAt": null
+          },
+          {
+            "type": "PARTIAL_COVERAGE",
+            "accountId": 3,
+            "statementId": null,
+            "reviewedAt": null
+          },
+          {
+            "type": "PARTIAL_COVERAGE",
+            "accountId": 4,
+            "statementId": null,
+            "reviewedAt": null
+          }
+        ]
+      }
+    }
+  ]
+}

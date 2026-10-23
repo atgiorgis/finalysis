@@ -1,0 +1,152 @@
+{
+  "accountId": null,
+  "status": "ALL",
+  "limit": 50,
+  "items": [
+    {
+      "accountId": 1,
+      "merchant": "CITY OF ARLINGTON WATER UTIL PMT",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "46.81",
+      "lastAmount": "47.98",
+      "fixedPrice": false,
+      "occurrences": 6,
+      "firstDate": "2026-04-22",
+      "lastDate": "2026-09-22",
+      "nextExpectedDate": "2026-10-22",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 3,
+      "merchant": "GOOGLE GOOGLE ONE",
+      "category": {
+        "id": 6,
+        "name": "Subscriptions",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "2.99",
+      "lastAmount": "2.99",
+      "fixedPrice": true,
+      "occurrences": 6,
+      "firstDate": "2026-04-20",
+      "lastDate": "2026-09-20",
+      "nextExpectedDate": "2026-10-20",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 1,
+      "merchant": "METRO POWER CO ONLINE PMT",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "96.60",
+      "lastAmount": "114.64",
+      "fixedPrice": false,
+      "occurrences": 6,
+      "firstDate": "2026-04-18",
+      "lastDate": "2026-09-18",
+      "nextExpectedDate": "2026-10-18",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 1,
+      "merchant": "CLEARLINE WIRELESS AUTOPAY",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "68.95",
+      "lastAmount": "68.90",
+      "fixedPrice": false,
+      "occurrences": 6,
+      "firstDate": "2026-04-15",
+      "lastDate": "2026-09-15",
+      "nextExpectedDate": "2026-10-15",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 3,
+      "merchant": "SPOTIFY USA",
+      "category": {
+        "id": 6,
+        "name": "Subscriptions",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "11.99",
+      "lastAmount": "12.99",
+      "fixedPrice": true,
+      "occurrences": 6,
+      "firstDate": "2026-04-12",
+      "lastDate": "2026-09-12",
+      "nextExpectedDate": "2026-10-12",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 3,
+      "merchant": "NETFLIX.COM",
+      "category": {
+        "id": 6,
+        "name": "Subscriptions",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "15.49",
+      "lastAmount": "15.49",
+      "fixedPrice": true,
+      "occurrences": 6,
+      "firstDate": "2026-04-06",
+      "lastDate": "2026-09-06",
+      "nextExpectedDate": "2026-10-06",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 1,
+      "merchant": "PARKSIDE PROPERTY MGMT RENT PMT",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "1850.00",
+      "lastAmount": "1850.00",
+      "fixedPrice": true,
+      "occurrences": 6,
+      "firstDate": "2026-04-01",
+      "lastDate": "2026-09-01",
+      "nextExpectedDate": "2026-10-01",
+      "status": "ACTIVE"
+    },
+    {
+      "accountId": 1,
+      "merchant": "SKYWAVE INTERNET AUTOPAY",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "cadence": "MONTHLY",
+      "typicalAmount": "79.99",
+      "lastAmount": "79.99",
+      "fixedPrice": true,
+      "occurrences": 5,
+      "firstDate": "2026-04-12",
+      "lastDate": "2026-08-12",
+      "nextExpectedDate": "2026-09-12",
+      "status": "ENDED"
+    }
+  ],
+  "truncated": false
+}

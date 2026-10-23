@@ -1,0 +1,285 @@
+{
+  "month": "2026-09",
+  "accountId": null,
+  "categoryId": null,
+  "rows": [
+    {
+      "line": "TOTAL_SPENDING",
+      "bucket": null,
+      "category": null,
+      "measure": "SPENT",
+      "amount": "3549.07",
+      "previousMonth": "4473.10",
+      "changeAmount": "-924.03",
+      "changePercent": "-20.7",
+      "trailing3": {
+        "amount": "3869.75",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "3760.15",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 1,
+        "name": "Dining",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "356.91",
+      "previousMonth": "340.63",
+      "changeAmount": "16.28",
+      "changePercent": "4.8",
+      "trailing3": {
+        "amount": "263.08",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "241.00",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 2,
+        "name": "Groceries",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "477.94",
+      "previousMonth": "540.99",
+      "changeAmount": "-63.05",
+      "changePercent": "-11.7",
+      "trailing3": {
+        "amount": "667.19",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "636.64",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 3,
+        "name": "Health",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "38.38",
+      "previousMonth": "40.77",
+      "changeAmount": "-2.39",
+      "changePercent": "-5.9",
+      "trailing3": {
+        "amount": "32.26",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "30.98",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "1850.00",
+      "previousMonth": "1850.00",
+      "changeAmount": "0.00",
+      "changePercent": "0.0",
+      "trailing3": {
+        "amount": "1850.00",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "1850.00",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 5,
+        "name": "Shopping",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "394.75",
+      "previousMonth": "1183.67",
+      "changeAmount": "-788.92",
+      "changePercent": "-66.7",
+      "trailing3": {
+        "amount": "544.81",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "479.24",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 6,
+        "name": "Subscriptions",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "31.47",
+      "previousMonth": "31.47",
+      "changeAmount": "0.00",
+      "changePercent": "0.0",
+      "trailing3": {
+        "amount": "31.14",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "30.97",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 7,
+        "name": "Transportation",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "168.10",
+      "previousMonth": "182.76",
+      "changeAmount": "-14.66",
+      "changePercent": "-8.0",
+      "trailing3": {
+        "amount": "187.48",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "195.44",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 8,
+        "name": "Utilities",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "231.52",
+      "previousMonth": "302.81",
+      "changeAmount": "-71.29",
+      "changePercent": "-23.5",
+      "trailing3": {
+        "amount": "293.79",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "295.88",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "TOTAL_INCOME",
+      "bucket": null,
+      "category": null,
+      "measure": "RECEIVED",
+      "amount": "4900.24",
+      "previousMonth": "4900.09",
+      "changeAmount": "0.15",
+      "changePercent": "0.0",
+      "trailing3": {
+        "amount": "4901.04",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "5513.36",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    },
+    {
+      "line": "CATEGORY",
+      "bucket": "INCOME",
+      "category": {
+        "id": 9,
+        "name": "Income",
+        "kind": "INCOME"
+      },
+      "measure": "RECEIVED",
+      "amount": "4900.24",
+      "previousMonth": "4900.09",
+      "changeAmount": "0.15",
+      "changePercent": "0.0",
+      "trailing3": {
+        "amount": "4901.04",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "5513.36",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    }
+  ]
+}

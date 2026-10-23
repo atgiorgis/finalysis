@@ -461,6 +461,36 @@ would reach is protected on disk as well. UI-08 stays Planned with that note.
 | 7b | Goals tab shell. | none | Goals test |
 | 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-03, UI-04, UI-05, UI-07, GOAL-06 tab; UI-08 stays Planned), CLAUDE.md current phase, tag `phase-7-done`. | none | full runs |
 
+### Step 0 notes: scaffolding
+
+Done: "Phase 7 step 0: frontend scaffolding". Backend 3,236 tests (from the surefire reports), 0 failures, 0 skipped
+(no backend change); frontend 47 tests (6 files), with `tsc` now part of `npm test`.
+
+- **Dependencies**, pinned exactly: `react-router-dom` 7.18.4, `recharts` 3.10.1, `@fontsource/inter` 5.3.0; dev
+  `@testing-library/user-event` 14.6.7 (14.6.8 was under two weeks old) and `@types/node` 22.20.5 (the guard test reads
+  files). No runtime request leaves the machine: Inter is bundled.
+- **Router**: `routes.tsx` holds the seven tabs in the plan's order, each a placeholder naming its step; `/` is still
+  the status page with the Phase 6 chat page until step 1; an unknown path goes to `/`.
+- **Theme**: `theme.css` with the §4.2 tokens; `index.css` no longer sets the font or color scheme.
+- **`format.ts`**: money, percents, months and dates from the API's strings, by string handling only (no float
+  parsing); a value in an unexpected shape is shown as it came.
+- **API types** in `api.ts` for every read the UI uses, a `getJson` helper and a `reads` object; the chat calls are
+  unchanged.
+- **Guard** (`noArithmetic.test.ts`): no file under `shell/`, `pages/` or `components/` (except
+  `components/charts/`) may call `parseFloat`, `parseInt`, `Number(`, `Math.*` or `toFixed`; a second test shows each
+  form is caught.
+- **Fixtures**: `scripts/capture-fixtures.mjs` (Node, not the plan's `.sh`: `jq` isn't installed, and Node's fetch reads
+  JSON) saves 18 reads under `src/test/fixtures/`, refuses to run unless AI is off, and replaces run-dependent
+  timestamps with a fixed one. Captured from a throwaway Postgres container (port 55432) and a backend on port 18080,
+  loaded by the README's newman folders (254 requests, 0 failures), then both removed; the dev database was not
+  touched. Two captures gave identical files. `src/test/fixtures.ts` types each file against `api.ts` at compile time
+  (string unions compared as strings); a fixture missing a required field fails `tsc` (checked by hand).
+- **Finding:** `GET /api/analytics/categories` returns `spending` and each row's `spendingSharePercent` as JSON
+  numbers, unlike every other amount and percent (strings). Both were added in Phase 6 step 8b without `@ApiMoney` /
+  `@ApiPercent`. Typed as numbers and not shown; the dashboard endpoint (step 2) returns its shares as strings. Not
+  changed here: it is Phase 6 code that works, and the chat tool reads the same record. The fixture also shows REFUND
+  rows with negative shares, which step 2's slices follow (§3.1).
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Evidence |

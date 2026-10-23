@@ -1,0 +1,524 @@
+{
+  "range": {
+    "from": "2026-04",
+    "to": "2026-10"
+  },
+  "accountId": null,
+  "type": null,
+  "includeDismissed": true,
+  "limit": 100,
+  "items": [
+    {
+      "key": "category-spike.2026-08.4355a46b19d348dc",
+      "type": "CATEGORY_SPIKE",
+      "month": "2026-08",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "340.63"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "207.79"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "311.68"
+        },
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-07-31",
+        "settings": [
+          {
+            "name": "min-increase-percent",
+            "value": {
+              "unit": "PERCENT",
+              "value": "50.0"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "100.00"
+            }
+          },
+          {
+            "name": "min-baseline-months",
+            "value": {
+              "unit": "COUNT",
+              "value": "3"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "CATEGORY_SPIKE",
+        "category": {
+          "id": 1,
+          "name": "Dining",
+          "kind": "EXPENSE"
+        },
+        "spent": "340.63",
+        "baseline": {
+          "amount": "207.79",
+          "monthsUsed": 3,
+          "monthsWanted": 3
+        },
+        "increaseAmount": "132.84",
+        "increasePercent": "63.9"
+      },
+      "txns": [
+        {
+          "id": 213,
+          "accountId": 4,
+          "txnDate": "2026-08-22",
+          "amount": "-43.88",
+          "merchant": "NAKAMURA RAMEN"
+        },
+        {
+          "id": 214,
+          "accountId": 4,
+          "txnDate": "2026-08-24",
+          "amount": "-42.09",
+          "merchant": "BLUE BEAN CAFE"
+        },
+        {
+          "id": 206,
+          "accountId": 4,
+          "txnDate": "2026-08-05",
+          "amount": "-38.65",
+          "merchant": "CHIPOTLE"
+        },
+        {
+          "id": 212,
+          "accountId": 4,
+          "txnDate": "2026-08-19",
+          "amount": "-36.14",
+          "merchant": "DOORDASH THAI BASIL"
+        },
+        {
+          "id": 210,
+          "accountId": 4,
+          "txnDate": "2026-08-14",
+          "amount": "-35.91",
+          "merchant": "BLUE BEAN CAFE"
+        },
+        {
+          "id": 205,
+          "accountId": 4,
+          "txnDate": "2026-08-03",
+          "amount": "-32.93",
+          "merchant": "NAKAMURA RAMEN"
+        },
+        {
+          "id": 216,
+          "accountId": 4,
+          "txnDate": "2026-08-27",
+          "amount": "-32.01",
+          "merchant": "CHIPOTLE"
+        },
+        {
+          "id": 208,
+          "accountId": 4,
+          "txnDate": "2026-08-12",
+          "amount": "-28.69",
+          "merchant": "BLUE BEAN CAFE"
+        },
+        {
+          "id": 207,
+          "accountId": 4,
+          "txnDate": "2026-08-09",
+          "amount": "-26.79",
+          "merchant": "DOORDASH THAI BASIL"
+        },
+        {
+          "id": 217,
+          "accountId": 4,
+          "txnDate": "2026-08-28",
+          "amount": "-23.54",
+          "merchant": "CHIPOTLE"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 2,
+          "reviewedAt": "2026-10-23T12:00:00Z"
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 18,
+          "reviewedAt": null
+        }
+      ],
+      "dismissed": false,
+      "dismissedAt": null,
+      "note": null
+    },
+    {
+      "key": "category-spike.2026-08.f0b5c2c2211c8d67",
+      "type": "CATEGORY_SPIKE",
+      "month": "2026-08",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "1183.67"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "244.42"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "366.63"
+        },
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-07-31",
+        "settings": [
+          {
+            "name": "min-increase-percent",
+            "value": {
+              "unit": "PERCENT",
+              "value": "50.0"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "100.00"
+            }
+          },
+          {
+            "name": "min-baseline-months",
+            "value": {
+              "unit": "COUNT",
+              "value": "3"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "CATEGORY_SPIKE",
+        "category": {
+          "id": 5,
+          "name": "Shopping",
+          "kind": "EXPENSE"
+        },
+        "spent": "1183.67",
+        "baseline": {
+          "amount": "244.42",
+          "monthsUsed": 3,
+          "monthsWanted": 3
+        },
+        "increaseAmount": "939.25",
+        "increasePercent": "384.3"
+      },
+      "txns": [
+        {
+          "id": 139,
+          "accountId": 3,
+          "txnDate": "2026-08-22",
+          "amount": "-899.99",
+          "merchant": "BEST BUY"
+        },
+        {
+          "id": 138,
+          "accountId": 3,
+          "txnDate": "2026-08-22",
+          "amount": "-103.62",
+          "merchant": "AMZN MKTP US"
+        },
+        {
+          "id": 128,
+          "accountId": 3,
+          "txnDate": "2026-08-01",
+          "amount": "-100.75",
+          "merchant": "TARGET"
+        },
+        {
+          "id": 126,
+          "accountId": 3,
+          "txnDate": "2026-08-02",
+          "amount": "-50.77",
+          "merchant": "AMZN MKTP US"
+        },
+        {
+          "id": 143,
+          "accountId": 3,
+          "txnDate": "2026-08-28",
+          "amount": "-28.54",
+          "merchant": "AMZN MKTP US"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 2,
+          "reviewedAt": "2026-10-23T12:00:00Z"
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 18,
+          "reviewedAt": null
+        }
+      ],
+      "dismissed": false,
+      "dismissedAt": null,
+      "note": null
+    },
+    {
+      "key": "large-transaction.2026-08.10c74308b2e74e9d",
+      "type": "LARGE_TRANSACTION",
+      "month": "2026-08",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "899.99"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "66.43"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "500.00"
+        },
+        "periodStart": "2026-02-23",
+        "periodEnd": "2026-08-21",
+        "settings": [
+          {
+            "name": "min-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "500.00"
+            }
+          },
+          {
+            "name": "times-median",
+            "value": {
+              "unit": "RATIO",
+              "value": "3.00"
+            }
+          },
+          {
+            "name": "history-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "180"
+            }
+          },
+          {
+            "name": "min-history",
+            "value": {
+              "unit": "COUNT",
+              "value": "5"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "LARGE_TRANSACTION",
+        "txn": {
+          "id": 139,
+          "accountId": 3,
+          "txnDate": "2026-08-22",
+          "amount": "-899.99",
+          "merchant": "BEST BUY"
+        },
+        "category": {
+          "id": 5,
+          "name": "Shopping",
+          "kind": "EXPENSE"
+        },
+        "median": "66.43",
+        "historyCount": 15,
+        "timesMedian": "13.55"
+      },
+      "txns": [
+        {
+          "id": 139,
+          "accountId": 3,
+          "txnDate": "2026-08-22",
+          "amount": "-899.99",
+          "merchant": "BEST BUY"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "PARTIAL_COVERAGE",
+          "accountId": 3,
+          "statementId": null,
+          "reviewedAt": null
+        },
+        {
+          "type": "PARTIAL_COVERAGE",
+          "accountId": 4,
+          "statementId": null,
+          "reviewedAt": null
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 2,
+          "reviewedAt": "2026-10-23T12:00:00Z"
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 18,
+          "reviewedAt": null
+        }
+      ],
+      "dismissed": false,
+      "dismissedAt": null,
+      "note": null
+    },
+    {
+      "key": "recurring-price-increase.2026-07.1e8efd1308f77888",
+      "type": "RECURRING_PRICE_INCREASE",
+      "month": "2026-07",
+      "basis": {
+        "observed": {
+          "unit": "MONEY",
+          "value": "12.99"
+        },
+        "baseline": {
+          "unit": "MONEY",
+          "value": "11.99"
+        },
+        "threshold": {
+          "unit": "MONEY",
+          "value": "12.49"
+        },
+        "periodStart": "2026-05-12",
+        "periodEnd": "2026-07-12",
+        "settings": [
+          {
+            "name": "stable-count",
+            "value": {
+              "unit": "COUNT",
+              "value": "2"
+            }
+          },
+          {
+            "name": "min-increase-amount",
+            "value": {
+              "unit": "MONEY",
+              "value": "0.50"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "RECURRING_PRICE_INCREASE",
+        "merchant": "SPOTIFY USA",
+        "accountId": 3,
+        "previousAmount": "11.99",
+        "newAmount": "12.99",
+        "increaseAmount": "1.00",
+        "increasePercent": "8.3"
+      },
+      "txns": [
+        {
+          "id": 117,
+          "accountId": 3,
+          "txnDate": "2026-07-12",
+          "amount": "-12.99",
+          "merchant": "SPOTIFY USA"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 2,
+          "reviewedAt": "2026-10-23T12:00:00Z"
+        },
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 18,
+          "reviewedAt": null
+        }
+      ],
+      "dismissed": false,
+      "dismissedAt": null,
+      "note": null
+    },
+    {
+      "key": "possible-duplicate.2026-06.8eedc1646cd20a2d",
+      "type": "POSSIBLE_DUPLICATE",
+      "month": "2026-06",
+      "basis": {
+        "observed": {
+          "unit": "COUNT",
+          "value": "2"
+        },
+        "baseline": null,
+        "threshold": {
+          "unit": "COUNT",
+          "value": "2"
+        },
+        "periodStart": "2026-06-13",
+        "periodEnd": "2026-06-13",
+        "settings": [
+          {
+            "name": "window-days",
+            "value": {
+              "unit": "DAYS",
+              "value": "1"
+            }
+          }
+        ]
+      },
+      "details": {
+        "type": "POSSIBLE_DUPLICATE",
+        "reasons": [
+          "SAME_MERCHANT_AMOUNT_DATE"
+        ],
+        "amount": "84.12",
+        "merchant": "SAFEWAY"
+      },
+      "txns": [
+        {
+          "id": 94,
+          "accountId": 3,
+          "txnDate": "2026-06-13",
+          "amount": "-84.12",
+          "merchant": "SAFEWAY"
+        },
+        {
+          "id": 95,
+          "accountId": 3,
+          "txnDate": "2026-06-13",
+          "amount": "-84.12",
+          "merchant": "SAFEWAY"
+        }
+      ],
+      "dataFlags": [
+        {
+          "type": "RECONCILIATION_FAILED",
+          "accountId": 1,
+          "statementId": 18,
+          "reviewedAt": null
+        }
+      ],
+      "dismissed": false,
+      "dismissedAt": null,
+      "note": null
+    }
+  ],
+  "counts": {
+    "CATEGORY_SPIKE": 2,
+    "LARGE_TRANSACTION": 1,
+    "POSSIBLE_DUPLICATE": 1,
+    "RECURRING_PRICE_INCREASE": 1,
+    "NEW_RECURRING": 0
+  },
+  "truncated": false
+}

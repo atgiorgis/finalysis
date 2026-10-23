@@ -1,0 +1,76 @@
+/*
+ * Theme tokens from the approved mockup (docs/plans/phase-7.md §4.2), named by role.
+ * Light only for now: the mockup has no dark variant.
+ */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+:root {
+  color-scheme: light;
+
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-muted: #eef1f5;
+  --border: #e2e7ee;
+  --text: #17202b;
+  --text-muted: #5b6573;
+  --nav: #1b2b44;
+  --accent: #1d4ed8;
+  --accent-strong: #1e3a8a;
+  --income: #0f766e;
+  --spending: #3b5bdb;
+  --warning: #b45309;
+  --warning-bg: #fdf0dc;
+  --danger: #b91c1c;
+  --danger-bg: #fdecec;
+
+  /* Donut slices by rank in the month, then Other and Uncategorized. */
+  --slice-1: #1e3a8a;
+  --slice-2: #3b82f6;
+  --slice-3: #d97706;
+  --slice-4: #0f766e;
+  --slice-5: #ea580c;
+  --slice-6: #7c3aed;
+  --slice-other: #94a3b8;
+  --slice-uncat: #cbd5e1;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+  --radius-pill: 999px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --touch-target: 44px;
+
+  --font: Inter, system-ui, -apple-system, sans-serif;
+
+  font-family: var(--font);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -1,0 +1,47 @@
+[
+  {
+    "id": 3,
+    "name": "Apex Visa (travel card)",
+    "institution": "Apex",
+    "type": "CREDIT_CARD",
+    "lastFour": "2001",
+    "createdAt": "2026-10-23T12:00:00Z",
+    "closedOn": null
+  },
+  {
+    "id": 1,
+    "name": "Northfield Bank Checking",
+    "institution": "Northfield Bank",
+    "type": "CHECKING",
+    "lastFour": "1001",
+    "createdAt": "2026-10-23T12:00:00Z",
+    "closedOn": null
+  },
+  {
+    "id": 2,
+    "name": "Northfield Bank Savings",
+    "institution": "Northfield Bank",
+    "type": "SAVINGS",
+    "lastFour": "1002",
+    "createdAt": "2026-10-23T12:00:00Z",
+    "closedOn": null
+  },
+  {
+    "id": 5,
+    "name": "Northfield Checking (imported twice)",
+    "institution": "Northfield Credit Union",
+    "type": "CHECKING",
+    "lastFour": "1001",
+    "createdAt": "2026-10-23T12:00:00Z",
+    "closedOn": "2026-04-30"
+  },
+  {
+    "id": 4,
+    "name": "Summit Cash Card",
+    "institution": "Summit",
+    "type": "CREDIT_CARD",
+    "lastFour": "3001",
+    "createdAt": "2026-10-23T12:00:00Z",
+    "closedOn": null
+  }
+]

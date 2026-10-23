@@ -1,0 +1,33 @@
+{
+  "month": "2026-09",
+  "accountId": null,
+  "categoryId": 4,
+  "rows": [
+    {
+      "line": "CATEGORY",
+      "bucket": "EXPENSE",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      },
+      "measure": "SPENT",
+      "amount": "1850.00",
+      "previousMonth": "1850.00",
+      "changeAmount": "0.00",
+      "changePercent": "0.0",
+      "trailing3": {
+        "amount": "1850.00",
+        "monthsUsed": 3,
+        "monthsWanted": 3
+      },
+      "trailing6": {
+        "amount": "1850.00",
+        "monthsUsed": 4,
+        "monthsWanted": 6
+      },
+      "sameMonthLastYear": null,
+      "monthCoverage": "COMPLETE"
+    }
+  ]
+}

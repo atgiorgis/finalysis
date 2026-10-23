@@ -1,0 +1,30 @@
+{
+  "range": {
+    "from": "2026-09",
+    "to": "2026-09"
+  },
+  "total": {
+    "moneyOut": "-1850.00",
+    "moneyIn": "0.00",
+    "net": "-1850.00",
+    "count": 1
+  },
+  "page": 0,
+  "size": 50,
+  "totalPages": 1,
+  "items": [
+    {
+      "id": 267,
+      "accountId": 1,
+      "txnDate": "2026-09-01",
+      "amount": "-1850.00",
+      "merchant": "PARKSIDE PROPERTY MGMT RENT PMT",
+      "category": {
+        "id": 4,
+        "name": "Housing",
+        "kind": "EXPENSE"
+      },
+      "bucket": "EXPENSE"
+    }
+  ]
+}

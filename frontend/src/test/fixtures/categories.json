@@ -1,0 +1,116 @@
+[
+  {
+    "id": 12,
+    "name": "Bank Fees",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 13,
+    "name": "Cash & ATM",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 1,
+    "name": "Dining",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 2,
+    "name": "Groceries",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 3,
+    "name": "Health",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 15,
+    "name": "HOA & Condo Fees",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 4,
+    "name": "Housing",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 9,
+    "name": "Income",
+    "kind": "INCOME",
+    "parentId": null
+  },
+  {
+    "id": 10,
+    "name": "Interest",
+    "kind": "INCOME",
+    "parentId": null
+  },
+  {
+    "id": 14,
+    "name": "Mortgage",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 18,
+    "name": "Person-to-Person In",
+    "kind": "INCOME",
+    "parentId": null
+  },
+  {
+    "id": 17,
+    "name": "Person-to-Person Out",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 19,
+    "name": "Refunds & Rebates",
+    "kind": "INCOME",
+    "parentId": null
+  },
+  {
+    "id": 5,
+    "name": "Shopping",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 6,
+    "name": "Subscriptions",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 16,
+    "name": "Tolls",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 11,
+    "name": "Transfer",
+    "kind": "TRANSFER",
+    "parentId": null
+  },
+  {
+    "id": 7,
+    "name": "Transportation",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  {
+    "id": 8,
+    "name": "Utilities",
+    "kind": "EXPENSE",
+    "parentId": null
+  }
+]

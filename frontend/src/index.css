@@ -1,11 +1,4 @@
-:root {
-  font-family: system-ui, -apple-system, sans-serif;
-  color-scheme: light dark;
-}
-
-body {
-  margin: 0;
-}
+/* The font, colors and base styles are in theme.css. */
 
 main {
   max-width: 960px;

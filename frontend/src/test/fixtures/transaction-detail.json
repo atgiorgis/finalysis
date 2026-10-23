@@ -1,0 +1,29 @@
+{
+  "id": 161,
+  "accountId": 3,
+  "accountName": "Apex Visa (travel card)",
+  "accountType": "CREDIT_CARD",
+  "statementId": 12,
+  "txnDate": "2026-09-30",
+  "postDate": "2026-10-01",
+  "amount": "-74.09",
+  "sourceSection": "PURCHASE",
+  "rawDescription": "TRADER JOE S #662 ARLINGTON VA",
+  "merchant": "TRADER JOE S",
+  "counterparty": null,
+  "category": {
+    "id": 2,
+    "name": "Groceries",
+    "kind": "EXPENSE",
+    "parentId": null
+  },
+  "categorySource": "RULE",
+  "ruleId": 39,
+  "categorizedAt": "2026-10-23T12:00:00Z",
+  "categoryModel": null,
+  "categoryConfidence": null,
+  "categoryPromptVersion": null,
+  "aiReviewReason": null,
+  "isTransfer": false,
+  "transferExcluded": false
+}
