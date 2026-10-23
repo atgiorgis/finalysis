@@ -565,39 +565,115 @@ export const reads = {
     getJson<ReviewQueueResponse>('/api/review-queue', params),
 }
 
-// ---------------------------------------------------------------------------- chat (CHT-01, Phase 6)
+// ---------------------------------------------------------------------------- chat (CHT-01–CHT-06, Phase 6)
 
-/** A transaction a citation points at; `GONE` when its statement was deleted. */
+/** A transaction a citation points at, re-resolved on every read: `GONE` once its statement was deleted. */
 export interface CitedTxn {
   status: 'FOUND' | 'GONE'
-  txnDate?: string | null
-  amount?: string | null
-  merchant?: string | null
-  accountName?: string | null
+  fingerprint: string
+  id: number | null
+  accountId: number | null
+  accountName: string | null
+  txnDate: IsoDate | null
+  postDate: IsoDate | null
+  amount: Money | null
+  merchant: string | null
+  category: string | null
+  statement: { id: number; periodStart: IsoDate; periodEnd: IsoDate } | null
+  sourceLine: { number: number | null; text: string | null } | null
 }
 
-/** One citation of an answer, by the marker its text shows (`[1]`). */
+/** The rows behind a total: `GET {path}` with exactly these params lists them (UI-04). */
+export interface CitationDrillDown {
+  path: string
+  params: Record<string, string>
+  total: MoneyFlow
+  count: number
+  sampleTxns: CitedTxn[]
+}
+
+/** One citation of an answer, by the marker its text shows (`[1]`). Links are built from these fields only. */
 export type Citation =
   | { kind: 'TRANSACTION'; marker: number; txn: CitedTxn }
-  | { kind: 'TOTAL'; marker: number; label: string }
-  | { kind: 'ALERT'; marker: number; type: string; month: string }
-  | { kind: 'SERIES'; marker: number; merchant: string }
+  | {
+      kind: 'TOTAL'
+      marker: number
+      label: string
+      figures: {
+        field: string
+        value: string
+        relation: 'SUM' | 'DERIVED'
+        component: 'NET' | 'MONEY_OUT' | 'MONEY_IN' | 'COUNT' | null
+        terms: { sign: 1 | -1; drillDown: CitationDrillDown }[]
+      }[]
+      drillDowns: CitationDrillDown[]
+    }
+  | { kind: 'ALERT'; marker: number; alertKey: string; type: AlertType; month: YearMonth; txns: CitedTxn[] }
+  | { kind: 'SERIES'; marker: number; accountId: number; merchant: string; drillDown: CitationDrillDown }
+
+export type LimitHit = 'ROUNDS' | 'TOOL_CALLS' | 'TOKENS' | 'TIME' | 'COST'
+export type AnswerSource = 'MODEL' | 'FALLBACK' | 'ERROR'
 
 export interface ChatUsage {
   model: string | null
   rounds: number
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cacheReadTokens?: number | null
+  cacheWriteTokens?: number | null
+  callsWithoutUsage?: number
+  /** Dollars, six decimals; null when the model has no price. */
   estimatedCost: string | null
 }
 
-/** One answered turn, as `POST /api/chat/conversations/{id}/turns` returns it (fields the page shows). */
+export interface ChatGrounding {
+  status: 'GROUNDED' | 'NO_FIGURES' | 'FALLBACK'
+  figuresChecked: number
+  retried: boolean
+  ungrounded: number
+}
+
+/** One answered turn, as `POST /api/chat/conversations/{id}/turns` returns it. */
 export interface ChatTurn {
   conversationId: number
   turn: number
+  /** The answer as shown, with markers `[1]`; for a fallback, the Java-built list of the figures. */
   answer: string
-  answerSource: 'MODEL' | 'FALLBACK'
+  answerSource: AnswerSource
+  grounding?: ChatGrounding
   citations: Citation[]
+  dataNotes?: { month: YearMonth; type: MonthFlagType; accountId: number }[]
   usage: ChatUsage
-  limitHit: string | null
+  limitHit: LimitHit | null
+}
+
+/** A stored turn, as a conversation's read returns it; `answer` is null for a turn that failed. */
+export interface StoredTurn {
+  turn: number
+  question: string
+  outboundQuestion: string | null
+  answer: string | null
+  answerSource: AnswerSource
+  grounding: ChatGrounding | null
+  citations: Citation[]
+  limitHit: LimitHit | null
+  usage: ChatUsage | null
+  createdAt: string
+}
+
+export interface ConversationItem {
+  id: number
+  title: string | null
+  turns: number
+  updatedAt: string
+}
+
+export interface Conversation {
+  id: number
+  title: string | null
+  createdAt: string
+  updatedAt: string
+  turns: StoredTurn[]
 }
 
 /** An RFC 9457 problem from the API, with its `detail` as the message. */
@@ -618,6 +694,16 @@ async function problemOf(res: Response): Promise<ApiProblem> {
   } catch {
     return new ApiProblem(res.status, undefined, `Request failed: ${res.status}`)
   }
+}
+
+export const chat = {
+  list: (page = 0, size = 50) =>
+    getJson<{ items: ConversationItem[]; page: number; size: number; totalPages: number }>('/api/chat/conversations', {
+      page,
+      size,
+    }),
+  get: (id: number | string) => getJson<Conversation>(`/api/chat/conversations/${encodeURIComponent(id)}`),
+  delete: (id: number) => send<null>('DELETE', `/api/chat/conversations/${id}`),
 }
 
 export async function createConversation(): Promise<{ id: number }> {

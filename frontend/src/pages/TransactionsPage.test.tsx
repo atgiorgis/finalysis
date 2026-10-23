@@ -95,8 +95,8 @@ test('to review: transactions without a category, every month, with why they wai
   const { requests } = renderApp('/transactions?month=2026-09&view=review', ROUTES)
 
   const section = await screen.findByRole('region', { name: 'Needs a category' })
-  expect(requests).toContain(UNCATEGORIZED)
   expect(await within(section).findByText('2 transactions, every month')).toBeInTheDocument()
+  expect(requests).toContain(UNCATEGORIZED)
   const rows = section.querySelectorAll('.txn-row')
   expect(rows[0]).toHaveTextContent('Uncategorized · The AI wasn’t sure')
   expect(rows[1]).toHaveTextContent('CORNER KIOSK')

@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
-import ChatPage from './ChatPage'
 import AlertsPage from './pages/AlertsPage'
+import ChatPage from './pages/ChatPage'
 import DrillPage from './pages/DrillPage'
 import OverviewPage from './pages/OverviewPage'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -29,8 +29,7 @@ const BUILT = ['/overview', '/transactions', '/alerts', '/recurring', '/chat', '
 const PLACEHOLDERS = TABS.filter((tab) => !BUILT.includes(tab.path))
 
 /**
- * Every route of the app, inside the shell. `/` opens the Overview. The Phase 6 chat page stays on the Chat tab until
- * step 6 replaces it.
+ * Every route of the app, inside the shell. `/` opens the Overview.
  */
 export default function AppRoutes() {
   return (
@@ -51,7 +50,8 @@ export default function AppRoutes() {
             />
           ))}
           <Route path="/overview/*" element={<OverviewPage />} />
-          <Route path="/chat/*" element={<ChatPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/:id" element={<ChatPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Route>

@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 5 done (step notes); next: step 6. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 6 done (step notes); next: step 7. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -697,6 +697,39 @@ recurring).
   the series' own fields (`series.ts`: account, merchant, first to last month, money out). `?series=<accountId>:
   <merchant>` marks one series (the Overview's recurring rows link to it; chat's series citations in step 6).
 - The alert wording lives in `components/alertText.ts`, shared by the Overview's summary and the Alerts tab.
+
+### Step 6 notes: Chat UI
+
+Done: "Phase 7 step 6: chat UI, Phase 6 test page removed (UI-03, UI-04)". Backend 3,277 tests (Maven summary, no
+backend change; nothing in the chat loop, tools, prompt or eval touched), 0 failures, 0 skipped; frontend 165 tests
+(17 files). No live AI call: chat responses in tests are hand-written from the Phase 6 records (`test/chatFixtures.ts`).
+
+- **Page** (`pages/ChatPage.tsx`, `/chat` and `/chat/:id`): the conversation list (title, question count, last
+  update; New conversation), the conversation, the question box (1,000 characters, counted). The first question
+  creates the conversation and moves to its URL; follow-ups continue it. Delete asks first ("Delete" / "Keep it"),
+  then returns to the list. On a phone, the list or one conversation (with "‹ All conversations"); from 900 px, side by
+  side. `ChatPage.tsx` and `ChatPage.test.tsx` of Phase 6 are deleted.
+- **Answers as text** (`chatText.ts`, §5.2, §13): never HTML or markdown. Emphasis pairs at word edges are stripped
+  (`**`, `*`, `***`, `_`, `__`, nested too); a lone or in-word marker (`SQ *TNK`, `snake_case`) and list markers
+  (`* item`) stay; line breaks stay. `[n]` becomes a link to citation `n` below only when the turn has citation `n`.
+- **Links from citation objects only** (§3.5, the owner's rule): `citationLinks.ts` builds every target from the
+  citation's fields: a transaction opens the sheet by `txn.id` (a GONE one has no link), a total opens `/drill` with
+  each drill-down's own `params`, its `label` and `expect` = its `total.net` (so the ✓ shows when the rows still add
+  up), an alert opens `/alerts?month=&key=`, a series `/recurring?series=` and its charges in `/drill`. Tested with an
+  answer holding `[click here](/drill?bucket=EXPENSE&evil=1)`, a bare path and `[9]`: every link on the turn is one of
+  the citation targets, and none carries the text's parameters.
+- **Each turn:** the fallback label ("The model's answer couldn't be checked, so here are the figures it used."), a
+  limit in words ("…reached the limit on cost for one question."), the model, the estimated cost or "no price", and
+  how many figures were checked. A stored turn that failed says so.
+- **Problems in words:** `ai-off`, `chat-budget` (with the daily cap read from `/api/chat/usage`), `chat-busy`,
+  `turn-in-progress`, `ai-unavailable`, else the API's `detail`; the question stays in the box. With AI off the box is
+  replaced by the reason, and conversations stay readable.
+- **A race fixed before it shipped:** the first question navigates to the new conversation's URL, which would read the
+  conversation back and could replace the answer with an older read; the page skips that read for a conversation it
+  created.
+- **Test stability:** the suite runs its files in parallel; a few tests checked a URL or a request before the async
+  step behind it finished. They now wait for it, and Testing Library's async timeout is 5 s (`test/setup.ts`). Six full
+  runs in a row passed.
 
 ### Requirement mapping
 

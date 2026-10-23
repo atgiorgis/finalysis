@@ -24,7 +24,7 @@ test('lists the seven tabs in the plan’s order', () => {
 /** A page's heading, where it says more than its tab. */
 const HEADINGS: Record<string, string> = { '/recurring': 'Recurring charges' }
 
-test.each(TABS.filter((tab) => tab.path !== '/chat').map((tab) => [tab.path, HEADINGS[tab.path] ?? tab.label]))(
+test.each(TABS.map((tab) => [tab.path, HEADINGS[tab.path] ?? tab.label]))(
   '%s renders its page: %s',
   async (path, heading) => {
     renderApp(path)
@@ -33,10 +33,10 @@ test.each(TABS.filter((tab) => tab.path !== '/chat').map((tab) => [tab.path, HEA
   },
 )
 
-test('the Chat tab is still the Phase 6 chat page until step 6', async () => {
+test('the Chat tab is the chat page', async () => {
   renderApp('/chat')
 
-  expect(await screen.findByRole('region', { name: 'Chat' })).toBeInTheDocument()
+  expect(await screen.findByRole('region', { name: 'Conversation' })).toBeInTheDocument()
 })
 
 test('a tab’s sub-path stays on that tab', async () => {

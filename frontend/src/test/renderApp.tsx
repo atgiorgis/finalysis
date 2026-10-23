@@ -22,6 +22,7 @@ export const SHELL_ROUTES: Record<string, unknown> = {
   '/api/analytics/months': fixtures.months,
   '/api/chat/usage': usageFixture,
   '/api/dashboard': fixtures.dashboardLatest,
+  '/api/chat/conversations': fixtures.chatConversations,
 }
 
 let location = ''
