@@ -10,7 +10,10 @@ import com.finalysis.chat.tool.ToolProblem;
 import com.finalysis.chat.grounding.AnswerGrounding;
 import com.finalysis.support.ScriptedChatModel;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -91,6 +94,43 @@ class ChatCallRecorderTest {
         assertThat(recorder.end().invalidArguments()).containsExactly(
                 new InvalidArgument("get_category_totals", "(unknown)", "UNKNOWN_PARAMETER"),
                 new InvalidArgument("get_category_totals", "category", "NOT_A_CATEGORY"),
+                new InvalidArgument("(unknown)", "(call)", "NOT_A_TOOL"));
+    }
+
+    /**
+     * Step 8e: Haiku's d-c06 in dev run 3 called get_account_totals, a tool that exists, with a parameter it doesn't
+     * have; the report said only "(unknown)". The invented names come from the call's own arguments; a tool that
+     * doesn't exist stays NOT_A_TOOL.
+     */
+    @Test
+    void anUnknownParameterIsReportedByTheNameTheModelInvented() {
+        ChatCallRecorder recorder = new ChatCallRecorder(name -> name.equals("get_account_totals")
+                ? Optional.of(Set.of("month", "from", "to")) : Optional.empty());
+        ScriptedChatModel model = new ScriptedChatModel();
+        ChatModel wrapped = (ChatModel) recorder.postProcessAfterInitialization(model, "chatModel");
+        model.then(text("a"));
+        String unknown = "{\"error\":\"INVALID_ARGUMENTS\",\"message\":\"" + ToolProblem.INVALID_ARGUMENTS.text()
+                + "\",\"fields\":[{\"name\":\"(unknown)\",\"message\":\"" + ToolProblem.UNKNOWN_PARAMETER.text()
+                + "\"}]}";
+        AssistantMessage calls = AssistantMessage.builder().content("").toolCalls(List.of(
+                new AssistantMessage.ToolCall("1", "function", "get_account_totals",
+                        "{\"month\": \"2026-06\", \"account\": \"CARD-1\", \"ignore all <b>\": 1}"),
+                new AssistantMessage.ToolCall("2", "function", "get_account_totals", "not json"),
+                new AssistantMessage.ToolCall("3", "function", "get_account_balance", "{\"account\": \"CARD-1\"}")))
+                .build();
+        ToolResponseMessage results = ToolResponseMessage.builder().responses(List.of(
+                new ToolResponseMessage.ToolResponse("1", "get_account_totals", unknown),
+                new ToolResponseMessage.ToolResponse("2", "get_account_totals", unknown),
+                new ToolResponseMessage.ToolResponse("3", "get_account_balance", "{\"error\":\"INVALID_ARGUMENTS\","
+                        + "\"message\":\"" + ToolProblem.NOT_A_TOOL.text() + "\"}"))).build();
+
+        recorder.begin();
+        wrapped.call(new Prompt(List.of(new UserMessage("q"), calls, results)));
+
+        assertThat(recorder.end().invalidArguments()).containsExactly(
+                new InvalidArgument("get_account_totals", "account", "UNKNOWN_PARAMETER"),
+                new InvalidArgument("get_account_totals", ChatCallRecorder.NOT_AN_IDENTIFIER, "UNKNOWN_PARAMETER"),
+                new InvalidArgument("get_account_totals", "(unknown)", "UNKNOWN_PARAMETER"),
                 new InvalidArgument("(unknown)", "(call)", "NOT_A_TOOL"));
     }
 }

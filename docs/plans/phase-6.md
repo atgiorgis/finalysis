@@ -2058,12 +2058,82 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-4-6 -Deval.maxTurnCost=0.10
 ```
 
+### Step 8e notes: search fixes from dev run 3
+
+Done: "Phase 6 step 8e: search fixes from dev run 3". Backend 3,204 tests (Maven summary; 3,178 + 26), 0 failures, 0 skipped; frontend 4. Requirements v1.67. Prompt
+`chat-7`. Dev set revision 4. Mocks only, no live call, `NoCloudAiGuard` in force; the chat holdout was not opened and
+the categorization holdout not run.
+
+Inputs: dev run 3 on step 8d (Haiku 4.5 and Sonnet 4.6, both 52/58; search 4/8 and 3/8, from 6/8), committed with this
+step (`docs/eval/README.md` "Run 3").
+
+**1. Word-by-word name match (CHT-02).**
+- **Cause, confirmed.** Not a substring match: `MerchantDirectory.nameMatches` kept a merchant only when its name held
+  every word of the search. "internet" found SKYWAVE INTERNET AUTOPAY; "Shell Chevron BP ExxonMobil Speedway",
+  "Chipotle Qdoba Moe's Baja Fresh Del Taco", "DoorDash Uber Eats Grubhub", "Comcast Xfinity AT&T Spectrum internet"
+  and even "internet bill" found nothing by name.
+- **The word match.** After the name matches (still `match: NAME`, unchanged), `search_transactions` adds every merchant
+  whose name holds at least one useful word of the search, as the new `match: WORD`: most words matched first, then name
+  order, before a matched category's merchants; the result limit still caps the list. Whole words, case ignored (the
+  search text is upper-cased like the merchants), `&` and `'` kept (AT&T, MOE'S). The model is told to keep a WORD
+  candidate only if it fits, as a CATEGORY one: "Uber Eats" also finds UBER TRIP, whose category shows it is a ride.
+- **Generic words.** `chat/search-generic-words.yml`, read by `chat.outbound.SearchGenericWords` when the search
+  text is prepared (the tool gets only `SearchText.matchWords`; `chat.tool` may not read YAML), in three groups: grammar (the, of, my,
+  ...), commerce (bill, payment, autopay, store, restaurant, service, inc, ...) and statement noise (pos, debit, ach,
+  pmt, sq, tst, purchase, card, ...). Single characters never count (the T of T-Mobile). Merchant names are only partly
+  normalized before search: cleaning strips the prefix forms `merchant-cleaning.yml` lists (`SQ *`, `TST*`,
+  `POS DEBIT `, ...), but words such as PMT, ACH, DEBIT and CARD can stay in a stored name, hence the noise group. A
+  generic word still counts inside a NAME match ("autopay" finds the autopay merchant by its whole name).
+- **No frequency cut** (owner's decision): a word in many merchant names is often the brand of all of them (AMAZON
+  MKTPL, AMAZON PRIME, AMAZON RETAIL), the most useful word of "Amazon Target Walmart".
+- The tool description names WORD and stays under the 700-character cap.
+
+**2. Prompt `chat-7`.** The brand rule becomes a fallback in order: when a search finds nothing that fits, (a) search
+once more with well-known brand names for that kind of business; (b) if that finds none either, look at the merchants
+themselves (`get_top_merchants` in the most likely category, or `get_recurring_charges` for a bill), pick the merchant
+whose name fits and say which one was picked; only then say it couldn't be found. Comparing two periods (more or less,
+higher or lower, up or down) is one `compare_periods` call, never two separate totals (Haiku's d-t04 used two
+`get_category_totals` calls and stated the wrong direction). WORD candidates are kept only if they fit. No brand or dev
+merchant is named (`SystemPromptRulesTest` checks every dev search target and the brands the runs searched for).
+
+**3. Scoring of 0 and 1 (eval).** Sonnet's d-m04 turn 3 ("how many transactions are waiting for review", expected 1)
+was scored correct on "2 uncategorized transactions ... one for $8.00 at BLUE BEAN CAFE": the "1" was the pronoun
+"one". Citation markers were not the cause; they were already removed before the 0/1 check (now pinned by a test). A
+word form of 0 or 1 ("one", "a single", "zero", "no") now counts only before a word that is not a preposition: "one
+transaction" and "only one is waiting" count, "one for $8.00", "one of those" and "No," don't; digits and "none" are
+unchanged. d-m04 is the only dev turn expecting 0 or 1: Haiku's "1 transaction waiting" still passes, Sonnet's fails.
+
+**4. Dev set revision 4** (holdout untouched). d-t04: `says`/`neverSays` so July must be named as the higher month
+(Haiku's "cost less in July" with both totals right fails). d-t05: a second alternative, September's 38.38 with its
+decrease from August, 2.39 (`diff`, recomputed from the answer key), since stating the decrease is a complete answer
+to "is it going up"; the reason is in the set.
+
+**5. Invalid arguments in the report (eval).** Haiku's d-c06 called `get_account_totals`, which exists (month, from,
+to), with a parameter it doesn't have; the app never echoes an invented name back to the model, and the report
+inherited that as "(unknown)". The call recorder now reads the call's own arguments and reports each invented name
+(identifiers only, else "(not an identifier)"); the app's reply to the model and the database are unchanged. A tool that
+doesn't exist stays `(unknown) | (call) | NOT_A_TOOL`, and the report says which is which.
+
+Not changed: the search floor stays 0.40; the run-3 reports keep the scores they were written with.
+
+**Tests**: `SearchWordMatchTest` (new, the four run-3 queries on the sample data, ranking, case, NAME kept, generic
+words alone), `SearchGenericWordsTest` (new), `MerchantDirectoryTest` (+2, a brand word in many names),
+`SystemPromptRulesTest` (new), `ChatEvalScoringTest` (+7: the d-m04 answers, markers, d-t04 and d-t05 on run 3's
+answers), `ChatCallRecorderTest` (+1); `ChatQuestionSetsTest` takes revision 4.
+
+**Commands** (`backend/`), after review:
+
+```sh
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-4-6 -Deval.maxTurnCost=0.15
+```
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
 | CHT-01 | 3, 5, 8c, 8d | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest` |
-| CHT-02 | 6, 8b, 8c, 8d | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest` |
+| CHT-02 | 6, 8b, 8c, 8d, 8e | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest`, `SearchWordMatchTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
 | CHT-04 | 4, 5, 8b, 8d | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |

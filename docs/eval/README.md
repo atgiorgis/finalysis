@@ -67,3 +67,21 @@ call, so it measured that setting, not the model. The check prices a round's est
 plus the whole 1,500-token output cap; at Sonnet 4.6's prices any round over about 7,330 estimated tokens passes $0.05,
 and every first round of the dev set is larger (the fixed prefix alone is about 5,950 tokens). Step 8d makes such a setup refuse to start and scores a limit-stopped turn as
 never correct.
+
+### Run 3: after step 8d
+
+Two dev runs, committed in step 8e. Both ran on commit `7f09a06` (step 8d; working tree dirty), dev set version 3,
+prompt `chat-6`, prompt caching on:
+
+- [chat-dev-7f09a06f2e08-20261022T222033Z.md](chat-dev-7f09a06f2e08-20261022T222033Z.md) (and `.json`): Haiku 4.5,
+  52 of 58 questions and 60 of 66 turns correct, search 4 of 8; 78,648 uncached input, 968,752 cache-read, 9,944
+  cache-write and 10,214 output tokens, $0.24; turn cost limit $0.05.
+- [chat-dev-7f09a06f2e08-20261022T222401Z.md](chat-dev-7f09a06f2e08-20261022T222401Z.md) (and `.json`): Sonnet 4.6,
+  52 of 58 questions and 60 of 66 turns correct, search 3 of 8; 80,648 uncached input, 998,006 cache-read, 9,933
+  cache-write and 12,182 output tokens, $0.76; turn cost limit $0.15 (`-Deval.maxTurnCost`, this run only).
+
+Read with step 8e (docs/plans/phase-6.md): the brand searches of d-s02, d-s03, d-s05 and d-s08 found nothing because
+the name match needed every word of the search in one merchant name; Sonnet's d-m04 turn 3 was scored correct on the
+pronoun "one" ("one for $8.00"), and is wrong under step 8e's scoring; Haiku's d-c06 "(unknown)" parameter was a
+parameter `get_account_totals` doesn't have, not an unknown tool. Revision 4 rescores d-t04 (Haiku's "cost less in July"
+fails) and d-t05 (Haiku's 38.38 and 2.39 passes). These reports keep the scores they were written with.

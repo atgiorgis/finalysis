@@ -12,18 +12,21 @@ import java.util.Map;
  * @param model         the embedding model the vector came from; only vectors of this model are compared
  * @param minSimilarity the cosine similarity a merchant or a category needs to be found by meaning
  * @param categories    the data's category names → ids, for matching categories (step 8b)
+ * @param matchWords    the words that may pick a merchant alone in the word match: generic words and single
+ *                      characters left out (step 8e)
  */
 public record SearchText(String outbound, List<String> words, float[] vector, String model, double minSimilarity,
-                         MerchantDirectory merchants, Map<String, Long> categories) {
+                         MerchantDirectory merchants, Map<String, Long> categories, List<String> matchWords) {
 
     public SearchText {
         words = List.copyOf(words);
         categories = Map.copyOf(categories);
+        matchWords = List.copyOf(matchWords);
     }
 
     public SearchText(String outbound, List<String> words, float[] vector, String model, double minSimilarity,
                       MerchantDirectory merchants) {
-        this(outbound, words, vector, model, minSimilarity, merchants, Map.of());
+        this(outbound, words, vector, model, minSimilarity, merchants, Map.of(), words);
     }
 
     public boolean byMeaning() {

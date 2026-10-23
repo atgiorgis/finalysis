@@ -107,6 +107,35 @@ class ChatEvalScoringTest {
         assertThat(score(answer(List.of(figures("0"))), "No transactions are waiting.").correct()).isTrue();
     }
 
+    /**
+     * Step 8e: Sonnet's d-m04 turn 3 in dev run 3 (7f09a06) scored correct with an expected 1 it never stated: the "1"
+     * was the pronoun in "one for $8.00". A word form counts only before a word that is not a preposition; markers
+     * never count.
+     */
+    @Test
+    void aPronounOrAMarkerIsNotACountOfOne() {
+        Turn waiting = answer(List.of(figures("1")));
+        String sonnet = "There are 2 uncategorized transactions in February 2026 [1]: one for $8.00 at BLUE BEAN CAFE "
+                + "on February 16, and one for $60.00 labeled MYSTERY PAYMENT on February 14. Neither has a category "
+                + "assigned yet, totaling $68.00 in uncategorized spending [1].";
+        String haiku = "Your spending in February 2026 was $1,687.98 [1]. Of that, $68.00 was uncategorized, which "
+                + "represents 4.0% of your total spending that month [2]. There is 1 transaction waiting for review [1].";
+
+        assertThat(score(waiting, sonnet).correct()).isFalse();
+        assertThat(score(waiting, haiku).correct()).isTrue();
+        assertThat(score(waiting, "2 are uncategorized [1].").correct()).as("a marker").isFalse();
+        assertThat(score(waiting, "2 are uncategorized [1, 2] and [c1].").correct()).isFalse();
+        assertThat(score(waiting, "Two are uncategorized; one of them is pending.").correct())
+                .as("one of").isFalse();
+        assertThat(score(waiting, "Only one is waiting for review.").correct()).isTrue();
+        assertThat(score(waiting, "One transaction is waiting.").correct()).isTrue();
+
+        Turn none = answer(List.of(figures("0")));
+        assertThat(score(none, "No, 2 are waiting.").correct()).as("No,").isFalse();
+        assertThat(score(none, "None are waiting.").correct()).isTrue();
+        assertThat(score(none, "Zero transactions are waiting.").correct()).isTrue();
+    }
+
     @Test
     void aForbiddenFigureMakesAnAnswerWrongInAnyForm() {
         Turn turn = answer(List.of(), "10.00");
@@ -357,6 +386,49 @@ class ChatEvalScoringTest {
 
         assertThat(score.correct()).isFalse();
         assertThat(score.reason()).startsWith("says what it must not");
+    }
+
+    // ------------------------------------------------------------------ dev revision 4 (step 8e)
+
+    /** Dev run 3's d-t04 (Haiku, two get_category_totals calls): both totals right, the direction wrong. */
+    @Test
+    void d_t04_run3sWrongDirectionFailsThePhraseCheck() {
+        TurnScore score = scoreDev("d-t04", "No, your subscriptions cost less in July than in June. In July you spent "
+                + "$31.47 [1], compared with $30.47 in June [2].");
+
+        assertThat(score.matched()).containsExactly(0);
+        assertThat(score.correct()).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Yes, your subscriptions cost slightly more in July than in June. You spent $31.47 on subscriptions in "
+                    + "July compared to $30.47 in June, a difference of $1.00 (about 3.3% more) [1].",
+            "Subscriptions cost more in July: $31.47, against $30.47 in June [c1].",
+            "July's subscriptions were higher than June's: $31.47 vs $30.47 [c1]."})
+    void d_t04_julyNamedAsHigherPasses(String answer) {
+        TurnScore score = scoreDev("d-t04", answer);
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+    }
+
+    @Test
+    void d_t04_juneNamedAsHigherFails() {
+        assertThat(scoreDev("d-t04", "You spent more in June: $30.47, against $31.47 in July [c1].").correct())
+                .isFalse();
+    }
+
+    /** Dev run 3's d-t05 (Haiku): September's total and its decrease from August, now a complete answer. */
+    @Test
+    void d_t05_septembersTotalWithItsDecreaseFromAugustPasses() {
+        TurnScore score = scoreDev("d-t05", "No, your health spending is not going up month over month. In September "
+                + "2026, you spent $38.38 on health, which is $2.39 less than the previous month (August), a "
+                + "decrease of 5.9% [1].");
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+        assertThat(score.matched()).containsExactly(1);
+        assertThat(scoreDev("d-t05", "In September you spent $38.38 on health [1].").correct())
+                .as("the total alone").isFalse();
     }
 
     /** Dev run 2's d-t06: the month-over-month change called the change from the 3-month average. */

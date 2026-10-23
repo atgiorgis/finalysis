@@ -33,7 +33,8 @@ import java.util.stream.IntStream;
  *       answer is grounded by construction (the model's answer passed the check, or it is the Java fallback), so a
  *       figure that appears is a grounded one. The whole numbers 0 and 1 are never figures to the extractor (§5.2), so
  *       an expected count of 0 or 1 is looked for as a digit or a word ("1", "one", "a single"; "0", "zero", "no",
- *       "none").</li>
+ *       "none"). A word form other than "none" counts only before a word that is not a preposition (step 8e): "one
+ *       transaction", never "one for $8.00" or "one of those". Citation markers and aliases are never the count.</li>
  *   <li><b>A refusal turn</b> is correct only when the shown answer has no figure at all and reads as a refusal
  *       ({@link #isRefusal}). The system prompt prescribes no fixed phrase, so a refusal is any of a fixed list of
  *       wordings ("can't tell", "don't have", "no data", "only answer questions about", ...), with no figure.</li>
@@ -65,8 +66,15 @@ final class ChatEvalScoring {
             + "is not (?:in|available|something|possible)|not available|no (?:data|transactions|records?|information|"
             + "such|way)|there (?:is|are) no|only (?:answer|help with)|not possible|won't be able)\\b");
     private static final Pattern MARKERS_AND_ALIASES = Pattern.compile("\\[[^\\]]*]|\\b[A-Z][A-Z_]*-\\d+\\b");
-    private static final Pattern ONE = Pattern.compile("(?i)(?<![\\d.,$])1(?![\\d.,%])|\\bone\\b|\\ba single\\b");
-    private static final Pattern ZERO = Pattern.compile("(?i)(?<![\\d.,$])0(?![\\d.,%])|\\bzero\\b|\\bno\\b|\\bnone\\b");
+    /**
+     * What may follow a word form of 0 or 1 for it to be the count (step 8e): a word that is not a preposition. "One
+     * for $8.00", "one of those" and "No," are not counts (dev run 3, d-m04, scored correct on "one for $8.00 at ...").
+     */
+    private static final String COUNTED = "(?=\\s+(?!(?:of|for|at|on|in|from|to|with|by)\\b)[a-z])";
+    private static final Pattern ONE = Pattern.compile("(?i)(?<![\\d.,$])1(?![\\d.,%])|\\b(?:one|a single)\\b"
+            + COUNTED);
+    private static final Pattern ZERO = Pattern.compile("(?i)(?<![\\d.,$])0(?![\\d.,%])|\\b(?:zero|no)\\b" + COUNTED
+            + "|\\bnone\\b");
     private static final Pattern BARE_YEAR = Pattern.compile("20\\d{2}");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 

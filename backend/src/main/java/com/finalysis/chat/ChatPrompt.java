@@ -32,9 +32,11 @@ public class ChatPrompt {
      * chat-1 was step 5; chat-2 adds the routing rules for search (step 6); chat-3 adds the summary and the recent turns
      * (step 7); chat-4 the step 8b fixes; chat-5 search and merchant totals over every month with data by default, and
      * the cache points after the tools and the context block (step 8c); chat-6 the step 8d fixes (a second search with
-     * brand names, no "let me look" without a call, higherPeriod, the trend fields named apart, searchIndex).
+     * brand names, no "let me look" without a call, higherPeriod, the trend fields named apart, searchIndex); chat-7 the
+     * step 8e fixes (search's WORD match, the fallback from brand names to the merchants themselves, compare_periods
+     * for every comparison of two periods).
      */
-    public static final String VERSION = "chat-6";
+    public static final String VERSION = "chat-7";
 
     static final String RESOURCE = "chat/system-prompt.txt";
     /** Where the history starts in {@link #start}'s messages: after the system prompt and the context block. */

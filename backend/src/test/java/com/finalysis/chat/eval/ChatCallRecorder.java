@@ -1,13 +1,19 @@
 package com.finalysis.chat.eval;
 
 import com.finalysis.chat.eval.ChatEvalResults.InvalidArgument;
+import com.finalysis.chat.tool.FieldProblem;
 import com.finalysis.chat.tool.ToolName;
 import com.finalysis.chat.tool.ToolProblem;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -27,13 +33,28 @@ import tools.jackson.databind.json.JsonMapper;
  * the turn response doesn't carry: the figures a grounding retry listed (for the bare-year count), the answer that retry
  * replaced, the search texts the model sent, and why a tool call was invalid (step 8b: each problem of an
  * {@code INVALID_ARGUMENTS} result as the model read it, by tool, parameter and {@link ToolProblem}), and each call's
- * reported tokens, cached-prefix tokens apart (step 8c). In memory only;
+ * reported tokens, cached-prefix tokens apart (step 8c). An unknown parameter is reported by the names the model
+ * invented (step 8e), read from the call's own arguments; the app never echoes them to the model. In memory only;
  * nothing is logged. The wrapper delegates every call
  * and the options unchanged, so the app's path is the one measured.
  */
 class ChatCallRecorder implements BeanPostProcessor {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** An invented parameter name is shown only when it reads as one. */
+    private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,40}");
+    static final String NOT_AN_IDENTIFIER = "(not an identifier)";
+
+    /** A registry tool's parameter names, by wire name; empty when unknown (then invented names stay unnamed). */
+    private final Function<String, Optional<Set<String>>> params;
+
+    ChatCallRecorder() {
+        this(name -> Optional.empty());
+    }
+
+    ChatCallRecorder(Function<String, Optional<Set<String>>> params) {
+        this.params = params;
+    }
 
     /** What the calls of one turn showed. */
     record TurnCalls(int calls, List<String> retryFigures, String rejectedAnswer, List<String> searchQueries,
@@ -88,11 +109,16 @@ class ChatCallRecorder implements BeanPostProcessor {
         calls++;
         totalCalls++;
         List<Message> messages = prompt.getInstructions();
+        Map<String, String> arguments = new HashMap<>();
         for (Message message : messages) {
+            if (message instanceof AssistantMessage assistant) {
+                assistant.getToolCalls().forEach(call -> arguments.put(call.id(), call.arguments()));
+            }
             if (message instanceof ToolResponseMessage results) {
                 for (ToolResponseMessage.ToolResponse result : results.getResponses()) {
                     if (seenResults.add(result.id())) {
-                        invalidArguments.addAll(invalid(result.name(), result.responseData()));
+                        invalidArguments.addAll(named(invalid(result.name(), result.responseData()),
+                                arguments.get(result.id())));
                     }
                 }
             }
@@ -158,6 +184,44 @@ class ChatCallRecorder implements BeanPostProcessor {
             problems.add(new InvalidArgument(name, "(call)", problem(node.path("message").asString(""))));
         }
         return problems;
+    }
+
+    /**
+     * The problems with each {@code (unknown)} parameter replaced by the names the model invented: the call's
+     * properties that are not the tool's parameters, in the call's order; an invented name that is not an identifier
+     * shows as {@value #NOT_AN_IDENTIFIER}. Kept as {@code (unknown)} when the tool's parameters or the call's arguments
+     * can't be read.
+     */
+    List<InvalidArgument> named(List<InvalidArgument> problems, String arguments) {
+        List<InvalidArgument> named = new ArrayList<>();
+        for (InvalidArgument problem : problems) {
+            List<String> invented = problem.parameter().equals(FieldProblem.UNKNOWN)
+                    ? invented(problem.tool(), arguments) : List.of();
+            if (invented.isEmpty()) {
+                named.add(problem);
+            } else {
+                invented.forEach(name -> named.add(new InvalidArgument(problem.tool(), name, problem.problem())));
+            }
+        }
+        return named;
+    }
+
+    private List<String> invented(String tool, String arguments) {
+        Optional<Set<String>> known = params.apply(tool);
+        if (known.isEmpty() || arguments == null) {
+            return List.of();
+        }
+        JsonNode node;
+        try {
+            node = JSON.readTree(arguments);
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+        if (!node.isObject()) {
+            return List.of();
+        }
+        return node.propertyNames().stream().filter(name -> !known.get().contains(name))
+                .map(name -> IDENTIFIER.matcher(name).matches() ? name : NOT_AN_IDENTIFIER).distinct().toList();
     }
 
     private static String problem(String message) {

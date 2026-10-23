@@ -357,7 +357,9 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         if (counts.isEmpty()) {
             return "No tool call had invalid arguments.\n";
         }
-        StringBuilder md = new StringBuilder("| Tool | Parameter | Problem | Count |\n|---|---|---|---:|\n");
+        StringBuilder md = new StringBuilder("A tool the registry doesn't have is `(unknown)` with problem NOT_A_TOOL; "
+                + "an UNKNOWN_PARAMETER row names the parameter the model invented for a tool that exists.\n\n"
+                + "| Tool | Parameter | Problem | Count |\n|---|---|---|---:|\n");
         counts.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .forEach(e -> md.append(e.getKey()).append(e.getValue()).append(" |\n"));
         return md.toString();

@@ -17,7 +17,8 @@ final class ChatEvalResults {
 
     /**
      * One problem of an invalid tool call, as the model read it (step 8b): the tool (or {@code (unknown)}), the
-     * parameter (or {@code (unknown)} for an invented one, {@code (call)} for the whole call) and the
+     * parameter (for an invented one the name the model sent, step 8e, or {@code (unknown)} when it can't be read;
+     * {@code (call)} for the whole call) and the
      * {@code ToolProblem}.
      */
     record InvalidArgument(String tool, String parameter, String problem) {

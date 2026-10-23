@@ -82,10 +82,11 @@ public sealed interface ToolRead {
         }
 
         /**
-         * How a candidate was found: its own name ({@code NAME}) or document ({@code MEANING}), or as a merchant of a
-         * category the search matched ({@code CATEGORY}, step 8b).
+         * How a candidate was found: its name holds every word of the search ({@code NAME}) or some useful one
+         * ({@code WORD}, step 8e), by its document ({@code MEANING}), or as a merchant of a category the search matched
+         * ({@code CATEGORY}, step 8b).
          */
-        public enum Match { NAME, MEANING, CATEGORY }
+        public enum Match { NAME, WORD, MEANING, CATEGORY }
 
         /** A category the search matched, by its name ({@code NAME}, similarity null) or by meaning. */
         public record CategoryMatch(String category, Match match, BigDecimal similarity) {

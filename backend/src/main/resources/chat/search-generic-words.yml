@@ -1,0 +1,23 @@
+# Words that never pick a merchant by themselves in search_transactions' word match (CHT-02; docs/plans/phase-6.md
+# §4.3, step 8e). The word match finds merchants whose name holds any other word of the search ("Shell Chevron BP"
+# finds SHELL OIL), as match WORD; these words would match unrelated merchants. Whole words, upper case, compared with
+# the search's words as MerchantDirectory.wordsOf splits them. A search that holds every word of a name still finds it
+# as match NAME, generic words included. Single characters never count (T from T-Mobile). Generic English and
+# statement vocabulary only: no bank, brand or merchant names. Data, not code: tune it here, against the dev set only.
+# Quote the words YAML 1.1 reads as booleans (ON, OFF, YES, NO).
+
+# Grammar: articles, prepositions, conjunctions, pronouns and question words.
+grammar: [THE, A, AN, AND, OR, OF, AT, IN, 'ON', FOR, TO, FROM, WITH, BY, MY, ME, I, WE, OUR, YOU, YOUR, IT, ITS,
+          THIS, THAT, THESE, THOSE, IS, ARE, WAS, WERE, BE, DO, DID, ANY, ALL, SOME, WHAT, WHICH, WHERE, HOW, MUCH,
+          MANY]
+
+# Commerce: kinds of business and payment words that many merchants share. A kind of business is found by meaning
+# and by category instead.
+commerce: [BILL, BILLS, PAYMENT, PAYMENTS, PAY, AUTOPAY, PURCHASE, PURCHASES, CHARGE, CHARGES, FEE, FEES, ORDER,
+           ORDERS, STORE, STORES, SHOP, SHOPS, SHOPPING, RESTAURANT, RESTAURANTS, SERVICE, SERVICES, ONLINE,
+           SUBSCRIPTION, SUBSCRIPTIONS, MERCHANT, MERCHANTS, COMPANY, INC, LLC, LTD, CO, CORP, PLACE, PLACES, STUFF,
+           THING, THINGS]
+
+# Statement noise: words statements put around a merchant name. Cleaning strips some of them only in set prefix forms
+# (categorize/merchant-cleaning.yml: SQ *, TST*, POS DEBIT ...), so others stay in stored names (RENT WEB PMT).
+statementNoise: [POS, DEBIT, CREDIT, ACH, PMT, SQ, TST, CARD, CHECKCARD, RECURRING, TRANSACTION, TRANSACTIONS]

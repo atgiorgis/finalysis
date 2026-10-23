@@ -6,6 +6,10 @@ import com.finalysis.chat.ChatModelClient;
 import com.finalysis.chat.ChatProperties;
 import com.finalysis.chat.ChatService;
 import com.finalysis.support.MutableClock;
+import com.finalysis.chat.tool.ToolParam;
+import com.finalysis.chat.tool.ToolRegistry;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -23,8 +27,9 @@ class ChatEvalBeans {
 
     /** Static: a post-processor must exist before the beans it wraps. */
     @Bean
-    static ChatCallRecorder chatCallRecorder() {
-        return new ChatCallRecorder();
+    static ChatCallRecorder chatCallRecorder(ObjectProvider<ToolRegistry> registry) {
+        return new ChatCallRecorder(name -> registry.getObject().find(name)
+                .map(tool -> tool.params().stream().map(ToolParam::name).collect(Collectors.toUnmodifiableSet())));
     }
 
     @Bean

@@ -20,12 +20,15 @@
 # Source kinds: spent, received, count, month, merchantSpent, row, diff, changePercent, average, max (SAMPLE);
 # fixtureTotal, fixtureAlert, fixtureRows (FIXTURE); injectionRows (INJECTION). Semantics in ChatQuestionSetsTest.
 set: dev
-version: 3
+version: 4
 # Revisions (docs/plans/phase-6.md, step 8b notes; dev only, the holdout is untouched):
 #   2 (2026-10-22, after the first dev run): d-x08 becomes a COMPARISON answered by get_category_totals' share of
 #     spending (computed in Java); d-s08 also accepts the internet bill's total over all data.
 #   3 (2026-10-22, after dev run 2, step 8d): phrase checks on d-c08 (March named as the higher month, never February)
 #     and d-t06 (the month-over-month change never called the change from the 3-month average). Figures unchanged.
+#   4 (2026-10-23, after dev run 3, step 8e): phrase checks on d-t04 (July named as the higher month, never June:
+#     Haiku said "less in July" with both totals right); d-t05 also accepts September's total with its decrease from
+#     August (38.38 and 2.39), since that states the trend completely.
 datasets:
   SAMPLE: {today: "2026-10-15", data: "sample-data/statements, categories from answer-key.csv; the last covered day is 2026-10-14, April to September have rows"}
   FIXTURE: {today: "2026-04-15", data: "sample-data/analytics, categories from categories.csv"}
@@ -297,6 +300,16 @@ questions:
         figures:
           - - {value: "31.47", source: {spent: {category: "Subscriptions", from: "2026-07", to: "2026-07"}}}
             - {value: "30.47", source: {spent: {category: "Subscriptions", from: "2026-06", to: "2026-06"}}}
+        says:
+          - '^\W*yes\b'
+          - '\b(?:more|higher|greater)\s+in\s+July\b'
+          - '\bJuly(?:''s)?\b[^.]{0,40}?\b(?:more|higher|greater)\s+than\b[^.]{0,20}?\bJune\b'
+        neverSays:
+          - '^\W*no\b'
+          - '\b(?:less|lower|cheaper)\s+in\s+July\b'
+          - '\b(?:more|higher|greater)\s+in\s+June\b'
+          - '\bJune(?:''s)?\b[^.]{0,40}?\b(?:more|higher|greater)\s+than\b[^.]{0,20}?\bJuly\b'
+        note: "revision 4: the figures can be right with the direction wrong (dev run 3, Haiku: \"cost less in July\")"
   - id: d-t05
     author: assistant
     category: TREND
@@ -308,6 +321,9 @@ questions:
         figures:
           - - {value: "38.38", source: {spent: {category: "Health", from: "2026-09", to: "2026-09"}}}
             - {value: "40.77", source: {spent: {category: "Health", from: "2026-08", to: "2026-08"}}}
+          - - {value: "38.38", source: {spent: {category: "Health", from: "2026-09", to: "2026-09"}}}
+            - {value: "2.39", source: {diff: {a: {spent: {category: "Health", from: "2026-08", to: "2026-08"}}, b: {spent: {category: "Health", from: "2026-09", to: "2026-09"}}}}}
+        note: "revision 4: September's total with its decrease from August is a complete answer to the trend (dev run 3, Haiku: 38.38, 2.39 less than August)"
   - id: d-t06
     author: assistant
     category: TREND

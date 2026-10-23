@@ -33,13 +33,15 @@ public class SearchTextOutbound {
     private final OutboundPayloadGuard guard;
     private final TextEmbedder embedder;
     private final ChatSearchProperties properties;
+    private final SearchGenericWords genericWords;
 
     public SearchTextOutbound(QuestionRedactor redactor, OutboundPayloadGuard guard, TextEmbedder embedder,
-                              ChatSearchProperties properties) {
+                              ChatSearchProperties properties, SearchGenericWords genericWords) {
         this.redactor = redactor;
         this.guard = guard;
         this.embedder = embedder;
         this.properties = properties;
+        this.genericWords = genericWords;
     }
 
     /** The search as it may leave, embedded when a model is configured; empty when it may not leave. */
@@ -62,6 +64,6 @@ public class SearchTextOutbound {
             }
         }
         return Optional.of(new SearchText(text, words, vector, embedder.modelId(), properties.minSimilarity(),
-                merchants, turn.categories()));
+                merchants, turn.categories(), genericWords.useful(words)));
     }
 }

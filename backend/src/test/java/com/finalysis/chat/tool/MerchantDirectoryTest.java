@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The turn's directory of nameable merchants (docs/plans/phase-6.md §4.3), no Spring: texts stand for every stored
- * merchant behind them, the name match needs every word as a whole word, and an oversized group is left out.
+ * merchant behind them, the name match needs every word as a whole word, the
+ * word match any one (step 8e), and an oversized group is left out.
  */
 class MerchantDirectoryTest {
 
@@ -39,6 +40,35 @@ class MerchantDirectoryTest {
         assertThat(DIRECTORY.nameMatches(List.of("AT&T"))).containsExactly("AT&T WIRELESS");
         assertThat(DIRECTORY.nameMatches(List.of())).isEmpty();
         assertThat(MerchantDirectory.wordsOf("  blue-bean, cafe!! ")).containsExactly("BLUE", "BEAN", "CAFE");
+    }
+
+    @Test
+    void theWordMatchNeedsAnyWordMostWordsFirst() {
+        assertThat(DIRECTORY.wordMatches(List.of("SHELL", "BEAN", "STARBUCKS")))
+                .as("any word, never part of one (BEANTOWN); ties in name order")
+                .containsExactly("BLUE BEAN CAFE", "STARBUCKS");
+        assertThat(DIRECTORY.wordMatches(List.of("BEAN", "CAFE", "STARBUCKS")))
+                .as("two words before one").containsExactly("BLUE BEAN CAFE", "STARBUCKS");
+        assertThat(DIRECTORY.wordMatches(List.of("STAR", "BEANS"))).as("whole words only").isEmpty();
+        assertThat(DIRECTORY.wordMatches(List.of("AT&T", "VERIZON"))).containsExactly("AT&T WIRELESS");
+        assertThat(DIRECTORY.wordMatches(List.of())).isEmpty();
+    }
+
+    /**
+     * A brand word in many names is the most useful word of a multi-brand search, not a common one (step 8e): every
+     * name of that brand is a word match.
+     */
+    @Test
+    void aBrandWordInManyNamesStillMatchesThemAll() {
+        MerchantDirectory directory = new MerchantDirectory(Map.of(
+                "AMAZON MKTPL", "AMAZON MKTPL",
+                "AMAZON PRIME", "AMAZON PRIME",
+                "AMAZON RETAIL", "AMAZON RETAIL",
+                "AMAZON DIGITAL", "AMAZON DIGITAL",
+                "AMAZON FRESH", "AMAZON FRESH",
+                "CORNER SHOP", "CORNER SHOP"));
+        assertThat(directory.wordMatches(MerchantDirectory.wordsOf("Amazon Target Walmart")))
+                .containsExactly("AMAZON DIGITAL", "AMAZON FRESH", "AMAZON MKTPL", "AMAZON PRIME", "AMAZON RETAIL");
     }
 
     @Test

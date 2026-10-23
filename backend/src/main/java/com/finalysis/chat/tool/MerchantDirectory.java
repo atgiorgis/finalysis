@@ -3,6 +3,7 @@ package com.finalysis.chat.tool;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -72,6 +73,28 @@ public final class MerchantDirectory {
             return List.of();
         }
         return storedByText.keySet().stream().filter(text -> words(text).containsAll(words)).toList();
+    }
+
+    /**
+     * The texts that contain at least one of the words, as whole words (step 8e: "Shell Chevron BP" finds SHELL OIL):
+     * most words matched first, then name order. The caller passes only words that may pick a merchant alone
+     * ({@link SearchText#matchWords}).
+     */
+    public List<String> wordMatches(List<String> words) {
+        if (words.isEmpty()) {
+            return List.of();
+        }
+        Set<String> wanted = Set.copyOf(words);
+        Map<String, Long> matched = new HashMap<>();
+        for (String text : storedByText.keySet()) {
+            long count = words(text).stream().filter(wanted::contains).count();
+            if (count > 0) {
+                matched.put(text, count);
+            }
+        }
+        return storedByText.keySet().stream().filter(matched::containsKey)
+                .sorted(Comparator.comparing((String text) -> matched.get(text)).reversed())
+                .toList();
     }
 
     /** The words of a text as the name match compares them: upper case, split at anything but letters and digits. */

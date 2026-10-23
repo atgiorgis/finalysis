@@ -27,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Name matches first, in name order: texts that hold every word of the search, so an exact name works without a
  *       vector;</li>
+ *   <li>then word matches (step 8e): texts that hold at least one of the search's words, generic words and single
+ *       characters left out when the search text was prepared ({@link SearchText#matchWords}), most words first, then name order. "Shell Chevron BP" finds
+ *       SHELL OIL; the model keeps a word match only if it fits ("Uber Eats" also finds a rideshare);</li>
  *   <li>then the merchants of the categories whose name the search holds ("groceries"), by their spending;</li>
  *   <li>then, by meaning, nearest first: merchants whose document (text and category) is at least {@code min-similarity}
  *       from the search, and the merchants of each category at least that near, at their category's similarity
@@ -73,14 +76,14 @@ class SearchTransactionsTool implements ChatTool {
 
     @Override
     public String description() {
-        return "Finds merchants matching what the user describes, by name and meaning. Returns matched categories, "
-                + "then candidates: merchant, match (NAME, MEANING, or CATEGORY: a merchant of a matched category; "
-                + "keep it only if it fits), similarity (not a figure), category, spent (a positive amount = money "
-                + "out after refunds) and count over the range. Then: get_merchant_totals with the ones that fit "
-                + "(combined total), list_transactions with one, or get_category_totals for a whole category. Without "
-                + "month or from: every month with data; from and to say which. searchIndex (only when some merchants "
-                + "can't be found by meaning; it counts the index, not this search) or byMeaning false: it may have "
-                + "missed some.";
+        return "Finds merchants for what the user describes, by name and meaning. Returns matched categories and "
+                + "candidates: merchant, match (NAME: all query words in the name; WORD: some; MEANING; CATEGORY: of a "
+                + "matched category; keep WORD and CATEGORY ones only if they fit), similarity (not a figure), "
+                + "category, spent (positive = out, after refunds) and count. Then: get_merchant_totals with the "
+                + "ones that fit (their sum), list_transactions with one, or get_category_totals for a whole "
+                + "category. Without month or from: every month with data; from and to say which. searchIndex (only "
+                + "when some merchants can't be found by meaning; counts the index, not this search) or byMeaning "
+                + "false: it may have missed some.";
     }
 
     @Override
@@ -110,6 +113,9 @@ class SearchTransactionsTool implements ChatTool {
         Map<String, Found> found = new LinkedHashMap<>();
         for (String text : query.merchants().nameMatches(query.words())) {
             found.putIfAbsent(text, new Found(text, ToolRead.Search.Match.NAME, null, 0));
+        }
+        for (String text : query.merchants().wordMatches(query.matchWords())) {
+            found.putIfAbsent(text, new Found(text, ToolRead.Search.Match.WORD, null, 0));
         }
         List<Found> byMeaning = new ArrayList<>();
         for (ToolRead.Search.CategoryMatch category : categories) {

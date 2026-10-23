@@ -35,7 +35,8 @@ public record SearchView(@Outbound(MONTH) String from, @Outbound(MONTH) String t
     }
 
     /**
-     * @param match      {@code NAME}, {@code MEANING}, or {@code CATEGORY} (a merchant of a matched category)
+     * @param match      {@code NAME} (every word of the search in the name), {@code WORD} (some word of it, step 8e),
+     *                   {@code MEANING}, or {@code CATEGORY} (a merchant of a matched category)
      * @param similarity cosine similarity, two decimals (a {@code CATEGORY} candidate's is its category's); null when
      *                   found by a name. Not a figure for the answer
      */
