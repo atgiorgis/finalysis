@@ -333,6 +333,10 @@ export interface Transaction {
   aiReviewReason: string | null
   isTransfer: boolean
   transferExcluded: boolean
+  /** The statement it was imported from (Phase 7 step 3b). */
+  statement: { id: number; periodStart: IsoDate; periodEnd: IsoDate }
+  /** The line it was imported from, as printed; null when the import kept none. */
+  sourceLine: { number: number | null; text: string | null } | null
 }
 
 export interface TransactionPage {
@@ -491,7 +495,7 @@ export const reads = {
   accounts: () => getJson<Account[]>('/api/accounts'),
   categories: () => getJson<Category[]>('/api/categories'),
   transactions: (params: Params = {}) => getJson<TransactionPage>('/api/transactions', params),
-  transaction: (id: number) => getJson<Transaction>(`/api/transactions/${id}`),
+  transaction: (id: number | string) => getJson<Transaction>(`/api/transactions/${encodeURIComponent(id)}`),
   reviewQueue: (params: { kind?: ReviewItemKind; accountId?: number } = {}) =>
     getJson<ReviewQueueResponse>('/api/review-queue', params),
 }

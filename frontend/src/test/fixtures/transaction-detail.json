@@ -25,5 +25,14 @@
   "categoryPromptVersion": null,
   "aiReviewReason": null,
   "isTransfer": false,
-  "transferExcluded": false
+  "transferExcluded": false,
+  "statement": {
+    "id": 12,
+    "periodStart": "2026-09-15",
+    "periodEnd": "2026-10-14"
+  },
+  "sourceLine": {
+    "number": 12,
+    "text": "2026-09-30,2026-10-01,TRADER JOE S #662 ARLINGTON VA,Groceries,74.09"
+  }
 }

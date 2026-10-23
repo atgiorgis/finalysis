@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 3 done (step notes); next: step 3b. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 3b done (step notes); next: step 4. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -612,6 +612,34 @@ summary), 0 failures, 0 skipped; frontend 90 tests (10 files); newman 263 reques
   Transaction rows open nothing yet: the transaction sheet is step 3b.
 - `formatSpent` (format.ts): money out as its size, money in with a plus, for the legend, Other and the panels.
 - Fixtures: three panels of September (Groceries, Health from Other, income) and the first page of each drill-down.
+
+### Step 3b notes: transaction sheet with its source line, the drill view
+
+Done: "Phase 7 step 3b: transaction sheet and source line, /drill (UI-04)". Backend 3,277 tests (Maven summary),
+0 failures, 0 skipped; frontend 104 tests (12 files); newman 264 requests, 0 failures.
+
+- **`statement` and `sourceLine` on the transaction response** (§13 decision 4, additive): `statement: {id,
+  periodStart, periodEnd}` and `sourceLine: {number, text}` (null when the import kept neither) on
+  `TransactionResponse`, so `GET /api/transactions/{id}`, the list and the correction and undo responses all carry
+  them; every existing field is unchanged (`TransactionApiTest`, `CorrectionTest`, `NotTransferCategoryTest` pass
+  untouched, and the re-captured fixtures differ only by the added fields). The line is local statement text like
+  `rawDescription`: SEC-10's leak test (logs and problem responses) passes unchanged. `TransactionSourceLineTest`:
+  on the analytics fixture, every txn's line is its file's own line at that number, and its statement is the one it
+  was imported into, with the manifest's period; the list carries the same fields.
+- **The sheet** (`shell/TxnSheet.tsx`): a dialog any page opens with `?txn=<id>` (the page's own parameters kept), so the
+  details panel's rows open it now and the Alerts and Chat links can later. It shows the amount, date and posting
+  date, account, category and who set it, the transfer state, the raw description, the statement's period and the
+  statement line as printed. Close, Escape and the backdrop close it; focus goes to its heading; a malformed `?txn` is
+  ignored and reads nothing. A bottom sheet on a phone, a side panel from 768 px. Read-only: corrections are step 4.
+  `/transactions/:id` opens the Transactions tab with the sheet (the plan's §4.4 route, kept as a link form).
+- **`/drill`** (`pages/DrillPage.tsx`, the target of a TOTAL citation in step 6): forwards only the drill-down's own
+  parameters (`month`, `from`, `to`, `bucket`, `measure`, `accountId`, `categoryId`, `merchant`, `noMerchant`; anything
+  else in the URL is dropped, tested), shows the filters in words, the rows' total (money out and in when both),
+  the rows (50 a page, Show more; each opens the sheet), and, with `expect=<figure>`, the ✓ only when the rows' total
+  is that string, otherwise the difference. Optional `label` names the total.
+- Newman folder 13: a transaction's statement and source line (the first row of the details panel's drill-down).
+- Choice: the sheet is a URL parameter over the current page rather than its own route, so opening a transaction
+  never loses the panel, the month or the chat it was opened from.
 
 ### Requirement mapping
 

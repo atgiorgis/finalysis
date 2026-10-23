@@ -27,7 +27,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 12,
+        "text": "2026-09-30,2026-10-01,TRADER JOE S #662 ARLINGTON VA,Groceries,74.09"
+      }
     },
     {
       "id": 236,
@@ -56,7 +65,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": true,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 18,
+        "text": "28-Sep-2026,ONLINE PAYMENT - THANK YOU,467.76"
+      }
     },
     {
       "id": 235,
@@ -85,7 +103,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 17,
+        "text": "28-Sep-2026,GIANT FOOD #0217 ARLINGTON VA,-68.16"
+      }
     },
     {
       "id": 234,
@@ -114,7 +141,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 16,
+        "text": "26-Sep-2026,GIANT FOOD #0217 ARLINGTON VA,-20.15"
+      }
     },
     {
       "id": 275,
@@ -143,7 +179,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": true,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 21,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 107,
+        "text": "<STMTTRN>\r\n<TRNTYPE>XFER\r\n<DTPOSTED>20260925120000[-5:EST]\r\n<TRNAMT>-467.76\r\n<FITID>NF2026092500259\r\n<NAME>SUMMIT CARD ONLINE PMT\r\n<MEMO>\r\n</STMTTRN>"
+      }
     },
     {
       "id": 160,
@@ -172,7 +217,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 11,
+        "text": "2026-09-24,2026-09-24,AMZN MKTP US*QKLLFB,Merchandise,74.56"
+      }
     },
     {
       "id": 159,
@@ -201,7 +255,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 10,
+        "text": "2026-09-23,2026-09-24,SAFEWAY #1234 ARLINGTON VA,Groceries,49.53"
+      }
     },
     {
       "id": 274,
@@ -230,7 +293,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 21,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 99,
+        "text": "<STMTTRN>\r\n<TRNTYPE>DEBIT\r\n<DTPOSTED>20260922120000[-5:EST]\r\n<TRNAMT>-47.98\r\n<FITID>NF2026092200053\r\n<NAME>CITY OF ARLINGTON WATER UTIL PMT\r\n<MEMO>\r\n</STMTTRN>"
+      }
     },
     {
       "id": 233,
@@ -259,7 +331,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 15,
+        "text": "21-Sep-2026,CHIPOTLE 2291,-31.21"
+      }
     },
     {
       "id": 232,
@@ -288,7 +369,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 14,
+        "text": "21-Sep-2026,TST* NAKAMURA RAMEN,-28.63"
+      }
     },
     {
       "id": 231,
@@ -317,7 +407,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 13,
+        "text": "20-Sep-2026,LYFT *RIDE,-10.83"
+      }
     },
     {
       "id": 158,
@@ -346,7 +445,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 9,
+        "text": "2026-09-20,2026-09-21,GOOGLE *Google One,Services,2.99"
+      }
     },
     {
       "id": 157,
@@ -375,7 +483,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 8,
+        "text": "2026-09-20,2026-09-20,TRADER JOE S #662 ARLINGTON VA,Groceries,36.46"
+      }
     },
     {
       "id": 230,
@@ -404,7 +521,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 12,
+        "text": "19-Sep-2026,LYFT *RIDE,-24.62"
+      }
     },
     {
       "id": 273,
@@ -433,7 +559,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 21,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 91,
+        "text": "<STMTTRN>\r\n<TRNTYPE>DEBIT\r\n<DTPOSTED>20260918120000[-5:EST]\r\n<TRNAMT>-114.64\r\n<FITID>NF2026091800052\r\n<NAME>METRO POWER CO ONLINE PMT\r\n<MEMO>\r\n</STMTTRN>"
+      }
     },
     {
       "id": 272,
@@ -462,7 +597,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 21,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 83,
+        "text": "<STMTTRN>\r\n<TRNTYPE>DIRECTDEP\r\n<DTPOSTED>20260918120000[-5:EST]\r\n<TRNAMT>2449.04\r\n<FITID>NF2026091800012\r\n<NAME>BRIGHTWAY LOGISTICS PAYROLL PPD\r\n<MEMO>ID: 4419920113\r\n</STMTTRN>"
+      }
     },
     {
       "id": 156,
@@ -491,7 +635,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 7,
+        "text": "2026-09-18,2026-09-19,TARGET 00023481 ARLINGTON VA,Merchandise,124.58"
+      }
     },
     {
       "id": 155,
@@ -520,7 +673,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 6,
+        "text": "2026-09-17,2026-09-19,SHELL OIL 57442 ARLINGTON VA,Gas/Automotive,33.02"
+      }
     },
     {
       "id": 229,
@@ -549,7 +711,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 17,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 11,
+        "text": "16-Sep-2026,SQ *BLUE BEAN CAFE 4412,-25.79"
+      }
     },
     {
       "id": 154,
@@ -578,7 +749,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 5,
+        "text": "2026-09-16,2026-09-16,CVS/PHARMACY #04512 ARLINGTON VA,Health Care,38.38"
+      }
     },
     {
       "id": 271,
@@ -607,7 +787,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 21,
+        "periodStart": "2026-09-01",
+        "periodEnd": "2026-09-30"
+      },
+      "sourceLine": {
+        "number": 75,
+        "text": "<STMTTRN>\r\n<TRNTYPE>DEBIT\r\n<DTPOSTED>20260915120000[-5:EST]\r\n<TRNAMT>-68.90\r\n<FITID>NF2026091500051\r\n<NAME>CLEARLINE WIRELESS AUTOPAY\r\n<MEMO>\r\n</STMTTRN>"
+      }
     },
     {
       "id": 153,
@@ -636,7 +825,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 4,
+        "text": "2026-09-15,2026-09-15,TARGET 00023481 ARLINGTON VA,Merchandise,139.75"
+      }
     },
     {
       "id": 152,
@@ -665,7 +863,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 3,
+        "text": "2026-09-15,2026-09-15,SHELL OIL 57442 ARLINGTON VA,Gas/Automotive,56.88"
+      }
     },
     {
       "id": 151,
@@ -694,7 +901,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 12,
+        "periodStart": "2026-09-15",
+        "periodEnd": "2026-10-14"
+      },
+      "sourceLine": {
+        "number": 2,
+        "text": "2026-09-15,2026-09-15,SAFEWAY #1234 ARLINGTON VA,Groceries,43.03"
+      }
     },
     {
       "id": 149,
@@ -723,7 +939,16 @@
       "categoryPromptVersion": null,
       "aiReviewReason": null,
       "isTransfer": false,
-      "transferExcluded": false
+      "transferExcluded": false,
+      "statement": {
+        "id": 11,
+        "periodStart": "2026-08-15",
+        "periodEnd": "2026-09-14"
+      },
+      "sourceLine": {
+        "number": 16,
+        "text": "2026-09-13,2026-09-13,SHELL OIL 57442 ARLINGTON VA,Gas/Automotive,32.40"
+      }
     }
   ],
   "page": 0,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { reads, type DashboardDetails, type DashboardResponse, type DrillDownResponse } from '../api'
 import { detailsTarget, shownFigure, shownName, type Detail } from '../detailParam'
 import { formatDate, formatMoney, formatMonth, formatPercent, formatSpent } from '../format'
+import { useTxnSheet } from '../shell/TxnSheet'
 import TrendChart from './charts/TrendChart'
 
 const PAGE_SIZE = 50
@@ -28,6 +29,7 @@ function againstAverage(details: DashboardDetails): string {
 
 /** The rows behind the panel's total, paged, with the check that they add up to it (UI-04). */
 function Transactions({ details, shown }: { details: DashboardDetails; shown: string | null }) {
+  const { open: openTxn } = useTxnSheet()
   const [pages, setPages] = useState<DrillDownResponse[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -70,13 +72,15 @@ function Transactions({ details, shown }: { details: DashboardDetails; shown: st
       ) : (
         <ul className="txn-list">
           {items.map((t) => (
-            <li key={t.id} className="txn-row">
-              <span className="txn-date">{formatDate(t.txnDate)}</span>
-              <span className="txn-merchant">
-                {t.merchant ?? '(no merchant)'}
-                {t.bucket === 'REFUND' && <span className="tag">refund</span>}
-              </span>
-              <span className="txn-amount">{formatMoney(t.amount)}</span>
+            <li key={t.id}>
+              <button type="button" className="txn-row row-button" onClick={() => openTxn(t.id)}>
+                <span className="txn-date">{formatDate(t.txnDate)}</span>
+                <span className="txn-merchant">
+                  {t.merchant ?? '(no merchant)'}
+                  {t.bucket === 'REFUND' && <span className="tag">refund</span>}
+                </span>
+                <span className="txn-amount">{formatMoney(t.amount)}</span>
+              </button>
             </li>
           ))}
         </ul>

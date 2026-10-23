@@ -552,6 +552,68 @@
   color: var(--danger);
 }
 
+.row-button.txn-row {
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+}
+
+/* ---- transaction sheet: a bottom sheet on a phone, a side panel on desktop (UI-07) ---- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(23 32 43 / 40%);
+}
+
+.sheet {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+}
+
+.sheet h2 {
+  margin: var(--space-1) 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.sheet h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.source-line {
+  margin: 0;
+}
+
+.source-line pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  background: var(--surface-muted);
+  border-radius: var(--radius-control);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .sheet-backdrop {
+    justify-content: flex-end;
+    align-items: stretch;
+  }
+
+  .sheet {
+    width: 420px;
+    max-height: none;
+    border-radius: var(--radius-card) 0 0 var(--radius-card);
+  }
+}
+
 .trend {
   margin: 0;
 }

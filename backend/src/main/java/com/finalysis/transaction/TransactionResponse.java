@@ -25,6 +25,9 @@ import java.time.OffsetDateTime;
  *                         {@code INVALID_ANSWER}); null otherwise
  * @param isTransfer       on a transfer link (kept by the V9 trigger)
  * @param transferExcluded the user said it is not a transfer
+ * @param statement        the statement it was imported from, with its period (Phase 7, UI-04)
+ * @param sourceLine       the line it was imported from, as printed (DAT-07); null when the import kept none. Local
+ *                         statement text, like {@code rawDescription}: never logged, never sent to a model
  */
 public record TransactionResponse(long id, long accountId, String accountName, AccountType accountType,
                                   long statementId, LocalDate txnDate, LocalDate postDate,
@@ -32,5 +35,21 @@ public record TransactionResponse(long id, long accountId, String accountName, A
                                   String merchant, String counterparty, CategoryResponse category,
                                   CategorySource categorySource, Long ruleId, OffsetDateTime categorizedAt,
                                   String categoryModel, BigDecimal categoryConfidence, String categoryPromptVersion,
-                                  String aiReviewReason, boolean isTransfer, boolean transferExcluded) {
+                                  String aiReviewReason, boolean isTransfer, boolean transferExcluded,
+                                  Statement statement, SourceLine sourceLine) {
+
+    /** A statement by its id and period. */
+    public record Statement(long id, LocalDate periodStart, LocalDate periodEnd) {
+    }
+
+    /**
+     * @param number the line's number in the file, when the parser knows it
+     * @param text   the line as printed
+     */
+    public record SourceLine(Integer number, String text) {
+
+        static SourceLine of(Integer number, String text) {
+            return number == null && text == null ? null : new SourceLine(number, text);
+        }
+    }
 }

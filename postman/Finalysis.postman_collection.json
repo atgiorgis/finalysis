@@ -8364,7 +8364,7 @@
     },
     {
       "name": "13. UI reads",
-      "description": "Phase 7 reads the UI needs (`docs/plans/phase-7.md` §3), with AI **off**, in the newman run after **12. Chat (AI off)** (the sample months loaded by **9. Analytics**). Step 1: `GET /api/chat/usage` (Settings). Step 2: `GET /api/dashboard?month=` (the Overview in one call), checked against the analytics endpoints: the month's totals, the slices against the category rows and their drill-downs, adding up to spending; and `/api/analytics/categories` returning `spending` and `spendingSharePercent` as strings. Step 3 adds the details panel, step 3b the transaction source line.",
+      "description": "Phase 7 reads the UI needs (`docs/plans/phase-7.md` §3), with AI **off**, in the newman run after **12. Chat (AI off)** (the sample months loaded by **9. Analytics**). Step 1: `GET /api/chat/usage` (Settings). Step 2: `GET /api/dashboard?month=` (the Overview in one call), checked against the analytics endpoints: the month's totals, the slices against the category rows and their drill-downs, adding up to spending; and `/api/analytics/categories` returning `spending` and `spendingSharePercent` as strings. Step 3: the details panel (`GET /api/dashboard/details`) and its rows adding up to it. Step 3b: a transaction's statement and source line.",
       "item": [
         {
           "name": "Chat usage (AI off)",
@@ -8596,7 +8596,38 @@
                   "const r = pm.response.json();",
                   "const cents = (s) => Math.round(parseFloat(s) * 100);",
                   "pm.test('the total is the panel\\'s', () => pm.expect(r.total.net).to.eql(pm.collectionVariables.get('ui_details_total')));",
-                  "pm.test('the listed rows add up to it', () => pm.expect(r.items.reduce((t, i) => t + cents(i.amount), 0)).to.equal(cents(r.total.net)));"
+                  "pm.test('the listed rows add up to it', () => pm.expect(r.items.reduce((t, i) => t + cents(i.amount), 0)).to.equal(cents(r.total.net)));",
+                  "pm.collectionVariables.set('ui_txn_id', r.items[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transaction: its statement and source line",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/transactions/{{ui_txn_id}}",
+            "description": "Step 3b, UI-04: a transaction carries the statement it came from (id and period) and the line it was imported from, as printed. Additive: `statementId` and every other field are unchanged."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json();",
+                  "pm.test('the statement is the one it was imported into, with its period', () => {",
+                  "    pm.expect(t.statement.id).to.eql(t.statementId);",
+                  "    pm.expect(t.statement.periodStart).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "    pm.expect(t.statement.periodEnd >= t.statement.periodStart).to.be.true;",
+                  "});",
+                  "pm.test('the source line: its number and its text, which holds the description as printed', () => {",
+                  "    pm.expect(t.sourceLine.number).to.be.a('number').and.above(1);",
+                  "    pm.expect(t.sourceLine.text).to.be.a('string').and.include(t.rawDescription.split(' ')[0]);",
+                  "});"
                 ]
               }
             }

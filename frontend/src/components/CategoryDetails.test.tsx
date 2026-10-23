@@ -89,7 +89,7 @@ test('the transactions behind the total add up to the figure the Overview showed
   expect(check).toHaveTextContent('8 transactions · add up to $477.94 ✓')
   expect(check).not.toHaveClass('adds-up-not')
   const panel = screen.getByRole('region', { name: 'Groceries' })
-  const rows = within(panel).getAllByRole('listitem').filter((li) => li.classList.contains('txn-row'))
+  const rows = [...panel.querySelectorAll('.txn-row')]
   expect(rows).toHaveLength(8)
   expect(rows[0]).toHaveTextContent(`Sep 30TRADER JOE S${MINUS}$74.09`)
   // The slice the Overview showed is the same string as the panel's total and the rows' total.
@@ -145,7 +145,7 @@ test('more rows than a page: Show more asks for the next page', async () => {
 
   expect(requests).toContain(drill(params, 1))
   const panel = screen.getByRole('region', { name: 'Groceries' })
-  expect(within(panel).getAllByRole('listitem').filter((li) => li.classList.contains('txn-row'))).toHaveLength(8)
+  expect([...panel.querySelectorAll('.txn-row')]).toHaveLength(8)
   expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument()
 })
 

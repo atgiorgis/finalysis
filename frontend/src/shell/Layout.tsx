@@ -4,12 +4,16 @@ import CloudAiBanner from './CloudAiBanner'
 import MonthPicker from './MonthPicker'
 import { BottomNav, NavTabs } from './Navigation'
 import { useMonth, useShellData } from './ShellData'
+import TxnSheet from './TxnSheet'
 
 function accountsLine(count: number): string {
   return count === 1 ? '1 account' : `${count} accounts`
 }
 
-/** The frame of every tab: the cloud-AI banner, the header with the tabs and the month picker, the bottom bar. */
+/**
+ * The frame of every tab: the cloud-AI banner, the header with the tabs and the month picker, the bottom bar, and the
+ * transaction sheet any page can open (`?txn=`).
+ */
 export default function Layout() {
   const { status, accounts, loading, error } = useShellData()
   const { month } = useMonth()
@@ -36,6 +40,7 @@ export default function Layout() {
         {!error && !loading && <Outlet />}
       </main>
       <BottomNav />
+      {!error && !loading && <TxnSheet />}
     </div>
   )
 }
