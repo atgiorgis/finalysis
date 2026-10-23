@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.finalysis.account.AccountRepository;
+import com.finalysis.alert.AlertType;
 import com.finalysis.analytics.AnalyticsFixture;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
@@ -102,6 +103,20 @@ class DashboardApiTest {
                 .andExpect(jsonPath("$.totals.spending").value("0.00"))
                 .andExpect(jsonPath("$.spendingSlices.rows").isEmpty())
                 .andExpect(jsonPath("$.vsLastMonth").isEmpty());
+    }
+
+    /** The alert counts keep the alert types' order, as the alerts endpoint does, so the JSON is the same every run. */
+    @Test
+    void alertCountsAreInTheAlertTypesOrder() throws Exception {
+        String body = mockMvc.perform(get(DASHBOARD).param("month", "2026-04")).andReturn().getResponse()
+                .getContentAsString();
+        String counts = body.substring(body.indexOf("\"counts\""));
+        int last = -1;
+        for (AlertType type : AlertType.values()) {
+            int at = counts.indexOf("\"" + type.name() + "\"");
+            assertThat(at).as(type.name()).isGreaterThan(last);
+            last = at;
+        }
     }
 
     @Test

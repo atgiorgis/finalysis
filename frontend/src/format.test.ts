@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { formatDate, formatMoney, formatMonth, formatPercent } from './format'
+import { formatDate, formatMoney, formatMonth, formatPercent, formatSpent } from './format'
 
 const MINUS = '−'
 
@@ -69,5 +69,14 @@ describe('formatMonth and formatDate', () => {
     expect(formatDate('2026-10-14', true)).toBe('Oct 14, 2026')
     expect(formatDate('2026-00-04')).toBe('2026-00-04')
     expect(formatDate(null)).toBe('—')
+  })
+})
+
+describe('formatSpent', () => {
+  test('money out as its size, money in with a plus, zero and null plain', () => {
+    expect(formatSpent('-74.09')).toBe('$74.09')
+    expect(formatSpent('85.00')).toBe('+$85.00')
+    expect(formatSpent('0.00')).toBe('$0.00')
+    expect(formatSpent(null)).toBe('\u2014')
   })
 })

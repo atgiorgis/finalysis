@@ -11,6 +11,8 @@ import com.finalysis.api.ApiMoney;
 import com.finalysis.api.ApiPercent;
 import java.math.BigDecimal;
 import java.time.YearMonth;
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -107,7 +109,10 @@ public record DashboardResponse(YearMonth month, MonthTotals totals, @ApiPercent
     public record AlertsSummary(MonthRange range, Map<AlertType, Integer> counts, List<Alert> newest) {
 
         public AlertsSummary {
-            counts = Map.copyOf(counts);
+            // In the alert types' order, as the alerts endpoint lists them (Map.copyOf's order changes per run).
+            EnumMap<AlertType, Integer> ordered = new EnumMap<>(AlertType.class);
+            ordered.putAll(counts);
+            counts = Collections.unmodifiableMap(ordered);
             newest = List.copyOf(newest);
         }
     }

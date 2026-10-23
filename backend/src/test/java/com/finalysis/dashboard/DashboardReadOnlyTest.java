@@ -68,7 +68,8 @@ class DashboardReadOnlyTest {
     @Test
     void everyReadIsOneReadOnlySnapshot() {
         int reads = 0;
-        for (Method method : DashboardService.class.getDeclaredMethods()) {
+        for (Method method : java.util.stream.Stream.of(DashboardService.class, DashboardDetailsService.class)
+                .flatMap(c -> java.util.Arrays.stream(c.getDeclaredMethods())).toList()) {
             if (Modifier.isPublic(method.getModifiers()) && !Modifier.isStatic(method.getModifiers())) {
                 Transactional tx = method.getAnnotation(Transactional.class);
                 assertThat(tx).as(method.getName()).isNotNull();
@@ -77,7 +78,7 @@ class DashboardReadOnlyTest {
                 reads++;
             }
         }
-        assertThat(reads).isPositive();
+        assertThat(reads).as("dashboard() and details()").isEqualTo(2);
     }
 
     /** Fixture: a dashboard class that dismisses an alert. */

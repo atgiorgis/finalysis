@@ -1,6 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import type { DashboardSlice } from '../../api'
-import { formatMoney, formatPercent } from '../../format'
+import { formatMoney, formatPercent, formatSpent } from '../../format'
 
 /** A slice's name as the legend shows it. */
 export function sliceName(slice: DashboardSlice): string {
@@ -34,16 +34,22 @@ function arc(amount: string): number {
   return value < 0 ? -value : 0
 }
 
-/** Money out as its size; money in (Other when refunds outweigh its charges) with a plus, so it isn't read as spent. */
-function legendAmount(amount: string): string {
-  return amount.startsWith('-') ? formatMoney(amount, { sign: 'magnitude' }) : formatMoney(amount, { sign: 'change' })
-}
-
 /**
  * "Where the money went" (UI-01): the donut and its legend, every row naming its slice, share and amount as the API
  * returns them; the month's spending in the centre.
  */
-export default function SpendingDonut({ spending, slices }: { spending: string; slices: DashboardSlice[] }) {
+export default function SpendingDonut({
+  spending,
+  slices,
+  selected,
+  onSelect,
+}: {
+  spending: string
+  slices: DashboardSlice[]
+  /** The slice whose panel is open, if any. */
+  selected?: DashboardSlice | null
+  onSelect?: (slice: DashboardSlice) => void
+}) {
   let rank = 0
   const rows = slices.map((slice) => {
     const color = sliceColor(slice, rank)
@@ -70,6 +76,8 @@ export default function SpendingDonut({ spending, slices }: { spending: string; 
                 stroke="var(--surface)"
                 strokeWidth={2}
                 isAnimationActive={false}
+                onClick={(_, index) => onSelect?.(rows[index].slice)}
+                cursor={onSelect ? 'pointer' : undefined}
               >
                 {rows.map((row) => (
                   <Cell key={row.name} fill={row.color} />
@@ -85,16 +93,24 @@ export default function SpendingDonut({ spending, slices }: { spending: string; 
       </div>
       <ul className="donut-legend" aria-label="Spending by category">
         {rows.map((row) => (
-          <li key={row.name} className="donut-legend-row">
-            <span className="legend-swatch" style={{ background: row.color }} aria-hidden="true" />
-            <span className="donut-legend-name">{row.name}</span>
-            <span className="donut-legend-share">{formatPercent(row.slice.spendingSharePercent)}</span>
-            <span className="donut-legend-amount">{legendAmount(row.slice.amount)}</span>
-            {row.slice.kind === 'OTHER' && (
-              <span className="donut-legend-members muted">
-                {row.slice.members.map((m) => m.category.name).join(', ')}
-              </span>
-            )}
+          <li key={row.name}>
+            <button
+              type="button"
+              className="donut-legend-row"
+              aria-pressed={selected === row.slice}
+              onClick={() => onSelect?.(row.slice)}
+              disabled={!onSelect}
+            >
+              <span className="legend-swatch" style={{ background: row.color }} aria-hidden="true" />
+              <span className="donut-legend-name">{row.name}</span>
+              <span className="donut-legend-share">{formatPercent(row.slice.spendingSharePercent)}</span>
+              <span className="donut-legend-amount">{formatSpent(row.slice.amount)}</span>
+              {row.slice.kind === 'OTHER' && (
+                <span className="donut-legend-members muted">
+                  {row.slice.members.map((m) => m.category.name).join(', ')}
+                </span>
+              )}
+            </button>
           </li>
         ))}
       </ul>

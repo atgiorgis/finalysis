@@ -67,6 +67,14 @@ export function formatMoney(value: string | null | undefined, options: SignOptio
   return `${signOf(minus, whole, fraction, options)}$${group(whole)}${fraction === undefined ? '' : `.${fraction}`}`
 }
 
+/**
+ * A spending figure, signed as stored: money out as its size (`"-74.09"` → `$74.09`), money in with a plus (`"85.00"` →
+ * `+$85.00`, a category whose refunds outweigh its charges), so money in is never read as spent.
+ */
+export function formatSpent(value: string | null | undefined): string {
+  return value && !value.startsWith('-') ? formatMoney(value, { sign: 'change' }) : formatMoney(value, { sign: 'magnitude' })
+}
+
 /** `"93.8"` → `93.8%`. Null shows as a dash. */
 export function formatPercent(value: string | null | undefined, options: SignOptions = {}): string {
   if (value === null || value === undefined) {

@@ -10,6 +10,7 @@ import type {
   Category,
   CategoryTotalsResponse,
   CoverageResponse,
+  DashboardDetails,
   DashboardResponse,
   DrillDownResponse,
   MerchantTotalsResponse,
@@ -36,6 +37,12 @@ import chatConversations from './fixtures/chat-conversations.json'
 import coverage from './fixtures/coverage.json'
 import dashboardCompleteMonth from './fixtures/dashboard-complete-month.json'
 import dashboardLatest from './fixtures/dashboard-latest.json'
+import detailsCategory from './fixtures/details-category.json'
+import detailsIncome from './fixtures/details-income.json'
+import detailsOtherMember from './fixtures/details-other-member.json'
+import drillDownCategory from './fixtures/drilldown-category.json'
+import drillDownIncome from './fixtures/drilldown-income.json'
+import drillDownOtherMember from './fixtures/drilldown-other-member.json'
 import reviewQueue from './fixtures/review-queue.json'
 import statusOff from './fixtures/status-off.json'
 import transactionDetail from './fixtures/transaction-detail.json'
@@ -84,6 +91,15 @@ export const fixtures = {
   dashboardCompleteMonth: typed<DashboardResponse>(dashboardCompleteMonth),
   /** October 2026, partial with no txns yet: no slices, three partial-coverage flags. */
   dashboardLatest: typed<DashboardResponse>(dashboardLatest),
+  /** September's Groceries panel (the second slice) and the first page of its rows: 8, below the average. */
+  detailsCategory: typed<DashboardDetails>(detailsCategory),
+  drillDownCategory: typed<DrillDownResponse>(drillDownCategory),
+  /** September's Health panel, one of Other's members: 1 row, above the average. */
+  detailsOtherMember: typed<DashboardDetails>(detailsOtherMember),
+  drillDownOtherMember: typed<DrillDownResponse>(drillDownOtherMember),
+  /** September's income panel: 2 rows, no merchants, no share. */
+  detailsIncome: typed<DashboardDetails>(detailsIncome),
+  drillDownIncome: typed<DrillDownResponse>(drillDownIncome),
 }
 
 /**

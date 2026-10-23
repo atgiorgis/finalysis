@@ -103,4 +103,21 @@ save('chat-conversations', await get('/api/chat/conversations'))
 
 // The Overview (step 2): the latest month (partial on the sample data) and the latest complete month.
 save('dashboard-latest', await get(`/api/dashboard?month=${month}`))
-save('dashboard-complete-month', await get(`/api/dashboard?month=${completeMonth}`))
+const dashboard = await get(`/api/dashboard?month=${completeMonth}`)
+save('dashboard-complete-month', dashboard)
+
+// The details panel (step 3): the second slice (more rows than the first), Other's first member, and the income line,
+// each with the first page of the drill-down it names, as the panel asks for it.
+async function panel(name, query) {
+  const details = await get(`/api/dashboard/details?month=${completeMonth}&${query}`)
+  save(`details-${name}`, details)
+  const params = new URLSearchParams({ ...details.drillDown.params, page: '0', size: '50' })
+  save(`drilldown-${name}`, await get(`${details.drillDown.path}?${params}`))
+}
+const slices = dashboard.spendingSlices.rows
+await panel('category', `categoryId=${slices[1].category.id}`)
+const other = slices.find((s) => s.kind === 'OTHER')
+if (other) {
+  await panel('other-member', `categoryId=${other.members[0].category.id}`)
+}
+await panel('income', 'line=INCOME')

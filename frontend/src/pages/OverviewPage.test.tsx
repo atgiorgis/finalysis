@@ -23,6 +23,14 @@ function tiles(): Record<string, string[]> {
   return out
 }
 
+test('without a month in the URL, the Overview asks for the latest complete month', async () => {
+  const { requests } = renderApp('/overview', SEPTEMBER)
+
+  expect(await screen.findByRole('heading', { name: 'Where the money went · September 2026' })).toBeInTheDocument()
+  expect(requests).toContain('/api/dashboard?month=2026-09')
+  expect(requests.filter((r) => r.startsWith('/api/dashboard?month=2026-10'))).toEqual([])
+})
+
 test('one call for the month shown, with every KPI and its change as the API returns them', async () => {
   const { requests } = renderApp('/overview?month=2026-09', SEPTEMBER)
 
@@ -155,7 +163,7 @@ test('recurring: how many are active and the first six', async () => {
 })
 
 test('a partial month with nothing yet: the caveat, no spending, the flags by account', async () => {
-  renderApp('/overview', { '/api/dashboard': fixtures.dashboardLatest })
+  renderApp('/overview?month=2026-10', { '/api/dashboard': fixtures.dashboardLatest })
 
   expect(
     await screen.findByText(

@@ -1,0 +1,43 @@
+{
+  "range": {
+    "from": "2026-09",
+    "to": "2026-09"
+  },
+  "total": {
+    "moneyOut": "0.00",
+    "moneyIn": "4900.24",
+    "net": "4900.24",
+    "count": 2
+  },
+  "page": 0,
+  "size": 50,
+  "totalPages": 1,
+  "items": [
+    {
+      "id": 272,
+      "accountId": 1,
+      "txnDate": "2026-09-18",
+      "amount": "2449.04",
+      "merchant": "BRIGHTWAY LOGISTICS PAYROLL",
+      "category": {
+        "id": 9,
+        "name": "Income",
+        "kind": "INCOME"
+      },
+      "bucket": "INCOME"
+    },
+    {
+      "id": 269,
+      "accountId": 1,
+      "txnDate": "2026-09-04",
+      "amount": "2451.20",
+      "merchant": "BRIGHTWAY LOGISTICS PAYROLL",
+      "category": {
+        "id": 9,
+        "name": "Income",
+        "kind": "INCOME"
+      },
+      "bucket": "INCOME"
+    }
+  ]
+}

@@ -39,7 +39,7 @@ function alertSubject(alert: Alert): string {
 const withMonth = (path: string, month: YearMonth) => `${path}?month=${encodeURIComponent(month)}`
 
 /** "Transfers between your accounts: Excluded", income and refunds, the lines the donut leaves out. */
-export function AtAGlance({ dashboard }: { dashboard: DashboardResponse }) {
+export function AtAGlance({ dashboard, onOpenIncome }: { dashboard: DashboardResponse; onOpenIncome?: () => void }) {
   const totals = dashboard.totals
   if (!totals) {
     return null
@@ -49,7 +49,20 @@ export function AtAGlance({ dashboard }: { dashboard: DashboardResponse }) {
       <h2 id="glance-title">{formatMonth(totals.month)} at a glance</h2>
       <dl className="facts">
         <dt>Income</dt>
-        <dd>{formatMoney(totals.income)}</dd>
+        <dd>
+          {onOpenIncome ? (
+            <button
+              type="button"
+              className="link-button"
+              onClick={onOpenIncome}
+              aria-label={`Income ${formatMoney(totals.income)}: details`}
+            >
+              {formatMoney(totals.income)}
+            </button>
+          ) : (
+            formatMoney(totals.income)
+          )}
+        </dd>
         <dt>Spending</dt>
         <dd>{formatMoney(totals.spending, { sign: 'magnitude' })}</dd>
         {totals.refunds.count > 0 && (
@@ -67,7 +80,8 @@ export function AtAGlance({ dashboard }: { dashboard: DashboardResponse }) {
           <div className="facts-row">
             <dt>Transfers not matched yet</dt>
             <dd>
-              Not counted ({totals.unlinkedTransfers.count === 1 ? '1 transaction' : `${totals.unlinkedTransfers.count} transactions`})
+              Not counted (
+              {totals.unlinkedTransfers.count === 1 ? '1 transaction' : `${totals.unlinkedTransfers.count} transactions`})
             </dd>
           </div>
         )}

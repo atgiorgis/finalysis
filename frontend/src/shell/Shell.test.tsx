@@ -96,14 +96,14 @@ test('an unknown cloud provider is named as the backend reports it', async () =>
 test('the header names the account count and the month shown', async () => {
   renderApp('/overview')
 
-  expect(await screen.findByText(`${fixtures.accounts.length} accounts · October 2026`)).toBeInTheDocument()
+  expect(await screen.findByText(`${fixtures.accounts.length} accounts · September 2026`)).toBeInTheDocument()
 })
 
-test('the picker offers the months with data, newest first, partial months marked', async () => {
+test('the picker opens on the latest complete month and lists every month with data, partial ones marked', async () => {
   const { requests } = renderApp('/overview')
 
   const picker = await screen.findByRole('combobox', { name: 'Month' })
-  expect(picker).toHaveValue('2026-10')
+  expect(picker).toHaveValue('2026-09')
   expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual([
     'October 2026 (partial)',
     'September 2026',
@@ -128,8 +128,20 @@ test('choosing a month puts it in the URL, and the tabs keep it', async () => {
   expect(within(nav).getByRole('link', { name: 'Alerts' })).toHaveAttribute('href', '/alerts?month=2026-08')
 })
 
-test('a month without data in the URL falls back to the latest month', async () => {
+test('a month without data in the URL falls back to the latest complete month', async () => {
   renderApp('/overview?month=2019-01')
+
+  expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveValue('2026-09')
+})
+
+test('the partial month can still be chosen', async () => {
+  renderApp('/overview?month=2026-10')
+
+  expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveValue('2026-10')
+})
+
+test('when no month is complete, the latest month', async () => {
+  renderApp('/overview', { '/api/analytics/coverage': { ...fixtures.coverage, latestCompleteMonth: null } })
 
   expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveValue('2026-10')
 })

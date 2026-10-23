@@ -1,0 +1,63 @@
+{
+  "month": "2026-09",
+  "coverage": "COMPLETE",
+  "kind": "INCOME",
+  "category": null,
+  "bucket": "INCOME",
+  "total": "4900.24",
+  "spendingSharePercent": null,
+  "amount": "4900.24",
+  "average": {
+    "amount": "4901.04",
+    "monthsUsed": 3,
+    "monthsWanted": 3,
+    "differenceFromAverage": "-0.80",
+    "differencePercent": "0.0"
+  },
+  "trend": [
+    {
+      "month": "2026-04",
+      "coverage": "PARTIAL",
+      "amount": "9799.44"
+    },
+    {
+      "month": "2026-05",
+      "coverage": "COMPLETE",
+      "amount": "7350.30"
+    },
+    {
+      "month": "2026-06",
+      "coverage": "COMPLETE",
+      "amount": "4899.65"
+    },
+    {
+      "month": "2026-07",
+      "coverage": "COMPLETE",
+      "amount": "4903.39"
+    },
+    {
+      "month": "2026-08",
+      "coverage": "COMPLETE",
+      "amount": "4900.09"
+    },
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE",
+      "amount": "4900.24"
+    }
+  ],
+  "topMerchants": null,
+  "drillDown": {
+    "path": "/api/analytics/transactions",
+    "params": {
+      "month": "2026-09",
+      "measure": "RECEIVED"
+    },
+    "total": {
+      "moneyOut": "0.00",
+      "moneyIn": "4900.24",
+      "net": "4900.24",
+      "count": 2
+    }
+  }
+}

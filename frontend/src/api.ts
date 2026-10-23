@@ -429,6 +429,34 @@ export interface DashboardResponse {
   recurring: { active: number; truncated: boolean; items: RecurringCharge[] }
 }
 
+/** `GET /api/dashboard/details`: one Overview total's panel (Phase 7 §3.2). */
+export interface DashboardDetails {
+  month: YearMonth
+  coverage: Coverage
+  kind: 'CATEGORY' | 'UNCATEGORIZED' | 'INCOME'
+  category: CategoryRef | null
+  bucket: TxnBucket
+  /** Signed as stored: the figure the Overview showed. */
+  total: Money
+  spendingSharePercent: Percent | null
+  /** `total` as a positive magnitude, as the trends measure it. */
+  amount: Money
+  average: {
+    amount: Money | null
+    monthsUsed: number
+    monthsWanted: number
+    differenceFromAverage: Money | null
+    differencePercent: Percent | null
+  }
+  trend: { month: YearMonth; coverage: Coverage; amount: Money }[]
+  topMerchants: MerchantTotalsResponse | null
+  /** `GET {path}` with exactly these params lists the rows behind `total`. */
+  drillDown: { path: string; params: Record<string, string>; total: MoneyFlow }
+}
+
+/** Which details panel: a category, Uncategorized money out, or the income line. */
+export type DetailsTarget = { categoryId: number } | { uncategorized: true } | { line: 'INCOME' }
+
 /** `GET /api/chat/usage`: today's estimated chat spend and the caps (null when a cap is off). */
 export interface ChatDailyUsage {
   day: IsoDate
@@ -442,6 +470,8 @@ export const reads = {
   status: () => getJson<StatusResponse>('/api/status'),
   chatUsage: () => getJson<ChatDailyUsage>('/api/chat/usage'),
   dashboard: (month?: YearMonth | null) => getJson<DashboardResponse>('/api/dashboard', { month }),
+  details: (month: YearMonth, target: DetailsTarget) =>
+    getJson<DashboardDetails>('/api/dashboard/details', { month, ...target }),
   coverage: () => getJson<CoverageResponse>('/api/analytics/coverage'),
   months: (params: { from?: YearMonth; to?: YearMonth; accountId?: number } = {}) =>
     getJson<MonthlyTotalsResponse>('/api/analytics/months', params),

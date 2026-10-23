@@ -8541,6 +8541,86 @@
               }
             }
           ]
+        },
+        {
+          "name": "Details: the largest slice's panel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/dashboard/details?month=2026-09&categoryId={{ui_top_category}}",
+            "description": "Step 3: the details panel of September's largest slice. Its total is the slice; its share the slice's; six trend months ending at September, the last one its amount; the drill-down it names is saved for the next request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const slice = JSON.parse(pm.collectionVariables.get('ui_dashboard_sep')).spendingSlices.rows[0];",
+                  "pm.collectionVariables.set('ui_details_query', Object.entries(d.drillDown.params).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&'));",
+                  "pm.collectionVariables.set('ui_details_total', d.total);",
+                  "pm.test('the total and share are the slice\\'s', () => {",
+                  "    pm.expect(d.total).to.eql(slice.amount);",
+                  "    pm.expect(d.spendingSharePercent).to.eql(slice.spendingSharePercent);",
+                  "});",
+                  "pm.test('six trend months to September, the last its amount', () => {",
+                  "    pm.expect(d.trend.map(c => c.month)).to.eql(['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']);",
+                  "    pm.expect(d.trend[5].amount).to.eql(d.amount);",
+                  "});",
+                  "pm.test('the drill-down names the transactions endpoint and totals the panel', () => {",
+                  "    pm.expect(d.drillDown.path).to.eql('/api/analytics/transactions');",
+                  "    pm.expect(d.drillDown.total.net).to.eql(d.total);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Details: the rows add up to the panel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/analytics/transactions?{{ui_details_query}}&size=200",
+            "description": "UI-04: the drill-down the panel names, run as named, lists rows that add up to its total, in whole cents."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const cents = (s) => Math.round(parseFloat(s) * 100);",
+                  "pm.test('the total is the panel\\'s', () => pm.expect(r.total.net).to.eql(pm.collectionVariables.get('ui_details_total')));",
+                  "pm.test('the listed rows add up to it', () => pm.expect(r.items.reduce((t, i) => t + cents(i.amount), 0)).to.equal(cents(r.total.net)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Details: income and the requests it refuses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/dashboard/details?month=2026-09",
+            "description": "Without categoryId, uncategorized=true or line=INCOME: a 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

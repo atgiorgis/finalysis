@@ -1,0 +1,118 @@
+{
+  "month": "2026-09",
+  "coverage": "COMPLETE",
+  "kind": "CATEGORY",
+  "category": {
+    "id": 2,
+    "name": "Groceries",
+    "kind": "EXPENSE"
+  },
+  "bucket": "EXPENSE",
+  "total": "-477.94",
+  "spendingSharePercent": "13.5",
+  "amount": "477.94",
+  "average": {
+    "amount": "667.19",
+    "monthsUsed": 3,
+    "monthsWanted": 3,
+    "differenceFromAverage": "-189.25",
+    "differencePercent": "-28.4"
+  },
+  "trend": [
+    {
+      "month": "2026-04",
+      "coverage": "PARTIAL",
+      "amount": "691.89"
+    },
+    {
+      "month": "2026-05",
+      "coverage": "COMPLETE",
+      "amount": "544.99"
+    },
+    {
+      "month": "2026-06",
+      "coverage": "COMPLETE",
+      "amount": "832.68"
+    },
+    {
+      "month": "2026-07",
+      "coverage": "COMPLETE",
+      "amount": "627.89"
+    },
+    {
+      "month": "2026-08",
+      "coverage": "COMPLETE",
+      "amount": "540.99"
+    },
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE",
+      "amount": "477.94"
+    }
+  ],
+  "topMerchants": {
+    "range": {
+      "from": "2026-09",
+      "to": "2026-09"
+    },
+    "accountId": null,
+    "categoryId": 2,
+    "limit": 5,
+    "items": [
+      {
+        "merchant": "SAFEWAY",
+        "spent": "217.12",
+        "count": 3,
+        "firstDate": "2026-09-06",
+        "lastDate": "2026-09-23",
+        "category": {
+          "id": 2,
+          "name": "Groceries",
+          "kind": "EXPENSE"
+        }
+      },
+      {
+        "merchant": "TRADER JOE S",
+        "spent": "172.51",
+        "count": 3,
+        "firstDate": "2026-09-03",
+        "lastDate": "2026-09-30",
+        "category": {
+          "id": 2,
+          "name": "Groceries",
+          "kind": "EXPENSE"
+        }
+      },
+      {
+        "merchant": "GIANT FOOD",
+        "spent": "88.31",
+        "count": 2,
+        "firstDate": "2026-09-26",
+        "lastDate": "2026-09-28",
+        "category": {
+          "id": 2,
+          "name": "Groceries",
+          "kind": "EXPENSE"
+        }
+      }
+    ],
+    "othersSpent": "0.00",
+    "othersCount": 0,
+    "totalSpent": "477.94",
+    "totalCount": 8
+  },
+  "drillDown": {
+    "path": "/api/analytics/transactions",
+    "params": {
+      "month": "2026-09",
+      "bucket": "EXPENSE",
+      "categoryId": "2"
+    },
+    "total": {
+      "moneyOut": "-477.94",
+      "moneyIn": "0.00",
+      "net": "-477.94",
+      "count": 8
+    }
+  }
+}

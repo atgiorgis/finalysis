@@ -1,0 +1,30 @@
+{
+  "range": {
+    "from": "2026-09",
+    "to": "2026-09"
+  },
+  "total": {
+    "moneyOut": "-38.38",
+    "moneyIn": "0.00",
+    "net": "-38.38",
+    "count": 1
+  },
+  "page": 0,
+  "size": 50,
+  "totalPages": 1,
+  "items": [
+    {
+      "id": 154,
+      "accountId": 3,
+      "txnDate": "2026-09-16",
+      "amount": "-38.38",
+      "merchant": "CVS/PHARMACY",
+      "category": {
+        "id": 3,
+        "name": "Health",
+        "kind": "EXPENSE"
+      },
+      "bucket": "EXPENSE"
+    }
+  ]
+}

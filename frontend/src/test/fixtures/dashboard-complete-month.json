@@ -211,11 +211,11 @@
       "to": "2026-09"
     },
     "counts": {
-      "NEW_RECURRING": 0,
       "CATEGORY_SPIKE": 2,
       "LARGE_TRANSACTION": 1,
+      "POSSIBLE_DUPLICATE": 0,
       "RECURRING_PRICE_INCREASE": 1,
-      "POSSIBLE_DUPLICATE": 0
+      "NEW_RECURRING": 0
     },
     "newest": [
       {

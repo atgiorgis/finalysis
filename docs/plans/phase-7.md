@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 2 done (step notes); next: step 3. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 3 done (step notes); next: step 3b. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -65,7 +65,7 @@ screen that uses them comes after, rendered in tests from fixed fixtures.
 
 | Element | Source |
 |---|---|
-| Month picker: the months with data, default the latest month | `GET /api/analytics/coverage` (`latestMonth`, `latestCompleteMonth`, per-account spans) |
+| Month picker: the months with data, default the latest complete month (the latest month when none is complete; owner's decision at step 2's approval) | `GET /api/analytics/coverage` (`latestMonth`, `latestCompleteMonth`, per-account spans) |
 | Partial-month marker on the picker | coverage, per month |
 | Cloud-AI banner | `GET /api/status` → `ai.mode == CLOUD` (wording above) |
 | Account count in the header | `GET /api/accounts` |
@@ -575,6 +575,43 @@ Done: "Phase 7 step 2: Overview and GET /api/dashboard (UI-01)". Backend 3,266 t
   as planned (step 1); the trends and alerts default to the latest complete month instead.
 - Not looked at in a browser yet (jsdom has no layout); step 7's Playwright run and the owner's smoke test will. The
   production build warns that the bundle is over 500 kB (Recharts); splitting it is left for the close-out.
+
+### Step 3 notes: details panel, and the picker's default
+
+Done: "Phase 7 step 3: details panel and GET /api/dashboard/details (UI-01, UI-04)". Backend 3,275 tests (Maven
+summary), 0 failures, 0 skipped; frontend 90 tests (10 files); newman 263 requests, 0 failures.
+
+- **Picker default** (the owner's decision at step 2's approval): the latest complete month, the latest month when
+  none is complete, as the trends and alerts default; the partial month stays listed and marked. On the sample data
+  the Overview now opens on September 2026.
+- **`GET /api/dashboard/details?month=&categoryId= | uncategorized=true | line=INCOME`** (exactly one; `month`
+  required; 400 otherwise or after the latest month with data; 404 for an unknown category), one read-only
+  snapshot: `total` (signed, the figure the Overview showed), `spendingSharePercent` (the month's category row),
+  `amount` (as the trends measure it), `average` (the trends' trailing 3 months, with the difference and its percent
+  computed in Java: `part × 100 / whole`, one rounding, `HALF_EVEN`, the analytics rule, written out because
+  `Arithmetic` is for the alerts only), `trend` (six months as magnitudes, with coverage), `topMerchants` (categories
+  only) and `drillDown: {path, params, total}`. The Refunds & Rebates line is read in its REFUND bucket. Other has no
+  details call: its panel lists its members, each opening its own (decision at the plan, §3.2).
+- **Invariant, now through the panel:** `DashboardInvariantTest` checks, on the sample data for March to October, that
+  every slice, each of Other's members and the income line equal their panel's total, which equals its drill-down's
+  total run as named, whose listed rows add up to it. `DashboardDetailsTest` (fixture): each part equals its endpoint
+  (category row, trends average, the six months, merchants), the refunds line, income and Uncategorized, a month
+  without rows, and every refused request.
+- **Found and fixed:** the dashboard's alert counts were copied with `Map.copyOf`, whose order changes from one JVM
+  run to the next, so the JSON order changed between restarts (the fixture re-capture caught it; the endpoint test
+  compares JSON objects, which ignores order). They now keep the alert types' order, as the alerts endpoint does;
+  `DashboardApiTest.alertCountsAreInTheAlertTypesOrder`; a capture, a backend restart and a second capture gave
+  identical files.
+- **Panel (frontend):** the donut's legend rows and slices, Other's members and the income line open it; the open
+  panel is `?detail=cat:<id> | uncategorized | income | other`, so a link or a reload opens the same panel. It shows
+  "September 2026 › Groceries", the total, the share and the month against its average in words ("$189.25 (−28.4%)
+  below the 3-month average ($667.19)"), the 6-month trend (line, dashed average, partial months hollow; the values
+  also listed as text), top merchants and the transactions (50 a page, Show more). **The ✓:** "8 transactions · add up
+  to $477.94 ✓" shows only when the rows' total, the panel's total and the figure the Overview showed are the same
+  string; otherwise "add up to $470.00, not $477.94" in red, tested both ways. Focus moves to the panel's heading.
+  Transaction rows open nothing yet: the transaction sheet is step 3b.
+- `formatSpent` (format.ts): money out as its size, money in with a plus, for the legend, Other and the panels.
+- Fixtures: three panels of September (Groceries, Health from Other, income) and the first page of each drill-down.
 
 ### Requirement mapping
 

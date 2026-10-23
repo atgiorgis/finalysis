@@ -24,8 +24,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * UI-04's invariant for the donut (docs/plans/phase-7.md §3.2): on the sample data with the answer key's categories,
  * for every month March to October 2026, each slice's amount equals the total of the drill-down behind it (Other's,
- * the sum of its members' drill-downs), and the slices add up to the month's spending. Step 3 adds the details panel
- * to the same chain.
+ * the sum of its members' drill-downs), and the slices add up to the month's spending. Step 3: each slice, each of
+ * Other's members and the income line equal their details panel's total, which equals the total of the drill-down the
+ * panel names, over every page.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -108,5 +109,60 @@ class DashboardInvariantTest {
         }
         assertThat(checked).as("slices checked").isGreaterThan(8 * 3);
         assertThat(otherSlices).as("the sample data has months with more than six categories").isPositive();
+    }
+
+    /** The details panel's total, checked against the drill-down it names, run as named. */
+    private JsonNode details(String params, String figure) throws Exception {
+        JsonNode details = read("/api/dashboard/details?" + params);
+        assertThat(details.get("total").asString()).as(params).isEqualTo(figure);
+        JsonNode drillDown = details.get("drillDown");
+        assertThat(drillDown.get("path").asString()).isEqualTo("/api/analytics/transactions");
+        StringBuilder query = new StringBuilder("size=200");
+        drillDown.get("params").properties().forEach(e -> query.append('&').append(e.getKey()).append('=')
+                .append(e.getValue().asString()));
+        JsonNode rows = read("/api/analytics/transactions?" + query);
+        assertThat(rows.get("total").get("net").asString()).as(params + ": the rows add up to the panel's total")
+                .isEqualTo(figure);
+        assertThat(drillDown.get("total")).as(params).isEqualTo(rows.get("total"));
+        BigDecimal listed = BigDecimal.ZERO;
+        for (JsonNode item : rows.get("items")) {
+            listed = listed.add(new BigDecimal(item.get("amount").asString()));
+        }
+        assertThat(rows.get("totalPages").asInt()).as(params + ": one page holds them").isLessThanOrEqualTo(1);
+        assertThat(listed).as(params + ": the listed rows add up").isEqualByComparingTo(new BigDecimal(figure));
+        return details;
+    }
+
+    @Test
+    void everyPanelEqualsItsSliceAndItsRowsEveryMonth() throws Exception {
+        int panels = 0;
+        for (YearMonth m = FIRST; !m.isAfter(LAST); m = m.plusMonths(1)) {
+            JsonNode dashboard = read("/api/dashboard?month=" + m);
+            for (JsonNode slice : dashboard.get("spendingSlices").get("rows")) {
+                switch (slice.get("kind").asString()) {
+                    case "CATEGORY" -> {
+                        JsonNode d = details("month=" + m + "&categoryId=" + slice.get("category").get("id").asLong(),
+                                slice.get("amount").asString());
+                        assertThat(d.get("spendingSharePercent")).isEqualTo(slice.get("spendingSharePercent"));
+                        panels++;
+                    }
+                    case "OTHER" -> {
+                        for (JsonNode member : slice.get("members")) {
+                            details("month=" + m + "&categoryId=" + member.get("category").get("id").asLong(),
+                                    member.get("amount").asString());
+                            panels++;
+                        }
+                    }
+                    case "UNCATEGORIZED" -> {
+                        details("month=" + m + "&uncategorized=true", slice.get("amount").asString());
+                        panels++;
+                    }
+                    default -> throw new AssertionError(slice);
+                }
+            }
+            details("month=" + m + "&line=INCOME", dashboard.get("totals").get("income").asString());
+            panels++;
+        }
+        assertThat(panels).isGreaterThan(8 * 4);
     }
 }

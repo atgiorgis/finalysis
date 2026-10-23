@@ -1,0 +1,94 @@
+{
+  "month": "2026-09",
+  "coverage": "COMPLETE",
+  "kind": "CATEGORY",
+  "category": {
+    "id": 3,
+    "name": "Health",
+    "kind": "EXPENSE"
+  },
+  "bucket": "EXPENSE",
+  "total": "-38.38",
+  "spendingSharePercent": "1.1",
+  "amount": "38.38",
+  "average": {
+    "amount": "32.26",
+    "monthsUsed": 3,
+    "monthsWanted": 3,
+    "differenceFromAverage": "6.12",
+    "differencePercent": "19.0"
+  },
+  "trend": [
+    {
+      "month": "2026-04",
+      "coverage": "PARTIAL",
+      "amount": "13.54"
+    },
+    {
+      "month": "2026-05",
+      "coverage": "COMPLETE",
+      "amount": "27.15"
+    },
+    {
+      "month": "2026-06",
+      "coverage": "COMPLETE",
+      "amount": "25.95"
+    },
+    {
+      "month": "2026-07",
+      "coverage": "COMPLETE",
+      "amount": "30.06"
+    },
+    {
+      "month": "2026-08",
+      "coverage": "COMPLETE",
+      "amount": "40.77"
+    },
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE",
+      "amount": "38.38"
+    }
+  ],
+  "topMerchants": {
+    "range": {
+      "from": "2026-09",
+      "to": "2026-09"
+    },
+    "accountId": null,
+    "categoryId": 3,
+    "limit": 5,
+    "items": [
+      {
+        "merchant": "CVS/PHARMACY",
+        "spent": "38.38",
+        "count": 1,
+        "firstDate": "2026-09-16",
+        "lastDate": "2026-09-16",
+        "category": {
+          "id": 3,
+          "name": "Health",
+          "kind": "EXPENSE"
+        }
+      }
+    ],
+    "othersSpent": "0.00",
+    "othersCount": 0,
+    "totalSpent": "38.38",
+    "totalCount": 1
+  },
+  "drillDown": {
+    "path": "/api/analytics/transactions",
+    "params": {
+      "month": "2026-09",
+      "bucket": "EXPENSE",
+      "categoryId": "3"
+    },
+    "total": {
+      "moneyOut": "-38.38",
+      "moneyIn": "0.00",
+      "net": "-38.38",
+      "count": 1
+    }
+  }
+}

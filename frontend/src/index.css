@@ -440,8 +440,136 @@
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-1) var(--space-3);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.donut-legend-row[aria-pressed='true'] {
+  background: #eef3fa;
+}
+
+.donut-legend-row:disabled {
+  cursor: default;
+}
+
+.link-button {
+  min-height: var(--touch-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.row-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-details {
+  grid-column: 1 / -1;
+}
+
+.details-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.details-crumb {
+  margin: 0;
+}
+
+.details h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.details-total {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.details-members,
+.details-merchants,
+.txn-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.details-merchants li,
+.txn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.txn-row {
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+}
+
+.txn-date {
+  color: var(--text-muted);
+}
+
+.tag {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  background: var(--surface-muted);
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+}
+
+.adds-up {
+  margin: var(--space-3) 0 0;
+  font-weight: 600;
+  color: var(--income);
+}
+
+.adds-up-not {
+  color: var(--danger);
+}
+
+.trend {
+  margin: 0;
+}
+
+.trend-values {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.trend-values li {
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
 }
 
 .donut-legend-name {

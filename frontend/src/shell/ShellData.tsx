@@ -74,8 +74,9 @@ export function useShellData(): ShellData {
 }
 
 /**
- * The month every tab shows: `?month=` when it is a month with data, else the latest month. Changing it keeps the
- * other query parameters.
+ * The month every tab shows: `?month=` when it is a month with data, else the latest complete month (the latest month
+ * when none is complete), as the trends and alerts default. A later partial month stays in the picker, marked.
+ * Changing it keeps the other query parameters.
  */
 export function useMonth(): { month: YearMonth | null; setMonth: (month: YearMonth) => void } {
   const { months, coverage } = useShellData()
@@ -85,7 +86,7 @@ export function useMonth(): { month: YearMonth | null; setMonth: (month: YearMon
     if (isYearMonth(asked) && months.some((m) => m.month === asked)) {
       return asked
     }
-    return coverage?.latestMonth ?? null
+    return coverage?.latestCompleteMonth ?? coverage?.latestMonth ?? null
   }, [asked, months, coverage])
   const setMonth = useCallback(
     (next: YearMonth) => {
