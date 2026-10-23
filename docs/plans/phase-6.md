@@ -2187,18 +2187,86 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0 -Deval.maxTurnCost=0.05
 ```
 
+### Step 9a notes: chat page, Postman folder, retry wording
+
+Done: "Phase 6 step 9a: chat page, Postman chat folder, retry wording". Backend 3,236 tests (Maven summary; 3,215 + 21), 0 failures, 0 skipped; frontend 11 (2 files).
+newman 254 requests, 721 assertions, 0 failures (folders 1–6, 8, 9 and 12, AI off). Requirements v1.69. Prompt
+`chat-9`. Dev set unchanged (revision 5). Mocks only, no live call; the chat holdout was not opened and the
+categorization holdout not run.
+
+Inputs: dev run 5 on step 8f (Haiku 4.5 and Sonnet 4.6, both 56/58), committed with this step (`docs/eval/README.md`
+"Run 5").
+
+**1. The chat page (CHT-01; not the Phase 7 panel, UI-03).** `frontend/src/ChatPage.tsx` and two calls in `api.ts`
+(`createConversation`, `askTurn`). A question box (at most 1,000 characters, as the API), the conversation, and under
+each answer its citations (a transaction as date, merchant, amount and account; a total by its label; an alert by type
+and month; a recurring series by merchant; a deleted statement's transaction as no longer there) and the turn's
+estimated cost with the model. The first question creates the conversation, follow-ups post to the same id; a problem
+(503 AI off, 429 budget or busy, 409, 400) shows its detail. A fallback answer says it came straight from the data. The
+page shows once the status call answers, under the banner.
+
+**2. The banner (UI-05, SEC-01).** With chat, more than categorization leaves the machine, so the banner now reads
+"Cloud AI is on (Amazon Bedrock): merchant names and amounts are sent for categorization, and chat questions with the
+figures they need are sent for answers." Recorded under SEC-01 (owner's addition). Tests: the banner above the chat page
+with cloud AI, none with AI off.
+
+**3. Postman 12. Chat (AI off)** (in the newman run, after 9. Analytics). Endpoints and fields:
+- `POST /api/chat/conversations` → 201, `{id, createdAt}`, `Location: /api/chat/conversations/{id}`;
+- `GET /api/chat/conversations?page=&size=` → `{items: [{id, title, turns, updatedAt}], page, size, totalPages}`;
+- `GET /api/chat/conversations/{id}` → `{id, title, createdAt, updatedAt, turns: [...]}`; 404 for an unknown id;
+- `POST /api/chat/conversations/{id}/turns` with `{message}` (1 to 1,000 characters): with AI on, `{conversationId,
+  turn, answer, answerSource, grounding, citations, dataNotes, tools, usage: {model, rounds, inputTokens, outputTokens,
+  cacheReadTokens, cacheWriteTokens, callsWithoutUsage, estimatedCost}, limitHit, redactions}`; with AI off, 503
+  `{type: "urn:finalysis:problem:ai-off", title: "AI is off", status: 503, detail: "AI is off. Start the backend with
+  the aws profile to use chat."}`, nothing stored; a blank or 1,001-character message, 400 `{title: "Invalid request",
+  errors: [{field: "message", ...}]}` (validation runs before the AI check, so with AI on or off); exactly 1,000
+  characters passes validation;
+- with AI off the AI check comes before the conversation lookup, so a turn on an unknown id is 503, not 404 (nothing is
+  read); with AI on it is 404;
+- `POST /api/chat/summaries` with AI off → 200, `source: TEMPLATE`, `usage: null`;
+- `POST /api/chat/search-index/refresh` with AI off → 200, `status: OFF`, `calls: 0`;
+- `DELETE /api/chat/conversations/{id}` → 204, then 404 on GET and on a second DELETE.
+Read-only: months, categories, the drill-down total, the transaction count, alerts (dismissed included) and recurring
+charges (all) are saved before the chat requests and compared field by field after them.
+
+**newman run (owner's option a).** A throwaway `pgvector/pgvector:pg17` container on `127.0.0.1:55432`, the backend
+against it on port 8081 without the `aws` profile (`SPRING_DATASOURCE_*` set, so `.env` was not used; Flyway logged
+`jdbc:postgresql://localhost:55432/finalysis_newman` and applied 24 migrations to the empty schema), then
+`npx newman@6` over folders 1–6, 8, 9 and 12: 254 requests, 721 assertions, 0 failures. Afterwards the backend was
+stopped, and the container and its anonymous volume removed. The dev database container (`finalysisapp-db-1`, volume
+`finalysisapp_pgdata`) was never addressed: no command named it except to read its start time, unchanged before and
+after.
+
+**4. Retry wording (CHT-04).** Both retries went as user messages and read as the user's correction, so Sonnet answered
+"You're right, I apologize. Here is the corrected answer" (d-s08, d-m03 turn 2) and Haiku "You're right." (d-x08). They
+now start "Automatic check, not a message from the user: ..." and ask to "write the answer to the user's question again
+from the start, as a new answer to that question"; no word of a correction or an apology (wrong, mistake, incorrect,
+error, sorry, apology, correct, right, fix, rewrite) is in either (`RetryWordingTest`). The prompt version is `chat-9`,
+since what is sent changed. The monthly summary's own retry is not a chat answer and is unchanged. The eval reads the
+retry figures by the new prefix and end.
+- The eval report counts shown answers that start with an apology or "You're right" (after markdown emphasis), with
+  their question ids, in the grounding table.
+
+**5. Phrase checks ignore markdown emphasis (eval).** Sonnet's d-c08 ("You spent more in **March 2026**") failed its
+`says`. Every `*`, and `_` at a word's edge, is removed before `says` and `neverSays` match (an underscore inside a word
+stays). The set file is unchanged, so no new revision.
+
+**Tests**: `ChatPage.test.tsx` (new, 5), `App.test.tsx` (+2, wording updated), `RetryWordingTest` (new, 3),
+`ChatEvalScoringTest` (+17 runs: d-c08 on run 5's answer, emphasis, apology starts), `ChatEvalReportTest` (+1);
+`AnswerGroundingTest`, `ChatServiceTest`, `ChatCallRecorderTest`, `ChatTurnPayloadTest` follow the new retry text.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
-| CHT-01 | 3, 5, 8c, 8d, 8f | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest` |
+| CHT-01 | 3, 5, 8c, 8d, 8f, 9a | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest`, `ChatPage.test.tsx`, newman |
 | CHT-02 | 6, 8b, 8c, 8d, 8e | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest`, `SearchWordMatchTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
-| CHT-04 | 4, 5, 8b, 8d | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
+| CHT-04 | 4, 5, 8b, 8d, 9a | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback), `RetryWordingTest` |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
 | CHT-06 | 7, 8f | `ConversationMemoryTest`, `HistoryAnswerTest` |
 | ANA-05 | 7 | `MonthlySummaryTest` |
-| SEC-01, SEC-08 | 2, 5 | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest` |
+| SEC-01, SEC-08 | 2, 5, 9a | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest`; the banner's wording (`App.test.tsx`) |
 | SEC-02 | 2, 5, 8 | `InstructionLikeTextTest`, injection scripted turns, eval injection category |
 | SEC-03 | 1, 3 | `ChatReadOnlyTest`, `ReadOnlyQueriesTest`, Postgres refusal |
 | AI-01, AI-05, AI-06 | 5, 8c, 8d, 8f | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c, 8d, 8f) |

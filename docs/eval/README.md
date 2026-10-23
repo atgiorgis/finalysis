@@ -104,3 +104,23 @@ search and merchant totals cover all data (18); Haiku's d-m03 turn 2 saw its own
 characters, just before the duplicate alert, and answered from memory; revision 5 accepts Haiku's d-t01 (356.91 and
 93.83). On these runs step 8f makes Sonnet 4.6 the default chat model at $0.15 a turn, with Haiku 4.5 at $0.05 as the
 budget option. These reports keep the scores they were written with.
+
+### Run 5: after step 8f
+
+Two dev runs, committed in step 9a. Both ran on commit `03ac886` (step 8f), dev set version 5, prompt `chat-8`,
+prompt caching on:
+
+- [chat-dev-03ac8864c009-20261023T085241Z.md](chat-dev-03ac8864c009-20261023T085241Z.md) (and `.json`): Haiku 4.5
+  (clean tree), 56 of 58 questions and 64 of 66 turns correct, search 7 of 8; 85,539 uncached input, 1,018,302
+  cache-read, 10,470 cache-write and 10,555 output tokens, $0.25; turn cost limit $0.05 (`-Deval.maxTurnCost`, the
+  budget option).
+- [chat-dev-03ac8864c009-20261023T085623Z.md](chat-dev-03ac8864c009-20261023T085623Z.md) (and `.json`): Sonnet 4.6
+  (working tree dirty), 56 of 58 questions and 64 of 66 turns correct, search 8 of 8; 86,858 uncached input, 1,048,408
+  cache-read, 10,459 cache-write and 12,408 output tokens, $0.80; turn cost limit $0.15 (the app's setting).
+
+Read with step 9a (docs/plans/phase-6.md): three shown answers began "You're right, I apologize" or "You're right."
+(Sonnet d-s08 and d-m03 turn 2, Haiku d-x08), the model answering the grounding retry as if the user had corrected it;
+step 9a rewords both retries and the report now counts such answers. Sonnet's d-c08 failed only because its phrase
+check met "more in **March 2026**"; under step 9a's scoring it is correct. d-x06 (a clarifying question where a refusal
+is expected) is the remaining miss in both runs, and Haiku's d-s03. These reports keep the scores they were written
+with.

@@ -27,3 +27,31 @@ main {
   text-align: center;
   font-weight: 600;
 }
+
+.chat textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.25rem 0 0.5rem;
+  font: inherit;
+}
+
+.chat-turns {
+  list-style: none;
+  padding: 0;
+}
+
+.chat-turn {
+  margin-bottom: 1.5rem;
+}
+
+.chat-answer {
+  white-space: pre-wrap;
+}
+
+.chat-citations,
+.chat-cost,
+.chat-note {
+  font-size: 0.875rem;
+  color: #666;
+}

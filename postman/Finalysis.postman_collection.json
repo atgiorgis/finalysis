@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Finalysis API",
-    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6, **8. Categorization** and **9. Analytics**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **10. Lookups**: manual lookups by id.\n- **11. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.\n\n**Scripts.** The Postman sandbox's global `_` is **Lodash 3**: functions added in Lodash 4 (`minBy`, `maxBy`, `sumBy`, …) don't exist there, so scripts use plain JavaScript or Lodash 3 only. In **8. Categorization**, and in **9. Analytics** after its imports, each subfolder's first request arms a flag and every pick checks what it found; after a failed pick the subfolder's later requests are skipped (`pm.execution.skipRequest`, newman 6.1 or later), so one bad pick is one failure, not a cascade.",
+    "description": "Requests for the Finalysis backend, with tests. Run top to bottom against the local dev app (`./mvnw spring-boot:run`, **without** the `aws` profile) on a **freshly reset** dev database (`scripts/reset-dev-db.sh`): setup creates the accounts, so a second run fails. File uploads use paths relative to the repo root: run newman from there, or set Postman's working directory (Settings → General) to the repo root.\n\n**The newman run** is folders 1–6, **8. Categorization**, **9. Analytics** and **12. Chat (AI off)**, selected with `--folder` (the README gives the command). They use only fictional sample data and expect AI to be off: every AI request asserts `status: OFF` and 0 calls, so none can reach Bedrock.\n\n**Left out of the newman run** (leave out their `--folder`, or untick them in the Collection Runner):\n- **7. Real-file test**: manual runs with your own file, selected in Postman.\n- **10. Lookups**: manual lookups by id.\n- **11. Live AI (aws profile)**: needs the backend started with `SPRING_PROFILES_ACTIVE=aws` and makes live Bedrock calls. Any request that needs the `aws` profile goes in this folder, never in the newman folders.\n\n**Scripts.** The Postman sandbox's global `_` is **Lodash 3**: functions added in Lodash 4 (`minBy`, `maxBy`, `sumBy`, …) don't exist there, so scripts use plain JavaScript or Lodash 3 only. In **8. Categorization**, and in **9. Analytics** after its imports, each subfolder's first request arms a flag and every pick checks what it found; after a failed pick the subfolder's later requests are skipped (`pm.execution.skipRequest`, newman 6.1 or later), so one bad pick is one failure, not a cascade.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -7610,6 +7610,757 @@
           ]
         }
       ]
+    },
+    {
+      "name": "12. Chat (AI off)",
+      "description": "Phase 6 chat over the API with AI **off** (no `aws` profile), in the newman run after **9. Analytics** (it runs on any data, but the read-only check means most with the sample months loaded). Endpoints: `POST /api/chat/conversations` (201, `{id, createdAt}`), `GET /api/chat/conversations`, `GET`/`DELETE /api/chat/conversations/{id}`, `POST /api/chat/conversations/{id}/turns` with `{message}` (1 to 1,000 characters; with AI on it returns the answer, citations and usage), `POST /api/chat/summaries`, `POST /api/chat/search-index/refresh`. **Read-only:** six reads (months, categories, a drill-down total, the transaction count, alerts, recurring charges) are saved first and compared field by field after every chat request. Live chat turns need the `aws` profile and belong in **11. Live AI**, never here.",
+      "item": [
+        {
+          "name": "Before",
+          "item": [
+            {
+              "name": "Before: Months (default range)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_months', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Before: Categories (default range)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/categories",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_categories', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Before: Drill-down total over the default range",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?size=1",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_drilldown', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Before: Transaction count",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?size=1",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_transactions', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Before: Alerts, dismissed included",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?includeDismissed=true",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_alerts', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Before: Recurring charges, all",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=ALL",
+                "description": "Read-only check: saved before any chat request, compared after the last one."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "if (pm.response.code === 200) {",
+                      "    pm.collectionVariables.set('chatBefore_recurring', pm.response.text());",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Conversations",
+          "item": [
+            {
+              "name": "Status: AI is off",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/status",
+                "description": "The folder runs without the `aws` profile: no request here can reach a model."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('AI off: mode only, no provider or models', () => pm.expect(pm.response.json().ai).to.eql({mode: 'OFF'}));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create a conversation → 201",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations",
+                "description": "Creating a conversation works with AI off: it stores only the conversation row."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('an id and a creation time', () => {",
+                      "    pm.expect(body.id).to.be.a('number');",
+                      "    pm.expect(body.createdAt).to.be.a('string');",
+                      "});",
+                      "pm.test('Location names the conversation', () => pm.expect(pm.response.headers.get('Location')).to.match(new RegExp(`/api/chat/conversations/${body.id}$`)));",
+                      "pm.collectionVariables.set('chatConversationId', body.id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get the conversation: same id, no turns",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}",
+                "description": "The id from the create is honored."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the id asked for, no turns', () => {",
+                      "    pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('chatConversationId')));",
+                      "    pm.expect(body.turns).to.eql([]);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "List conversations: it is there",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations?page=0&size=100",
+                "description": "Newest first; page and size as the other list endpoints."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const id = Number(pm.collectionVariables.get('chatConversationId'));",
+                      "const item = pm.response.json().items.find(i => i.id === id);",
+                      "pm.test('listed with 0 turns', () => { pm.expect(item).to.be.an('object'); pm.expect(item.turns).to.eql(0); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Ask with AI off → 503 ai-off",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}/turns",
+                "description": "The documented AI-off answer: 503, problem type `urn:finalysis:problem:ai-off`. Nothing is stored and no call is made.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"message\": \"How much did I spend on dining last month?\"}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('503', () => pm.response.to.have.status(503));",
+                      "const body = pm.response.json();",
+                      "pm.test('problem: AI is off', () => {",
+                      "    pm.expect(body.status).to.eql(503);",
+                      "    pm.expect(body.title).to.eql('AI is off');",
+                      "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
+                      "});",
+                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "The turn was not stored",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}",
+                "description": "An AI-off turn leaves nothing behind."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "pm.test('still no turns', () => pm.expect(pm.response.json().turns).to.eql([]));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "A message of 1,001 characters → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}/turns",
+                "description": "A question is 1 to 1,000 characters. Validation runs before the AI check, so this is a 400 with AI on or off.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"message\": \"{{chatLongMessage}}\"}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('chatLongMessage', 'a'.repeat(1001));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();",
+                      "pm.test('problem: Invalid request', () => {",
+                      "    pm.expect(body.status).to.eql(400);",
+                      "    pm.expect(body.title).to.eql('Invalid request');",
+                      "});",
+                      "pm.test('the message field is named', () => pm.expect(body.errors.map(e => e.field)).to.include('message'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "A message of exactly 1,000 characters passes validation → 503 ai-off",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}/turns",
+                "description": "The limit is inclusive: 1,000 characters reach the AI check.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"message\": \"{{chatLongMessage}}\"}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('chatLongMessage', 'a'.repeat(1000));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('503', () => pm.response.to.have.status(503));",
+                      "const body = pm.response.json();",
+                      "pm.test('problem: AI is off', () => {",
+                      "    pm.expect(body.status).to.eql(503);",
+                      "    pm.expect(body.title).to.eql('AI is off');",
+                      "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
+                      "});",
+                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "A blank message → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}/turns",
+                "description": "A blank question is rejected.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"message\": \"   \"}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400', () => pm.response.to.have.status(400));",
+                      "const body = pm.response.json();",
+                      "pm.test('problem: Invalid request', () => {",
+                      "    pm.expect(body.status).to.eql(400);",
+                      "    pm.expect(body.title).to.eql('Invalid request');",
+                      "});",
+                      "pm.test('the message field is named', () => pm.expect(body.errors.map(e => e.field)).to.include('message'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Unknown conversation → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/999999",
+                "description": "An id that was never created."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "A turn on an unknown conversation with AI off → 503 ai-off",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/conversations/999999/turns",
+                "description": "With AI off the AI check comes first, before the conversation is looked up: nothing is read. With AI on this is a 404.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"message\": \"Hello\"}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('503', () => pm.response.to.have.status(503));",
+                      "const body = pm.response.json();",
+                      "pm.test('problem: AI is off', () => {",
+                      "    pm.expect(body.status).to.eql(503);",
+                      "    pm.expect(body.title).to.eql('AI is off');",
+                      "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
+                      "});",
+                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Monthly summary with AI off: the template, no call",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/chat/summaries",
+                "description": "ANA-05 with AI off: the template summary of the latest complete month. Not stored.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('the Java template, no model call', () => {",
+                      "    pm.expect(body.source).to.eql('TEMPLATE');",
+                      "    pm.expect(body.usage).to.eql(null);",
+                      "    pm.expect(body.text).to.be.a('string').and.not.empty;",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Search index refresh with AI off: OFF, no call",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/search-index/refresh",
+                "description": "The index is filled by categorization's embedding path; with AI off nothing is read or sent."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const body = pm.response.json();",
+                      "pm.test('OFF, nothing embedded', () => {",
+                      "    pm.expect(body.status).to.eql('OFF');",
+                      "    pm.expect(body.calls).to.eql(0);",
+                      "    pm.expect(body.embedded).to.eql(0);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete the conversation → 204",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}",
+                "description": "A user action, never a tool: removes the conversation, its turns, tool calls and summary."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get it after the delete → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}",
+                "description": "Gone."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete it again → 404",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}/api/chat/conversations/{{chatConversationId}}",
+                "description": "Deleting is not idempotent here: an unknown conversation is a 404."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "After",
+          "item": [
+            {
+              "name": "After: Months (default range) unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/months",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_months');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "After: Categories (default range) unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/categories",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_categories');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "After: Drill-down total over the default range unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/transactions?size=1",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_drilldown');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "After: Transaction count unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/transactions?size=1",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_transactions');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "After: Alerts, dismissed included unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/alerts?includeDismissed=true",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_alerts');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "After: Recurring charges, all unchanged",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/api/analytics/recurring?status=ALL",
+                "description": "No chat request changes data (SEC-03, CHT-01: chat tools are read-only): the response equals the one saved before the chat requests, field by field."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const saved = pm.collectionVariables.get('chatBefore_recurring');",
+                      "pm.test('saved before the chat requests', () => pm.expect(saved, 'run this folder from the top').to.be.a('string'));",
+                      "pm.test('the same as before every chat request', () => pm.expect(pm.response.json()).to.eql(JSON.parse(saved)));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -7935,6 +8686,38 @@
     },
     {
       "key": "anaDismissedAt",
+      "value": ""
+    },
+    {
+      "key": "chatConversationId",
+      "value": ""
+    },
+    {
+      "key": "chatLongMessage",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_months",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_categories",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_drilldown",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_transactions",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_alerts",
+      "value": ""
+    },
+    {
+      "key": "chatBefore_recurring",
       "value": ""
     }
   ]

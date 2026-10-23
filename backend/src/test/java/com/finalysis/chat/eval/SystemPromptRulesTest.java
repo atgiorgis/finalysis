@@ -31,8 +31,8 @@ class SystemPromptRulesTest {
     }
 
     @Test
-    void theVersionIsChat8() {
-        assertThat(ChatPrompt.VERSION).isEqualTo("chat-8");
+    void theVersionIsChat9() {
+        assertThat(ChatPrompt.VERSION).isEqualTo("chat-9");
     }
 
     /** Step 8f, chat-8: Haiku's d-m03 turn 2 answered a follow-up about an alert from the earlier answer, no call. */

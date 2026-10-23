@@ -23,8 +23,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class AnswerGrounding {
 
+    /**
+     * Where an automatic retry message comes from, said first (step 9a): the retry goes as a user message, and models
+     * answered "You're right, I apologize" to it as if the user had corrected them (dev run 5).
+     */
+    public static final String AUTOMATIC = "Automatic check, not a message from the user: ";
+
     /** How the retry message starts; the evaluation reads the figures after it (step 8). */
-    public static final String RETRY_PREFIX = "These figures are not in this turn's tool results: ";
+    public static final String RETRY_PREFIX = AUTOMATIC + "these figures are not in this turn's tool results: ";
+
+    /** What follows the figures: a new answer to the question, written from the start. */
+    public static final String RETRY_INSTRUCTION = ". Write the answer to the user's question again from the start, as "
+            + "a new answer to that question, using only figures from tool results; call a tool if one returns the "
+            + "figure you need (`compare_periods` for differences), or say you can't tell from the data.";
 
     private static final Pattern SENTENCE_END = Pattern.compile("[.!?](?=\\s|$)|\\R");
 
@@ -66,8 +77,7 @@ public class AnswerGrounding {
         }
         return RETRY_PREFIX
                 + check.ungrounded().stream().map(Figure::asWritten).distinct().collect(Collectors.joining(", "))
-                + ". Rewrite the answer using only figures from tool results, call a tool if one returns the figure "
-                + "you need (`compare_periods` for differences), or say you can't tell.";
+                + RETRY_INSTRUCTION;
     }
 
     /** The values a figure cites: see {@link AnswerCheck.FigureMatch}. Values under no ref never cite. */

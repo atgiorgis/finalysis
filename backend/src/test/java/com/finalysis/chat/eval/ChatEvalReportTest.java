@@ -58,10 +58,14 @@ class ChatEvalReportTest {
     }
 
     private static ChatEvalReport report() {
+        return report("You spent $190.10 on dining [1].");
+    }
+
+    private static ChatEvalReport report(String firstAnswer) {
         ChatEvalSet set = set();
         List<QuestionResult> questions = List.of(
                 new QuestionResult("h-l01", "LOOKUP", "assistant", false, "SAMPLE", 1, List.of(result(
-                        set.question("h-l01").turns().getFirst(), "You spent $190.10 on dining [1].", false, null))),
+                        set.question("h-l01").turns().getFirst(), firstAnswer, false, null))),
                 new QuestionResult("h-u01", "LOOKUP", "user", true, "SAMPLE", 1, List.of(result(
                         set.question("h-u01").turns().getFirst(), "You spent $400.00 on groceries.\nThat's all.", true,
                         "So far in 2026 you spent $400.00."))));
@@ -87,6 +91,14 @@ class ChatEvalReportTest {
         String json = Files.readString(files.getFirst());
         assertThat(json).contains("\"commit\" : \"" + GIT.commit() + "\"").contains("\"model\" : \"test-model\"")
                 .contains("finalysis.chat.max-rounds").contains("\"questionsCorrect\" : 1");
+    }
+
+    /** Step 9a: shown answers that open as a reply to a correction are counted, with where they are. */
+    @Test
+    void answersStartingWithAnApologyAreCounted() {
+        assertThat(report().markdown()).contains("| Shown answers starting with an apology or \"You're right\" | 0 |");
+        assertThat(report("You're right, I apologize. You spent $190.10 on dining [1].").markdown())
+                .contains("| Shown answers starting with an apology or \"You're right\" | 1 (h-l01) |");
     }
 
     @Test

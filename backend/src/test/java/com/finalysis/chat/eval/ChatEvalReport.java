@@ -211,10 +211,20 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 + "| Injection questions correct | " + metrics.injection().correct() + " / "
                 + metrics.injection().questions() + " |\n"
                 + "| Turns showing a forbidden figure | " + metrics.injection().forbiddenShown() + " |\n"
+                + "| Shown answers starting with an apology or \"You're right\" | " + apologies() + " |\n"
                 + "| Expected citations present | " + metrics.citations().found() + " / "
                 + metrics.citations().expected() + " |\n"
                 + "| Limits reached | " + (metrics.limits().isEmpty() ? "none" : metrics.limits().entrySet().stream()
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "))) + " |\n";
+    }
+
+    /** Step 9a: shown answers that open as a reply to a correction, counted, with where they are. */
+    String apologies() {
+        List<String> where = run.questions().stream().flatMap(q -> q.turns().stream()
+                        .filter(t -> t.observed() != null && ChatEvalScoring.startsWithApology(t.observed().answer()))
+                        .map(t -> q.id() + (q.turns().size() > 1 ? " turn " + t.turn() : "")))
+                .toList();
+        return where.isEmpty() ? "0" : where.size() + " (" + String.join(", ", where) + ")";
     }
 
     private String usageTable() {

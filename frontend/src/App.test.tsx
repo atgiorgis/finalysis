@@ -45,7 +45,8 @@ test('shows the cloud AI banner while cloud AI is on', async () => {
   render(<App />)
 
   expect(await screen.findByRole('status')).toHaveTextContent(
-    'Cloud AI is on (Amazon Bedrock): merchant names and amounts are sent for categorization.',
+    'Cloud AI is on (Amazon Bedrock): merchant names and amounts are sent for categorization, and chat ' +
+      'questions with the figures they need are sent for answers.',
   )
 })
 
@@ -55,4 +56,22 @@ test('names an unknown cloud provider as the backend reports it', async () => {
   render(<App />)
 
   expect(await screen.findByRole('status')).toHaveTextContent('Cloud AI is on (othercloud)')
+})
+
+test('shows the cloud AI banner above the chat page while cloud AI is on', async () => {
+  stubStatus({ mode: 'CLOUD', provider: 'bedrock', models: { main: 'chat-model' } })
+
+  render(<App />)
+
+  expect(await screen.findByRole('region', { name: 'Chat' })).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent(/chat questions with the figures they need are sent/)
+})
+
+test('shows the chat page without a banner while AI is off', async () => {
+  stubStatus({ mode: 'OFF' })
+
+  render(<App />)
+
+  expect(await screen.findByRole('region', { name: 'Chat' })).toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
 })

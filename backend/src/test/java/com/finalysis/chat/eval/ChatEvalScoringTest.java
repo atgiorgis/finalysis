@@ -431,6 +431,42 @@ class ChatEvalScoringTest {
                 .as("the total alone").isFalse();
     }
 
+    // ------------------------------------------------------------------ step 9a
+
+    /** Dev run 5's d-c08 (Sonnet): March named as higher, in bold; the phrase check now reads past the emphasis. */
+    @Test
+    void d_c08_markdownEmphasisDoesNotHideThePhrase() {
+        TurnScore score = scoreDev("d-c08", "You spent more in **March 2026**. You spent $1,809.48 in March compared to "
+                + "$1,687.98 in February, making March about $121.50 (6.7%) higher [1].");
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+        assertThat(scoreDev("d-c08", "You spent more in __February 2026__: $1,687.98 against $1,809.48 in March [1].")
+                .correct()).as("emphasis hides a neverSays no more than a says").isFalse();
+    }
+
+    @Test
+    void emphasisMarkersAreRemovedButUnderscoresInsideWordsStay() {
+        assertThat(ChatEvalScoring.withoutEmphasis("more in **March 2026**, *really* _higher_ than __before__"))
+                .isEqualTo("more in March 2026, really higher than before");
+        assertThat(ChatEvalScoring.withoutEmphasis("max_turn_cost stays")).isEqualTo("max_turn_cost stays");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"You're right, I apologize. Here is the corrected answer:", "You're right.",
+            "You’re right: the total is $5.", "**You're right**, sorry.", "I apologize for the confusion.",
+            "Apologies, here it is.", "My apologies.", "Sorry, I misread.", "I'm sorry, here it is.",
+            "You are right."})
+    void answersOpeningAsAReplyToACorrectionAreFlagged(String answer) {
+        assertThat(ChatEvalScoring.startsWithApology(answer)).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"You spent $5.00 [1].", "Right now you have 2 alerts.", "The right card is CARD-1.",
+            "In June you were charged twice; sorry for the long list.", "Your rent is right where it was."})
+    void otherAnswersAreNot(String answer) {
+        assertThat(ChatEvalScoring.startsWithApology(answer)).isFalse();
+    }
+
     // ------------------------------------------------------------------ dev revision 5 (step 8f)
 
     /** Dev run 4's d-t01 (Haiku): September and its difference from the 3-month average, now a complete answer. */

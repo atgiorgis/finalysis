@@ -193,9 +193,32 @@ final class ChatEvalScoring {
                 written, forbidden, refusal, clarifying, toolChoice);
     }
 
-    /** Why the answer fails the turn's phrase checks, or null when it passes (or has none). */
+    /** Markdown emphasis: every {@code *}, and {@code _} at the edge of a word (step 9a). */
+    private static final Pattern EMPHASIS = Pattern.compile("\\*+|(?<![\\p{L}\\p{N}])_+|_+(?![\\p{L}\\p{N}])");
+
+    /**
+     * A shown answer that opens as a reply to a correction (step 9a): "You're right", an apology, "sorry". The user
+     * said nothing; the model was answering the grounding retry (dev run 5: d-s08, d-m03, d-x08).
+     */
+    private static final Pattern APOLOGY_START = Pattern.compile("^\\W*(?:you'?re (?:absolutely )?right|you are right"
+            + "|i apologi[sz]e|(?:my )?apologies|(?:i'?m |i am )?sorry)\\b", Pattern.CASE_INSENSITIVE);
+
+    /** The text without markdown emphasis, so "more in **March 2026**" reads "more in March 2026". */
+    static String withoutEmphasis(String text) {
+        return EMPHASIS.matcher(text).replaceAll("");
+    }
+
+    /** Whether a shown answer opens as a reply to a correction (see {@link #APOLOGY_START}). */
+    static boolean startsWithApology(String answer) {
+        return answer != null && APOLOGY_START.matcher(withoutEmphasis(answer.replace('’', '\''))).find();
+    }
+
+    /**
+     * Why the answer fails the turn's phrase checks, or null when it passes (or has none). Markdown emphasis is
+     * removed first (step 9a: d-c08's "more in **March 2026**").
+     */
     static String phraseProblem(Turn turn, String answer) {
-        String text = WHITESPACE.matcher(answer.replace('’', '\'')).replaceAll(" ");
+        String text = WHITESPACE.matcher(withoutEmphasis(answer.replace('’', '\''))).replaceAll(" ");
         if (!turn.says().isEmpty() && turn.says().stream().noneMatch(p -> p.matcher(text).find())) {
             return "says none of " + turn.says().stream().map(Pattern::pattern).toList();
         }
@@ -271,7 +294,7 @@ final class ChatEvalScoring {
             return List.of();
         }
         String rest = message.substring(AnswerGrounding.RETRY_PREFIX.length());
-        int end = rest.indexOf(". Rewrite");
+        int end = rest.indexOf(AnswerGrounding.RETRY_INSTRUCTION);
         return Arrays.stream((end < 0 ? rest : rest.substring(0, end)).split(", ")).map(String::strip)
                 .filter(s -> !s.isEmpty()).toList();
     }

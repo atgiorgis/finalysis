@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { fetchStatus, type AiStatus, type StatusResponse } from './api'
+import ChatPage from './ChatPage'
 
 const PROVIDER_NAMES: Record<string, string> = { bedrock: 'Amazon Bedrock' }
 
-/** Shown for as long as cloud AI is on: what leaves the machine, and to whom. */
+/**
+ * Shown for as long as cloud AI is on: what leaves the machine, and to whom (SEC-01). Categorization sends merchant
+ * names and amounts; chat sends the question and the figures its tools return.
+ */
 function CloudAiBanner({ ai }: { ai: AiStatus }) {
   if (ai.mode !== 'CLOUD') {
     return null
@@ -11,7 +15,8 @@ function CloudAiBanner({ ai }: { ai: AiStatus }) {
   const provider = (ai.provider && PROVIDER_NAMES[ai.provider]) ?? ai.provider ?? 'a cloud provider'
   return (
     <div role="status" className="cloud-ai-banner">
-      Cloud AI is on ({provider}): merchant names and amounts are sent for categorization.
+      Cloud AI is on ({provider}): merchant names and amounts are sent for categorization, and chat questions with
+      the figures they need are sent for answers.
     </div>
   )
 }
@@ -39,6 +44,7 @@ export default function App() {
             {new Date(status.timestamp).toLocaleString()})
           </p>
         )}
+        {status && <ChatPage />}
       </main>
     </>
   )

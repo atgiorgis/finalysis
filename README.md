@@ -76,7 +76,11 @@ restores the duplicate. Money is compared in whole cents.
 Setup is strict, so a second run without a reset fails.
 
 **Newman runs with AI off** (no `aws` profile). Every AI request in the run asserts `status: OFF`
-and 0 calls, so the run never reaches Bedrock. Three folders are manual and left out of the run:
+and 0 calls, so the run never reaches Bedrock. **12. Chat (AI off)** creates, reads and deletes a
+conversation, checks that a turn returns the `ai-off` problem (503) and stores nothing, that a
+question over 1,000 characters is a 400, and that no chat request changes data: six reads (months,
+categories, a drill-down total, the transaction count, alerts, recurring charges) are saved before
+the chat requests and compared field by field after them. Three folders are manual and left out of the run:
 **7. Real-file test** (your own files, below), **10. Lookups** (a txn by id, coverage counts) and
 **11. Live AI (aws profile)**, which makes live Bedrock calls and needs the backend started with
 `SPRING_PROFILES_ACTIVE=aws`. In the Collection Runner, untick those three.
@@ -88,7 +92,7 @@ npx newman run postman/Finalysis.postman_collection.json \
     -e postman/Finalysis-Local.postman_environment.json --working-dir . \
     --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
     --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
-    --folder "8. Categorization" --folder "9. Analytics"
+    --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)"
 ```
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,

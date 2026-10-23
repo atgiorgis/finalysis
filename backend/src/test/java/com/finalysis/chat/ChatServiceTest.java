@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.finalysis.account.AccountRepository;
 import com.finalysis.analytics.AnalyticsFixture;
 import com.finalysis.chat.citation.Citation;
+import com.finalysis.chat.grounding.AnswerGrounding;
 import com.finalysis.chat.grounding.GroundingStatus;
 import com.finalysis.support.ChatIntegrationTest;
 import com.finalysis.support.ImportTestSupport;
@@ -269,7 +270,7 @@ class ChatServiceTest {
         List<Message> retry = model.prompts().get(2).getInstructions();
         assertThat(retry.get(retry.size() - 2).getText()).contains("$116.21 more than usual");
         assertThat(retry.getLast().getMessageType()).isEqualTo(MessageType.USER);
-        assertThat(retry.getLast().getText()).startsWith("These figures are not in this turn's tool results: $116.21.");
+        assertThat(retry.getLast().getText()).startsWith(AnswerGrounding.RETRY_PREFIX + "$116.21.");
         assertThat(storedTurn()).containsEntry("retried", true).containsEntry("answer", response.answer());
     }
 

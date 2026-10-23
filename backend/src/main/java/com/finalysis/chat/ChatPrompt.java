@@ -35,9 +35,10 @@ public class ChatPrompt {
      * brand names, no "let me look" without a call, higherPeriod, the trend fields named apart, searchIndex); chat-7 the
      * step 8e fixes (search's WORD match, the fallback from brand names to the merchants themselves, compare_periods
      * for every comparison of two periods); chat-8 the step 8f fix (a follow-up about earlier data calls the tool again,
-     * and a shortened earlier answer is named).
+     * and a shortened earlier answer is named); chat-9 the step 9a retry messages (an automatic check, not the user,
+     * asking for a new answer to the question, so the model doesn't answer "You're right, I apologize").
      */
-    public static final String VERSION = "chat-8";
+    public static final String VERSION = "chat-9";
 
     static final String RESOURCE = "chat/system-prompt.txt";
     /** Where the history starts in {@link #start}'s messages: after the system prompt and the context block. */

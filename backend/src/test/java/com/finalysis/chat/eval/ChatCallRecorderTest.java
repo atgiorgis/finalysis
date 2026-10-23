@@ -51,7 +51,7 @@ class ChatCallRecorderTest {
         wrapped.call(new Prompt(new UserMessage("question")));
         wrapped.call(new Prompt(new UserMessage("tool results")));
         wrapped.call(new Prompt(List.of(new UserMessage(AnswerGrounding.RETRY_PREFIX
-                + "2026. Rewrite the answer using only figures from tool results."))));
+                + "2026" + AnswerGrounding.RETRY_INSTRUCTION))));
         TurnCalls calls = recorder.end();
 
         assertThat(calls.calls()).isEqualTo(3);

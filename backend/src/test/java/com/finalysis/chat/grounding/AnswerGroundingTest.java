@@ -319,9 +319,11 @@ class AnswerGroundingTest {
 
             assertThat(check.ungrounded()).extracting(Figure::asWritten).containsExactly("$116.21", "12%", "$116.21");
             assertThat(new AnswerGrounding(Evidence.GUARD).retryMessage(check)).isEqualTo(
-                    "These figures are not in this turn's tool results: $116.21, 12%. Rewrite the answer using only "
-                            + "figures from tool results, call a tool if one returns the figure you need "
-                            + "(`compare_periods` for differences), or say you can't tell.");
+                    "Automatic check, not a message from the user: these figures are not in this turn's tool "
+                            + "results: $116.21, 12%. Write the answer to the user's question again from the start, "
+                            + "as a new answer to that question, using only figures from tool results; call a tool if "
+                            + "one returns the figure you need (`compare_periods` for differences), or say you can't "
+                            + "tell from the data.");
         }
 
         @Test

@@ -110,7 +110,7 @@ class ChatTurnPayloadTest {
                 case ToolResponseMessage tools -> tools.getResponses().forEach(r -> sent.add(r.responseData()));
                 case AssistantMessage assistant -> assistant.getToolCalls().forEach(c -> sent.add(c.arguments()));
                 default -> {
-                    if (!message.getText().startsWith("These figures are not in this turn's tool results")) {
+                    if (!message.getText().startsWith(com.finalysis.chat.grounding.AnswerGrounding.RETRY_PREFIX)) {
                         sent.add(message.getText());
                     }
                 }

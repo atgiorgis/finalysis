@@ -38,8 +38,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class TurnLoop {
 
-    static final String CUT_ANSWER_RETRY = "Your answer was cut off at the length limit. Answer again, briefly, using "
-            + "only figures from this turn's tool results.";
+    /** The retry after an answer cut at the output cap; framed as the grounding retry is (step 9a). */
+    static final String CUT_ANSWER_RETRY = AnswerGrounding.AUTOMATIC + "the answer was cut off at the length limit. "
+            + "Write the answer to the user's question again from the start, briefly, using only figures from this "
+            + "turn's tool results.";
 
     private final ChatModelClient client;
     private final ToolExecutor executor;

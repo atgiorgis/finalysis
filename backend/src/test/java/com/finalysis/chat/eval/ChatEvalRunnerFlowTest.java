@@ -102,7 +102,7 @@ class ChatEvalRunnerFlowTest {
         assertThat(run.ledgerCost()).isPositive();
         assertThat(run.settings()).containsKey("finalysis.chat.max-rounds")
                 .containsEntry("finalysis.ai.roles.main", ChatIntegrationTest.MAIN_MODEL);
-        assertThat(run.promptVersion()).isEqualTo("chat-8");
+        assertThat(run.promptVersion()).isEqualTo("chat-9");
 
         ChatEvalMetrics metrics = ChatEvalMetrics.of(run.questions(), List.of("LOOKUP", "CANT_ANSWER"));
         assertThat(metrics.grounding().bareYearRetries()).isEqualTo(1);
