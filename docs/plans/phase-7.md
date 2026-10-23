@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 7 done (step notes); next: step 7b. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 7b done (step notes); next: step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -765,6 +765,19 @@ checks in the desktop run).
   the donut and the trend); the trend's x-axis dropped and clipped its end labels (every tick shown, the axis padded);
   a heading focused by code showed a focus ring (none for `h1`/`h2` with `tabindex=-1`, which aren't controls).
   Screenshots stay out of the repo until the close-out's README.
+
+### Step 7b notes: the Goals tab shell
+
+Done: "Phase 7b: Goals tab shell (GOAL-06, tab only)". Backend 3,277 tests (Maven summary, no backend change),
+0 failures, 0 skipped; frontend 167 tests (18 files); layout check 36 passed, 2 skipped.
+
+- **`pages/GoalsPage.tsx`**: the tab, "No goals yet", and three sentences on Layer 2: goals are set by you (the chat
+  may suggest one; only your save creates it), checked each month against your own totals, the same figures as the
+  Overview, with every gap explained by the transactions behind it; "Planning from your own data, not financial
+  advice." No goal data, endpoint, table or control; a test shows the page reads nothing about goals and has no
+  button, field or link. The mockup's report card, goal cards, detail panel and advisor note are Layer 2.
+- Every tab is built, so step 0's placeholder page and the tabs' step numbers are removed; the routes follow the tab
+  order. The layout check now waits for "No goals yet".
 
 ### Requirement mapping
 

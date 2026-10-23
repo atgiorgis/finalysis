@@ -35,7 +35,7 @@ const SCREENS: { name: string; path: string; ready: string; overrides?: Record<s
   { name: 'drill', path: '/drill?month=2026-09&bucket=EXPENSE&categoryId=2&label=Groceries&expect=-477.94', ready: 'add up to' },
   { name: 'chat list', path: '/chat', ready: 'New conversation' },
   { name: 'chat conversation', path: '/chat/7', ready: 'You spent $477.94' },
-  { name: 'goals', path: '/goals', ready: 'h1:Goals' },
+  { name: 'goals', path: '/goals', ready: 'No goals yet' },
   { name: 'settings', path: '/settings', ready: 'Chat costs' },
 ]
 

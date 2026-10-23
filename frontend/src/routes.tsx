@@ -2,8 +2,8 @@ import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-route
 import AlertsPage from './pages/AlertsPage'
 import ChatPage from './pages/ChatPage'
 import DrillPage from './pages/DrillPage'
+import GoalsPage from './pages/GoalsPage'
 import OverviewPage from './pages/OverviewPage'
-import PlaceholderPage from './pages/PlaceholderPage'
 import RecurringPage from './pages/RecurringPage'
 import SettingsPage from './pages/SettingsPage'
 import TransactionsPage from './pages/TransactionsPage'
@@ -24,35 +24,23 @@ function TransactionLink() {
   return <Navigate to={`/transactions?${next}`} replace />
 }
 
-/** Tabs a later step builds; each is a placeholder until then. */
-const BUILT = ['/overview', '/transactions', '/alerts', '/recurring', '/chat', '/settings']
-const PLACEHOLDERS = TABS.filter((tab) => !BUILT.includes(tab.path))
-
-/**
- * Every route of the app, inside the shell. `/` opens the Overview.
- */
+/** Every route of the app, inside the shell, in tab order; `/` opens the Overview, `/drill` lists any total's rows. */
 export default function AppRoutes() {
   return (
     <ShellDataProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/overview" replace />} />
+          <Route path="/overview/*" element={<OverviewPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transactions/:id" element={<TransactionLink />} />
-          <Route path="/drill" element={<DrillPage />} />
           <Route path="/alerts/*" element={<AlertsPage />} />
           <Route path="/recurring/*" element={<RecurringPage />} />
-          {PLACEHOLDERS.map((tab) => (
-            <Route
-              key={tab.path}
-              path={`${tab.path}/*`}
-              element={<PlaceholderPage label={tab.label} step={tab.step} />}
-            />
-          ))}
-          <Route path="/overview/*" element={<OverviewPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:id" element={<ChatPage />} />
+          <Route path="/goals/*" element={<GoalsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/drill" element={<DrillPage />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Route>
       </Routes>
