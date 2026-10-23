@@ -82,3 +82,9 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* A heading focused by code (a panel or a sheet opening) moves the screen reader there; it is not a control. */
+h1[tabindex='-1']:focus,
+h2[tabindex='-1']:focus {
+  outline: none;
+}

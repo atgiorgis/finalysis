@@ -377,7 +377,14 @@
 .cash-flow-net {
   font-size: 0.75rem;
   color: var(--text-muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+/* Six months with their net don't fit one row on a phone: two rows of three. */
+@media (max-width: 479px) {
+  .cash-flow-months {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .legend-swatch {
@@ -849,7 +856,14 @@
 .trend-values li {
   display: flex;
   flex-direction: column;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+@media (max-width: 479px) {
+  .trend-values {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: var(--space-2);
+  }
 }
 
 .donut-legend-name {
@@ -906,6 +920,11 @@
   border-bottom: 1px solid var(--border);
   text-align: left;
   overflow-wrap: anywhere;
+}
+
+.summary-table .num {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 .summary-table th {
@@ -1044,7 +1063,6 @@
 }
 
 .chat-citations .link-button {
-  min-height: auto;
   text-align: left;
 }
 

@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 6 done (step notes); next: step 7. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 7 done (step notes); next: step 7b. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -343,6 +343,16 @@ the stored answer is unchanged.
 
 AI off: the Chat tab shows "Chat needs an AI model. AI is off in this setup (no `aws` profile)", the input disabled,
 earlier conversations still readable.
+
+### 5.4 The first turn is shown from the POST response
+
+The first question of a new conversation is shown from the `POST …/turns` response, not by reading the conversation
+back (decided at step 6's approval). The first question creates the conversation and moves the page to its URL
+(`/chat/:id`), which would normally read that conversation. That read can be answered before the turn is stored, so it
+could replace the answer just shown with an empty conversation; the page therefore skips the read for a conversation it
+created itself. The response is the same record the API stores and re-resolves (answer, citations, usage, limit), so
+nothing is lost by not reading it back; the next visit to the URL reads the stored conversation as usual, with its
+citations re-resolved.
 
 ---
 
@@ -730,6 +740,31 @@ backend change; nothing in the chat loop, tools, prompt or eval touched), 0 fail
 - **Test stability:** the suite runs its files in parallel; a few tests checked a URL or a request before the async
   step behind it finished. They now wait for it, and Testing Library's async timeout is 5 s (`test/setup.ts`). Six full
   runs in a row passed.
+
+### Step 7 notes: the phone pass at 375 px
+
+Done: "Phase 7 step 7: phone layout at 375 px, Playwright layout check (UI-07)". Backend 3,277 tests (Maven summary, no
+backend change), 0 failures, 0 skipped; frontend 165 tests (17 files); layout check 36 passed, 2 skipped (phone-only
+checks in the desktop run).
+
+- **Playwright** 1.64.0 (pinned; Chromium only, §13 decision 5), `npm run test:layout`, run beside `npm test` from now
+  on. It starts the Vite dev server and answers every `/api` request from the unit tests' fixtures (`e2e/mockApi.ts`),
+  so it needs no backend. Vitest only collects `src/**/*.test.*`; the fixtures' JSON imports carry `with { type: 'json'
+  }`, which Node needs to load them outside Vite.
+- **Checked on 16 screens** (Overview in a complete and a partial month and with the cloud banner, the details panel for
+  a category, Other and income, the transaction sheet, Transactions, To review, Alerts, Recurring, `/drill`, the chat
+  list and a conversation, Goals, Settings), at 375 × 812 and 1280 × 900: no horizontal scroll; on a phone the bottom
+  bar and no header tabs, on desktop the reverse; on a phone every button, link, select and input at least 44 px tall,
+  except links inline in running text and checkboxes (whose label is the target), as WCAG 2.5.8 allows. A test shows
+  the measure catches a 20 px button and skips an inline link. Also: More reaches the other tabs; the transaction sheet
+  is a bottom sheet on a phone and a 420 px side panel on desktop.
+- **Found by the check:** a chat citation button at 34 px (fixed).
+- **Found by looking at screenshots** (the checks pass but say nothing about how a screen reads): the Overview's
+  recurring amounts and the cash-flow nets broke mid-number at 375 px (numbers now never wrap; the six months sit in two
+  rows of three below 480 px, as do the trend's values); the cash-flow bars animated from zero (animation off, as for
+  the donut and the trend); the trend's x-axis dropped and clipped its end labels (every tick shown, the axis padded);
+  a heading focused by code showed a focus ring (none for `h1`/`h2` with `tabindex=-1`, which aren't controls).
+  Screenshots stay out of the repo until the close-out's README.
 
 ### Requirement mapping
 

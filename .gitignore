@@ -10,6 +10,8 @@ target/
 # Frontend
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 *.tsbuildinfo
 
 # Real bank and card statements. Only synthetic files under sample-data/ are committed.

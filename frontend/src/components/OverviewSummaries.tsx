@@ -126,8 +126,8 @@ export function RecurringSummary({ dashboard }: { dashboard: DashboardResponse }
           <thead>
             <tr>
               <th scope="col">Merchant</th>
-              <th scope="col">Typical</th>
-              <th scope="col">Next</th>
+              <th scope="col" className="num">Typical</th>
+              <th scope="col" className="num">Next</th>
             </tr>
           </thead>
           <tbody>
@@ -139,8 +139,8 @@ export function RecurringSummary({ dashboard }: { dashboard: DashboardResponse }
                   </Link>
                   {r.category && <span className="muted"> · {r.category.name}</span>}
                 </td>
-                <td>{formatMoney(r.typicalAmount, { sign: 'magnitude' })}</td>
-                <td>{formatDate(r.nextExpectedDate)}</td>
+                <td className="num">{formatMoney(r.typicalAmount, { sign: 'magnitude' })}</td>
+                <td className="num">{formatDate(r.nextExpectedDate)}</td>
               </tr>
             ))}
           </tbody>

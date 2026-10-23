@@ -22,32 +22,32 @@ import type {
   TransactionPage,
   TrendsResponse,
 } from '../api'
-import accounts from './fixtures/accounts.json'
-import alertsAll from './fixtures/alerts-all.json'
-import categoriesAll from './fixtures/analytics-categories.json'
-import categoriesCompleteMonth from './fixtures/analytics-categories-complete-month.json'
-import drillDownTopCategory from './fixtures/analytics-drilldown-top-category.json'
-import merchantsCompleteMonth from './fixtures/analytics-merchants-complete-month.json'
-import months from './fixtures/analytics-months.json'
-import recurringAll from './fixtures/analytics-recurring-all.json'
-import trendsCompleteMonth from './fixtures/analytics-trends-complete-month.json'
-import trendsTopCategory from './fixtures/analytics-trends-top-category.json'
-import categories from './fixtures/categories.json'
-import chatConversations from './fixtures/chat-conversations.json'
-import coverage from './fixtures/coverage.json'
-import dashboardCompleteMonth from './fixtures/dashboard-complete-month.json'
-import dashboardLatest from './fixtures/dashboard-latest.json'
-import detailsCategory from './fixtures/details-category.json'
-import detailsIncome from './fixtures/details-income.json'
-import detailsOtherMember from './fixtures/details-other-member.json'
-import drillDownCategory from './fixtures/drilldown-category.json'
-import drillDownIncome from './fixtures/drilldown-income.json'
-import drillDownOtherMember from './fixtures/drilldown-other-member.json'
-import reviewQueue from './fixtures/review-queue.json'
-import statusOff from './fixtures/status-off.json'
-import transactionDetail from './fixtures/transaction-detail.json'
-import transactionsPage from './fixtures/transactions-page.json'
-import transactionsUncategorized from './fixtures/transactions-uncategorized.json'
+import accounts from './fixtures/accounts.json' with { type: 'json' }
+import alertsAll from './fixtures/alerts-all.json' with { type: 'json' }
+import categoriesAll from './fixtures/analytics-categories.json' with { type: 'json' }
+import categoriesCompleteMonth from './fixtures/analytics-categories-complete-month.json' with { type: 'json' }
+import drillDownTopCategory from './fixtures/analytics-drilldown-top-category.json' with { type: 'json' }
+import merchantsCompleteMonth from './fixtures/analytics-merchants-complete-month.json' with { type: 'json' }
+import months from './fixtures/analytics-months.json' with { type: 'json' }
+import recurringAll from './fixtures/analytics-recurring-all.json' with { type: 'json' }
+import trendsCompleteMonth from './fixtures/analytics-trends-complete-month.json' with { type: 'json' }
+import trendsTopCategory from './fixtures/analytics-trends-top-category.json' with { type: 'json' }
+import categories from './fixtures/categories.json' with { type: 'json' }
+import chatConversations from './fixtures/chat-conversations.json' with { type: 'json' }
+import coverage from './fixtures/coverage.json' with { type: 'json' }
+import dashboardCompleteMonth from './fixtures/dashboard-complete-month.json' with { type: 'json' }
+import dashboardLatest from './fixtures/dashboard-latest.json' with { type: 'json' }
+import detailsCategory from './fixtures/details-category.json' with { type: 'json' }
+import detailsIncome from './fixtures/details-income.json' with { type: 'json' }
+import detailsOtherMember from './fixtures/details-other-member.json' with { type: 'json' }
+import drillDownCategory from './fixtures/drilldown-category.json' with { type: 'json' }
+import drillDownIncome from './fixtures/drilldown-income.json' with { type: 'json' }
+import drillDownOtherMember from './fixtures/drilldown-other-member.json' with { type: 'json' }
+import reviewQueue from './fixtures/review-queue.json' with { type: 'json' }
+import statusOff from './fixtures/status-off.json' with { type: 'json' }
+import transactionDetail from './fixtures/transaction-detail.json' with { type: 'json' }
+import transactionsPage from './fixtures/transactions-page.json' with { type: 'json' }
+import transactionsUncategorized from './fixtures/transactions-uncategorized.json' with { type: 'json' }
 
 /** `T` with every string literal widened to `string`, as a JSON import types it. */
 type Widen<T> = T extends string
@@ -100,6 +100,15 @@ export const fixtures = {
   /** September's income panel: 2 rows, no merchants, no share. */
   detailsIncome: typed<DashboardDetails>(detailsIncome),
   drillDownIncome: typed<DrillDownResponse>(drillDownIncome),
+}
+
+/** `GET /api/chat/usage` with nothing spent and the default caps (hand-written: the capture runs with AI off). */
+export const usageFixture = {
+  day: '2026-10-23',
+  spentToday: '0.000000',
+  maxTurnCost: '0.15',
+  maxDailyCost: '1.00',
+  resetsAt: '2026-10-24T00:00:00-04:00',
 }
 
 /**

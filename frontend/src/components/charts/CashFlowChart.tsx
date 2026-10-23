@@ -88,15 +88,21 @@ export default function CashFlowChart({
               ))}
             </defs>
             <CartesianGrid vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+            <XAxis
+              dataKey="label"
+              interval={0}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+            />
             <YAxis hide />
             <Tooltip content={<TooltipBody />} cursor={{ fill: 'var(--surface-muted)' }} />
-            <Bar dataKey="income" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer">
+            <Bar dataKey="income" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
               {points.map((p) => (
                 <Cell key={p.month} fill={fill('income', p.source)} />
               ))}
             </Bar>
-            <Bar dataKey="spending" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer">
+            <Bar dataKey="spending" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
               {points.map((p) => (
                 <Cell key={p.month} fill={fill('spending', p.source)} />
               ))}

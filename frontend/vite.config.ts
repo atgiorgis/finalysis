@@ -14,5 +14,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // The layout check (e2e/, Playwright) runs on its own: npm run test:layout.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 })

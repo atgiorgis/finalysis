@@ -64,7 +64,14 @@ export default function TrendChart({ trend, average }: { trend: Cell[]; average:
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
             <CartesianGrid vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+            <XAxis
+              dataKey="label"
+              interval={0}
+              padding={{ left: 16, right: 16 }}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+            />
             <YAxis hide domain={[0, 'auto']} />
             <Tooltip content={<TooltipBody />} />
             {averageLine !== null && (

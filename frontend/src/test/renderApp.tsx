@@ -2,16 +2,9 @@ import { render } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { vi } from 'vitest'
 import AppRoutes from '../routes'
-import { fetchFrom, fixtures } from './fixtures'
+import { fetchFrom, fixtures, usageFixture } from './fixtures'
 
-/** `GET /api/chat/usage` with nothing spent and the default caps (hand-written: the capture runs before step 1). */
-export const usageFixture = {
-  day: '2026-10-23',
-  spentToday: '0.000000',
-  maxTurnCost: '0.15',
-  maxDailyCost: '1.00',
-  resetsAt: '2026-10-24T00:00:00-04:00',
-}
+export { usageFixture }
 
 /** What every tab reads through the shell, and the Overview it opens on, from the sample-data fixtures. */
 export const SHELL_ROUTES: Record<string, unknown> = {
