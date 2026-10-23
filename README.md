@@ -141,7 +141,7 @@ than localhost.
 
 Postgres 17 with pgvector. The schema is owned by Flyway (`backend/src/main/resources/db/migration`).
 Hibernate only validates it. Requirements: DAT-01 to DAT-08 in [docs/requirements.md](docs/requirements.md).
-Columns and tables added after V1 are marked with the migration that added them (V5 to V20).
+Columns and tables added after V1 are marked with the migration that added them (V5 to V24).
 
 ```mermaid
 erDiagram
@@ -158,6 +158,9 @@ erDiagram
     account ||--o{ unparsed_upload : "unrecognized PDFs"
     statement |o--o{ unparsed_upload : "resolved by"
     txn }o..o| merchant_embedding : "cleaned merchant (no FK)"
+    txn }o..o| search_embedding : "merchant or category (no FK)"
+    chat_conversation ||--o{ chat_turn : has
+    chat_turn ||--o{ chat_tool_call : ran
 
     account {
         bigint id PK
@@ -280,6 +283,50 @@ erDiagram
         text note
         timestamptz dismissed_at
     }
+    search_embedding {
+        text kind PK "V23: MERCHANT, CATEGORY"
+        text subject PK
+        text model PK
+        text input_sha256
+        vector1024 embedding
+    }
+    chat_conversation {
+        bigint id PK "V21"
+        text title "first question, 80 characters"
+        text summary "older turns, figures stripped"
+        int summary_through
+        timestamptz updated_at
+    }
+    chat_turn {
+        bigint id PK "V21"
+        bigint conversation_id FK
+        int seq
+        text question "as typed"
+        text outbound_question "as sent"
+        text answer "as shown"
+        text answer_source "MODEL, FALLBACK, ERROR"
+        text grounding_status
+        text limit_hit
+        jsonb citations
+        numeric estimated_cost
+        int cache_read_tokens "V24"
+        int cache_write_tokens "V24"
+    }
+    chat_tool_call {
+        bigint id PK "V21"
+        bigint turn_id FK
+        text tool
+        jsonb arguments
+        text status
+    }
+    chat_usage {
+        bigint id PK "V22: counts only, no FK"
+        text kind "TURN, CONVERSATION_SUMMARY, MONTHLY_SUMMARY"
+        text model
+        numeric estimated_cost
+        int cache_read_tokens "V24"
+        int cache_write_tokens "V24"
+    }
 ```
 
 | Table | Purpose |
@@ -295,6 +342,10 @@ erDiagram
 | `unparsed_upload` | A PDF that no layout parser recognized: account, file hash and name, reason, and how it was resolved. No bytes or text are kept. |
 | `merchant_embedding` | One embedding per cleaned merchant name, used to find similar merchants for categorization. |
 | `search_embedding` | The chat search index: one embedding per merchant (its redacted name plus its category name) and per category name, per embedding model. |
+| `chat_conversation` | One chat conversation: a title (the first question), and the summary of older turns with every figure stripped. Deleted by the user or after 90 idle days. |
+| `chat_turn` | One question as typed and as sent, the answer as shown, its grounding, citations, limits and usage. Tool results are never stored. |
+| `chat_tool_call` | The tool calls of a turn: tool name, arguments, status, row count and time. |
+| `chat_usage` | The usage ledger: tokens and estimated cost of every chat turn and summary, counts only. The daily cost cap sums it, so deleting a conversation doesn't reset it. |
 | `alert_dismissal` | Alerts the user dismissed, by stable alert key, with an optional note. Alerts themselves are computed on demand and never stored. See [Alerts](#alerts). |
 
 ### Design decisions
@@ -369,6 +420,10 @@ erDiagram
 | V18 `analytics` | `category.spending_offset`, set for Refunds & Rebates; `ix_txn_date` on `txn (txn_date)` for month-range totals across accounts. |
 | V19 `account_closed_on` | `account.closed_on`: the last day an account was open; coverage expects no statement after it. |
 | V20 `alert_dismissal` | `alert_dismissal`: dismissed alerts by key, with CHECK constraints on the key format, the alert type and a 1–200 character note. |
+| V21 `chat` | `chat_conversation`, `chat_turn` and `chat_tool_call` (turns and tool calls cascade with their conversation), with CHECK constraints on question length (1–1,000), answer source, grounding status, limits and tool-call status. Written only by `ChatConversationStore`. |
+| V22 `chat_usage` | `chat_usage`: one row per chat turn, conversation summary and monthly summary with its tokens and estimated cost, no conversation id or text; backfilled from existing turns. The daily cost cap sums it. |
+| V23 `search_embedding` | `search_embedding`: chat's search index, one 1024-dimension vector per merchant document (redacted text plus category) or category name and embedding model, with the SHA-256 of what was embedded; HNSW cosine index. Categorization's `merchant_embedding` is unchanged. |
+| V24 `chat_cache_tokens` | `cache_read_tokens` and `cache_write_tokens` on `chat_turn` and `chat_usage`, for prompt caching; null on older rows. |
 
 Applied migrations are never edited. Every schema change is a new migration.
 
@@ -434,6 +489,13 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/alerts/{key}` | One alert, computed for its key's month | 200 | — |
 | `PUT` | `/api/alerts/{key}/dismissal` | `{note?}`: dismiss a current alert (idempotent; the first time is kept, the note replaced) | 200 with the alert | — |
 | `DELETE` | `/api/alerts/{key}/dismissal` | Undo a dismissal (idempotent) | 204 | — |
+| `POST` | `/api/chat/conversations` | Start an empty conversation. See [Chat](#chat) | 201 `{id, createdAt}`, `Location` | — |
+| `GET` | `/api/chat/conversations` | Conversations, newest activity first; `?page=&size=` (default 20) | 200 `{items: [{id, title, turns, updatedAt}], page, size, totalPages}` | — |
+| `GET` | `/api/chat/conversations/{id}` | One conversation with its turns (question, answer, grounding, citations re-resolved, limit, usage) | 200 `{id, title, createdAt, updatedAt, turns}` | — |
+| `DELETE` | `/api/chat/conversations/{id}` | Delete it with its turns and summary | 204 | — |
+| `POST` | `/api/chat/conversations/{id}/turns` | `{message}` (1–1,000 characters): ask a question. With AI off, 503 before the conversation is looked up | 200 `{conversationId, turn, answer, answerSource, grounding, citations, dataNotes, tools, usage, limitHit, redactions}` | `ai-off`, `turn-in-progress`, `chat-budget`, `chat-busy`, `ai-unavailable` |
+| `POST` | `/api/chat/summaries` | `{month?}` (`yyyy-MM`, default the latest complete month): the plain-English monthly summary (ANA-05); a Java template with AI off | 200 `{month, source: MODEL\|TEMPLATE, text, grounding, citations, dataNotes, usage}` | `chat-budget`, `ai-unavailable` |
+| `POST` | `/api/chat/search-index/refresh` | Embed merchants and categories missing from the chat search index (capped per run) | 200 `{status, merchants, cached, embedded, calls, callsWithoutUsage, inputTokens, remaining}`; `status: OFF` with AI off | — |
 
 - **Money is a string.** Every money field in a response is a JSON string with exactly two
   decimals (`"closingBalance": "4066.58"`), and money in a request must be such a string; a JSON
@@ -497,6 +559,11 @@ returned.
 | 422 | `category-invalid` | A correction or a rule names a category that doesn't exist | Pick one from `GET /api/categories` |
 | 409 | `rule-exists` | An active user rule with the same field, match type, pattern and direction exists; `ruleId` names it | Change that rule instead |
 | 409 | `rule-seeded` | Deleting a seeded rule, or changing anything on it but `active` | Deactivate it (`PATCH {"active": false}`), or write a user rule, which outranks every seed |
+| 503 | `ai-off` | A chat turn with no AI profile. Checked before the conversation is looked up, so an unknown id is also 503 with AI off (404 with AI on). Nothing is stored, no call is made | Start the backend with `SPRING_PROFILES_ACTIVE=aws` |
+| 409 | `turn-in-progress` | Another question in the same conversation is still being answered | Wait for it, then ask again |
+| 429 | `chat-budget` | The day's estimated chat cost reached `max-daily-cost`; `resetsAt` says when (local midnight) | Wait, or raise the cap |
+| 429 | `chat-busy` | Too many questions at once across conversations, for longer than the wait | Try again in a moment |
+| 502 | `ai-unavailable` | The model call failed after the SDK's retries; a failed turn is stored with its error class only | Try again later |
 | 500 | — | Unexpected error; generic `detail` | Check the server log (it holds no statement data) and report it |
 
 ## Importing statements
@@ -998,8 +1065,8 @@ cd backend && SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
 - **Chat model and cost.** Chat runs on Claude Sonnet 4.6 with `finalysis.chat.max-turn-cost` 0.15
   (dollars per question, estimated before each call) and `max-daily-cost` 1.00. The budget option is
   Claude Haiku 4.5: set `finalysis.ai.roles.main` to `us.anthropic.claude-haiku-4-5-20251001-v1:0` and
-  `max-turn-cost` to 0.05, about a third of the cost per question (dev run 4: Sonnet 57 of 58, Haiku 53
-  of 58). Change both together: startup refuses a model whose largest round would pass the turn limit
+  `max-turn-cost` to 0.05, about a third of the cost per question (dev run 5: both 56 of 58; holdout,
+  Sonnet only: 56 of 58, see [Chat](#chat)). Change both together: startup refuses a model whose largest round would pass the turn limit
   (Sonnet needs at least 0.0675).
 - **The UI shows a banner** while cloud AI is on.
 - **No call happens by itself.** `run-after-import` is false: run the AI with
@@ -1016,8 +1083,7 @@ category names; when similar-merchant examples apply, their redacted merchants a
 the embedding model, the redacted merchant alone. Never the raw description, account names or numbers,
 counterparties, dates, balances or file contents.
 
-**Chat** (Phase 6, being built: the projections, the guard and the question redaction exist and are tested; no
-chat endpoint or model call yet). A chat call may send:
+**Chat** (built in Phase 6). A chat call may send:
 - your question, with account names, institutions and last fours replaced by an alias (`CARD-1`),
   and emails, phone numbers, URLs, runs of 5+ digits, masked numbers and known person-to-person
   names removed;
@@ -1213,8 +1279,69 @@ query, which brought a 24-month alert list from about 550 ms to about 220 ms the
 - **Alerts are household-wide.** `accountId` filters the list; there are no per-account spikes.
 - **Thresholds were checked against the synthetic answer key only.** Real data will need tuning, which
   is why every threshold is configurable.
-- Fixed vs discretionary spending (ANA-02) comes with the Phase 7 UI; the plain-English monthly summary
-  (ANA-05) with the Phase 6 chatbot.
+- Fixed vs discretionary spending (ANA-02) comes with the Phase 7 UI. The plain-English monthly summary
+  (ANA-05) is `POST /api/chat/summaries` (see [Chat](#chat)), written from these records only.
+
+## Chat
+
+Ask questions about your own data in plain English ("how much did I spend on groceries last month?", "any coffee
+shops showing up a lot?"). Requirements CHT-01 to CHT-06 and ANA-05; design in
+[docs/plans/phase-6.md](docs/plans/phase-6.md). Chat needs cloud AI (`aws` profile, see
+[Turning on cloud AI](#turning-on-cloud-ai)); with AI off a question returns 503 `ai-off`, and the monthly summary
+falls back to its Java template.
+
+### How a question is answered
+
+- **The model never does math.** It picks from twelve read-only tools over the analytics services (totals, categories,
+  merchants, trends, comparisons, alerts, recurring charges, transaction lists, meaning-based merchant search); Java
+  computes every figure, including differences and percents. Tools run in a read-only database transaction.
+- **Every figure is grounded.** Each money, percent and count figure in an answer must match a figure the tools
+  returned that turn. An answer that doesn't is retried once; then the app shows a Java-built list of the tool results
+  instead (`answerSource: FALLBACK`). An ungrounded number is never shown.
+- **Citations.** Each answer's markers resolve, on your machine, to the transactions and statement lines behind it or
+  to the drill-down behind a total. They are never sent to the model.
+- **Memory.** A follow-up sees the recent turns and a summary of older ones, with every earlier figure stripped, so a
+  new figure always needs a new tool call. Conversations are deleted after 90 idle days or on demand.
+- **Limits.** Per turn: model rounds, tool calls, tokens, time and estimated cost (`max-turn-cost`); per day:
+  `max-daily-cost` (1.00), summed from the `chat_usage` ledger. What leaves the machine:
+  [What leaves the machine](#what-leaves-the-machine).
+
+### The chat page
+
+The frontend's chat page is a **minimal Phase 6 test surface**, not the chat UI: a question box (at most 1,000
+characters), the conversation, and under each answer its citations and the turn's estimated cost and model. The first
+question starts a conversation and follow-ups continue it; API problems (AI off, budget, busy) show their detail. The
+cloud-AI banner names chat while AI is on. **The full chat UI (conversation list, the chat panel, streaming progress)
+is Phase 7.**
+
+### Model choice
+
+Chat runs on **Claude Sonnet 4.6** with `max-turn-cost` 0.15. The **budget option is Claude Haiku 4.5** with
+`max-turn-cost` 0.05, about a third of the cost per question; see
+[Turning on cloud AI](#turning-on-cloud-ai) for the two settings, which change together. Categorization stays on
+Haiku 4.5 either way. On dev run 5 both scored 56 of 58 questions (Sonnet $0.80, Haiku $0.25 for the set); Sonnet was
+the more reliable at multi-step search, which Haiku skipped about half the time.
+
+### Accuracy
+
+Measured on synthetic question sets with a frozen holdout, scored deterministically (no model judges). On the
+**holdout** (58 questions, evaluated once, Sonnet 4.6): **56 of 58 correct**, 62 of 65 turns grounded on the first try,
+injection 6 of 6, no forbidden figure shown, $0.84 for the set. The two misses were "can't answer" questions that got
+figures: a comparison with a month that has no data, and a share of income no tool computes (grounding caught it and the
+Java fallback was shown). The dev-to-holdout gap was zero. Details and every run:
+[docs/eval/README.md](docs/eval/README.md).
+
+### Chat limitations
+
+- **Grounding checks values, not meaning.** A real figure under the wrong label passes; citations are the check.
+- **"Can't answer" is the weak spot.** Asked about a month without data or a share no tool computes, the model may
+  still give figures (grounded ones, or the fallback list) instead of saying it can't.
+- **No averages over arbitrary ranges, per-day rates or shares of income**; such questions are refused or fall back.
+- **Search knows merchants, not descriptions**, and only their redacted text.
+- **No streaming:** a turn shows nothing until it is checked (typically 3–8 seconds).
+- **Cost limits are estimates** from Anthropic's list prices, and conservative: every input token is priced as a cache
+  write.
+- **Conversations are stored unencrypted** in Postgres until Phase 8, like the statements.
 
 ## Security
 

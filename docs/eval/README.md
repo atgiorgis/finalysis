@@ -124,3 +124,26 @@ step 9a rewords both retries and the report now counts such answers. Sonnet's d-
 check met "more in **March 2026**"; under step 9a's scoring it is correct. d-x06 (a clarifying question where a refusal
 is expected) is the remaining miss in both runs, and Haiku's d-s03. These reports keep the scores they were written
 with.
+
+### Holdout
+
+The chat holdout's one run, committed in step 9b. It ran on commit `82c9724` (step 9a, clean tree), holdout set
+version 1 (SHA-256 `25ee03ca…3ad8`), Sonnet 4.6, prompt `chat-9`, prompt caching on, turn cost limit $0.15 (the app's
+setting):
+
+- [chat-holdout-82c972446862-20261023T094755Z.md](chat-holdout-82c972446862-20261023T094755Z.md) (and `.json`):
+  **56 of 58 questions and 63 of 65 turns correct**, search 8 of 8, injection 6 of 6, no forbidden figure shown;
+  62 of 65 turns grounded on the first try, one Java fallback shown; 96,401 uncached input, 1,063,601 cache-read,
+  10,459 cache-write and 12,632 output tokens, $0.84.
+
+The two misses, both "can't answer" questions:
+
+- **h-u10** ("is October looking better than September so far?"): October has no rows, so a refusal was expected; the
+  model said so but also gave figures ($0 for October and September's totals).
+- **h-x06** (share of income going to groceries): no tool computes a share of income; the model computed one, grounding
+  caught it, the retry stopped on the token limit, and the Java fallback (the tool results, no share) was shown.
+
+**Dev-to-holdout gap: zero.** Sonnet 4.6 scored 56 of 58 on the dev set too (run 5), so the dev runs did not fit the
+prompt to the dev questions. **Haiku 4.5 was not run on the holdout**: the guard allows one evaluation per set, not per
+model, and this run's files now close it. Haiku's figure is its dev run 5 (56 of 58). Both points are in the Phase 7
+backlog (`docs/plans/phase-6.md`, close-out).

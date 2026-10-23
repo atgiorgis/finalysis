@@ -2255,6 +2255,53 @@ stays). The set file is unchanged, so no new revision.
 `ChatEvalScoringTest` (+17 runs: d-c08 on run 5's answer, emphasis, apology starts), `ChatEvalReportTest` (+1);
 `AnswerGroundingTest`, `ChatServiceTest`, `ChatCallRecorderTest`, `ChatTurnPayloadTest` follow the new retry text.
 
+### Step 9b notes: close-out
+
+Done: "Phase 6 step 9b: holdout report, README, close-out". Backend 3,236 tests (Maven summary), 0 failures, 0 skipped (a first run, while the frontend tests ran alongside it, had one failure: `AnalyticsPerformanceTest`, the alerts endpoint at 0.53 s against its 0.5 s limit; the re-run alone passed, and no code changed in this step); frontend 11 (2 files). Requirements v1.70.
+Tag `phase-6-done` on this commit. Docs only: no code, prompt or question-set change; no live AI call; the chat holdout
+question file was not opened and the categorization holdout not run.
+
+**The holdout run** (the owner's, once, on `82c9724`, step 9a, clean tree; Sonnet 4.6, prompt `chat-9`, holdout
+version 1, hash `25ee03ca…3ad8`): **56 of 58 questions and 63 of 65 turns correct**, search 8 of 8, injection 6 of 6,
+tool choice 65 of 65, 62 of 65 grounded on the first try, one fallback shown, no forbidden figure, $0.84. Committed
+with this step with a "Holdout" section in `docs/eval/README.md`; the committed files keep the guard closed. The two
+misses:
+- **h-u10** (the owner's): "is October looking better than September so far?" with no October rows; a refusal was
+  expected, the model said October was partial but gave $0 and September's totals.
+- **h-x06**: a share of income going to groceries; no tool computes one, the model computed it, grounding caught it,
+  the retry stopped on the token limit, and the Java fallback (the tool results, no share) was shown.
+
+Sonnet 4.6 also scored 56 of 58 on the dev set (run 5): no dev-to-holdout gap. Haiku 4.5 was not run on the holdout:
+the guard allows one evaluation per set, not per model.
+
+**Docs.** README: the chat tables and migrations V21–V24 (diagram, table purposes, migration list), the chat endpoints
+and their problems in the API table and error catalogue (with AI off, a turn is 503 `ai-off` before the conversation is
+looked up, so an unknown id is 503, not 404), a Chat section (how a question is answered, the chat page as a minimal
+Phase 6 test surface with the full chat UI in Phase 7, the model choice with the Haiku 4.5 budget option, the holdout
+headline, limitations); "What leaves the machine" and the analytics limitations no longer say chat is being built. The
+newman command already runs folder 12. Requirements v1.70: CHT-01 to CHT-06, ANA-05, SEC-01, SEC-02 and SEC-03 Done, each
+with its evidence; AI-01, AI-05 and AI-06 stay Planned (later phases). CLAUDE.md: the current phase
+is Phase 7.
+
+### Phase 7 backlog (from the Phase 6 close-out)
+
+Recorded, not fixed in Phase 6:
+
+- **h-u10: figures where a refusal was expected.** Asked about a month with no rows, the model gives $0 and the other
+  period's totals instead of saying there is nothing to compare. A tool result that says "no data in this period"
+  explicitly, or a prompt rule, would need its own dev questions first (the holdout is spent).
+- **h-x06: no tool for a share of income.** Shares of spending exist (`spendingSharePercent`, step 8b); a share of income
+  doesn't, so the model computed one and grounding caught it. Either a Java-computed share of income, or a clearer
+  refusal; the fallback shown today is correct but not an answer.
+- **The holdout guard is per set, not per model.** One run closed the holdout for every model, so Haiku 4.5 (the budget
+  option) has no holdout score. A guard keyed by set and model, or a second frozen set, would let a model choice be
+  checked on unseen questions.
+- **Haiku 4.5 skips the multi-step search fallback** (a second search with brand names, then the merchants themselves,
+  prompt `chat-7`) about half the time in the dev runs. Sonnet follows it; the budget option's search is weaker for it.
+- **The cost estimator is conservative.** Every estimated input token is priced at the cache-write rate plus the whole
+  output cap, though most of the prefix is read from the cache at a tenth of the input price; it forces a higher
+  `max-turn-cost` than turns cost (Backlog above, step 8d).
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
