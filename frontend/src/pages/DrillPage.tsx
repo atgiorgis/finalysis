@@ -68,9 +68,8 @@ function describe(
  */
 export default function DrillPage() {
   const [search] = useSearchParams()
-  const { accounts } = useShellData()
+  const { accounts, categories } = useShellData()
   const { open } = useTxnSheet()
-  const [categories, setCategories] = useState<Category[]>([])
   const [pages, setPages] = useState<DrillDownResponse[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -84,10 +83,6 @@ export default function DrillPage() {
   const key = JSON.stringify(params)
   const label = search.get('label')
   const expect = search.get('expect')
-
-  useEffect(() => {
-    reads.categories().then(setCategories).catch(() => setCategories([]))
-  }, [])
 
   useEffect(() => {
     let live = true

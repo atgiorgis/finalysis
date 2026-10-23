@@ -556,6 +556,143 @@
   grid-template-columns: 4.5rem minmax(0, 1fr) auto;
 }
 
+/* ---- transactions ---- */
+
+.segmented {
+  display: inline-flex;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.segmented button {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.filters label {
+  display: grid;
+  gap: var(--space-1);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.filters select {
+  min-height: var(--touch-target);
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.row-button.txn-row-wide {
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+}
+
+.txn-meta {
+  display: block;
+  font-size: 0.8125rem;
+}
+
+@media (min-width: 768px) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 18rem));
+  }
+}
+
+/* ---- corrections ---- */
+
+.txn-category-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.txn-category-form label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.txn-category-form select {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font: inherit;
+}
+
+.txn-category-form .checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+}
+
+.txn-category-form .checkbox input {
+  width: 20px;
+  height: 20px;
+}
+
+.txn-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.button-primary,
+.button-secondary {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.button-secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.button-primary:disabled,
+.button-secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.txn-action-result {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: #e7f6f4;
+  border-radius: var(--radius-control);
+}
+
 /* ---- transaction sheet: a bottom sheet on a phone, a side panel on desktop (UI-07) ---- */
 
 .sheet-backdrop {

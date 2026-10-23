@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { reads, type CategorySource, type Transaction } from '../api'
 import { formatDate, formatMoney } from '../format'
+import { useDataVersion, useShellData } from './ShellData'
+import TxnActions from './TxnActions'
 
 const SOURCE_TEXT: Record<CategorySource, string> = {
   RULE: 'set by a rule',
@@ -71,10 +73,12 @@ function Facts({ txn }: { txn: Transaction }) {
 
 /**
  * A transaction and the statement line it came from (UI-04): a dialog over the page on desktop, a bottom sheet on a
- * phone (UI-07). Read-only here; corrections are the Transactions tab's (step 4).
+ * phone (UI-07), with the corrections it allows (step 4, `TxnActions`).
  */
 export default function TxnSheet() {
   const { id, close } = useTxnSheet()
+  const { categories } = useShellData()
+  const { dataChanged } = useDataVersion()
   const [txn, setTxn] = useState<Transaction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -99,7 +103,20 @@ export default function TxnSheet() {
     if (id) {
       heading.current?.focus()
     }
-  }, [id, txn])
+  }, [id, txn?.id])
+
+  /** After a write: show the transaction as it now is, and let every page re-read. */
+  const changed = (updated?: Transaction) => {
+    dataChanged()
+    if (updated) {
+      setTxn(updated)
+    } else if (id) {
+      reads
+        .transaction(id)
+        .then(setTxn)
+        .catch((e: Error) => setError(e.message))
+    }
+  }
 
   useEffect(() => {
     if (!id) {
@@ -136,6 +153,8 @@ export default function TxnSheet() {
           <>
             <p className="details-total">{formatMoney(txn.amount)}</p>
             <Facts txn={txn} />
+            <h3>Correct it</h3>
+            <TxnActions key={txn.id} txn={txn} categories={categories} onChanged={changed} />
             <h3>Statement line</h3>
             {txn.sourceLine ? (
               <figure className="source-line">

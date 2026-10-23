@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 3b done (step notes); next: step 4. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 4 done (step notes); next: step 5. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -229,6 +229,11 @@ The brief allows an endpoint or a response shape for citation links. The existin
 | `SERIES` | `accountId`, `merchant`, `drillDown` | Recurring with that series highlighted, its charges from the drill-down |
 
 The citation is resolved by the backend on every read of a conversation, so a link never points at stale text.
+
+**Links come from the citation object only** (the owner's note at step 3b's approval): a link's target and parameters
+are built from the citation's own fields (`txn.id`, `drillDowns[].params`, `alertKey`, `accountId`), never from text in
+the answer, which the model wrote and which can quote untrusted merchant text. Step 6 tests it with an answer whose
+text looks like a link or parameters.
 
 ### 3.6 Bind the backend to localhost (step 1, UI-08)
 
@@ -640,6 +645,34 @@ Done: "Phase 7 step 3b: transaction sheet and source line, /drill (UI-04)". Back
 - Newman folder 13: a transaction's statement and source line (the first row of the details panel's drill-down).
 - Choice: the sheet is a URL parameter over the current page rather than its own route, so opening a transaction
   never loses the panel, the month or the chat it was opened from.
+
+### Step 4 notes: Transactions, review, corrections
+
+Done: "Phase 7 step 4: Transactions tab, review queue, corrections". Backend 3,277 tests (Maven summary, no backend
+change), 0 failures, 0 skipped; frontend 120 tests (14 files). No new endpoint, so no newman change (folder 8 covers the
+correction API).
+
+- **Corrections live in the transaction sheet** (`shell/TxnActions.tsx`), so a transaction can be corrected wherever it
+  opens (Transactions, the Overview's panel, later Alerts and Chat): Save category (`PUT …/category`, "Also for this
+  merchant's other transactions" on by default = `applyToMerchant`), Undo my category (only for a USER category;
+  `DELETE …/category?removeRule=true`, the full undo), Not a transfer (a transfer, or a Transfer-kind category;
+  `POST …/not-transfer`) and Undo "not a transfer" (`DELETE`, 204). Each result is said in words from the response
+  ("Saved as Dining. 3 other TRADER JOE S transactions changed too, and future ones will follow. 1 other kept the
+  category you set."); a refused request shows the API's own `detail`. With alert dismissal (step 5), the only writes.
+- **After a write every page reads again:** a data version in the shell's context, bumped by the sheet, is in the
+  Overview's, the details panel's and the Transactions lists' read dependencies. The sheet shows the transaction as
+  the response returns it (or reads it again after a transfer action).
+- **Transactions** (`?view=` absent): the month from the picker as `from`/`to` dates, filters Category (every category,
+  or Uncategorized) and Account in the URL, 50 rows a page with Show more, each opening the sheet.
+- **To review** (`?view=review`): Needs a category (every month: `uncategorized=true`, with why each waits, from the
+  transaction's own `aiReviewReason` and `transferExcluded`), Transfers without a match (the queue's
+  `SUGGESTED_ONE_SIDED_TRANSFER` items; the sheet offers Not a transfer and a category), and the queue's other kinds
+  as counts, "resolved through the API until the upload page (Phase 8)" (§13 decision 1).
+- No combined "to review" count on the toggle: it would add two counts in the UI; each section shows its own.
+- Category names now load once with the shell (status, coverage, accounts, categories), for the filters, the sheet
+  and `/drill`.
+- Recorded for step 6 (§3.5, the owner's note at step 3b's approval): citation links are built from the citation
+  object's fields only, never from text in the answer.
 
 ### Requirement mapping
 

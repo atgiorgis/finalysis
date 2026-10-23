@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { reads, type DashboardDetails, type DashboardResponse, type DrillDownResponse } from '../api'
 import { detailsTarget, shownFigure, shownName, type Detail } from '../detailParam'
 import { formatDate, formatMoney, formatMonth, formatPercent, formatSpent } from '../format'
+import { useDataVersion } from '../shell/ShellData'
 import { useTxnSheet } from '../shell/TxnSheet'
 import TrendChart from './charts/TrendChart'
 
@@ -163,6 +164,7 @@ export default function CategoryDetails({
   const [details, setDetails] = useState<DashboardDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
+  const { version } = useDataVersion()
   const target = detailsTarget(detail)
   const targetKey = JSON.stringify(target)
   const shown = shownFigure(dashboard, detail)
@@ -186,7 +188,7 @@ export default function CategoryDetails({
     return () => {
       live = false
     }
-  }, [month, targetKey])
+  }, [month, targetKey, version])
 
   return (
     <section className="card details" aria-labelledby="details-title">

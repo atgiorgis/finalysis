@@ -9,7 +9,7 @@ import KpiTiles from '../components/KpiTiles'
 import { AlertsSummary, AtAGlance, RecurringSummary } from '../components/OverviewSummaries'
 import { detailParam, parseDetail, type Detail } from '../detailParam'
 import { formatMonth } from '../format'
-import { useMonth, useShellData } from '../shell/ShellData'
+import { useDataVersion, useMonth, useShellData } from '../shell/ShellData'
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'done'; dashboard: DashboardResponse }
 
@@ -22,6 +22,7 @@ export default function OverviewPage() {
   const { month, setMonth } = useMonth()
   const [params, setParams] = useSearchParams()
   const detail = parseDetail(params.get('detail'))
+  const { version } = useDataVersion()
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const setDetail = (next: Detail | null) =>
     setParams((current) => {
@@ -44,7 +45,7 @@ export default function OverviewPage() {
     return () => {
       live = false
     }
-  }, [month])
+  }, [month, version])
 
   return (
     <section className="page overview">

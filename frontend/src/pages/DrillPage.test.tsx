@@ -29,7 +29,6 @@ test('the exact drill-down parameters are sent, and the rows, their total and th
 
   expect(await screen.findByRole('heading', { level: 1, name: 'Groceries in September 2026' })).toBeInTheDocument()
   expect(requests).toContain(page(0))
-  // Category names arrive with the category list; until then the chip names the id.
   expect(await screen.findByText('Groceries', { selector: '.chip' })).toBeInTheDocument()
   expect(within(screen.getByRole('list', { name: 'Filters' })).getAllByRole('listitem').map((li) => li.textContent))
     .toEqual(['September 2026', 'Spending', 'Groceries'])

@@ -4,6 +4,7 @@ import DrillPage from './pages/DrillPage'
 import OverviewPage from './pages/OverviewPage'
 import PlaceholderPage from './pages/PlaceholderPage'
 import SettingsPage from './pages/SettingsPage'
+import TransactionsPage from './pages/TransactionsPage'
 import Layout from './shell/Layout'
 import { ShellDataProvider } from './shell/ShellData'
 import { TABS } from './tabs'
@@ -22,7 +23,7 @@ function TransactionLink() {
 }
 
 /** Tabs a later step builds; each is a placeholder until then. */
-const PLACEHOLDERS = TABS.filter((tab) => !['/overview', '/chat', '/settings'].includes(tab.path))
+const PLACEHOLDERS = TABS.filter((tab) => !['/overview', '/transactions', '/chat', '/settings'].includes(tab.path))
 
 /**
  * Every route of the app, inside the shell. `/` opens the Overview. The Phase 6 chat page stays on the Chat tab until
@@ -34,6 +35,7 @@ export default function AppRoutes() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/overview" replace />} />
+          <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transactions/:id" element={<TransactionLink />} />
           <Route path="/drill" element={<DrillPage />} />
           {PLACEHOLDERS.map((tab) => (

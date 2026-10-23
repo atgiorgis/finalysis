@@ -18,6 +18,7 @@ export const SHELL_ROUTES: Record<string, unknown> = {
   '/api/status': fixtures.statusOff,
   '/api/analytics/coverage': fixtures.coverage,
   '/api/accounts': fixtures.accounts,
+  '/api/categories': fixtures.categories,
   '/api/analytics/months': fixtures.months,
   '/api/chat/usage': usageFixture,
   '/api/dashboard': fixtures.dashboardLatest,
@@ -30,18 +31,38 @@ function LocationProbe() {
   return null
 }
 
+/** A write the app sent: method, URL and parsed JSON body. */
+export interface Write {
+  method: string
+  url: string
+  body: unknown
+}
+
+/** Answers a write; the default is a 404 problem, so a test notices a write it didn't expect. */
+export type WriteHandler = (write: Write) => Response | undefined
+
 /**
- * Renders the whole app at `path` with `fetch` answered from fixtures (`routes` on top of the shell's). Returns the
- * URLs requested and the current location.
+ * Renders the whole app at `path` with `fetch` answered from fixtures (`routes` on top of the shell's); writes (PUT,
+ * POST, DELETE) go to `onWrite`. Returns the GETs and writes sent, and the current location.
  */
-export function renderApp(path: string, routes: Record<string, unknown> = {}) {
+export function renderApp(path: string, routes: Record<string, unknown> = {}, onWrite?: WriteHandler) {
   const requests: string[] = []
+  const writes: Write[] = []
   const answer = fetchFrom({ ...SHELL_ROUTES, ...routes })
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: string) => {
-      requests.push(input)
-      return answer(input)
+    vi.fn(async (input: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'GET') {
+        requests.push(input)
+        return answer(input)
+      }
+      const write = { method, url: input, body: init?.body ? JSON.parse(String(init.body)) : undefined }
+      writes.push(write)
+      return (
+        onWrite?.(write) ??
+        Response.json({ type: 'not-found', detail: `no handler for ${method} ${input}` }, { status: 404 })
+      )
     }),
   )
   const result = render(
@@ -50,5 +71,5 @@ export function renderApp(path: string, routes: Record<string, unknown> = {}) {
       <LocationProbe />
     </MemoryRouter>,
   )
-  return { ...result, requests, location: () => location }
+  return { ...result, requests, writes, location: () => location }
 }

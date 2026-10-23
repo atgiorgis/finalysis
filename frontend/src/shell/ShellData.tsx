@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { reads, type Account, type Coverage, type CoverageResponse, type StatusResponse, type YearMonth } from '../api'
+import {
+  reads,
+  type Account,
+  type Category,
+  type Coverage,
+  type CoverageResponse,
+  type StatusResponse,
+  type YearMonth,
+} from '../api'
 import { addMonths, isYearMonth } from '../months'
 
 /** The most months the picker offers: the analytics endpoints' range limit. */
@@ -15,15 +23,34 @@ export interface ShellData {
   status: StatusResponse | null
   coverage: CoverageResponse | null
   accounts: Account[]
+  /** Every category, for the filters and the category picker; empty if the read failed. */
+  categories: Category[]
   /** Months with data, oldest first, with their coverage; empty while loading or without statements. */
   months: PickerMonth[]
   loading: boolean
   error: string | null
 }
 
-const EMPTY: ShellData = { status: null, coverage: null, accounts: [], months: [], loading: true, error: null }
+const EMPTY: ShellData = {
+  status: null,
+  coverage: null,
+  accounts: [],
+  categories: [],
+  months: [],
+  loading: true,
+  error: null,
+}
 
 const ShellContext = createContext<ShellData>(EMPTY)
+
+/**
+ * Bumped after every write (a correction, a dismissal), so the pages that read the changed data read it again
+ * (docs/plans/phase-7.md §2.4). Pages put `version` in their reads' dependencies.
+ */
+const VersionContext = createContext<{ version: number; dataChanged: () => void }>({
+  version: 0,
+  dataChanged: () => {},
+})
 
 /** The first month any account has data, from coverage: the earliest `firstDay`. */
 function firstMonth(coverage: CoverageResponse): YearMonth | null {
@@ -41,7 +68,12 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let live = true
     async function load() {
-      const [status, coverage, accounts] = await Promise.all([reads.status(), reads.coverage(), reads.accounts()])
+      const [status, coverage, accounts, categories] = await Promise.all([
+        reads.status(),
+        reads.coverage(),
+        reads.accounts(),
+        reads.categories().catch(() => [] as Category[]),
+      ])
       let months: PickerMonth[] = []
       const latest = coverage.latestMonth
       const first = firstMonth(coverage)
@@ -53,7 +85,7 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
           .map((m) => ({ month: m.month, coverage: m.coverage }))
       }
       if (live) {
-        setData({ status, coverage, accounts, months, loading: false, error: null })
+        setData({ status, coverage, accounts, categories, months, loading: false, error: null })
       }
     }
     load().catch((e: Error) => {
@@ -66,7 +98,19 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  return <ShellContext.Provider value={data}>{children}</ShellContext.Provider>
+  const [version, setVersion] = useState(0)
+  const versionValue = useMemo(() => ({ version, dataChanged: () => setVersion((v) => v + 1) }), [version])
+
+  return (
+    <ShellContext.Provider value={data}>
+      <VersionContext.Provider value={versionValue}>{children}</VersionContext.Provider>
+    </ShellContext.Provider>
+  )
+}
+
+/** The data version and the call that bumps it after a write. */
+export function useDataVersion(): { version: number; dataChanged: () => void } {
+  return useContext(VersionContext)
 }
 
 export function useShellData(): ShellData {

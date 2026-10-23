@@ -371,6 +371,62 @@ export interface ReviewQueueResponse {
   items: ({ kind: ReviewItemKind; since: string } & Record<string, unknown>)[]
 }
 
+// ---------------------------------------------------------------------------- corrections (CAT-04, CAT-08; Phase 4)
+//
+// With alert dismissal (step 5), the only writes in the UI (docs/plans/phase-7.md §2.4).
+
+export type RuleAction = 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'REMOVED' | 'NONE'
+
+/** `PUT /api/transactions/{id}/category`: the txn, its merchant's correction rule, and the merchant's other txns. */
+export interface CorrectionResult {
+  txn: Transaction
+  ruleId: number | null
+  ruleAction: RuleAction
+  otherTxnsUpdated: number
+  otherTxnsKeptUser: number
+  otherTxnsKeptOtherRule: number
+}
+
+/** `DELETE /api/transactions/{id}/category?removeRule=true`: the txn after the rules ran, the rule deleted. */
+export interface UndoResult {
+  txn: Transaction
+  ruleId: number | null
+  ruleAction: RuleAction
+  otherTxnsUpdated: number
+}
+
+export interface NotTransferResult {
+  txnId: number
+  transferExcluded: boolean
+  removedLinkId: number | null
+}
+
+async function send<T>(method: 'PUT' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T | null> {
+  const res = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw await problemOf(res)
+  }
+  return res.status === 204 ? null : res.json()
+}
+
+export const corrections = {
+  /** Sets your category; with `applyToMerchant` (the default) the merchant's other txns follow. */
+  setCategory: (id: number, categoryId: number, applyToMerchant: boolean) =>
+    send<CorrectionResult>('PUT', `/api/transactions/${id}/category`, { categoryId, applyToMerchant }) as Promise<
+      CorrectionResult
+    >,
+  /** Clears your category and its merchant rule; the rules run again. */
+  undoCategory: (id: number) =>
+    send<UndoResult>('DELETE', `/api/transactions/${id}/category?removeRule=true`) as Promise<UndoResult>,
+  notTransfer: (id: number) =>
+    send<NotTransferResult>('POST', `/api/transactions/${id}/not-transfer`) as Promise<NotTransferResult>,
+  undoNotTransfer: (id: number) => send<null>('DELETE', `/api/transactions/${id}/not-transfer`),
+}
+
 // ---------------------------------------------------------------------------- reads
 
 type Params = Record<string, string | number | boolean | null | undefined>
