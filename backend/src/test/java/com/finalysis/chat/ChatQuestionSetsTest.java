@@ -89,7 +89,7 @@ class ChatQuestionSetsTest {
             "ALERTS_RECURRING", 6, "SEARCH", 8, "MULTI_TURN", 4, "INJECTION", 6, "CANT_ANSWER", 7);
 
     /** Each set's version: the dev set's revisions are recorded in its header and the plan; the holdout's is 1. */
-    static final Map<String, Integer> VERSIONS = Map.of("dev", 4, "holdout", 1);
+    static final Map<String, Integer> VERSIONS = Map.of("dev", 5, "holdout", 1);
 
     static final Set<String> QUESTION_KEYS = Set.of("id", "author", "category", "dataset", "searchTargets", "turns");
     static final Set<String> TURN_KEYS = Set.of("ask", "expect", "tools", "figures", "forbidden", "citations", "note",

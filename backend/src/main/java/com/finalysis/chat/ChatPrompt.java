@@ -34,9 +34,10 @@ public class ChatPrompt {
      * the cache points after the tools and the context block (step 8c); chat-6 the step 8d fixes (a second search with
      * brand names, no "let me look" without a call, higherPeriod, the trend fields named apart, searchIndex); chat-7 the
      * step 8e fixes (search's WORD match, the fallback from brand names to the merchants themselves, compare_periods
-     * for every comparison of two periods).
+     * for every comparison of two periods); chat-8 the step 8f fix (a follow-up about earlier data calls the tool again,
+     * and a shortened earlier answer is named).
      */
-    public static final String VERSION = "chat-7";
+    public static final String VERSION = "chat-8";
 
     static final String RESOURCE = "chat/system-prompt.txt";
     /** Where the history starts in {@link #start}'s messages: after the system prompt and the context block. */

@@ -31,7 +31,7 @@ public record ChatProperties(@DefaultValue List<String> redactTerms,
                              @DefaultValue("40000") int maxInputTokensPerTurn,
                              @DefaultValue("1500") int maxOutputTokens,
                              @DefaultValue("45s") Duration maxTurnTime,
-                             @DefaultValue("0.05") BigDecimal maxTurnCost,
+                             @DefaultValue("0.15") BigDecimal maxTurnCost,
                              @DefaultValue("1.00") BigDecimal maxDailyCost,
                              @DefaultValue("90") int retentionDays) {
 

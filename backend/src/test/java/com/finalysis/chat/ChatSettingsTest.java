@@ -47,7 +47,7 @@ class ChatSettingsTest {
         assertThat(limits.maxInputTokensPerTurn()).isEqualTo(40_000);
         assertThat(limits.maxOutputTokens()).isEqualTo(1_500);
         assertThat(limits.maxTurnTime()).isEqualTo(Duration.ofSeconds(45));
-        assertThat(limits.maxTurnCost()).isEqualByComparingTo("0.05");
+        assertThat(limits.maxTurnCost()).isEqualByComparingTo("0.15");
         assertThat(limits.maxDailyCost()).isEqualByComparingTo("1.00");
         assertThat(limits.retentionDays()).isEqualTo(90);
         assertThat(limits.redactTerms()).isEmpty();
@@ -108,7 +108,8 @@ class ChatSettingsTest {
      */
     @Test
     void aModelWhoseLargestRoundPassesTheTurnCostFailsStartup() {
-        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), ChatLimits.defaults(), true))
+        ChatProperties at005 = withTurnCost("0.05");
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), at005, true))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("main-model")
                 .hasMessageContaining("$0.0675")
@@ -116,10 +117,10 @@ class ChatSettingsTest {
                 .hasMessageContaining("finalysis.chat.max-turn-cost $0.05")
                 .hasMessageContaining("raise finalysis.chat.max-turn-cost to at least 0.0675");
         // uncached: 12,000 × $3 + 1,500 × $15 = $0.0585, still above
-        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), ChatLimits.defaults(), false))
+        assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), at005, false))
                 .hasMessageContaining("$0.0585");
         // Haiku 4.5: 12,000 × $1.25 + 1,500 × $5 = $0.0225
-        ChatStartupCheck.verify(CLOUD, mainAt(HAIKU_4_5), ChatLimits.defaults(), true);
+        ChatStartupCheck.verify(CLOUD, mainAt(HAIKU_4_5), at005, true);
         // the turn limit off, or raised to the round's worst case
         ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0"), true);
         ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0.0675"), true);
@@ -127,7 +128,70 @@ class ChatSettingsTest {
                 .isInstanceOf(IllegalStateException.class);
         // AI off: nothing to check
         ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles("main-model", null, null,
-                null), true), mainAt(SONNET_4_6), ChatLimits.defaults(), true);
+                null), true), mainAt(SONNET_4_6), at005, true);
+    }
+
+    // ------------------------------------------------------------------ the configurations as shipped (step 8f)
+
+    static final String SONNET = "us.anthropic.claude-sonnet-4-6";
+    static final String HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+    /** application.yml under application-aws.yml, as the aws profile runs, with overrides on top (highest first). */
+    private static Binder shipped(Map<String, String> overrides) throws Exception {
+        List<org.springframework.boot.context.properties.source.ConfigurationPropertySource> sources =
+                new java.util.ArrayList<>();
+        sources.add(new MapConfigurationPropertySource(overrides));
+        List<PropertySource<?>> yaml = new java.util.ArrayList<>();
+        yaml.addAll(new YamlPropertySourceLoader().load("aws", new ClassPathResource("application-aws.yml")));
+        yaml.addAll(new YamlPropertySourceLoader().load("app", new ClassPathResource("application.yml")));
+        ConfigurationPropertySources.from(yaml).forEach(sources::add);
+        return new Binder(sources);
+    }
+
+    private static void verifyShipped(Binder binder, boolean caching) {
+        ChatStartupCheck.verify(binder.bind("finalysis.ai", AiProperties.class).get(),
+                binder.bind("finalysis.ai", AiPrices.class).get(),
+                binder.bindOrCreate("finalysis.chat", ChatProperties.class), caching);
+    }
+
+    /** The default: chat on Sonnet 4.6 at $0.15 a turn, categorization still on Haiku 4.5; startup passes. */
+    @Test
+    void theDefaultSonnetConfigurationPassesStartup() throws Exception {
+        Binder binder = shipped(Map.of());
+        AiProperties ai = binder.bind("finalysis.ai", AiProperties.class).get();
+
+        assertThat(ai.roles().main()).isEqualTo(SONNET);
+        assertThat(ai.roles().categorization()).isEqualTo(HAIKU);
+        assertThat(binder.bindOrCreate("finalysis.chat", ChatProperties.class).maxTurnCost())
+                .isEqualByComparingTo("0.15");
+        assertThat(binder.bindOrCreate("finalysis.chat", ChatProperties.class).maxDailyCost())
+                .isEqualByComparingTo("1.00");
+        assertThat(binder.bind("finalysis.ai", AiPrices.class).get().of(SONNET)).isPresent();
+        verifyShipped(binder, true);
+        verifyShipped(binder, false);
+    }
+
+    /** The budget option documented in application-aws.yml: Haiku 4.5 at $0.05 a turn; startup passes. */
+    @Test
+    void theBudgetHaikuConfigurationPassesStartup() throws Exception {
+        Binder binder = shipped(Map.of("finalysis.ai.roles.main", HAIKU, "finalysis.chat.max-turn-cost", "0.05"));
+
+        assertThat(binder.bind("finalysis.ai", AiProperties.class).get().roles().main()).isEqualTo(HAIKU);
+        verifyShipped(binder, true);
+        verifyShipped(binder, false);
+        // and the mix the comments warn about: Sonnet at the budget limit refuses to start
+        assertThatThrownBy(() -> verifyShipped(shipped(Map.of("finalysis.chat.max-turn-cost", "0.05")), true))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining(SONNET);
+    }
+
+    @Test
+    void theShippedFilesDocumentTheBudgetOption() throws Exception {
+        String aws = new String(new ClassPathResource("application-aws.yml").getInputStream().readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String app = new String(new ClassPathResource("application.yml").getInputStream().readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(aws).contains("Budget option: Claude Haiku 4.5 (" + HAIKU + ") with max-turn-cost 0.05");
+        assertThat(app).contains("0.05 with the budget").contains("Haiku 4.5 as finalysis.ai.roles.main");
     }
 
     /** Startup and the loop share one check: a setup startup passes lets the loop's largest first round through. */

@@ -51,8 +51,14 @@ public class ConversationMemory {
     static final int FOLD_AFTER = 6;
     static final int HISTORY_TOKENS = 1_500;
     static final int SUMMARY_OUTPUT_TOKENS = 400;
-    /** The longest earlier answer sent back; a longer one is cut at a word. */
-    static final int MAX_ANSWER_CHARS = 1_000;
+    /**
+     * The longest earlier answer sent back, marker included; a longer one is cut at a word and ends with
+     * {@link #SHORTENED}. Step 8f: 1,000 cut the last alert out of a five-alert answer (dev run 4, d-m03), and the next
+     * turn said there was none.
+     */
+    static final int MAX_ANSWER_CHARS = 2_000;
+    /** Ends a shortened earlier answer, so the model knows it sees part of it. No figure. */
+    static final String SHORTENED = "… [earlier answer shortened; call the tool for the full data]";
     static final String RESOURCE = "chat/summary-prompt.txt";
 
     private static final Logger log = LoggerFactory.getLogger(ConversationMemory.class);
@@ -141,10 +147,20 @@ public class ConversationMemory {
         return new ChatHistory.Turn(guard.checkText(turn.outboundQuestion()), guard.checkHistory(answer));
     }
 
-    /** An answer as history: figures stripped, cut to {@value #MAX_ANSWER_CHARS} characters; null if nothing is left. */
+    /**
+     * An answer as history: figures stripped, then at most {@value #MAX_ANSWER_CHARS} characters, a longer one cut at a
+     * word and marked {@link #SHORTENED}; null if nothing is left.
+     */
     static String strippedAnswer(String answer) {
-        String stripped = cut(SummaryFigureStripper.strip(answer), MAX_ANSWER_CHARS);
-        return stripped.isBlank() ? null : stripped;
+        String stripped = SummaryFigureStripper.strip(answer);
+        if (stripped.isBlank()) {
+            return null;
+        }
+        if (stripped.length() <= MAX_ANSWER_CHARS) {
+            return stripped;
+        }
+        String kept = cut(stripped, MAX_ANSWER_CHARS - SHORTENED.length() + 1);
+        return kept.substring(0, kept.length() - 1).strip() + SHORTENED;
     }
 
     private String stripped(ChatConversationStore.PastTurn turn) {

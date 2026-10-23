@@ -431,6 +431,22 @@ class ChatEvalScoringTest {
                 .as("the total alone").isFalse();
     }
 
+    // ------------------------------------------------------------------ dev revision 5 (step 8f)
+
+    /** Dev run 4's d-t01 (Haiku): September and its difference from the 3-month average, now a complete answer. */
+    @Test
+    void d_t01_septemberWithItsDifferenceFromTheThreeMonthAveragePasses() {
+        TurnScore score = scoreDev("d-t01", "Your dining spending shows a modest increase. In September 2026, you spent "
+                + "$356.91 on dining, up $16.28 (4.8%) from August [1]. However, this September spending is "
+                + "significantly higher than your recent patterns: it's $93.83 above your 3-month average and $134.42 "
+                + "above your 5-month average [1].");
+
+        assertThat(score.correct()).as(score.reason()).isTrue();
+        assertThat(score.matched()).containsExactly(2);
+        assertThat(scoreDev("d-t01", "In September you spent $356.91 on dining [1].").correct())
+                .as("the total alone").isFalse();
+    }
+
     /** Dev run 2's d-t06: the month-over-month change called the change from the 3-month average. */
     @Test
     void d_t06_run2sAnswerFailsThePhraseCheck() {

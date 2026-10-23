@@ -85,3 +85,22 @@ the name match needed every word of the search in one merchant name; Sonnet's d-
 pronoun "one" ("one for $8.00"), and is wrong under step 8e's scoring; Haiku's d-c06 "(unknown)" parameter was a
 parameter `get_account_totals` doesn't have, not an unknown tool. Revision 4 rescores d-t04 (Haiku's "cost less in July"
 fails) and d-t05 (Haiku's 38.38 and 2.39 passes). These reports keep the scores they were written with.
+
+### Run 4: after step 8e
+
+Two dev runs, committed in step 8f. Both ran on commit `cc040ba` (step 8e), dev set version 4, prompt `chat-7`,
+prompt caching on:
+
+- [chat-dev-cc040bab7a2b-20261023T081207Z.md](chat-dev-cc040bab7a2b-20261023T081207Z.md) (and `.json`): Haiku 4.5
+  (clean tree), 53 of 58 questions and 61 of 66 turns correct, search 6 of 8; 81,557 uncached input, 996,317
+  cache-read, 10,221 cache-write and 10,913 output tokens, $0.25; turn cost limit $0.05.
+- [chat-dev-cc040bab7a2b-20261023T081549Z.md](chat-dev-cc040bab7a2b-20261023T081549Z.md) (and `.json`): Sonnet 4.6
+  (working tree dirty), 57 of 58 questions and 65 of 66 turns correct, search 8 of 8; 79,144 uncached input, 1,003,442
+  cache-read, 10,210 cache-write and 11,543 output tokens, $0.75; turn cost limit $0.15 (`-Deval.maxTurnCost`, this
+  run only).
+
+Read with step 8f (docs/plans/phase-6.md): Haiku's d-s05 took 17 from `get_top_merchants`' 6-month default where
+search and merchant totals cover all data (18); Haiku's d-m03 turn 2 saw its own turn-1 answer cut at 1,000
+characters, just before the duplicate alert, and answered from memory; revision 5 accepts Haiku's d-t01 (356.91 and
+93.83). On these runs step 8f makes Sonnet 4.6 the default chat model at $0.15 a turn, with Haiku 4.5 at $0.05 as the
+budget option. These reports keep the scores they were written with.

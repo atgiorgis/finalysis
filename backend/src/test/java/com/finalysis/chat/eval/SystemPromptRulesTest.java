@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
 /**
- * The step 8e rules of prompt {@code chat-7}, no Spring: the fallback after a search that finds nothing (brand names
- * once, then the merchants themselves, naming the one picked), compare_periods for every comparison of two periods, and
- * the WORD match. The prompt stays generic: it names none of the dev set's search targets and no brand.
+ * The step 8e rules of prompt {@code chat-7}, and step 8f's of {@code chat-8} (a follow-up about earlier data calls
+ * the tool again), no Spring: the fallback after a search that finds nothing (brand names once, then the merchants
+ * themselves, naming the one picked), compare_periods for every comparison of two periods, and the WORD match. The prompt stays generic: it names none of the dev set's search targets and no brand.
  */
 class SystemPromptRulesTest {
 
@@ -31,8 +31,17 @@ class SystemPromptRulesTest {
     }
 
     @Test
-    void theVersionIsChat7() {
-        assertThat(ChatPrompt.VERSION).isEqualTo("chat-7");
+    void theVersionIsChat8() {
+        assertThat(ChatPrompt.VERSION).isEqualTo("chat-8");
+    }
+
+    /** Step 8f, chat-8: Haiku's d-m03 turn 2 answered a follow-up about an alert from the earlier answer, no call. */
+    @Test
+    void aFollowUpAboutEarlierDataCallsTheToolAgain() throws IOException {
+        assertThat(prompt()).contains("A follow-up about data from an earlier turn (an alert, a merchant, a "
+                + "transaction, an account) calls the tool again: never answer it from the earlier answer alone, even "
+                + "without a figure.")
+                .contains("[earlier answer shortened ...]");
     }
 
     @Test

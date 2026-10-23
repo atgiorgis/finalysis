@@ -24,8 +24,8 @@ class ToolRegistryTest {
     /** The tools without their services: names, descriptions and parameters need none. */
     static List<ChatTool> tools() {
         return List.of(new MonthTotalsTool(null), new CategoryTotalsTool(null), new AccountTotalsTool(null),
-                new TopMerchantsTool(null), new TrendsTool(null), new ComparePeriodsTool(null),
-                new ListTransactionsTool(null), new RecurringChargesTool(null), new AlertsTool(null, null),
+                new TopMerchantsTool(null, null), new TrendsTool(null), new ComparePeriodsTool(null),
+                new ListTransactionsTool(null, null), new RecurringChargesTool(null), new AlertsTool(null, null),
                 new DataCoverageTool(null), new SearchTransactionsTool(null, null, null, null), new MerchantTotalsTool(null, null));
     }
 

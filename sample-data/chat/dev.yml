@@ -20,7 +20,7 @@
 # Source kinds: spent, received, count, month, merchantSpent, row, diff, changePercent, average, max (SAMPLE);
 # fixtureTotal, fixtureAlert, fixtureRows (FIXTURE); injectionRows (INJECTION). Semantics in ChatQuestionSetsTest.
 set: dev
-version: 4
+version: 5
 # Revisions (docs/plans/phase-6.md, step 8b notes; dev only, the holdout is untouched):
 #   2 (2026-10-22, after the first dev run): d-x08 becomes a COMPARISON answered by get_category_totals' share of
 #     spending (computed in Java); d-s08 also accepts the internet bill's total over all data.
@@ -29,6 +29,8 @@ version: 4
 #   4 (2026-10-23, after dev run 3, step 8e): phrase checks on d-t04 (July named as the higher month, never June:
 #     Haiku said "less in July" with both totals right); d-t05 also accepts September's total with its decrease from
 #     August (38.38 and 2.39), since that states the trend completely.
+#   5 (2026-10-23, after dev run 4, step 8f): d-t01 also accepts September's total with its difference from the 3-month
+#     average (356.91 and 93.83): the month against its trailing average answers "trending up" completely.
 datasets:
   SAMPLE: {today: "2026-10-15", data: "sample-data/statements, categories from answer-key.csv; the last covered day is 2026-10-14, April to September have rows"}
   FIXTURE: {today: "2026-04-15", data: "sample-data/analytics, categories from categories.csv"}
@@ -266,7 +268,9 @@ questions:
             - {value: "263.08", source: {average: {of: [{spent: {category: "Dining", from: "2026-06", to: "2026-06"}}, {spent: {category: "Dining", from: "2026-07", to: "2026-07"}}, {spent: {category: "Dining", from: "2026-08", to: "2026-08"}}]}}}
           - - {value: "356.91", source: {spent: {category: "Dining", from: "2026-09", to: "2026-09"}}}
             - {value: "340.63", source: {spent: {category: "Dining", from: "2026-08", to: "2026-08"}}}
-        note: "the latest complete month is 2026-09"
+          - - {value: "356.91", source: {spent: {category: "Dining", from: "2026-09", to: "2026-09"}}}
+            - {value: "93.83", source: {diff: {a: {spent: {category: "Dining", from: "2026-09", to: "2026-09"}}, b: {average: {of: [{spent: {category: "Dining", from: "2026-06", to: "2026-06"}}, {spent: {category: "Dining", from: "2026-07", to: "2026-07"}}, {spent: {category: "Dining", from: "2026-08", to: "2026-08"}}]}}}}}
+        note: "the latest complete month is 2026-09; revision 5: September with its difference from the 3-month average is a complete answer (dev run 4, Haiku: 93.83 above the 3-month average)"
   - id: d-t02
     author: assistant
     category: TREND

@@ -119,6 +119,43 @@ class SearchDefaultRangeTest {
         assertThat(new BigDecimal(totals.get("combined").get("spent").stringValue())).isEqualByComparingTo("399.95");
     }
 
+    /**
+     * Step 8f: with no period, every merchant tool covers every month with data, so one merchant has one count. Dev run
+     * 4's d-s05: get_top_merchants said 17 for CHIPOTLE (its 6-month default, May to October) where search and
+     * get_merchant_totals said 18 (one row is in April).
+     */
+    @Test
+    void everyMerchantToolGivesOneCountWithoutAPeriod() {
+        OutboundTurn turn = turns.start();
+        JsonNode chipotle = nameMatch(byName(turn, "CHIPOTLE", ""));
+        String merchant = chipotle.get("merchant").stringValue();
+
+        JsonNode totals = result(turn, "get_merchant_totals", "{\"merchants\": [\"" + merchant + "\"]}");
+        JsonNode top = result(turn, "get_top_merchants", "{\"limit\": 20}");
+        JsonNode topRow = top.get("items").valueStream()
+                .filter(m -> merchant.equals(m.path("merchant").stringValue(null))).findFirst().orElseThrow();
+        JsonNode listed = result(turn, "list_transactions", "{\"limit\": 5, \"merchant\": \"" + merchant + "\"}");
+
+        assertThat(chipotle.get("count").asInt()).isEqualTo(18);
+        assertThat(totals.get("combined").get("count").asInt()).isEqualTo(18);
+        assertThat(topRow.get("count").asInt()).isEqualTo(18);
+        assertThat(listed.get("total").get("count").asInt()).isEqualTo(18);
+        assertThat(new BigDecimal(topRow.get("spent").stringValue()))
+                .isEqualByComparingTo(new BigDecimal(chipotle.get("spent").stringValue()));
+        for (JsonNode result : List.of(top, listed)) {
+            assertThat(result.get("from").stringValue()).isEqualTo("2026-03");
+            assertThat(result.get("to").stringValue()).isEqualTo("2026-10");
+        }
+
+        // a period the model gives still wins: May to October has the 17 of the old default
+        JsonNode mayOn = result(turn, "get_top_merchants", "{\"limit\": 20, \"from\": \"2026-05\"}");
+        assertThat(mayOn.get("items").valueStream().filter(m -> merchant.equals(m.path("merchant").stringValue(null)))
+                .findFirst().orElseThrow().get("count").asInt()).isEqualTo(17);
+        assertThat(result(turn, "list_transactions", "{\"limit\": 5, \"merchant\": \"" + merchant
+                + "\", \"month\": \"2026-04\"}")
+                .get("total").get("count").asInt()).isEqualTo(1);
+    }
+
     @Test
     void aMonthIsStillOneMonthAndAToStillEndsTheRange() {
         OutboundTurn turn = turns.start();

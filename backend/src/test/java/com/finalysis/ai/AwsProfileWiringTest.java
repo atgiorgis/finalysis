@@ -75,7 +75,8 @@ class AwsProfileWiringTest {
         assertThat(properties.roles().embedding()).isEqualTo("amazon.titan-embed-text-v2:0");
         assertThat(properties.nativeStructuredOutput()).isTrue();
         // Phase 6: chat's role, priced so its cost limits are on, and no temperature of its own (phase-6.md §2.3)
-        assertThat(properties.roles().main()).isEqualTo("us.anthropic.claude-haiku-4-5-20251001-v1:0");
+        assertThat(properties.roles().main()).as("chat on Sonnet 4.6 since step 8f")
+                .isEqualTo("us.anthropic.claude-sonnet-4-6");
         assertThat(context.getBean(com.finalysis.ai.AiPrices.class).of(properties.roles().main())).isPresent();
         assertThat(context.getBean(com.finalysis.ai.ChatRoleProperties.class).temperature()).isNull();
     }
@@ -110,7 +111,7 @@ class AwsProfileWiringTest {
                 .andExpect(jsonPath("$.ai.provider").value("bedrock"))
                 .andExpect(jsonPath("$.ai.models.categorization").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
                 .andExpect(jsonPath("$.ai.models.embedding").value("amazon.titan-embed-text-v2:0"))
-                .andExpect(jsonPath("$.ai.models.main").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
+                .andExpect(jsonPath("$.ai.models.main").value("us.anthropic.claude-sonnet-4-6"))
                 .andExpect(jsonPath("$.ai.length()").value(3))
                 .andExpect(jsonPath("$.ai.models.length()").value(3))
                 .andReturn().getResponse().getContentAsString();

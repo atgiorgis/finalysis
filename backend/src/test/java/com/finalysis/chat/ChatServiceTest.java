@@ -401,15 +401,16 @@ class ChatServiceTest {
 
     @Test
     void theTurnCostLimitStopsBeforeACallThatCouldPassIt() {
-        // 30,000 in and 4,000 out at $1 and $5 per million: $0.05 spent, so any further call would pass $0.05
-        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)).usage(30_000, 4_000));
+        // 30,000 in and 24,000 out at $1 and $5 per million: $0.15 spent (the default limit since step 8f), so any
+        // further call would pass $0.15
+        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)).usage(30_000, 24_000));
 
         ChatTurnResponse response = ask("How much did I spend in March?");
 
         assertThat(response.limitHit()).isEqualTo(LimitHit.COST);
         assertThat(response.answerSource()).isEqualTo(AnswerSource.FALLBACK);
         assertThat(response.answer()).contains("spending 1,809.48");
-        assertThat(response.usage().estimatedCost()).isEqualTo("0.050000");
+        assertThat(response.usage().estimatedCost()).isEqualTo("0.150000");
         assertThat(response.usage().rounds()).isEqualTo(1);
     }
 

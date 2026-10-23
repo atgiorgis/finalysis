@@ -2128,21 +2128,80 @@ caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.c
 caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-4-6 -Deval.maxTurnCost=0.15
 ```
 
+### Step 8f notes: fixes from dev run 4, and the default model
+
+Done: "Phase 6 step 8f: fixes from dev run 4, Sonnet 4.6 by default". Backend 3,215 tests (Maven summary; 3,204 + 11), 0 failures, 0 skipped;
+frontend 4. Requirements v1.68. Prompt `chat-8`. Dev set revision 5. Mocks only, no live call, `NoCloudAiGuard` in force; the chat
+holdout was not opened and the categorization holdout not run.
+
+Inputs: dev run 4 on step 8e (Sonnet 4.6 57/58, Haiku 4.5 53/58), committed with this step (`docs/eval/README.md`
+"Run 4").
+
+**1. One default range for the merchant tools (CHT-01).** Haiku's d-s05 took 17 Chipotle visits from
+`get_top_merchants`, where `search_transactions` and `get_merchant_totals` say 18. **Cause, confirmed:** the default
+range, not partial months. Without a period `get_top_merchants` took the analytics default of 6 months ending at the
+latest month (May to October); one of Chipotle's 18 rows is in April, and search and merchant totals cover every month
+with data since step 8c. `get_top_merchants` and `list_transactions` (owner's choice, since the prompt sends a search
+candidate there) now default the same way (`DataMonths`, `from` described as "the first month with data"); a period
+the model gives still wins. Month, category and account totals keep their 6-month default: they answer questions about
+periods. Test: with no period, CHIPOTLE is 18 in all four tools, `get_top_merchants` and `list_transactions` say March
+to October, and an explicit `from` of May or `month` of April gives the old 17 and the 1.
+
+**2. Lost context (CHT-06).** Haiku's d-m03 turn 2 ("Tell me more about the duplicate") answered "I don't see any
+alerts for possible duplicates" without a call. **Cause, confirmed:** not the summary (there is none before the
+seventh turn) and not figure stripping, which keeps every alert's kind and merchant. Turn 1's answer goes back as
+history cut at 1,000 characters; Haiku's, stripped, is 1,149, and the duplicate began at 975, so turn 2 saw a cut-off
+"Possible Duplicate (1…" heading and no Safeway line.
+- The cap is now 2,000 characters (about 500 tokens; the guard's history limit is 4,000, the history window 1,500
+  tokens), marker included. A longer answer is cut at a word and ends with "… [earlier answer shortened; call the tool
+  for the full data]" (owner's addition), so the model knows it sees part of it. The marker has no figure.
+- **Prompt `chat-8`:** a follow-up about data from an earlier turn (an alert, a merchant, a transaction, an account)
+  calls the tool again, never answered from the earlier answer alone, even without a figure; the prompt names the
+  marker. Haiku's turn 3 ("Which card was it on?" answered "Best Buy … CARD-1" from memory) was the same failure.
+- Tests (`HistoryAnswerTest`, new): Haiku's own turn-1 answer keeps every kind and merchant, "Possible Duplicate" and
+  "Safeway on June 13, 2026" included, with no figure and no marker; a cut answer ends with the marker within the cap;
+  an uncut one doesn't; the marker has no figure; the prompt names it as written.
+
+**3. Dev set revision 5** (holdout untouched). d-t01 also accepts September's 356.91 with its difference from the
+3-month average, 93.83 (`diff` of the month and the `average` of June to August, recomputed from the answer key): the
+month against its trailing average answers "trending up" completely. The reason is in the set.
+
+**4. The default model (AI-05).** `finalysis.ai.roles.main` is `us.anthropic.claude-sonnet-4-6`, priced in
+`application-aws.yml` as in the price file; `finalysis.chat.max-turn-cost` is 0.15 (`application.yml` and the
+`ChatProperties` default); `max-daily-cost` stays 1.00 (owner's decision; Sonnet's run 4 averaged about $0.011 a
+turn). Categorization stays on Haiku 4.5. The budget option, Haiku 4.5 as `roles.main` with `max-turn-cost` 0.05
+(run 4: $0.25 against $0.75 for the same questions, 53 against 57 of 58), is documented in both files and the README.
+Tests: both configurations, bound from the shipped `application.yml` and `application-aws.yml`, pass the startup check
+with caching on and off; Sonnet at the budget limit refuses to start; the defaults test takes 0.15;
+`AwsProfileWiringTest` expects Sonnet as the main model.
+
+**Tests**: `HistoryAnswerTest` (new, 5), `SearchDefaultRangeTest` (+1), `ChatSettingsTest` (+3), `ChatEvalScoringTest`
+(+1, d-t01 on run 4's answer), `SystemPromptRulesTest` (+1); `ChatQuestionSetsTest` takes revision 5; `ChatServiceTest`'s cost-limit turn spends
+$0.15, the new default.
+
+**Commands** (`backend/`), after review (the eval prices the model from the price file; Sonnet now runs at the app's
+own limit):
+
+```sh
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-sonnet-4-6
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=us.anthropic.claude-haiku-4-5-20251001-v1:0 -Deval.maxTurnCost=0.05
+```
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Tests |
 |---|---|---|
-| CHT-01 | 3, 5, 8c, 8d | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest` |
+| CHT-01 | 3, 5, 8c, 8d, 8f | `*ToolTest`, `ChatServiceTest`, `SearchDefaultRangeTest`, `ComparisonAndTrendLabelsTest` |
 | CHT-02 | 6, 8b, 8c, 8d, 8e | `MerchantSearchTest`, `MerchantIndexRefreshTest`, `ChatSearchPayloadTest`, `SearchDefaultRangeTest`, `SearchWordMatchTest` |
 | CHT-03 | 6, 8 | `ChatSearchTurnTest`; eval's tool-choice metric |
 | CHT-04 | 4, 5, 8b, 8d | `FigureExtractorTest`, `GroundingMatcherTest`, `ChatServiceTest` (retry, fallback) |
 | CHT-05 | 4 | `CitationTest`, `InjectionCitationTest` |
-| CHT-06 | 7 | `ConversationMemoryTest` |
+| CHT-06 | 7, 8f | `ConversationMemoryTest`, `HistoryAnswerTest` |
 | ANA-05 | 7 | `MonthlySummaryTest` |
 | SEC-01, SEC-08 | 2, 5 | `ChatPayloadGuardTest`, `QuestionRedactorTest`, `ChatOutboundPayloadTest` |
 | SEC-02 | 2, 5, 8 | `InstructionLikeTextTest`, injection scripted turns, eval injection category |
 | SEC-03 | 1, 3 | `ChatReadOnlyTest`, `ReadOnlyQueriesTest`, Postgres refusal |
-| AI-01, AI-05, AI-06 | 5, 8c, 8d | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c, 8d) |
+| AI-01, AI-05, AI-06 | 5, 8c, 8d, 8f | `AiModeTest`, limits tests, log assertions; `BedrockPromptCacheTest`, `ChatSettingsTest` (8c, 8d, 8f) |
 
 ---
 

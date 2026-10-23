@@ -990,7 +990,13 @@ cd backend && SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
 - Credentials come from the AWS CLI profile `finalysis` (override with `FINALYSIS_AWS_PROFILE`), in
   `~/.aws`, never in the repo or `.env`. Region `us-east-1`; models in
   `backend/src/main/resources/application-aws.yml` (Claude Haiku 4.5 for categorization, Titan Text
-  Embeddings V2 for similar merchants).
+  Embeddings V2 for similar merchants and chat search, Claude Sonnet 4.6 for chat).
+- **Chat model and cost.** Chat runs on Claude Sonnet 4.6 with `finalysis.chat.max-turn-cost` 0.15
+  (dollars per question, estimated before each call) and `max-daily-cost` 1.00. The budget option is
+  Claude Haiku 4.5: set `finalysis.ai.roles.main` to `us.anthropic.claude-haiku-4-5-20251001-v1:0` and
+  `max-turn-cost` to 0.05, about a third of the cost per question (dev run 4: Sonnet 57 of 58, Haiku 53
+  of 58). Change both together: startup refuses a model whose largest round would pass the turn limit
+  (Sonnet needs at least 0.0675).
 - **The UI shows a banner** while cloud AI is on.
 - **No call happens by itself.** `run-after-import` is false: run the AI with
   `POST /api/categorization/run`. Each run is capped (`max-items-per-run`, `max-embeddings-per-run`),
