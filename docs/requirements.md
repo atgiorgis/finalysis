@@ -1,6 +1,6 @@
 # Finalysis Requirements
 
-**Version:** 1.70 · **Date:** 2026-10-23 · **Roadmap:** Finalysis Roadmap V4
+**Version:** 1.71 · **Date:** 2026-10-23 · **Roadmap:** `docs/plans/roadmap.md`
 
 A private, on-demand personal accountant for regular households: local-first financial
 analytics with Spring AI.
@@ -9,8 +9,11 @@ analytics with Spring AI.
 
 - Each requirement has an ID (e.g. `ING-03`) for referencing in prompts, commits, and PRs.
 - **Phase** = roadmap phase that delivers it. **POC** = part of the proof of concept (Phases 2–7).
+- **Layer** = the roadmap layer that holds it (`docs/plans/roadmap.md`): 1 Your books, 2 Your plan,
+  3 Your education, 4 Your accountant. Nothing in a layer ships before the layer below is complete.
 - **Status:** `Done`, `Planned`, `Deferred` (planned, but moved out of its phase; the note says
-  until when), or `Proposed` (idea not yet confirmed).
+  until when), `Proposed` (idea not yet confirmed), or `Out of scope (listed, not built)` (Layer 4:
+  recorded so the boundary is written down; the phase number is kept from before the layers).
 - When a requirement changes, update it here and bump the version.
 
 ---
@@ -99,20 +102,22 @@ Ingestion coverage has three layers:
 
 ## 5. Goals
 
-Goals sit on top of the Phase 5 analytics: every figure a goal is judged on is an analytics total, and every gap is
-explained with the same bucket rule as the drill-down. Phase 7 builds them (placement to be confirmed in the Phase 7
-plan); drafting a goal in chat needs the Phase 6 chatbot.
+Goals are roadmap Layer 2 ("Your plan"). They sit on top of the Phase 5 analytics: every figure a goal is judged on
+is an analytics total, and every gap is explained with the same bucket rule as the drill-down. Phase 7b builds only the
+Goals tab shell (GOAL-06); the rest starts when Layer 1 is complete, in a phase to be assigned. Drafting a goal in chat
+needs the Phase 6 chatbot.
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| GOAL-01 | Goals are structured records of one of these types: category spending cap, total spending cap, savings rate, savings amount, category reduction against its average, and no new subscriptions. A goal is versioned by effective month, so a past month is always judged against the goal that applied then. | 7 · POC | Planned |
-| GOAL-02 | The chatbot may propose a goal as a draft built from the user's own numbers, shown as a "Proposed in chat · not saved" card with **Save** and **Not now**. Only the user's explicit save creates or changes a goal; chatbot tools stay read-only (SEC-03). *Needs the Phase 6 chatbot.* | 7 · POC | Planned |
-| GOAL-03 | Each goal is evaluated per month, deterministically in Java and SQL on the analytics totals (GR-01): `MET` or `MISSED`; for a partial month, `ON_TRACK` or `OFF_PACE` (projected by days elapsed), or `JUDGED_AT_MONTH_END` for goals a mid-month figure would mislead (savings rate: rent and pay land unevenly); `INSUFFICIENT_DATA` when the month's data quality (ANA-08) is below a threshold; `NOT_STARTED` before the goal's effective month. | 7 · POC | Planned |
-| GOAL-04 | Every result returns its gap and what caused it, computed with the same bucket rule as the drill-down (`GET /api/analytics/transactions`): for caps, the amount over and the top merchants with visit counts; for savings rate, the points and dollars short and the categories that rose most against their 3-month average; for no new subscriptions, the new recurring charge or charges (ANA-07). | 7 · POC | Planned |
-| GOAL-05 | A short advisor-style note per month, written only from GOAL-03 and GOAL-04's results, with every number grounded (CHT-04), and a template fallback when AI is off. Labelled "education and planning, not financial advice". *The written note needs the Phase 6 chatbot; the template fallback does not.* | 7 · POC | Planned |
-| GOAL-06 | Goals tab: a monthly report card ("2 of 4 met", with a segment bar), the advisor note, one card per goal (status, progress against the target, a one-line gap, Aug/Sep/Oct-style history dots), and a detail panel (status, progress, "What was missing" with its contributors, a since-start chart against a dashed target line, and the transactions behind a miss). | 7 · POC | Planned |
+| GOAL-01 | Goals are structured records of one of these types: category spending cap, total spending cap, savings rate, savings amount, category reduction against its average, and no new subscriptions. A goal is versioned by effective month, so a past month is always judged against the goal that applied then. | Layer 2 (phase to be assigned) | Planned |
+| GOAL-02 | The chatbot may propose a goal as a draft built from the user's own numbers, shown as a "Proposed in chat · not saved" card with **Save** and **Not now**. Only the user's explicit save creates or changes a goal; chatbot tools stay read-only (SEC-03). *Needs the Phase 6 chatbot.* | Layer 2 (phase to be assigned) | Planned |
+| GOAL-03 | Each goal is evaluated per month, deterministically in Java and SQL on the analytics totals (GR-01): `MET` or `MISSED`; for a partial month, `ON_TRACK` or `OFF_PACE` (projected by days elapsed), or `JUDGED_AT_MONTH_END` for goals a mid-month figure would mislead (savings rate: rent and pay land unevenly); `INSUFFICIENT_DATA` when the month's data quality (ANA-08) is below a threshold; `NOT_STARTED` before the goal's effective month. | Layer 2 (phase to be assigned) | Planned |
+| GOAL-04 | Every result returns its gap and what caused it, computed with the same bucket rule as the drill-down (`GET /api/analytics/transactions`): for caps, the amount over and the top merchants with visit counts; for savings rate, the points and dollars short and the categories that rose most against their 3-month average; for no new subscriptions, the new recurring charge or charges (ANA-07). | Layer 2 (phase to be assigned) | Planned |
+| GOAL-05 | A short advisor-style note per month, written only from GOAL-03 and GOAL-04's results, with every number grounded (CHT-04), and a template fallback when AI is off. Labelled "education and planning, not financial advice". *The written note needs the Phase 6 chatbot; the template fallback does not.* | Layer 2 (phase to be assigned) | Planned |
+| GOAL-06 | Goals tab: a monthly report card ("2 of 4 met", with a segment bar), the advisor note, one card per goal (status, progress against the target, a one-line gap, Aug/Sep/Oct-style history dots), and a detail panel (status, progress, "What was missing" with its contributors, a since-start chart against a dashed target line, and the transactions behind a miss).<br>*v1.71:* Phase 7b builds the tab shell from the approved mockup (layout and empty state, no goal logic); the rest is Layer 2. | 7b (shell) · POC; rest Layer 2 (phase to be assigned) | Planned |
+| GOAL-07 | A goal can also have a target amount, a target date and a funding source the app can observe in the user's statements (for example, transfers into a savings account, or the surplus of INV-01). Progress is the observed funding to date, computed in Java and SQL (GR-01); no projection, and no recommendation of how to fund it. | Layer 2 (phase to be assigned) | Planned |
 
-**Open questions for the Phase 7 plan:**
+**Open questions for the goals plan (Layer 2):**
 - A "partly met" status for a result near its target.
 - One overall score, or weighted goals.
 
@@ -143,17 +148,24 @@ plan); drafting a goal in chat needs the Phase 6 chatbot.
 
 ## 8. Investment education and scenario planning
 
+INV-01 and INV-02 are roadmap Layer 2 (your own data only), INV-04 to INV-07 Layer 3 (education, never advice),
+INV-03 and INV-08 Layer 4 (out of scope).
+
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
-| INV-01 | Calculate investable surplus from actual cash flow. | 14 | Planned |
-| INV-02 | Java scenario engine: projections and Monte Carlo simulations (e.g. invest vs. pay down debt). | 14 | Planned |
-| INV-03 | Market data via an MCP client. | 14 | Planned |
+| INV-01 | Calculate surplus from actual cash flow (income plus spending, transfers excluded; GR-04), as a figure a goal can draw on. A figure, never a recommendation of what to do with it. | 14 | Planned |
+| INV-02 | Holdings and contributions the user entered or imported, tracked against a goal's target to date (GOAL-07). Observed figures only: no market data, no projection, no advice. *v1.71: projections and Monte Carlo simulations moved to INV-08.* | 14 | Planned |
+| INV-03 | Market data via an MCP client. *Layer 4. May move to Layer 2 if valuing the user's holdings needs prices: the boundary is no recommendations and no forecasts, not no data.* | 14 | Out of scope (listed, not built) |
 | INV-04 | Curated knowledge base of public sources (Investor.gov, FINRA, IRS, Bogleheads wiki, fund-company research tagged by publisher), each with a publish date. | 14 | Planned |
 | INV-05 | Repo contains only source URLs and the ingestion script, never article text. | 14 | Planned |
 | INV-06 | Every answer includes the case for, case against, risks, dated sources, and flags publisher conflicts of interest. | 14 | Planned |
 | INV-07 | UI labels: "education and scenario planning, not financial advice" and "past returns don't guarantee future results." | 14 | Planned |
+| INV-08 | Java scenario engine: projections and Monte Carlo simulations (e.g. invest vs. pay down debt). *Moved from INV-02 in v1.71; Layer 4.* | 14 | Out of scope (listed, not built) |
 
 ## 9. Personal accountant
+
+ACC-01 to ACC-07 (bookkeeping) are roadmap Layer 1, Phase 15. TAX-01 to TAX-10 recommend or forecast, so they are
+Layer 4, out of scope for the portfolio project (`docs/plans/roadmap.md`).
 
 | ID | Requirement | Phase | Status |
 |---|---|---|---|
@@ -164,16 +176,16 @@ plan); drafting a goal in chat needs the Phase 6 chatbot.
 | ACC-05 | Depreciation schedule per property; owner-occupied vs. rented split. | 15 | Planned |
 | ACC-06 | Net worth statement tracked over time. | 15 | Planned |
 | ACC-07 | Encrypted document vault (W-2s, 1099s, property records) with SSNs redacted on import. | 15 | Planned |
-| TAX-01 | Tax brackets, deductions, and limits stored as dated, versioned data from IRS publications; tax year shown beside every figure. | 16 | Planned |
-| TAX-02 | Year-to-date tax snapshot (deterministic Java, tested). | 16 | Planned |
-| TAX-03 | Year-end what-if scenarios (e.g. extra retirement contributions). | 16 | Planned |
-| TAX-04 | Quarterly estimated tax calculation and reminders. | 16 | Planned |
-| TAX-05 | Itemize vs. standard deduction tracker. | 16 | Planned |
-| TAX-06 | Deadline calendar (estimated taxes, property tax, renewals, contribution deadlines). | 16 | Planned |
-| TAX-07 | Monthly accountant note summarizing the month. | 16 | Planned |
-| TAX-08 | "Ask my accountant" chat grounded in the user's books plus RAG over IRS publications, with sources and dates. | 16 | Planned |
-| TAX-09 | Annual tax package export and lender-ready income/expense summaries. | 16 | Planned |
-| TAX-10 | UI label: "bookkeeping and tax-prep assistant, not a CPA." Tax documents and SSNs are never sent to Bedrock. | 16 | Planned |
+| TAX-01 | Tax brackets, deductions, and limits stored as dated, versioned data from IRS publications; tax year shown beside every figure. | 16 | Out of scope (listed, not built) |
+| TAX-02 | Year-to-date tax snapshot (deterministic Java, tested). | 16 | Out of scope (listed, not built) |
+| TAX-03 | Year-end what-if scenarios (e.g. extra retirement contributions). | 16 | Out of scope (listed, not built) |
+| TAX-04 | Quarterly estimated tax calculation and reminders. | 16 | Out of scope (listed, not built) |
+| TAX-05 | Itemize vs. standard deduction tracker. | 16 | Out of scope (listed, not built) |
+| TAX-06 | Deadline calendar (estimated taxes, property tax, renewals, contribution deadlines). | 16 | Out of scope (listed, not built) |
+| TAX-07 | Monthly accountant note summarizing the month. | 16 | Out of scope (listed, not built) |
+| TAX-08 | "Ask my accountant" chat grounded in the user's books plus RAG over IRS publications, with sources and dates. | 16 | Out of scope (listed, not built) |
+| TAX-09 | Annual tax package export and lender-ready income/expense summaries. | 16 | Out of scope (listed, not built) |
+| TAX-10 | UI label: "bookkeeping and tax-prep assistant, not a CPA." Tax documents and SSNs are never sent to Bedrock. | 16 | Out of scope (listed, not built) |
 
 ## 10. Integrations
 
@@ -300,3 +312,4 @@ plan); drafting a goal in chat needs the Phase 6 chatbot.
 | 1.68 | 2026-10-23 | Phase 6 step 8f: fixes from dev run 4 (Sonnet 4.6 57/58, Haiku 4.5 53/58). CHT-01: `get_top_merchants` and `list_transactions` default to every month with data. CHT-06: earlier answers as history up to 2,000 characters, a cut one marked; prompt `chat-8` (follow-ups call the tool again). AI-05: Sonnet 4.6 the default chat model at `max-turn-cost` 0.15, Haiku 4.5 at 0.05 the documented budget option. Dev set revision 5 (d-t01). |
 | 1.69 | 2026-10-23 | Phase 6 step 9a: chat page and Postman folder. CHT-01: a plain chat page (question, answers, citations, cost) and Postman **12. Chat (AI off)** in the newman run. SEC-01 and UI-05: the cloud-AI banner names chat as well as categorization. CHT-04: retry messages written as an automatic check asking for a new answer (`chat-9`); eval apology count and markdown-blind phrase checks. |
 | 1.70 | 2026-10-23 | Phase 6 complete (chatbot). CHT-01 to CHT-06, ANA-05, SEC-01, SEC-02 and SEC-03 Done, each with its evidence; the chat holdout was evaluated once on `82c9724` with Sonnet 4.6, 56 of 58 correct, the same as the dev set (`docs/eval/README.md`, Holdout). AI-01, AI-05 and AI-06 stay Planned (later phases). README documents the chat tables (V21–V24), the chat endpoints and errors (503 `ai-off` before 404 with AI off), the chat page as a minimal Phase 6 test surface (the full chat UI is Phase 7), the model choice and the limitations. The remaining work is in the Phase 7 backlog of `docs/plans/phase-6.md`. No behaviour changes. |
+| 1.71 | 2026-10-23 | Roadmap reorganized into four layers in `docs/plans/roadmap.md` (Your books, Your plan, Your education, Your accountant), which replaces Finalysis Roadmap V4 as this file's roadmap; ids and phase numbers kept. New status `Out of scope (listed, not built)`. GOAL-01 to GOAL-05 move from Phase 7 to Layer 2 (phase to be assigned); GOAL-06's tab shell is Phase 7b, the rest Layer 2. Added GOAL-07 (target date and an observable funding source). INV-01 reworded to surplus (no "investable"); INV-02 reworded to the user's own holdings and contributions, with projections and Monte Carlo moved to the new INV-08. INV-03, INV-08 and TAX-01 to TAX-10 are Out of scope (listed, not built). |
