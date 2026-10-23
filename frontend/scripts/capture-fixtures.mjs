@@ -100,3 +100,7 @@ if (transactions.items.length > 0) {
 }
 save('review-queue', await get('/api/review-queue'))
 save('chat-conversations', await get('/api/chat/conversations'))
+
+// The Overview (step 2): the latest month (partial on the sample data) and the latest complete month.
+save('dashboard-latest', await get(`/api/dashboard?month=${month}`))
+save('dashboard-complete-month', await get(`/api/dashboard?month=${completeMonth}`))

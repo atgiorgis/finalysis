@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 and 1 done (step notes); next: step 2. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 2 done (step notes); next: step 3. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -273,7 +273,7 @@ CSS custom properties in `src/theme.css`, named by role, values from the mockup:
 | `--spending` | `#3B5BDB` | spending bars |
 | `--warning` / `--warning-bg` | `#B45309` / `#FDF0DC` | partial months, spikes, the banner |
 | `--danger` / `--danger-bg` | `#B91C1C` / `#FDECEC` | duplicates, failed reconciliation |
-| `--slice-1` … `--slice-6` | `#1E3A8A`, `#3B82F6`, `#D97706`, `#0F766E`, `#EA580C`, `#7C3AED` | donut, by rank |
+| `--slice-1` … `--slice-6` | `#2F55C5`, `#DB2777`, `#D97706`, `#16A34A`, `#EA580C`, `#BE185D` (step 2: validated; the mockup's set failed) | donut, by rank |
 | `--slice-other` / `--slice-uncat` | `#94A3B8` / `#CBD5E1` | Other, Uncategorized |
 
 Radii 12–14 px on cards, 999 px on pills; spacing on a 4 px scale (4, 8, 12, 16, 20). Contrast checked at 4.5:1 for
@@ -520,6 +520,61 @@ Done: "Phase 7 step 1: shell, month picker, banner, Settings". Backend 3,244 tes
   no-arithmetic guard stays strict for screens.
 - Postman **13. UI reads** started (chat usage with AI off); the README's newman command runs it. A re-capture of the
   fixtures on a fresh sample-data backend gave no diff. The usage fixture is hand-written in `test/renderApp.tsx`.
+
+### Step 2 notes: Overview, dashboard endpoint, categories as strings
+
+Done: "Phase 7 step 2: Overview and GET /api/dashboard (UI-01)". Backend 3,266 tests (Maven summary), 0 failures,
+0 skipped; frontend 74 tests (9 files); newman 260 requests, 0 failures.
+
+- **Categories as strings** (the owner's instruction at step 1's approval): `CategoryTotalsResponse.spending` is
+  `@ApiMoney` and `Row.spendingSharePercent` `@ApiPercent`, a JSON serialization change only. The model never sees this
+  record as JSON: `OutboundProjector` reads the two `BigDecimal`s and writes the tool view itself, so the model-facing
+  text cannot change. Evidence: every chat test passes unchanged (750 in a targeted run after a clean, then the full
+  build), including `ChatOutboundPayloadTest` (each tool's payload equal to its hand-checked file in
+  `src/test/resources/chat/outbound/`, `get_category_totals` among them), `ChatTurnPayloadTest` and
+  `ToolsMatchEndpointsTest`; no file under `chat/` (code, tests or expected payloads) changed. New:
+  `AnalyticsApiTest.categorySpendingAndSharesAreStrings` (March by hand). Newman folder 9 never read the two fields; folder 13
+  now checks they are strings. A first targeted run showed an "Unresolved compilation problem" in `ChatReadOnlyTest`:
+  classes compiled into `target/` by the IDE's Eclipse compiler; after `clean` it passed, and every run since is `clean`.
+- **`GET /api/dashboard?month=`** (`com.finalysis.dashboard`): the month's `MonthTotals`, `categorizedPercent`
+  (100 − the uncategorized share by count), `vsLastMonth` (spending, income and net from `ComparisonService`, the
+  `compare_periods` rule; savings-rate points subtracted in Java; null when last month has no data, compared with a
+  partial month as the trends do), the six cash-flow months, the slices, the alerts of the three months to the month
+  (counts and the newest three) and the active recurring series (count and the first six). One read-only,
+  repeatable-read transaction, so every figure is one snapshot. 400 for a month after the latest with data; without
+  statements, a 200 with nothing. Changes from the §3.1 sketch: no `coveredThrough` (the household's last covered day
+  isn't each account's; the per-account partial-coverage flags say it instead) and no per-slice `count` (the
+  Uncategorized row's count includes money in, so it wouldn't match the slice's drill-down).
+- **Slices** (§3.1, decision 7): the six expense categories with the most spending (ties by name), then Other (the
+  rest, expense categories whose refunds exceed their charges, and the Refunds & Rebates line, with its members),
+  then Uncategorized money out. Every spending row lands in one slice, so they add up to spending exactly.
+- **Tests:** `DashboardSlicesTest` (the rule by hand), `DashboardMatchesEndpointsTest` (fixture, four months: every
+  figure equals its endpoint's JSON), `DashboardInvariantTest` (sample data, March to October: each slice equals its
+  drill-down, the slices add up to spending; the sample data has months with an Other slice), `DashboardApiTest`
+  (default month, March by hand, the first month, before the data, 400s), `DashboardEmptyDatabaseTest`,
+  `DashboardReadOnlyTest` (no writer, no SQL, no chat or AI; nothing depends on it; one read-only snapshot; each rule
+  shown to catch a violation).
+- **Palette (§4.2 changed):** the mockup's slice colors failed the data-viz validator (`#1e3a8a` outside the
+  lightness band, `#0f766e` below the chroma floor). Slices stay colored by rank (as planned; colors that follow the
+  category can't pass, since any two would meet). Slot 1 meets every later slot around the ring, and any slot can meet
+  Other's grey, so the order was searched under those constraints: `#2f55c5, #db2777, #d97706, #16a34a, #ea580c,
+  #be185d`, then the mockup's two greys. Every pair that can meet passes the colorblind and normal-vision floors; the
+  greys are below 3:1, so every slice is named in its legend row with its share and amount. Cash flow: income
+  `#0d9488` (the mockup's second teal), spending `#3b5bdb`.
+- **Overview:** KPI tiles (each change as returned, "vs Aug", toned by the sign of the API's string), a caveat when the
+  month shown is partial, the data-quality tile (flags named by account), the cash-flow chart (striped partial months;
+  a bar or a month's button selects that month; each month's net as text under the chart), the donut with its legend
+  (Other's members listed; money in shown with a plus), at a glance (income, spending, refunds, transfers excluded,
+  unmatched transfers not counted), the alerts and recurring summaries linking to their tabs. Charts turn strings into
+  numbers in `components/charts/` only, for drawing.
+- **Fixtures:** re-captured on a fresh sample-data backend: the two categories files changed only by the two fields
+  becoming strings (18 lines); `dashboard-latest` (October, partial, no txns yet) and `dashboard-complete-month`
+  (September) added.
+- **For the owner:** on the sample data the default month is October 2026, partial with no txns yet, so the Overview
+  opens on $0 and "−100%" against September, now with the partial-month caveat. The picker defaults to the latest month
+  as planned (step 1); the trends and alerts default to the latest complete month instead.
+- Not looked at in a browser yet (jsdom has no layout); step 7's Playwright run and the owner's smoke test will. The
+  production build warns that the bundle is over 500 kB (Recharts); splitting it is left for the close-out.
 
 ### Requirement mapping
 

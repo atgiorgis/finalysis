@@ -161,6 +161,21 @@ class AnalyticsApiTest {
                 .andExpect(jsonPath("$.rows[0].months[0].reviewPending").isEmpty());
     }
 
+    /**
+     * Phase 7 step 2: the range's spending and each row's share are strings like every other amount and percent
+     * (they were JSON numbers since Phase 6 step 8b). March by hand, as in {@code MonthlyTotalsTest}.
+     */
+    @Test
+    void categorySpendingAndSharesAreStrings() throws Exception {
+        mockMvc.perform(get(CATEGORIES).param("from", "2026-03").param("to", "2026-03"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spending").isString())
+                .andExpect(jsonPath("$.spending").value("-1809.48"))
+                .andExpect(jsonPath("$.rows[?(@.category.name == 'Shopping')].spendingSharePercent").value("3.5"))
+                .andExpect(jsonPath("$.rows[?(@.bucket == 'INCOME')].spendingSharePercent").value(
+                        org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.nullValue())));
+    }
+
     @Test
     void accountsAsJson() throws Exception {
         mockMvc.perform(get(ACCOUNTS).param("from", "2026-01").param("to", "2026-01"))

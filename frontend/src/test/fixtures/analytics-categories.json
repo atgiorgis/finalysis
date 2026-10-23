@@ -185,7 +185,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 7.1
+      "spendingSharePercent": "7.1"
     },
     {
       "bucket": "EXPENSE",
@@ -262,7 +262,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 16.3
+      "spendingSharePercent": "16.3"
     },
     {
       "bucket": "EXPENSE",
@@ -339,7 +339,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 0.9
+      "spendingSharePercent": "0.9"
     },
     {
       "bucket": "EXPENSE",
@@ -416,7 +416,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 49.8
+      "spendingSharePercent": "49.8"
     },
     {
       "bucket": "EXPENSE",
@@ -493,7 +493,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 12.4
+      "spendingSharePercent": "12.4"
     },
     {
       "bucket": "EXPENSE",
@@ -570,7 +570,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 0.8
+      "spendingSharePercent": "0.8"
     },
     {
       "bucket": "EXPENSE",
@@ -647,7 +647,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 5.1
+      "spendingSharePercent": "5.1"
     },
     {
       "bucket": "EXPENSE",
@@ -724,7 +724,7 @@
           "reviewPending": null
         }
       ],
-      "spendingSharePercent": 7.6
+      "spendingSharePercent": "7.6"
     },
     {
       "bucket": "UNLINKED_TRANSFER",
@@ -877,5 +877,5 @@
       "spendingSharePercent": null
     }
   ],
-  "spending": -18589.67
+  "spending": "-18589.67"
 }

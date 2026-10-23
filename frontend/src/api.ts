@@ -115,11 +115,9 @@ export interface CategoryTotalsResponse {
     category: CategoryRef | null
     total: MoneyFlow
     months: { month: YearMonth; flow: MoneyFlow; reviewPending: number | null }[]
-    /** A JSON number, unlike every other percent (added in Phase 6 step 8b without `@ApiPercent`); not shown. */
-    spendingSharePercent: number | null
+    spendingSharePercent: Percent | null
   }[]
-  /** A JSON number, unlike every other amount (Phase 6 step 8b, without `@ApiMoney`); not shown. */
-  spending: number | null
+  spending: Money | null
 }
 
 export interface DateSpan {
@@ -394,6 +392,43 @@ export async function getJson<T>(path: string, params: Params = {}): Promise<T> 
   return res.json()
 }
 
+// ---------------------------------------------------------------------------- dashboard (Phase 7 §3.1)
+
+/** A change from last month: this month minus last, spending and income as magnitudes, net signed. */
+export interface DashboardChange {
+  previous: Money
+  difference: Money
+  changePercent: Percent | null
+}
+
+export type SliceKind = 'CATEGORY' | 'OTHER' | 'UNCATEGORIZED'
+
+export interface DashboardSlice {
+  kind: SliceKind
+  category: CategoryRef | null
+  /** Signed: money out is negative. */
+  amount: Money
+  spendingSharePercent: Percent | null
+  members: { category: CategoryRef; amount: Money; spendingSharePercent: Percent | null }[]
+}
+
+export interface DashboardResponse {
+  month: YearMonth | null
+  totals: MonthTotals | null
+  categorizedPercent: Percent | null
+  vsLastMonth: {
+    previousMonth: YearMonth
+    spending: DashboardChange
+    income: DashboardChange
+    net: DashboardChange
+    savingsRatePoints: Percent | null
+  } | null
+  cashFlow: { month: YearMonth; coverage: Coverage; income: Money; spending: Money; net: Money }[]
+  spendingSlices: { spending: Money; rows: DashboardSlice[] }
+  alerts: { range: MonthRange | null; counts: Partial<Record<AlertType, number>>; newest: Alert[] }
+  recurring: { active: number; truncated: boolean; items: RecurringCharge[] }
+}
+
 /** `GET /api/chat/usage`: today's estimated chat spend and the caps (null when a cap is off). */
 export interface ChatDailyUsage {
   day: IsoDate
@@ -406,6 +441,7 @@ export interface ChatDailyUsage {
 export const reads = {
   status: () => getJson<StatusResponse>('/api/status'),
   chatUsage: () => getJson<ChatDailyUsage>('/api/chat/usage'),
+  dashboard: (month?: YearMonth | null) => getJson<DashboardResponse>('/api/dashboard', { month }),
   coverage: () => getJson<CoverageResponse>('/api/analytics/coverage'),
   months: (params: { from?: YearMonth; to?: YearMonth; accountId?: number } = {}) =>
     getJson<MonthlyTotalsResponse>('/api/analytics/months', params),

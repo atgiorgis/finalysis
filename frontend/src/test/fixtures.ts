@@ -10,6 +10,7 @@ import type {
   Category,
   CategoryTotalsResponse,
   CoverageResponse,
+  DashboardResponse,
   DrillDownResponse,
   MerchantTotalsResponse,
   MonthlyTotalsResponse,
@@ -33,6 +34,8 @@ import trendsTopCategory from './fixtures/analytics-trends-top-category.json'
 import categories from './fixtures/categories.json'
 import chatConversations from './fixtures/chat-conversations.json'
 import coverage from './fixtures/coverage.json'
+import dashboardCompleteMonth from './fixtures/dashboard-complete-month.json'
+import dashboardLatest from './fixtures/dashboard-latest.json'
 import reviewQueue from './fixtures/review-queue.json'
 import statusOff from './fixtures/status-off.json'
 import transactionDetail from './fixtures/transaction-detail.json'
@@ -77,6 +80,10 @@ export const fixtures = {
   transactionDetail: typed<Transaction>(transactionDetail),
   reviewQueue: typed<ReviewQueueResponse>(reviewQueue),
   chatConversations: chatConversations,
+  /** September 2026, complete: seven slices with Other (Health, Subscriptions), alerts, recurring. */
+  dashboardCompleteMonth: typed<DashboardResponse>(dashboardCompleteMonth),
+  /** October 2026, partial with no txns yet: no slices, three partial-coverage flags. */
+  dashboardLatest: typed<DashboardResponse>(dashboardLatest),
 }
 
 /**

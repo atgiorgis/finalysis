@@ -26,15 +26,23 @@
   --danger: #b91c1c;
   --danger-bg: #fdecec;
 
-  /* Donut slices by rank in the month, then Other and Uncategorized. */
-  --slice-1: #1e3a8a;
-  --slice-2: #3b82f6;
+  /*
+   * Chart series, checked with the data-viz palette validator (light surface): the mockup's slice colors failed the
+   * lightness band (#1e3a8a) and the chroma floor (#0f766e), so two were replaced and the order searched. Slices go by
+   * rank in the month (the plan's §4.2), so a slot meets its neighbours and, around the ring, slot 1 and the grays:
+   * every such pair passes the colorblind and normal-vision floors. The grays are below 3:1 against the surface, so
+   * every slice is also named in its legend row.
+   */
+  --slice-1: #2f55c5;
+  --slice-2: #db2777;
   --slice-3: #d97706;
-  --slice-4: #0f766e;
+  --slice-4: #16a34a;
   --slice-5: #ea580c;
-  --slice-6: #7c3aed;
+  --slice-6: #be185d;
   --slice-other: #94a3b8;
   --slice-uncat: #cbd5e1;
+  --series-income: #0d9488;
+  --series-spending: #3b5bdb;
 
   --radius-card: 14px;
   --radius-control: 10px;

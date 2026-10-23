@@ -1,5 +1,7 @@
 package com.finalysis.analytics;
 
+import com.finalysis.api.ApiMoney;
+import com.finalysis.api.ApiPercent;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.List;
@@ -19,7 +21,7 @@ import java.util.List;
  *                      the base of each row's share, whatever {@code categoryId} filters. Null without a range
  */
 public record CategoryTotalsResponse(MonthRange range, Long accountId, Long categoryId, boolean uncategorized,
-                                     List<MonthCoverage> coverage, List<Row> rows, BigDecimal spending) {
+                                     List<MonthCoverage> coverage, List<Row> rows, @ApiMoney BigDecimal spending) {
 
     /**
      * One line of the breakdown. Rows come in bucket order (income, spending, refunds, uncategorized, unlinked
@@ -36,7 +38,7 @@ public record CategoryTotalsResponse(MonthRange range, Long accountId, Long cate
      *                 and when spending is zero
      */
     public record Row(TxnBucket bucket, CategoryRef category, MoneyFlow total, List<Cell> months,
-                      BigDecimal spendingSharePercent) {
+                      @ApiPercent BigDecimal spendingSharePercent) {
     }
 
     /**

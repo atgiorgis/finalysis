@@ -8364,7 +8364,7 @@
     },
     {
       "name": "13. UI reads",
-      "description": "Phase 7 reads the UI needs (`docs/plans/phase-7.md` §3), with AI **off**, in the newman run after **12. Chat (AI off)**. Step 1: `GET /api/chat/usage` (Settings): today's estimated chat spend, the same sum the daily cap checks, beside the caps. Later steps add the dashboard, its details and the transaction source line.",
+      "description": "Phase 7 reads the UI needs (`docs/plans/phase-7.md` §3), with AI **off**, in the newman run after **12. Chat (AI off)** (the sample months loaded by **9. Analytics**). Step 1: `GET /api/chat/usage` (Settings). Step 2: `GET /api/dashboard?month=` (the Overview in one call), checked against the analytics endpoints: the month's totals, the slices against the category rows and their drill-downs, adding up to spending; and `/api/analytics/categories` returning `spending` and `spendingSharePercent` as strings. Step 3 adds the details panel, step 3b the transaction source line.",
       "item": [
         {
           "name": "Chat usage (AI off)",
@@ -8391,6 +8391,152 @@
                   "    pm.expect(body.day).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
                   "    pm.expect(new Date(body.resetsAt).getTime()).to.be.above(Date.now());",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Categories: spending and shares are strings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/analytics/categories?from=2026-09&to=2026-09",
+            "description": "Phase 7 step 2: `spending` and each row's `spendingSharePercent` are JSON strings like every other amount and percent (they were numbers)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('ui_categories_sep', pm.response.text());",
+                  "pm.test('spending is a string with two decimals', () => pm.expect(body.spending).to.be.a('string').and.match(/^-?\\d+\\.\\d{2}$/));",
+                  "pm.test('every share is a string with one decimal, or null', () => body.rows.forEach(r => {",
+                  "    if (r.spendingSharePercent !== null) pm.expect(r.spendingSharePercent).to.be.a('string').and.match(/^-?\\d+\\.\\d$/);",
+                  "}));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Months: September 2026",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/analytics/months?from=2026-04&to=2026-09",
+            "description": "Saved for the dashboard check below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('ui_months_sep', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard: September 2026 matches the endpoints",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/dashboard?month=2026-09",
+            "description": "The Overview in one call. Totals and cash flow equal `/months`; each category slice equals its category row; Other is the sum of its members; the slices add up to spending, in whole cents."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const months = JSON.parse(pm.collectionVariables.get('ui_months_sep')).months;",
+                  "const categories = JSON.parse(pm.collectionVariables.get('ui_categories_sep'));",
+                  "const cents = (s) => Math.round(parseFloat(s) * 100);",
+                  "pm.collectionVariables.set('ui_dashboard_sep', pm.response.text());",
+                  "pm.test('the month and its totals are /months\\' September', () => {",
+                  "    pm.expect(d.month).to.eql('2026-09');",
+                  "    pm.expect(d.totals).to.eql(months[5]);",
+                  "});",
+                  "pm.test('the cash flow is the six months to September', () => {",
+                  "    pm.expect(d.cashFlow.map(m => m.month)).to.eql(months.map(m => m.month));",
+                  "    d.cashFlow.forEach((m, i) => ['income', 'spending', 'net', 'coverage'].forEach(k => pm.expect(m[k], m.month + ' ' + k).to.eql(months[i][k])));",
+                  "});",
+                  "pm.test('each category slice is its category row', () => d.spendingSlices.rows.filter(s => s.kind === 'CATEGORY').forEach(s => {",
+                  "    const row = categories.rows.find(r => r.bucket === 'EXPENSE' && r.category && r.category.id === s.category.id);",
+                  "    pm.expect(s.amount, s.category.name).to.eql(row.total.net);",
+                  "    pm.expect(s.spendingSharePercent, s.category.name).to.eql(row.spendingSharePercent);",
+                  "}));",
+                  "pm.test('Other is the sum of its members', () => d.spendingSlices.rows.filter(s => s.kind === 'OTHER').forEach(s => {",
+                  "    pm.expect(cents(s.amount)).to.equal(s.members.reduce((t, m) => t + cents(m.amount), 0));",
+                  "}));",
+                  "pm.test('the slices add up to spending, which is the categories\\' spending', () => {",
+                  "    pm.expect(d.spendingSlices.spending).to.eql(categories.spending).and.to.eql(d.totals.spending);",
+                  "    pm.expect(d.spendingSlices.rows.reduce((t, s) => t + cents(s.amount), 0)).to.equal(cents(d.spendingSlices.spending));",
+                  "});",
+                  "pm.test('at most 6 category slices, every amount a string', () => {",
+                  "    pm.expect(d.spendingSlices.rows.filter(s => s.kind === 'CATEGORY').length).to.be.at.most(6);",
+                  "    d.spendingSlices.rows.forEach(s => pm.expect(s.amount).to.be.a('string'));",
+                  "});",
+                  "pm.test('August is last month, with its spending as the previous magnitude', () => {",
+                  "    pm.expect(d.vsLastMonth.previousMonth).to.eql('2026-08');",
+                  "    pm.expect(cents(d.vsLastMonth.spending.previous)).to.equal(-cents(months[4].spending));",
+                  "    pm.expect(cents(d.vsLastMonth.net.difference)).to.equal(cents(months[5].net) - cents(months[4].net));",
+                  "});",
+                  "pm.collectionVariables.set('ui_top_category', d.spendingSlices.rows[0].category.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard: the largest slice equals its drill-down",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/analytics/transactions?month=2026-09&bucket=EXPENSE&size=1&categoryId={{ui_top_category}}",
+            "description": "UI-04: the rows behind the largest slice add up to it."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const d = JSON.parse(pm.collectionVariables.get('ui_dashboard_sep'));",
+                  "const top = d.spendingSlices.rows[0];",
+                  "pm.test('the drill-down total is the slice', () => pm.expect(pm.response.json().total.net).to.eql(top.amount));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dashboard: a month after the data is a 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/dashboard?month=2030-01",
+            "description": "A month after the latest month with data is a 400 naming `month`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('names the month', () => pm.expect(pm.response.json().errors[0].field).to.eql('month'));"
                 ]
               }
             }

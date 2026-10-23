@@ -13,13 +13,14 @@ export const usageFixture = {
   resetsAt: '2026-10-24T00:00:00-04:00',
 }
 
-/** What every tab reads through the shell, from the sample-data fixtures. */
+/** What every tab reads through the shell, and the Overview it opens on, from the sample-data fixtures. */
 export const SHELL_ROUTES: Record<string, unknown> = {
   '/api/status': fixtures.statusOff,
   '/api/analytics/coverage': fixtures.coverage,
   '/api/accounts': fixtures.accounts,
   '/api/analytics/months': fixtures.months,
   '/api/chat/usage': usageFixture,
+  '/api/dashboard': fixtures.dashboardLatest,
 }
 
 let location = ''

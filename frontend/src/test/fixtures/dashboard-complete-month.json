@@ -1,0 +1,707 @@
+{
+  "month": "2026-09",
+  "totals": {
+    "month": "2026-09",
+    "coverage": "COMPLETE",
+    "income": "4900.24",
+    "spending": "-3549.07",
+    "net": "1351.17",
+    "savingsRatePercent": "27.6",
+    "refunds": {
+      "moneyOut": "0.00",
+      "moneyIn": "0.00",
+      "net": "0.00",
+      "count": 0
+    },
+    "uncategorized": {
+      "moneyOut": "0.00",
+      "moneyIn": "0.00",
+      "net": "0.00",
+      "count": 0
+    },
+    "unlinkedTransfers": {
+      "moneyOut": "-500.00",
+      "moneyIn": "0.00",
+      "net": "-500.00",
+      "count": 1
+    },
+    "linkedTransfers": {
+      "moneyOut": "-1403.46",
+      "moneyIn": "1403.46",
+      "net": "0.00",
+      "count": 4
+    },
+    "netChange": "851.17",
+    "txnCount": 44,
+    "dataQuality": {
+      "countedTxns": 39,
+      "uncategorizedCount": 0,
+      "reviewPendingCount": 0,
+      "unlinkedTransferCount": 1,
+      "uncategorizedPercentOfCount": "0.0",
+      "reviewPendingPercentOfCount": "0.0",
+      "uncategorizedPercentOfSpending": "0.0",
+      "flags": []
+    }
+  },
+  "categorizedPercent": "100.0",
+  "vsLastMonth": {
+    "previousMonth": "2026-08",
+    "spending": {
+      "previous": "4473.10",
+      "difference": "-924.03",
+      "changePercent": "-20.7"
+    },
+    "income": {
+      "previous": "4900.09",
+      "difference": "0.15",
+      "changePercent": "0.0"
+    },
+    "net": {
+      "previous": "426.99",
+      "difference": "924.18",
+      "changePercent": "216.4"
+    },
+    "savingsRatePoints": "18.9"
+  },
+  "cashFlow": [
+    {
+      "month": "2026-04",
+      "coverage": "PARTIAL",
+      "income": "9799.44",
+      "spending": "-5614.31",
+      "net": "4185.13"
+    },
+    {
+      "month": "2026-05",
+      "coverage": "COMPLETE",
+      "income": "7350.30",
+      "spending": "-3431.35",
+      "net": "3918.95"
+    },
+    {
+      "month": "2026-06",
+      "coverage": "COMPLETE",
+      "income": "4899.65",
+      "spending": "-3638.53",
+      "net": "1261.12"
+    },
+    {
+      "month": "2026-07",
+      "coverage": "COMPLETE",
+      "income": "4903.39",
+      "spending": "-3497.62",
+      "net": "1405.77"
+    },
+    {
+      "month": "2026-08",
+      "coverage": "COMPLETE",
+      "income": "4900.09",
+      "spending": "-4473.10",
+      "net": "426.99"
+    },
+    {
+      "month": "2026-09",
+      "coverage": "COMPLETE",
+      "income": "4900.24",
+      "spending": "-3549.07",
+      "net": "1351.17"
+    }
+  ],
+  "spendingSlices": {
+    "spending": "-3549.07",
+    "rows": [
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 4,
+          "name": "Housing",
+          "kind": "EXPENSE"
+        },
+        "amount": "-1850.00",
+        "spendingSharePercent": "52.1",
+        "members": []
+      },
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 2,
+          "name": "Groceries",
+          "kind": "EXPENSE"
+        },
+        "amount": "-477.94",
+        "spendingSharePercent": "13.5",
+        "members": []
+      },
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 5,
+          "name": "Shopping",
+          "kind": "EXPENSE"
+        },
+        "amount": "-394.75",
+        "spendingSharePercent": "11.1",
+        "members": []
+      },
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 1,
+          "name": "Dining",
+          "kind": "EXPENSE"
+        },
+        "amount": "-356.91",
+        "spendingSharePercent": "10.1",
+        "members": []
+      },
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 8,
+          "name": "Utilities",
+          "kind": "EXPENSE"
+        },
+        "amount": "-231.52",
+        "spendingSharePercent": "6.5",
+        "members": []
+      },
+      {
+        "kind": "CATEGORY",
+        "category": {
+          "id": 7,
+          "name": "Transportation",
+          "kind": "EXPENSE"
+        },
+        "amount": "-168.10",
+        "spendingSharePercent": "4.7",
+        "members": []
+      },
+      {
+        "kind": "OTHER",
+        "category": null,
+        "amount": "-69.85",
+        "spendingSharePercent": "2.0",
+        "members": [
+          {
+            "category": {
+              "id": 3,
+              "name": "Health",
+              "kind": "EXPENSE"
+            },
+            "amount": "-38.38",
+            "spendingSharePercent": "1.1"
+          },
+          {
+            "category": {
+              "id": 6,
+              "name": "Subscriptions",
+              "kind": "EXPENSE"
+            },
+            "amount": "-31.47",
+            "spendingSharePercent": "0.9"
+          }
+        ]
+      }
+    ]
+  },
+  "alerts": {
+    "range": {
+      "from": "2026-07",
+      "to": "2026-09"
+    },
+    "counts": {
+      "NEW_RECURRING": 0,
+      "CATEGORY_SPIKE": 2,
+      "LARGE_TRANSACTION": 1,
+      "RECURRING_PRICE_INCREASE": 1,
+      "POSSIBLE_DUPLICATE": 0
+    },
+    "newest": [
+      {
+        "key": "category-spike.2026-08.4355a46b19d348dc",
+        "type": "CATEGORY_SPIKE",
+        "month": "2026-08",
+        "basis": {
+          "observed": {
+            "unit": "MONEY",
+            "value": "340.63"
+          },
+          "baseline": {
+            "unit": "MONEY",
+            "value": "207.79"
+          },
+          "threshold": {
+            "unit": "MONEY",
+            "value": "311.68"
+          },
+          "periodStart": "2026-05-01",
+          "periodEnd": "2026-07-31",
+          "settings": [
+            {
+              "name": "min-increase-percent",
+              "value": {
+                "unit": "PERCENT",
+                "value": "50.0"
+              }
+            },
+            {
+              "name": "min-increase-amount",
+              "value": {
+                "unit": "MONEY",
+                "value": "100.00"
+              }
+            },
+            {
+              "name": "min-baseline-months",
+              "value": {
+                "unit": "COUNT",
+                "value": "3"
+              }
+            }
+          ]
+        },
+        "details": {
+          "type": "CATEGORY_SPIKE",
+          "category": {
+            "id": 1,
+            "name": "Dining",
+            "kind": "EXPENSE"
+          },
+          "spent": "340.63",
+          "baseline": {
+            "amount": "207.79",
+            "monthsUsed": 3,
+            "monthsWanted": 3
+          },
+          "increaseAmount": "132.84",
+          "increasePercent": "63.9"
+        },
+        "txns": [
+          {
+            "id": 213,
+            "accountId": 4,
+            "txnDate": "2026-08-22",
+            "amount": "-43.88",
+            "merchant": "NAKAMURA RAMEN"
+          },
+          {
+            "id": 214,
+            "accountId": 4,
+            "txnDate": "2026-08-24",
+            "amount": "-42.09",
+            "merchant": "BLUE BEAN CAFE"
+          },
+          {
+            "id": 206,
+            "accountId": 4,
+            "txnDate": "2026-08-05",
+            "amount": "-38.65",
+            "merchant": "CHIPOTLE"
+          },
+          {
+            "id": 212,
+            "accountId": 4,
+            "txnDate": "2026-08-19",
+            "amount": "-36.14",
+            "merchant": "DOORDASH THAI BASIL"
+          },
+          {
+            "id": 210,
+            "accountId": 4,
+            "txnDate": "2026-08-14",
+            "amount": "-35.91",
+            "merchant": "BLUE BEAN CAFE"
+          },
+          {
+            "id": 205,
+            "accountId": 4,
+            "txnDate": "2026-08-03",
+            "amount": "-32.93",
+            "merchant": "NAKAMURA RAMEN"
+          },
+          {
+            "id": 216,
+            "accountId": 4,
+            "txnDate": "2026-08-27",
+            "amount": "-32.01",
+            "merchant": "CHIPOTLE"
+          },
+          {
+            "id": 208,
+            "accountId": 4,
+            "txnDate": "2026-08-12",
+            "amount": "-28.69",
+            "merchant": "BLUE BEAN CAFE"
+          },
+          {
+            "id": 207,
+            "accountId": 4,
+            "txnDate": "2026-08-09",
+            "amount": "-26.79",
+            "merchant": "DOORDASH THAI BASIL"
+          },
+          {
+            "id": 217,
+            "accountId": 4,
+            "txnDate": "2026-08-28",
+            "amount": "-23.54",
+            "merchant": "CHIPOTLE"
+          }
+        ],
+        "dataFlags": [
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 2,
+            "reviewedAt": "2026-10-23T12:00:00Z"
+          },
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 18,
+            "reviewedAt": null
+          }
+        ],
+        "dismissed": false,
+        "dismissedAt": null,
+        "note": null
+      },
+      {
+        "key": "category-spike.2026-08.f0b5c2c2211c8d67",
+        "type": "CATEGORY_SPIKE",
+        "month": "2026-08",
+        "basis": {
+          "observed": {
+            "unit": "MONEY",
+            "value": "1183.67"
+          },
+          "baseline": {
+            "unit": "MONEY",
+            "value": "244.42"
+          },
+          "threshold": {
+            "unit": "MONEY",
+            "value": "366.63"
+          },
+          "periodStart": "2026-05-01",
+          "periodEnd": "2026-07-31",
+          "settings": [
+            {
+              "name": "min-increase-percent",
+              "value": {
+                "unit": "PERCENT",
+                "value": "50.0"
+              }
+            },
+            {
+              "name": "min-increase-amount",
+              "value": {
+                "unit": "MONEY",
+                "value": "100.00"
+              }
+            },
+            {
+              "name": "min-baseline-months",
+              "value": {
+                "unit": "COUNT",
+                "value": "3"
+              }
+            }
+          ]
+        },
+        "details": {
+          "type": "CATEGORY_SPIKE",
+          "category": {
+            "id": 5,
+            "name": "Shopping",
+            "kind": "EXPENSE"
+          },
+          "spent": "1183.67",
+          "baseline": {
+            "amount": "244.42",
+            "monthsUsed": 3,
+            "monthsWanted": 3
+          },
+          "increaseAmount": "939.25",
+          "increasePercent": "384.3"
+        },
+        "txns": [
+          {
+            "id": 139,
+            "accountId": 3,
+            "txnDate": "2026-08-22",
+            "amount": "-899.99",
+            "merchant": "BEST BUY"
+          },
+          {
+            "id": 138,
+            "accountId": 3,
+            "txnDate": "2026-08-22",
+            "amount": "-103.62",
+            "merchant": "AMZN MKTP US"
+          },
+          {
+            "id": 128,
+            "accountId": 3,
+            "txnDate": "2026-08-01",
+            "amount": "-100.75",
+            "merchant": "TARGET"
+          },
+          {
+            "id": 126,
+            "accountId": 3,
+            "txnDate": "2026-08-02",
+            "amount": "-50.77",
+            "merchant": "AMZN MKTP US"
+          },
+          {
+            "id": 143,
+            "accountId": 3,
+            "txnDate": "2026-08-28",
+            "amount": "-28.54",
+            "merchant": "AMZN MKTP US"
+          }
+        ],
+        "dataFlags": [
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 2,
+            "reviewedAt": "2026-10-23T12:00:00Z"
+          },
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 18,
+            "reviewedAt": null
+          }
+        ],
+        "dismissed": false,
+        "dismissedAt": null,
+        "note": null
+      },
+      {
+        "key": "large-transaction.2026-08.10c74308b2e74e9d",
+        "type": "LARGE_TRANSACTION",
+        "month": "2026-08",
+        "basis": {
+          "observed": {
+            "unit": "MONEY",
+            "value": "899.99"
+          },
+          "baseline": {
+            "unit": "MONEY",
+            "value": "66.43"
+          },
+          "threshold": {
+            "unit": "MONEY",
+            "value": "500.00"
+          },
+          "periodStart": "2026-02-23",
+          "periodEnd": "2026-08-21",
+          "settings": [
+            {
+              "name": "min-amount",
+              "value": {
+                "unit": "MONEY",
+                "value": "500.00"
+              }
+            },
+            {
+              "name": "times-median",
+              "value": {
+                "unit": "RATIO",
+                "value": "3.00"
+              }
+            },
+            {
+              "name": "history-days",
+              "value": {
+                "unit": "DAYS",
+                "value": "180"
+              }
+            },
+            {
+              "name": "min-history",
+              "value": {
+                "unit": "COUNT",
+                "value": "5"
+              }
+            }
+          ]
+        },
+        "details": {
+          "type": "LARGE_TRANSACTION",
+          "txn": {
+            "id": 139,
+            "accountId": 3,
+            "txnDate": "2026-08-22",
+            "amount": "-899.99",
+            "merchant": "BEST BUY"
+          },
+          "category": {
+            "id": 5,
+            "name": "Shopping",
+            "kind": "EXPENSE"
+          },
+          "median": "66.43",
+          "historyCount": 15,
+          "timesMedian": "13.55"
+        },
+        "txns": [
+          {
+            "id": 139,
+            "accountId": 3,
+            "txnDate": "2026-08-22",
+            "amount": "-899.99",
+            "merchant": "BEST BUY"
+          }
+        ],
+        "dataFlags": [
+          {
+            "type": "PARTIAL_COVERAGE",
+            "accountId": 3,
+            "statementId": null,
+            "reviewedAt": null
+          },
+          {
+            "type": "PARTIAL_COVERAGE",
+            "accountId": 4,
+            "statementId": null,
+            "reviewedAt": null
+          },
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 2,
+            "reviewedAt": "2026-10-23T12:00:00Z"
+          },
+          {
+            "type": "RECONCILIATION_FAILED",
+            "accountId": 1,
+            "statementId": 18,
+            "reviewedAt": null
+          }
+        ],
+        "dismissed": false,
+        "dismissedAt": null,
+        "note": null
+      }
+    ]
+  },
+  "recurring": {
+    "active": 7,
+    "truncated": false,
+    "items": [
+      {
+        "accountId": 1,
+        "merchant": "CITY OF ARLINGTON WATER UTIL PMT",
+        "category": {
+          "id": 8,
+          "name": "Utilities",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "46.81",
+        "lastAmount": "47.98",
+        "fixedPrice": false,
+        "occurrences": 6,
+        "firstDate": "2026-04-22",
+        "lastDate": "2026-09-22",
+        "nextExpectedDate": "2026-10-22",
+        "status": "ACTIVE"
+      },
+      {
+        "accountId": 3,
+        "merchant": "GOOGLE GOOGLE ONE",
+        "category": {
+          "id": 6,
+          "name": "Subscriptions",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "2.99",
+        "lastAmount": "2.99",
+        "fixedPrice": true,
+        "occurrences": 6,
+        "firstDate": "2026-04-20",
+        "lastDate": "2026-09-20",
+        "nextExpectedDate": "2026-10-20",
+        "status": "ACTIVE"
+      },
+      {
+        "accountId": 1,
+        "merchant": "METRO POWER CO ONLINE PMT",
+        "category": {
+          "id": 8,
+          "name": "Utilities",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "96.60",
+        "lastAmount": "114.64",
+        "fixedPrice": false,
+        "occurrences": 6,
+        "firstDate": "2026-04-18",
+        "lastDate": "2026-09-18",
+        "nextExpectedDate": "2026-10-18",
+        "status": "ACTIVE"
+      },
+      {
+        "accountId": 1,
+        "merchant": "CLEARLINE WIRELESS AUTOPAY",
+        "category": {
+          "id": 8,
+          "name": "Utilities",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "68.95",
+        "lastAmount": "68.90",
+        "fixedPrice": false,
+        "occurrences": 6,
+        "firstDate": "2026-04-15",
+        "lastDate": "2026-09-15",
+        "nextExpectedDate": "2026-10-15",
+        "status": "ACTIVE"
+      },
+      {
+        "accountId": 3,
+        "merchant": "SPOTIFY USA",
+        "category": {
+          "id": 6,
+          "name": "Subscriptions",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "11.99",
+        "lastAmount": "12.99",
+        "fixedPrice": true,
+        "occurrences": 6,
+        "firstDate": "2026-04-12",
+        "lastDate": "2026-09-12",
+        "nextExpectedDate": "2026-10-12",
+        "status": "ACTIVE"
+      },
+      {
+        "accountId": 3,
+        "merchant": "NETFLIX.COM",
+        "category": {
+          "id": 6,
+          "name": "Subscriptions",
+          "kind": "EXPENSE"
+        },
+        "cadence": "MONTHLY",
+        "typicalAmount": "15.49",
+        "lastAmount": "15.49",
+        "fixedPrice": true,
+        "occurrences": 6,
+        "firstDate": "2026-04-06",
+        "lastDate": "2026-09-06",
+        "nextExpectedDate": "2026-10-06",
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
