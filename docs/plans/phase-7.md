@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 4 done (step notes); next: step 5. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 to 5 done (step notes); next: step 6. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -673,6 +673,30 @@ correction API).
   and `/drill`.
 - Recorded for step 6 (§3.5, the owner's note at step 3b's approval): citation links are built from the citation
   object's fields only, never from text in the answer.
+
+### Step 5 notes: Alerts and Recurring
+
+Done: "Phase 7 step 5: Alerts and Recurring tabs". Backend 3,277 tests (Maven summary, no backend change), 0 failures,
+0 skipped; frontend 136 tests (16 files). No new endpoint, so no newman change (folder 9 covers alerts, dismissal and
+recurring).
+
+- **Alerts** (`pages/AlertsPage.tsx`, `components/AlertCard.tsx`): the three months to the month picked (the endpoint's
+  default length), a type filter and "Show dismissed alerts" in the URL, the counts per type as returned. Each alert:
+  its type and month, its subject (a large transaction's merchant, else the category, else the merchant), what it
+  found in a sentence from its own `details` strings ("$340.63 spent, $132.84 (+63.9%) above the 3-month average of
+  $207.79."), its basis (observed, baseline, threshold "it fires at this or more", period, every setting in words), the
+  transactions it is about (each opens the sheet), and the data flags of the months it used, named by account.
+  Dismiss with an optional note (at most 200 characters, the API's limit; no note sends `{}`), Restore for a dismissed
+  one; a refused request shows the API's reason; after either, every page reads again.
+- **`?key=`** (the Overview's summary links; chat's alert citations in step 6) focuses that alert; a key outside the
+  list's months is read on its own (`GET /api/alerts/{key}`), and one that no longer matches says "This alert no
+  longer applies."
+- **Recurring** (`pages/RecurringPage.tsx`): every series (Active / Ended / All in the URL, the endpoint's limit of
+  100), with its account, category, typical and last amount ("the amount varies" when the last three differ), the
+  next expected date as a projection or when it ended, and its charges. "See its charges" opens `/drill` built from
+  the series' own fields (`series.ts`: account, merchant, first to last month, money out). `?series=<accountId>:
+  <merchant>` marks one series (the Overview's recurring rows link to it; chat's series citations in step 6).
+- The alert wording lives in `components/alertText.ts`, shared by the Overview's summary and the Alerts tab.
 
 ### Requirement mapping
 

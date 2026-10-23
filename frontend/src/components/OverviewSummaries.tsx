@@ -1,40 +1,8 @@
 import { Link } from 'react-router-dom'
-import type { Alert, AlertType, DashboardResponse, Quantity, YearMonth } from '../api'
-import { formatDate, formatMoney, formatMonth, formatPercent } from '../format'
-
-export const ALERT_LABELS: Record<AlertType, string> = {
-  CATEGORY_SPIKE: 'Spending spike',
-  LARGE_TRANSACTION: 'Large transaction',
-  POSSIBLE_DUPLICATE: 'Possible duplicate',
-  RECURRING_PRICE_INCREASE: 'Price increase',
-  NEW_RECURRING: 'New recurring charge',
-}
-
-/** A basis value with its unit, as returned. */
-export function quantityText(q: Quantity | null): string {
-  if (!q) {
-    return '—'
-  }
-  switch (q.unit) {
-    case 'MONEY':
-      return formatMoney(q.value, { sign: 'magnitude' })
-    case 'PERCENT':
-      return formatPercent(q.value)
-    case 'RATIO':
-      return `${q.value}×`
-    case 'DAYS':
-      return q.value === '1' ? '1 day' : `${q.value} days`
-    default:
-      return q.value
-  }
-}
-
-function alertSubject(alert: Alert): string {
-  const details = alert.details as Record<string, unknown>
-  const category = (details.category as { name?: string } | undefined)?.name
-  const merchant = details.merchant as string | undefined
-  return category ?? merchant ?? ''
-}
+import type { AlertType, DashboardResponse, YearMonth } from '../api'
+import { seriesParam } from '../series'
+import { ALERT_LABELS, alertSubject, quantityText } from './alertText'
+import { formatDate, formatMoney, formatMonth } from '../format'
 
 const withMonth = (path: string, month: YearMonth) => `${path}?month=${encodeURIComponent(month)}`
 
@@ -166,7 +134,9 @@ export function RecurringSummary({ dashboard }: { dashboard: DashboardResponse }
             {items.map((r) => (
               <tr key={`${r.accountId}-${r.merchant}`}>
                 <td>
-                  {r.merchant}
+                  <Link to={`/recurring?month=${encodeURIComponent(month)}&series=${encodeURIComponent(seriesParam(r))}`}>
+                    {r.merchant}
+                  </Link>
                   {r.category && <span className="muted"> · {r.category.name}</span>}
                 </td>
                 <td>{formatMoney(r.typicalAmount, { sign: 'magnitude' })}</td>

@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom'
 import ChatPage from './ChatPage'
+import AlertsPage from './pages/AlertsPage'
 import DrillPage from './pages/DrillPage'
 import OverviewPage from './pages/OverviewPage'
 import PlaceholderPage from './pages/PlaceholderPage'
+import RecurringPage from './pages/RecurringPage'
 import SettingsPage from './pages/SettingsPage'
 import TransactionsPage from './pages/TransactionsPage'
 import Layout from './shell/Layout'
@@ -23,7 +25,8 @@ function TransactionLink() {
 }
 
 /** Tabs a later step builds; each is a placeholder until then. */
-const PLACEHOLDERS = TABS.filter((tab) => !['/overview', '/transactions', '/chat', '/settings'].includes(tab.path))
+const BUILT = ['/overview', '/transactions', '/alerts', '/recurring', '/chat', '/settings']
+const PLACEHOLDERS = TABS.filter((tab) => !BUILT.includes(tab.path))
 
 /**
  * Every route of the app, inside the shell. `/` opens the Overview. The Phase 6 chat page stays on the Chat tab until
@@ -38,6 +41,8 @@ export default function AppRoutes() {
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transactions/:id" element={<TransactionLink />} />
           <Route path="/drill" element={<DrillPage />} />
+          <Route path="/alerts/*" element={<AlertsPage />} />
+          <Route path="/recurring/*" element={<RecurringPage />} />
           {PLACEHOLDERS.map((tab) => (
             <Route
               key={tab.path}

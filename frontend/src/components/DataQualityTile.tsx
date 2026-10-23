@@ -7,7 +7,7 @@ const COVERAGE_TEXT: Record<Coverage, string> = {
   NONE: 'No statements for this month',
 }
 
-function flagText(flag: MonthFlag, accounts: Account[]): string {
+export function flagText(flag: MonthFlag, accounts: Account[]): string {
   const name = accounts.find((a) => a.id === flag.accountId)?.name ?? 'An account'
   switch (flag.type) {
     case 'RECONCILIATION_FAILED':

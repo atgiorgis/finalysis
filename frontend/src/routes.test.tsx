@@ -21,12 +21,15 @@ test('lists the seven tabs in the plan’s order', () => {
   ])
 })
 
-test.each(TABS.filter((tab) => tab.path !== '/chat').map((tab) => [tab.path, tab.label]))(
-  '%s renders the %s tab',
-  async (path, label) => {
+/** A page's heading, where it says more than its tab. */
+const HEADINGS: Record<string, string> = { '/recurring': 'Recurring charges' }
+
+test.each(TABS.filter((tab) => tab.path !== '/chat').map((tab) => [tab.path, HEADINGS[tab.path] ?? tab.label]))(
+  '%s renders its page: %s',
+  async (path, heading) => {
     renderApp(path)
 
-    expect(await screen.findByRole('heading', { level: 1, name: label })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
   },
 )
 

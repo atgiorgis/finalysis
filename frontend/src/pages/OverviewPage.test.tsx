@@ -156,6 +156,10 @@ test('recurring: how many are active and the first six', async () => {
   const rows = within(recurring).getAllByRole('row').slice(1)
   expect(rows).toHaveLength(6)
   expect(rows[0]).toHaveTextContent('CITY OF ARLINGTON WATER UTIL PMT · Utilities$46.81Oct 22')
+  expect(within(rows[0]).getByRole('link', { name: 'CITY OF ARLINGTON WATER UTIL PMT' })).toHaveAttribute(
+    'href',
+    '/recurring?month=2026-09&series=1%3ACITY%20OF%20ARLINGTON%20WATER%20UTIL%20PMT',
+  )
   expect(within(recurring).getByRole('link', { name: 'All recurring charges' })).toHaveAttribute(
     'href',
     '/recurring?month=2026-09',

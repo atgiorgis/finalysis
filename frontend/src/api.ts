@@ -427,6 +427,15 @@ export const corrections = {
   undoNotTransfer: (id: number) => send<null>('DELETE', `/api/transactions/${id}/not-transfer`),
 }
 
+/** Alert dismissal (ANA-04, V20): with the corrections, the only writes in the UI. */
+export const dismissals = {
+  /** Dismisses a current alert, with an optional note; answers the alert as it now is. */
+  dismiss: (key: string, note: string | null) =>
+    send<Alert>('PUT', `/api/alerts/${encodeURIComponent(key)}/dismissal`, note ? { note } : {}) as Promise<Alert>,
+  /** Shows a dismissed alert again (204). */
+  restore: (key: string) => send<null>('DELETE', `/api/alerts/${encodeURIComponent(key)}/dismissal`),
+}
+
 // ---------------------------------------------------------------------------- reads
 
 type Params = Record<string, string | number | boolean | null | undefined>
