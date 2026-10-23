@@ -1,24 +1,226 @@
-/* The font, colors and base styles are in theme.css. */
+/* The font, colors and base styles are in theme.css. Mobile first: phone layout by default, desktop from 768 px. */
 
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .error {
-  color: #c0392b;
+  color: var(--danger);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* ---- shell ---- */
+
+.app {
+  min-height: 100vh;
+  /* room for the bottom bar on a phone */
+  padding-bottom: calc(var(--touch-target) + var(--space-4));
 }
 
 .cloud-ai-banner {
   position: sticky;
   top: 0;
-  padding: 0.5rem 1rem;
-  background: #fff4ce;
-  color: #5c4400;
-  border-bottom: 1px solid #e0c060;
-  text-align: center;
+  z-index: 2;
+  padding: var(--space-2) var(--space-4);
+  background: var(--warning-bg);
+  color: #8a4b0a;
+  border-bottom: 1px solid #f1d5b0;
+  font-size: 0.875rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.app-header {
+  background: var(--nav);
+  color: #ffffff;
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.app-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.app-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.app-context {
+  margin: var(--space-1) 0 var(--space-3);
+  color: #c9d3e2;
+  font-size: 0.875rem;
+}
+
+.month-picker select {
+  min-height: var(--touch-target);
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border: 1px solid #afc0da;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.nav-tabs {
+  display: none;
+}
+
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  color: #c9d3e2;
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+
+.nav-tab:hover {
+  color: #ffffff;
+}
+
+.nav-tab.active {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+  font-weight: 600;
+}
+
+.bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.bottom-nav-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-target);
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.bottom-nav-tab.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bottom-nav-more {
+  position: absolute;
+  right: var(--space-2);
+  bottom: calc(100% + var(--space-2));
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.bottom-nav-more a {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  text-decoration: none;
+}
+
+.app-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .app {
+    padding-bottom: 0;
+  }
+
+  .nav-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+
+  .app-main {
+    padding: var(--space-5);
+  }
+}
+
+/* ---- pages ---- */
+
+.page h1 {
+  margin: 0 0 var(--space-2);
+  font-size: 1.5rem;
+}
+
+.card {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.card h2 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.0625rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.facts-row {
+  display: contents;
+}
+
+.facts dt {
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .facts {
+    grid-template-columns: minmax(12rem, max-content) 1fr;
+  }
+
+  .facts dd {
+    margin: 0;
+  }
 }
 
 .chat textarea {

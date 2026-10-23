@@ -1,27 +1,13 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { cleanup, screen } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
-import AppRoutes, { TABS } from './routes'
+import { TABS } from './routes'
+import { renderApp } from './test/renderApp'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
-
-function renderAt(path: string) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      Response.json({ app: 'finalysis', status: 'ok', timestamp: '2026-01-01T00:00:00Z', ai: { mode: 'OFF' } }),
-    ),
-  )
-  render(
-    <MemoryRouter initialEntries={[path]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  )
-}
 
 test('lists the seven tabs in the plan’s order', () => {
   expect(TABS.map((tab) => tab.label)).toEqual([
@@ -35,28 +21,30 @@ test('lists the seven tabs in the plan’s order', () => {
   ])
 })
 
-test.each(TABS.map((tab) => [tab.path, tab.label]))('%s renders the %s tab', async (path, label) => {
-  renderAt(path)
+test.each(TABS.filter((tab) => tab.path !== '/chat').map((tab) => [tab.path, tab.label]))(
+  '%s renders the %s tab',
+  async (path, label) => {
+    renderApp(path)
 
-  expect(screen.getByRole('heading', { level: 1, name: label })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: label })).toBeInTheDocument()
+  },
+)
+
+test('the Chat tab is still the Phase 6 chat page until step 6', async () => {
+  renderApp('/chat')
+
+  expect(await screen.findByRole('region', { name: 'Chat' })).toBeInTheDocument()
 })
 
-test('a tab’s sub-path stays on that tab', () => {
-  renderAt('/chat/12')
+test('a tab’s sub-path stays on that tab', async () => {
+  renderApp('/alerts/some-key')
 
-  expect(screen.getByRole('heading', { level: 1, name: 'Chat' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'Alerts' })).toBeInTheDocument()
 })
 
-test('the root is still the status page until step 1', async () => {
-  renderAt('/')
+test('an unknown path goes to the Overview', async () => {
+  const { location } = renderApp('/nowhere')
 
-  expect(screen.getByRole('heading', { name: 'Finalysis' })).toBeInTheDocument()
-  expect(await screen.findByText('ok')).toBeInTheDocument()
-})
-
-test('an unknown path goes to the root', async () => {
-  renderAt('/nowhere')
-
-  expect(screen.getByRole('heading', { name: 'Finalysis' })).toBeInTheDocument()
-  expect(await screen.findByText('ok')).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
+  expect(location()).toBe('/overview')
 })

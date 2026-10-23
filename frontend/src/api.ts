@@ -394,7 +394,18 @@ export async function getJson<T>(path: string, params: Params = {}): Promise<T> 
   return res.json()
 }
 
+/** `GET /api/chat/usage`: today's estimated chat spend and the caps (null when a cap is off). */
+export interface ChatDailyUsage {
+  day: IsoDate
+  spentToday: string
+  maxTurnCost: string | null
+  maxDailyCost: string | null
+  resetsAt: string
+}
+
 export const reads = {
+  status: () => getJson<StatusResponse>('/api/status'),
+  chatUsage: () => getJson<ChatDailyUsage>('/api/chat/usage'),
   coverage: () => getJson<CoverageResponse>('/api/analytics/coverage'),
   months: (params: { from?: YearMonth; to?: YearMonth; accountId?: number } = {}) =>
     getJson<MonthlyTotalsResponse>('/api/analytics/months', params),

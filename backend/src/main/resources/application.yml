@@ -48,6 +48,9 @@ spring:
 
 server:
   port: 8080
+  # Local only (UI-08, docs/plans/phase-7.md §9): nothing else on the network can reach the API. Phone access needs
+  # login and HTTPS first (Phase 8).
+  address: 127.0.0.1
 
 management:
   endpoints:

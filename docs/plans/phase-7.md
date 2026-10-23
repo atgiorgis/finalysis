@@ -1,7 +1,7 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Next: step 0. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+in this file. Steps 0 and 1 done (step notes); next: step 2. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
 Requirements as of `docs/requirements.md` v1.72.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
@@ -490,6 +490,36 @@ Done: "Phase 7 step 0: frontend scaffolding". Backend 3,236 tests (from the sure
   `@ApiPercent`. Typed as numbers and not shown; the dashboard endpoint (step 2) returns its shares as strings. Not
   changed here: it is Phase 6 code that works, and the chat tool reads the same record. The fixture also shows REFUND
   rows with negative shares, which step 2's slices follow (§3.1).
+
+### Step 1 notes: shell, Settings, localhost binding
+
+Done: "Phase 7 step 1: shell, month picker, banner, Settings". Backend 3,244 tests (Maven summary), 0 failures,
+0 skipped; frontend 62 tests (8 files); newman 255 requests, 0 failures, with folder 13.
+
+- **Localhost binding (UI-08):** `server.address: 127.0.0.1` in `application.yml`. `ServerAddressTest` starts a real
+  server on a random port: the property is set, a connection to loopback succeeds, a connection to this machine's
+  network address is refused (skipped on a machine with none), and no profile file sets another address. The newman
+  run uses `http://localhost:…` and still reaches it; the Vite proxy now targets `127.0.0.1:8080` explicitly.
+- **`GET /api/chat/usage`** (`ChatUsageController`, chat package, read-only): `{day, spentToday, maxTurnCost,
+  maxDailyCost, resetsAt}`. `spentToday` is the store's existing `costSince(local midnight)`, the daily cap's own sum,
+  six decimals like a turn's cost; caps keep their configured value with at least two decimals (`1.00`, `0.15`), null
+  when off. The plan's `priced` flag was left out: nothing on the page needs it. No change to the loop, the store's
+  writes or `ChatProperties`. Tests: `ChatUsageApiTest` (empty ledger, every kind since midnight only, unpriced rows
+  count 0, the day boundary with the mutable clock) and `ChatAiOffApiTest` (AI off: 0 and the caps).
+- **Shell:** `ShellDataProvider` loads status, coverage and accounts once, then the picker's months (from the first
+  month any account has data, at most 24, through the latest; months without data left out). `useMonth()` reads
+  `?month=` (falling back to the latest month when it isn't a month with data) and keeps other query parameters when
+  it changes; tab links keep the month. Header: name, picker (newest first, "(partial)" marked), "N accounts ·
+  Month", desktop tabs; the phone bottom bar (Overview, Transactions, Chat, More) shows below 768 px, its full pass is
+  step 7. The banner moved into the shell with the same wording and shows on every tab.
+- **Removed:** the Phase 5 status page (`App.tsx`) and its test; its banner tests moved to `Shell.test.tsx`. `/` opens
+  the Overview; an unknown path goes there too. The Phase 6 chat page sits on the Chat tab until step 6.
+- **Settings:** the AI mode (with what Off means), the provider, the model of each role, and the chat costs; no
+  control that changes anything (tested).
+- `months.ts` (calendar stepping, a month's first and last day) sits outside the screen folders, so the
+  no-arithmetic guard stays strict for screens.
+- Postman **13. UI reads** started (chat usage with AI off); the README's newman command runs it. A re-capture of the
+  fixtures on a fresh sample-data backend gave no diff. The usage fixture is hand-written in `test/renderApp.tsx`.
 
 ### Requirement mapping
 

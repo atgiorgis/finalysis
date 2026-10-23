@@ -8361,6 +8361,42 @@
           ]
         }
       ]
+    },
+    {
+      "name": "13. UI reads",
+      "description": "Phase 7 reads the UI needs (`docs/plans/phase-7.md` §3), with AI **off**, in the newman run after **12. Chat (AI off)**. Step 1: `GET /api/chat/usage` (Settings): today's estimated chat spend, the same sum the daily cap checks, beside the caps. Later steps add the dashboard, its details and the transaction source line.",
+      "item": [
+        {
+          "name": "Chat usage (AI off)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/chat/usage",
+            "description": "Today's spend since local midnight and the caps, as strings. With AI off nothing is spent: the newman run makes no model call."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('nothing spent with AI off, six decimals', () => pm.expect(body.spentToday).to.eql('0.000000'));",
+                  "pm.test('the default caps, as strings', () => {",
+                  "    pm.expect(body.maxTurnCost).to.eql('0.15');",
+                  "    pm.expect(body.maxDailyCost).to.eql('1.00');",
+                  "});",
+                  "pm.test('today and the next midnight', () => {",
+                  "    pm.expect(body.day).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "    pm.expect(new Date(body.resetsAt).getTime()).to.be.above(Date.now());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [

@@ -20,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * AI off, the default (docs/plans/phase-6.md §10.4, §18 decision 10): conversations still work, and a turn is 503
  * {@code ai-off}, with no model, no call and nothing stored. The conversation keeps no turns. The search index refresh
- * answers {@code OFF}.
+ * answers {@code OFF}. The usage read (Phase 7) answers with nothing spent.
  */
 @IntegrationTest
 @AutoConfigureMockMvc
@@ -79,5 +79,15 @@ class ChatAiOffApiTest {
     void aTurnOnAnUnknownConversationIsStill503WithAiOff() throws Exception {
         mvc.perform(post("/api/chat/conversations/{id}/turns", 999_999).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"message\": \"Hello\"}")).andExpect(status().isServiceUnavailable());
+    }
+
+    /** Phase 7 §3.4: Settings reads the usage with AI off too: nothing spent, the configured caps. */
+    @Test
+    void theUsageReadsZeroWithAiOff() throws Exception {
+        mvc.perform(get("/api/chat/usage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.spentToday").value("0.000000"))
+                .andExpect(jsonPath("$.maxTurnCost").value("0.15"))
+                .andExpect(jsonPath("$.maxDailyCost").value("1.00"));
     }
 }

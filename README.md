@@ -92,7 +92,7 @@ npx newman run postman/Finalysis.postman_collection.json \
     -e postman/Finalysis-Local.postman_environment.json --working-dir . \
     --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
     --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
-    --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)"
+    --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)" --folder "13. UI reads"
 ```
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
