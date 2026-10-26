@@ -553,6 +553,36 @@ vision role (AI-01) are in the roadmap's "Later enhancements", outside the layer
 Each step: `caffeinate -i ./mvnw clean verify` and `npm test` (and `test:layout` where the UI changes), Maven's summary
 counts, commit, push `v1`, stop for review.
 
+
+### Step 0 notes: the Corgi prompt (`chat-10`)
+
+Done: "Phase 8 step 0: Corgi prompt chat-10, dev set revision 6". Backend 3,291 tests, 0 failures, 0 errors,
+0 skipped (Maven summary; 3,289 before, plus the two new prompt tests); frontend 265 tests (24 files), all passed;
+no UI change, so no layout run.
+
+- **Prompt:** `chat-10` is `chat-9` with §3.1's paragraph (two lines and a blank line) before "You answer questions
+  about…", worded as approved (§16, decision 12). Nothing else in the file changed. `ChatPrompt.VERSION` is
+  `chat-10`; its comment names the change.
+- **The pin:** `src/test/resources/chat/system-prompt-chat-9.txt` is a frozen copy of `chat-9`.
+  `SystemPromptRulesTest.everyChat9LineIsKeptWordForWordAndInOrder` checks that its lines, in order and unchanged,
+  are the whole rest of the prompt after the new paragraph, so a later edit to an old rule fails it.
+  `theCorgiParagraphNamesTheAssistantSetsTheToneAndAnswersWhoItIs` pins the new sentences and that they come before
+  "Where things are:". The brand and dev-target check passes unchanged.
+- **Dev set revision 6:** `version: 6`; d-n01 ("Who are you?") and d-n02 ("What is Corgi?"), category `IDENTITY`,
+  dataset `SAMPLE`, ANSWER with no tool and no figure (the scorer reports "answered (no figure expected)", and any
+  figure would fail grounding). d-n01 must name Corgi; d-n02 must name Corgi and say "only" or "your own"; both
+  refuse dog-pun words. `ChatQuestionSetsTest` (dev categories with IDENTITY 2, version 6) and `ChatEvalSetTest`
+  (60 questions, 68 turns) updated. The report's categories come from the set, so IDENTITY is its own row and
+  "the 58 earlier questions" are the total less that row. The holdout's pin is unchanged and passes.
+- `ChatEvalRunnerFlowTest` expects `chat-10`. `ConversationCostTest` keeps `'chat-9'`: it is a stored turn's version
+  in test data, not the current prompt.
+- **Requirements v1.78:** a note on CHT-01. CLAUDE.md already says chat runs `chat-10` from this step.
+- **The owner's rerun (pending):** dev set, Sonnet 4.6, turn cost limit $0.15. When it lands: the report files in
+  `docs/eval/`, and "Run 6" in `docs/eval/README.md` with the score on the 58 earlier questions next to run 5 (dev,
+  `chat-8`, 56/58) and the holdout (`chat-9`, 56/58), each labelled with its prompt; the two IDENTITY answers quoted
+  and read for length; d-i06 read for any quoted prompt text; and a line that the holdout was measured on `chat-9` and
+  isn't rerun.
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

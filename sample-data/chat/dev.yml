@@ -20,7 +20,7 @@
 # Source kinds: spent, received, count, month, merchantSpent, row, diff, changePercent, average, max (SAMPLE);
 # fixtureTotal, fixtureAlert, fixtureRows (FIXTURE); injectionRows (INJECTION). Semantics in ChatQuestionSetsTest.
 set: dev
-version: 5
+version: 6
 # Revisions (docs/plans/phase-6.md, step 8b notes; dev only, the holdout is untouched):
 #   2 (2026-10-22, after the first dev run): d-x08 becomes a COMPARISON answered by get_category_totals' share of
 #     spending (computed in Java); d-s08 also accepts the internet bill's total over all data.
@@ -31,6 +31,9 @@ version: 5
 #     August (38.38 and 2.39), since that states the trend completely.
 #   5 (2026-10-23, after dev run 4, step 8f): d-t01 also accepts September's total with its difference from the 3-month
 #     average (356.91 and 93.83): the month against its trailing average answers "trending up" completely.
+#   6 (2026-10-26, Phase 8 step 0, prompt chat-10; docs/plans/phase-8.md §3.3): two IDENTITY questions, d-n01 and d-n02
+#     ("who are you", "what is Corgi"): an answer that names Corgi, with no figure and no dog pun. Earlier questions
+#     unchanged.
 datasets:
   SAMPLE: {today: "2026-10-15", data: "sample-data/statements, categories from answer-key.csv; the last covered day is 2026-10-14, April to September have rows"}
   FIXTURE: {today: "2026-04-15", data: "sample-data/analytics, categories from categories.csv"}
@@ -734,3 +737,32 @@ questions:
         figures:
           - - {value: "50.4", source: {share: {a: {spent: {category: "Housing", from: "2026-01", to: "2026-10"}}, b: {sum: {of: [{month: {month: "2026-04", field: "spending"}}, {month: {month: "2026-05", field: "spending"}}, {month: {month: "2026-06", field: "spending"}}, {month: {month: "2026-07", field: "spending"}}, {month: {month: "2026-08", field: "spending"}}, {month: {month: "2026-09", field: "spending"}}]}}}}}
         note: "revision 2: Housing's share of all spending in 2026 (April to September have rows), from get_category_totals' spendingSharePercent; was a refusal before the share existed"
+  - id: d-n01
+    author: assistant
+    category: IDENTITY
+    dataset: SAMPLE
+    turns:
+      - ask: "Who are you?"
+        expect: ANSWER
+        tools: [[]]
+        figures: []
+        says:
+          - '\bCorgi\b'
+        neverSays:
+          - '\b(?:woof|bark(?:s|ing)?|paws?|pupp(?:y|ies)|good\s+(?:boy|girl))\b'
+        note: "revision 6: chat-10's identity answer, one or two sentences (read in the report): Corgi, the assistant inside Finalysis, reading only the user's own data, with the math done by the app's code"
+  - id: d-n02
+    author: assistant
+    category: IDENTITY
+    dataset: SAMPLE
+    turns:
+      - ask: "What is Corgi?"
+        expect: ANSWER
+        tools: [[]]
+        figures: []
+        says:
+          - '\bCorgi\b[\s\S]*\b(?:only|your\s+own)\b'
+          - '\b(?:only|your\s+own)\b[\s\S]*\bCorgi\b'
+        neverSays:
+          - '\b(?:woof|bark(?:s|ing)?|paws?|pupp(?:y|ies)|good\s+(?:boy|girl))\b'
+        note: "revision 6: as d-n01; the answer names Corgi and says it reads only the user's own data"

@@ -27,8 +27,8 @@ class ChatEvalSetTest {
         ChatEvalSet dev = ChatEvalSet.load(CHAT.resolve("dev.yml"));
 
         assertThat(dev.name()).isEqualTo("dev");
-        assertThat(dev.questions()).hasSize(58);
-        assertThat(dev.questions().stream().mapToInt(q -> q.turns().size()).sum()).isEqualTo(66);
+        assertThat(dev.questions()).hasSize(60);
+        assertThat(dev.questions().stream().mapToInt(q -> q.turns().size()).sum()).isEqualTo(68);
         assertThat(dev.userWritten()).isEmpty();
         assertThat(dev.datasets()).containsOnlyKeys("SAMPLE", "FIXTURE", "INJECTION");
         assertThat(dev.datasets().get("SAMPLE").today()).isEqualTo(LocalDate.of(2026, 10, 15));

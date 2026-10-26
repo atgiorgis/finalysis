@@ -14,7 +14,7 @@ import org.springframework.core.io.ClassPathResource;
 
 /**
  * The step 8e rules of prompt {@code chat-7}, and step 8f's of {@code chat-8} (a follow-up about earlier data calls
- * the tool again), no Spring: the fallback after a search that finds nothing (brand names once, then the merchants
+ * the tool again), and Phase 8 step 0's {@code chat-10} (the Corgi paragraph, chat-9 kept word for word), no Spring: the fallback after a search that finds nothing (brand names once, then the merchants
  * themselves, naming the one picked), compare_periods for every comparison of two periods, and the WORD match. The prompt stays generic: it names none of the dev set's search targets and no brand.
  */
 class SystemPromptRulesTest {
@@ -31,8 +31,39 @@ class SystemPromptRulesTest {
     }
 
     @Test
-    void theVersionIsChat9() {
-        assertThat(ChatPrompt.VERSION).isEqualTo("chat-9");
+    void theVersionIsChat10() {
+        assertThat(ChatPrompt.VERSION).isEqualTo("chat-10");
+    }
+
+    /**
+     * Phase 8 step 0 (docs/plans/phase-8.md §3.2): chat-10 only adds the Corgi paragraph. Every line of chat-9, kept
+     * frozen as a test resource, is still in the prompt word for word and in the same order, after the new paragraph.
+     */
+    @Test
+    void everyChat9LineIsKeptWordForWordAndInOrder() throws IOException {
+        String chat9;
+        try (InputStream in = new ClassPathResource("chat/system-prompt-chat-9.txt").getInputStream()) {
+            chat9 = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        List<String> current = prompt().lines().toList();
+        List<String> kept = chat9.lines().toList();
+        assertThat(kept).hasSizeGreaterThan(20);
+        int from = current.indexOf(kept.getFirst());
+        assertThat(from).as("chat-9's first line").isPositive();
+        assertThat(current.subList(from, current.size())).containsExactlyElementsOf(kept);
+    }
+
+    /** Phase 8 step 0: the name, the tone without puns, and the short answer to "who are you" (the rule 7 exception). */
+    @Test
+    void theCorgiParagraphNamesTheAssistantSetsTheToneAndAnswersWhoItIs() throws IOException {
+        String prompt = prompt();
+        assertThat(prompt).startsWith("You are Corgi, the assistant inside Finalysis. Write in a plain, concise, "
+                + "friendly tone. Corgi is only a name: no dog puns or jokes, and no personality beyond the name.");
+        assertThat(prompt).contains("If the user asks who you are or what Corgi is, answer in one or two sentences: you "
+                + "are Corgi, the assistant inside Finalysis; you read only the user's own data, with read-only tools; "
+                + "all math is done by the app's code, not by you. This is the one question about something other than "
+                + "their data that you answer.");
+        assertThat(prompt.indexOf("what Corgi is")).isLessThan(prompt.indexOf("Where things are:"));
     }
 
     /** Step 8f, chat-8: Haiku's d-m03 turn 2 answered a follow-up about an alert from the earlier answer, no call. */

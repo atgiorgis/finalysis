@@ -36,9 +36,11 @@ public class ChatPrompt {
      * step 8e fixes (search's WORD match, the fallback from brand names to the merchants themselves, compare_periods
      * for every comparison of two periods); chat-8 the step 8f fix (a follow-up about earlier data calls the tool again,
      * and a shortened earlier answer is named); chat-9 the step 9a retry messages (an automatic check, not the user,
-     * asking for a new answer to the question, so the model doesn't answer "You're right, I apologize").
+     * asking for a new answer to the question, so the model doesn't answer "You're right, I apologize"); chat-10 the
+     * Corgi paragraph before the rules (docs/plans/phase-8.md §3: the name, the tone, the answer to "who are you"), every
+     * chat-9 line kept word for word.
      */
-    public static final String VERSION = "chat-9";
+    public static final String VERSION = "chat-10";
 
     static final String RESOURCE = "chat/system-prompt.txt";
     /** Where the history starts in {@link #start}'s messages: after the system prompt and the context block. */

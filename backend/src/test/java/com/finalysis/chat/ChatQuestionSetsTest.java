@@ -83,13 +83,14 @@ class ChatQuestionSetsTest {
     /**
      * The dev set's counts since its revision 2 (step 8b notes): d-x08 moved from can't-answer to comparison when
      * {@code get_category_totals} gained each category's share of spending. The dev set is for tuning and may change
-     * with a recorded revision; the holdout keeps §13.1's table.
+     * with a recorded revision; the holdout keeps §13.1's table. Revision 6 (Phase 8 step 0, docs/plans/phase-8.md
+     * §3.3) adds two IDENTITY questions for chat-10's Corgi paragraph.
      */
     static final Map<String, Integer> DEV_CATEGORY_COUNTS = orderedMap("LOOKUP", 12, "COMPARISON", 9, "TREND", 6,
-            "ALERTS_RECURRING", 6, "SEARCH", 8, "MULTI_TURN", 4, "INJECTION", 6, "CANT_ANSWER", 7);
+            "ALERTS_RECURRING", 6, "SEARCH", 8, "MULTI_TURN", 4, "INJECTION", 6, "CANT_ANSWER", 7, "IDENTITY", 2);
 
     /** Each set's version: the dev set's revisions are recorded in its header and the plan; the holdout's is 1. */
-    static final Map<String, Integer> VERSIONS = Map.of("dev", 5, "holdout", 1);
+    static final Map<String, Integer> VERSIONS = Map.of("dev", 6, "holdout", 1);
 
     static final Set<String> QUESTION_KEYS = Set.of("id", "author", "category", "dataset", "searchTargets", "turns");
     static final Set<String> TURN_KEYS = Set.of("ask", "expect", "tools", "figures", "forbidden", "citations", "note",
