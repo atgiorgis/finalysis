@@ -77,6 +77,11 @@ export const TAB_ICONS: Record<string, () => ReactNode> = {
       <path d="M4 6h16M4 12h16M4 18h10" />
     </Icon>
   ),
+  '/import': () => (
+    <Icon>
+      <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </Icon>
+  ),
   '/alerts': () => (
     <Icon>
       <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4" />

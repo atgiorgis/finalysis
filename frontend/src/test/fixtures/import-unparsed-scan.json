@@ -1,0 +1,11 @@
+{
+  "id": 3,
+  "accountId": 7,
+  "reason": "NO_TEXT_LAYER",
+  "fileName": "pdf-no-text.pdf",
+  "createdAt": "2026-10-23T12:00:00Z",
+  "state": "OPEN",
+  "resolvedAt": null,
+  "resolvedStatementId": null,
+  "detail": "No supported statement layout was recognized; nothing was imported. The file is held for review."
+}

@@ -1,0 +1,7 @@
+{
+  "detail": "The statement layout was recognized (boa-checking), but reading it is not implemented yet; nothing was imported",
+  "instance": "/api/accounts/10/imports",
+  "status": 422,
+  "title": "Statement could not be read",
+  "type": "urn:finalysis:problem:parse-error"
+}

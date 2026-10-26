@@ -11,6 +11,7 @@ import java.util.List;
 /**
  * The filters and page of {@code GET /api/transactions}; null = no filter. Filters combine with AND.
  *
+ * @param statementId   only the rows this statement owns (step 7d, the Import page's "open in Transactions")
  * @param uncategorized true: only txns without a category; false: only txns with one
  * @param from          first {@code txn_date}, inclusive
  * @param to            last {@code txn_date}, inclusive
@@ -18,7 +19,7 @@ import java.util.List;
  * @param page          zero-based
  * @param size          1 to {@link #MAX_SIZE}
  */
-public record TransactionFilter(Long accountId, Long categoryId, Boolean uncategorized, CategorySource source,
+public record TransactionFilter(Long accountId, Long statementId, Long categoryId, Boolean uncategorized, CategorySource source,
                                 Boolean isTransfer, LocalDate from, LocalDate to, String merchant, int page,
                                 int size) {
 

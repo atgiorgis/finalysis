@@ -43,11 +43,17 @@ const EMPTY: ShellData = {
 
 const ShellContext = createContext<ShellData>(EMPTY)
 
+/** What changed: `shell` also reloads what the shell shares (accounts, coverage, the picker's months). */
+export interface DataChange {
+  shell?: boolean
+}
+
 /**
- * Bumped after every write (a correction, a dismissal), so the pages that read the changed data read it again
- * (docs/plans/phase-7.md §2.4). Pages put `version` in their reads' dependencies.
+ * Bumped after every write (a correction, a dismissal, an import), so the pages that read the changed data read it
+ * again (docs/plans/phase-7.md §2.4). Pages put `version` in their reads' dependencies. A write that adds an account or
+ * a statement, or removes one, asks for `{ shell: true }`.
  */
-const VersionContext = createContext<{ version: number; dataChanged: () => void }>({
+const VersionContext = createContext<{ version: number; dataChanged: (change?: DataChange) => void }>({
   version: 0,
   dataChanged: () => {},
 })
@@ -64,6 +70,8 @@ function firstMonth(coverage: CoverageResponse): YearMonth | null {
 /** Loads what every tab shares once: status (the AI mode), coverage, accounts and the picker's months. */
 export function ShellDataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<ShellData>(EMPTY)
+  const [version, setVersion] = useState(0)
+  const [shellVersion, setShellVersion] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -89,17 +97,28 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
       }
     }
     load().catch((e: Error) => {
-      if (live) {
+      // A reload that fails keeps what the shell had; only the first load shows the error.
+      if (live && shellVersion === 0) {
         setData({ ...EMPTY, loading: false, error: e.message })
       }
     })
     return () => {
       live = false
     }
-  }, [])
+  }, [shellVersion])
 
-  const [version, setVersion] = useState(0)
-  const versionValue = useMemo(() => ({ version, dataChanged: () => setVersion((v) => v + 1) }), [version])
+  const versionValue = useMemo(
+    () => ({
+      version,
+      dataChanged: (change: DataChange = {}) => {
+        setVersion((v) => v + 1)
+        if (change.shell) {
+          setShellVersion((v) => v + 1)
+        }
+      },
+    }),
+    [version],
+  )
 
   return (
     <ShellContext.Provider value={data}>
@@ -109,7 +128,7 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
 }
 
 /** The data version and the call that bumps it after a write. */
-export function useDataVersion(): { version: number; dataChanged: () => void } {
+export function useDataVersion(): { version: number; dataChanged: (change?: DataChange) => void } {
   return useContext(VersionContext)
 }
 

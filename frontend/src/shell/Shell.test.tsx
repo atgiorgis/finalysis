@@ -27,7 +27,7 @@ test('the root opens the Overview inside the shell', async () => {
   expect(screen.getByText('Finalysis')).toBeInTheDocument()
 })
 
-const TAB_NAMES = ['Overview', 'Transactions', 'Alerts', 'Recurring', 'Chat', 'Goals', 'Settings']
+const TAB_NAMES = ['Overview', 'Transactions', 'Import', 'Alerts', 'Recurring', 'Chat', 'Goals', 'Settings']
 
 /** Opens the menu from the top bar and returns it. */
 async function openMenu(user: ReturnType<typeof userEvent.setup>) {
@@ -49,7 +49,7 @@ test('one top bar at every width: the menu button, the logo, the tab shown, the 
   expect(screen.queryByRole('navigation', { name: 'Main (phone)' })).not.toBeInTheDocument()
 })
 
-test('the menu lists the seven tabs in order, the current one marked, and focus moves into it', async () => {
+test('the menu lists the eight tabs in order, the current one marked, and focus moves into it', async () => {
   const user = userEvent.setup()
   renderApp('/alerts')
 
@@ -237,7 +237,7 @@ test('without statements there is no picker and the tabs still work', async () =
   expect(screen.queryByRole('button', { name: 'Previous month' })).not.toBeInTheDocument()
   const menu = await openMenu(userEvent.setup())
   expect(menu).toHaveTextContent('0 accounts')
-  expect(within(menu).getAllByRole('link')).toHaveLength(7)
+  expect(within(menu).getAllByRole('link')).toHaveLength(8)
 })
 
 test('an unreachable backend is said plainly', async () => {

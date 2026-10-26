@@ -1,13 +1,13 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 7c done (step notes); next: the owner's smoke test (sample data, then real statements),
-then step 7d (UI fixes only, if the smoke test finds any) and step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
-Requirements as of `docs/requirements.md` v1.73.
+in this file. Steps 0 to 7d done (step notes); next: the owner's smoke test (sample data, then real statements),
+then step 7e (UI fixes only, if the smoke test finds any) and step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+Requirements as of `docs/requirements.md` v1.74.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
-line), UI-05 (the cloud-AI banner, in full), UI-07 (phone layout), UI-08 (the mobile-access decision, §9), and the
-GOAL-06 tab shell (Phase 7b). The UI replaces the Phase 5 status page and the Phase 6 chat test page.
+line), UI-05 (the cloud-AI banner, in full), UI-07 (phone layout), UI-08 (the mobile-access decision, §9), the
+GOAL-06 tab shell (Phase 7b), and UI-02 (the upload page, step 7d, pulled forward from Phase 8). The UI replaces the Phase 5 status page and the Phase 6 chat test page.
 
 Out of scope:
 - **Any change to chat behavior.** The chat loop, tools, prompt, grounding, citations, memory, scoring and eval are
@@ -18,8 +18,8 @@ Out of scope:
 - **Goal logic** (GOAL-01 to GOAL-07 beyond the empty tab): Layer 2.
 - **The monthly summary** (`POST /api/chat/summaries`, ANA-05) on the dashboard: not in the mockup; a later phase can
   add it.
-- UI-02 (upload page): the first Phase 8 item (§13). ANA-02 (fixed vs. discretionary): waits, phase to be assigned
-  (§13).
+- ANA-02 (fixed vs. discretionary): waits, phase to be assigned (§13). UI-02 was out of scope at approval and came
+  back as step 7d (2026-10-26, §13).
 
 Working rules (unchanged): one step per commit (small follow-ups are fine); before every commit run
 `caffeinate -i ./mvnw clean verify` in `backend/` and `npm test` in `frontend/`, and report Maven's summary counts;
@@ -132,7 +132,8 @@ The overview is one call (`GET /api/dashboard`), as the brief asks.
 | Not a transfer / undo | `POST` / `DELETE /api/transactions/{id}/not-transfer` |
 | Transaction detail (sheet) | `GET /api/transactions/{id}` with its source line (§3.3) |
 
-These and alert dismissal are the only writes in the UI.
+These and alert dismissal were the only writes in the UI until step 7d, whose Import tab adds an account, an
+import, a CSV mapping and the existing review and delete actions (step 7d notes).
 
 ### 2.5 Alerts
 
@@ -497,6 +498,8 @@ would reach is protected on disk as well. UI-08 stays Planned with that note.
 | 7 | Mobile pass at 375 px for every screen: bottom bar, bottom sheets, tap, 44 px targets. Playwright layout check. | none | `test:layout` on every route |
 | 7b | Goals tab shell. | none | Goals test |
 | 7c | Restyle to mockup v2 (Midnight): dark default and light theme with a switch, top bar and slide-in menu at every width, the banner as a strip, the Overview's hero, lead sentence, KPI edges, net line, donut legend, alert cards and recurring list; Manrope. | none | theme, menu, lead-sentence and hero tests; `test:layout` with the menu open in both themes |
+| 7d | Import tab (UI-02, pulled forward from Phase 8): account picker and add-account, one file dropped or chosen, the import's result as returned, the CSV mapping step, statements by account with delete, the review queue's statements, uploads and transfer matches, the privacy line. | `statementId` filter on `GET /api/transactions` | `ImportPage.test.tsx`, Transactions statement filter, `TransactionApiTest.filtersByStatement`, `LastFourOutboundTest`, `LastFourChatPayloadTest`; `test:layout` for the Import screens; newman 13 |
+| 7e | UI fixes from the owner's smoke test (sample data, then real statements), if any. | none expected | per fix |
 | 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-03, UI-04, UI-05, UI-07, GOAL-06 tab; UI-08 stays Planned), CLAUDE.md current phase, tag `phase-7-done`. | none | full runs |
 
 ### Step 0 notes: scaffolding
@@ -837,6 +840,90 @@ the desktop run).
 - **Found by looking at screenshots:** on desktop the cash-flow card stretched to the donut card's height, leaving an
   empty block; the grid now aligns cards to the top.
 
+### Step 7d notes: the Import tab (UI-02)
+
+Pulled forward from Phase 8 by the owner (2026-10-26), with the plan's answers: (1) a `statementId` filter on
+`GET /api/transactions` with a clearable "Statement {period}" chip; (2) statements grouped by account from the existing
+per-account endpoint; (3) the last four a required field, shown as `···1234` in the picker, with a test that it never
+reaches an AI payload; (4) a minimal CSV mapping step, the page's third write. Done: "Phase 7 step 7d: Import tab
+(UI-02)". Backend 3,280 tests, 0 failures, 0 errors, 0 skipped (Maven summary); frontend 225 tests (21 files);
+layout check 61 passed, 1 skipped (a phone-only check in the desktop run); newman 266 requests, 0 failures.
+
+- **Backend, one read addition:** `statementId` on `GET /api/transactions` (`TransactionFilter`, `TransactionQuery`):
+  the rows the statement owns, combinable with the other filters; an unknown id matches nothing, a non-number is a
+  400 naming it (`TransactionApiTest.filtersByStatement`). Newman 13 "Transactions: one statement's rows" checks that
+  every row belongs to the statement and the page's `total` equals the statement's `transactionCount`.
+- **Last four never leaves the machine:** `LastFourOutboundTest` (fake models, AI on) creates accounts with
+  `POST /api/accounts` as the form sends them, imports a sample QFX with the page's multipart request, adds synthetic
+  rows carrying each last four (`CARD ENDING 2001`, `XXXX2001`, `KIOSK 7364`, `*7364`), and runs
+  `POST /api/categorization/run`: no prompt and no embedding input contains a last four, an account name, the
+  institution or the account number. `LastFourChatPayloadTest` does the same through a chat turn whose question names
+  both accounts by name, institution and last four, with tools reading every account and row. The existing payload
+  tests already checked fixtures; these follow the Import page's own path.
+- **The tab** (`/import`, between Transactions and Alerts; the menu has eight tabs): `pages/ImportPage.tsx` with
+  `components/import/` (`AccountPicker`, `FileDrop`, `ImportResult`, `StatementsList`, `ReviewSections`,
+  `importText.ts`). Writes, all through `api.ts` `imports`: add an account, import a file, save a CSV mapping, and the
+  review and delete actions that already existed (statement review and delete, upload dismissal, transfer link,
+  join, dismiss join, confirm, unlink).
+- **Account picker:** `GET /api/accounts` (the shell's), each as `name ···lastFour`, closed ones marked. "Add an
+  account" posts `{name, institution, type, lastFour}`; the API validates, and its field errors are shown named as the
+  form labels them. The new account is chosen (`?account=`), and the shell reads its accounts again.
+- **File:** a drop zone and a file button (`.ofx,.qfx,.csv,.txt,.pdf`, the backend's list), one file at a time (two
+  dropped are refused), name and size in bytes (`formatBytes`: grouped digits, no rounding into KB). Image files
+  aren't accepted by the API (OCR is Phase 8); a scanned PDF comes back as an unparsed upload, `NO_TEXT_LAYER`.
+- **Import:** one multipart part, `file`, to `POST /api/accounts/{id}/imports`; an indeterminate progress bar while it
+  runs (`fetch` reports no upload progress, and the parse is the slow part). Results, each as returned:
+  - 201: period, rows parsed, new transactions, duplicates skipped, status and balance check, every warning
+    verbatim; links to its transactions, the review queue and "Needs a category". **"Categorize now" isn't offered:**
+    `POST /api/categorization/run` runs over every transaction, not one statement, and the rules already ran with the
+    import (AI in the background only when `run-after-import` is on).
+  - 202: the upload's `detail` and its reason in words, pointing to the review queue.
+  - 409 `already-imported`: a notice (not an error) with the API's title and detail and a link to that statement.
+  - 422 `mapping-required`: the preview (`POST …/imports/preview`, which writes nothing) shows the file's first rows
+    and the suggested mapping with each field's confidence; "Use this mapping" saves it unedited
+    (`PUT /api/accounts/{id}/csv-mapping`) and imports the same file again. The problem's `detail`, which tells an API
+    user which endpoints to call, isn't shown: the page makes those calls.
+  - 422 `mapping-mismatch`: the problem as returned, with the same preview, and **no** button: replacing a mapping
+    already used can change fingerprints (the API's mapping lock), so it stays an API action.
+  - Anything else (422 parse-error, 413, 415): the problem's title, detail and line, as an error.
+- **Found while capturing:** for a card CSV with more payments than purchases (the transfers edge-case file), the
+  suggester guesses `sign: INVERTED`, and the import would turn payments into money out. The mapping step shows the
+  sign in words ("Money out is printed positive: every amount is flipped") with its confidence ("guessed, check
+  it"), so the guess is visible before it is saved; the page can't edit it. Worth watching in the smoke test.
+- **Statements:** one read per account, grouped by account, each group newest period first as returned. A row is its
+  period (a link to `/transactions?statement={id}`), its transaction count, rows in the file, status (", accepted"
+  once reviewed), balance check and import date. Delete asks first: "Delete the statement {period} of {account}? This
+  removes the {n} transactions it imported, and any transfer links on them. The file can be imported again
+  afterwards." Then the response is said ("Statement deleted: 8 transactions and 4 transfer links removed.").
+- **Every page reads again** after an Import-page write: `dataChanged({ shell: true })` also reloads the shell's
+  accounts, coverage and the picker's months (a reload that fails keeps what the shell had).
+- **Review queue** (`#review`), each section with the queue's own count: statements to review (warnings verbatim;
+  Accept as it is, or Delete with the same question), uploads not recognized (reason; Dismiss), and transfer matches:
+  candidate groups ("Link these two" per pair, with both sides and the days apart), competing candidates (Keep this
+  link, Unlink), possible matches (Join as one transfer, Not the same transfer). Every transaction opens the sheet,
+  where "Not a transfer" and a category already live. On the Transactions tab, "resolved through the API until the
+  upload page (Phase 8)" became a link to `/import#review`.
+- **Transactions' statement filter:** `?statement=` replaces the month's dates with `statementId` (a statement can
+  span months), shows "Statement {period} · {account}" as a chip from `GET /api/statements/{id}`, and ✕ clears it.
+- **Privacy line** under the drop zone: "The file is read on this computer. With cloud AI on, only merchant names and
+  amounts leave it, for categorization." (the banner's wording family, SEC-01), tested word for word.
+- **No arithmetic:** the guard covers `components/import/`; counts are shown as returned, the "nothing to decide"
+  check uses `every` on the lists rather than adding their lengths, and plurals choose by `=== 1`.
+- **Fixtures:** `capture-fixtures.mjs` reads every sample account's statements, then runs an import pass on new
+  "Fixture Bank" accounts with the `edge-cases/transfers` CSVs, `csv-card-refund.csv`, `csv-windows-1252.csv` and the
+  unrecognized and no-text PDFs: 201 (reconciled; NEEDS_REVIEW from request balances that don't add up), 202 (both
+  reasons), 409, 422 (mapping required, mismatch, parse error), the preview and saved mapping, a delete, and the
+  review queue with a candidate group, then a competing candidate (the card statement deleted and imported again),
+  then a possible match (that link unlinked, both sides marked one-sided). `importedAt`, `resolvedAt` and
+  `confirmedAt` are now normalized; two captures gave identical files and the earlier fixtures didn't change.
+  Captured on a throwaway Postgres (port 55432) and backend (18080) after the README's newman folders (266 requests,
+  0 failures), both removed afterwards.
+- **Layout check:** `/import` with each transfer kind, the Transactions statement chip, and, by interaction, a result
+  with warnings, the mapping step (its wide preview scrolls inside the card), the already-imported notice, the
+  add-account form and the delete question. The target check now measures a visually hidden input by its label (the
+  file button), with a case in its self-test. Found by looking at screenshots: the account select overflowed its card
+  at 375 px with a long account name; it now fills the column.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Evidence |
@@ -848,7 +935,8 @@ the desktop run).
 | UI-07 | 7, 7c | `test:layout` (the menu open at 375 px in both themes), menu tests |
 | UI-08 | 1 (decision and binding) | `ServerAddressTest`; stays Planned (§9) |
 | GOAL-06 (tab shell) | 7b | Goals test |
-| ANA-02, UI-02 | none | notes only (§13): UI-02 is the first Phase 8 item; ANA-02 waits |
+| UI-02 | 7d | `ImportPage.test.tsx`, the Transactions statement-filter tests, `TransactionApiTest.filtersByStatement`, `LastFourOutboundTest`, `LastFourChatPayloadTest`, `test:layout` (Import screens), newman 13 |
+| ANA-02 | none | notes only (§13): ANA-02 waits |
 
 ---
 
@@ -878,6 +966,8 @@ the desktop run).
 ## 13. Decisions at approval (2026-10-23)
 
 1. **UI-02 waits.** It is the first Phase 8 item; imports stay through the API and Postman until then.
+   *Changed 2026-10-26:* the owner pulled UI-02 forward as step 7d (the Import tab), before the smoke test; the UI
+   fixes the smoke test finds are step 7e.
 2. **ANA-02 (fixed vs. discretionary) waits**, phase to be assigned; ANA-02 stays Planned.
 3. **UI-08:** the backend binds to `127.0.0.1` now (step 1); no phone access in Phase 7; login and HTTPS with Phase 8.
 4. **Source line:** `statement` and `sourceLine` added to the existing `GET /api/transactions/{id}` response, additive.

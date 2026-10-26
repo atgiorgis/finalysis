@@ -1,0 +1,59 @@
+{
+  "detail": "The file's columns don't match account 7's CSV mapping. Check the preview, save a mapping for these columns with PUT /api/accounts/7/csv-mapping, then import again",
+  "instance": "/api/accounts/7/imports",
+  "status": 422,
+  "title": "CSV mapping does not match the file",
+  "type": "urn:finalysis:problem:mapping-mismatch",
+  "preview": {
+    "format": "csv",
+    "delimiter": ",",
+    "encoding": "UTF-8",
+    "skipRows": 0,
+    "headers": [
+      "Transaction Date",
+      "Post Date",
+      "Description",
+      "Category",
+      "Amount"
+    ],
+    "mappingStatus": "MISMATCH",
+    "suggestedMapping": {
+      "mapping": {
+        "headers": [
+          "Transaction Date",
+          "Post Date",
+          "Description",
+          "Category",
+          "Amount"
+        ],
+        "columnCount": null,
+        "delimiter": ",",
+        "encoding": "UTF-8",
+        "headerRow": true,
+        "skipRows": 0,
+        "dateColumn": "Transaction Date",
+        "dateFormat": "yyyy-MM-dd",
+        "postDateColumn": "Post Date",
+        "descriptionColumns": [
+          "Description"
+        ],
+        "amountMode": "SINGLE",
+        "amountColumn": "Amount",
+        "debitColumn": null,
+        "creditColumn": null,
+        "sign": "AS_IS",
+        "balanceColumn": null,
+        "checkNumberColumn": null
+      },
+      "confidence": {
+        "dateColumn": "MATCHED",
+        "dateFormat": "MATCHED",
+        "postDateColumn": "MATCHED",
+        "descriptionColumns": "MATCHED",
+        "amountColumn": "MATCHED",
+        "sign": "GUESSED"
+      },
+      "notes": []
+    }
+  }
+}

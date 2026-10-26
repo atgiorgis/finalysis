@@ -1,0 +1,16 @@
+{
+  "id": 24,
+  "accountId": 7,
+  "parser": "csv",
+  "periodStart": "2026-05-01",
+  "periodEnd": "2026-05-27",
+  "openingBalance": "5000.00",
+  "closingBalance": "5400.40",
+  "status": "RECONCILED",
+  "balanceCheck": "PASSED",
+  "warnings": [],
+  "parsedCount": 12,
+  "transactionCount": 12,
+  "importedAt": "2026-10-23T12:00:00Z",
+  "reviewedAt": null
+}

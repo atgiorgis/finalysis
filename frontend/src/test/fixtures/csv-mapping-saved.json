@@ -1,0 +1,25 @@
+{
+  "accountId": 7,
+  "delimiter": ",",
+  "encoding": "UTF-8",
+  "headerRow": true,
+  "skipRows": 0,
+  "headerSignature": "sha256:44f6b13f72fb3a2b22a0db091c729f6466ca41c2d3dfb4bed9d441092dd71aa3",
+  "dateColumn": "Date",
+  "dateFormat": "MM/dd/yyyy",
+  "postDateColumn": null,
+  "descriptionColumns": [
+    "Description"
+  ],
+  "amountMode": "DEBIT_CREDIT",
+  "amountColumn": null,
+  "debitColumn": "Debit",
+  "creditColumn": "Credit",
+  "sign": "AS_IS",
+  "balanceColumn": "Balance",
+  "checkNumberColumn": null,
+  "usedAt": null,
+  "createdAt": "2026-10-23T12:00:00Z",
+  "updatedAt": "2026-10-23T12:00:00Z",
+  "warnings": []
+}

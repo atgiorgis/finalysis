@@ -1,0 +1,125 @@
+{
+  "format": "csv",
+  "delimiter": ",",
+  "encoding": "UTF-8",
+  "skipRows": 0,
+  "headers": [
+    "Date",
+    "Description",
+    "Debit",
+    "Credit",
+    "Balance"
+  ],
+  "rows": [
+    [
+      "05/01/2026",
+      "HARBORLINE FREIGHT PAYROLL DIRECT DEP",
+      "",
+      "2310.55",
+      "7310.55"
+    ],
+    [
+      "05/04/2026",
+      "ONLINE TRANSFER TO SAVINGS",
+      "300.00",
+      "",
+      "7010.55"
+    ],
+    [
+      "05/06/2026",
+      "SUMMIT CARD ONLINE PMT",
+      "410.25",
+      "",
+      "6600.30"
+    ],
+    [
+      "05/08/2026",
+      "SUMMIT CARD ONLINE PMT",
+      "133.10",
+      "",
+      "6467.20"
+    ],
+    [
+      "05/08/2026",
+      "SUMMIT CARD ONLINE PMT",
+      "144.20",
+      "",
+      "6323.00"
+    ],
+    [
+      "05/12/2026",
+      "SUMMIT CARD ONLINE PMT",
+      "95.60",
+      "",
+      "6227.40"
+    ],
+    [
+      "05/15/2026",
+      "ONLINE TRANSFER TO SAVINGS",
+      "250.00",
+      "",
+      "5977.40"
+    ],
+    [
+      "05/17/2026",
+      "ONLINE TRANSFER TO SAVINGS",
+      "250.00",
+      "",
+      "5727.40"
+    ],
+    [
+      "05/20/2026",
+      "ONLINE TRANSFER",
+      "200.00",
+      "",
+      "5527.40"
+    ],
+    [
+      "05/22/2026",
+      "CORNER HARDWARE DEBIT CARD PURCHASE",
+      "42.00",
+      "",
+      "5485.40"
+    ]
+  ],
+  "mappingStatus": "NONE",
+  "suggestedMapping": {
+    "mapping": {
+      "headers": [
+        "Date",
+        "Description",
+        "Debit",
+        "Credit",
+        "Balance"
+      ],
+      "columnCount": null,
+      "delimiter": ",",
+      "encoding": "UTF-8",
+      "headerRow": true,
+      "skipRows": 0,
+      "dateColumn": "Date",
+      "dateFormat": "MM/dd/yyyy",
+      "postDateColumn": null,
+      "descriptionColumns": [
+        "Description"
+      ],
+      "amountMode": "DEBIT_CREDIT",
+      "amountColumn": null,
+      "debitColumn": "Debit",
+      "creditColumn": "Credit",
+      "sign": "AS_IS",
+      "balanceColumn": "Balance",
+      "checkNumberColumn": null
+    },
+    "confidence": {
+      "dateColumn": "MATCHED",
+      "dateFormat": "MATCHED",
+      "descriptionColumns": "MATCHED",
+      "debitColumn": "MATCHED",
+      "creditColumn": "MATCHED",
+      "sign": "MATCHED",
+      "balanceColumn": "MATCHED"
+    },
+    "notes": []
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": 7,
+  "name": "Fixture Checking",
+  "institution": "Fixture Bank",
+  "type": "CHECKING",
+  "lastFour": "5101",
+  "createdAt": "2026-10-23T12:00:00Z",
+  "closedOn": null
+}

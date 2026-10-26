@@ -16,13 +16,41 @@ import type {
   MerchantTotalsResponse,
   MonthlyTotalsResponse,
   RecurringChargesResponse,
+  ImportPreview,
+  ImportSummary,
   ReviewQueueResponse,
+  StatementDeleteResult,
+  StatementDetail,
+  StatementListItem,
   StatusResponse,
   Transaction,
   TransactionPage,
   TrendsResponse,
+  UnparsedUpload,
 } from '../api'
 import accounts from './fixtures/accounts.json' with { type: 'json' }
+import accountCreated from './fixtures/account-created.json' with { type: 'json' }
+import importAlreadyImported from './fixtures/import-already-imported.json' with { type: 'json' }
+import importMappingMismatch from './fixtures/import-mapping-mismatch.json' with { type: 'json' }
+import importMappingRequired from './fixtures/import-mapping-required.json' with { type: 'json' }
+import importNeedsReview from './fixtures/import-needs-review.json' with { type: 'json' }
+import importParseError from './fixtures/import-parse-error.json' with { type: 'json' }
+import importPreviewCsv from './fixtures/import-preview-csv.json' with { type: 'json' }
+import importSummary from './fixtures/import-summary.json' with { type: 'json' }
+import importUnparsed from './fixtures/import-unparsed.json' with { type: 'json' }
+import importUnparsedScan from './fixtures/import-unparsed-scan.json' with { type: 'json' }
+import reviewQueueCandidates from './fixtures/review-queue-candidates.json' with { type: 'json' }
+import reviewQueueCompeting from './fixtures/review-queue-competing.json' with { type: 'json' }
+import reviewQueuePossibleMatch from './fixtures/review-queue-possible-match.json' with { type: 'json' }
+import statementDeleted from './fixtures/statement-deleted.json' with { type: 'json' }
+import statementDetail from './fixtures/statement-detail.json' with { type: 'json' }
+import statementsAccount1 from './fixtures/statements-account-1.json' with { type: 'json' }
+import statementsAccount2 from './fixtures/statements-account-2.json' with { type: 'json' }
+import statementsAccount3 from './fixtures/statements-account-3.json' with { type: 'json' }
+import statementsAccount4 from './fixtures/statements-account-4.json' with { type: 'json' }
+import statementsAccount5 from './fixtures/statements-account-5.json' with { type: 'json' }
+import statementsFixtureChecking from './fixtures/statements-fixture-checking.json' with { type: 'json' }
+import transactionsStatement from './fixtures/transactions-statement.json' with { type: 'json' }
 import alertsAll from './fixtures/alerts-all.json' with { type: 'json' }
 import categoriesAll from './fixtures/analytics-categories.json' with { type: 'json' }
 import categoriesCompleteMonth from './fixtures/analytics-categories-complete-month.json' with { type: 'json' }
@@ -68,6 +96,18 @@ function typed<T>(json: Widen<T>): T {
   return json as unknown as T
 }
 
+/** An RFC 9457 problem as the API returns it, with the members import problems add. */
+export interface ProblemBody {
+  type: string
+  title: string
+  status: number
+  detail: string
+  instance: string
+  statementId?: number
+  line?: number
+  preview?: ImportPreview
+}
+
 export const fixtures = {
   statusOff: typed<StatusResponse>(statusOff),
   coverage: typed<CoverageResponse>(coverage),
@@ -100,6 +140,43 @@ export const fixtures = {
   /** September's income panel: 2 rows, no merchants, no share. */
   detailsIncome: typed<DashboardDetails>(detailsIncome),
   drillDownIncome: typed<DrillDownResponse>(drillDownIncome),
+
+  // The Import page (step 7d): the sample accounts' statements, then an import pass on new "Fixture Bank" accounts.
+  /** Each sample account's statements, by account id, as `GET /api/accounts/{id}/statements` returns them. */
+  statementsByAccount: {
+    1: typed<StatementListItem[]>(statementsAccount1),
+    2: typed<StatementListItem[]>(statementsAccount2),
+    3: typed<StatementListItem[]>(statementsAccount3),
+    4: typed<StatementListItem[]>(statementsAccount4),
+    5: typed<StatementListItem[]>(statementsAccount5),
+  } as Record<number, StatementListItem[]>,
+  accountCreated: typed<Account>(accountCreated),
+  /** 422: the account has no CSV mapping (no preview in the problem). */
+  importMappingRequired: typed<ProblemBody>(importMappingRequired),
+  /** The preview the page then reads: headers, first rows and the suggested mapping. */
+  importPreviewCsv: typed<ImportPreview>(importPreviewCsv),
+  /** 201: a CSV with balances that check out, no warnings. */
+  importSummary: typed<ImportSummary>(importSummary),
+  /** 201: NEEDS_REVIEW with "reconciliation failed" warnings. */
+  importNeedsReview: typed<ImportSummary>(importNeedsReview),
+  /** 409: the same file again. */
+  importAlreadyImported: typed<ProblemBody>(importAlreadyImported),
+  /** 422: another layout than the account's mapping; the preview without rows. */
+  importMappingMismatch: typed<ProblemBody>(importMappingMismatch),
+  /** 422: a PDF layout recognized but not read yet. */
+  importParseError: typed<ProblemBody>(importParseError),
+  /** 202: an unrecognized PDF, and a scan. */
+  importUnparsed: typed<UnparsedUpload>(importUnparsed),
+  importUnparsedScan: typed<UnparsedUpload>(importUnparsedScan),
+  /** The queue with a candidate group, then with a competing candidate, then with a possible match. */
+  reviewQueueCandidates: typed<ReviewQueueResponse>(reviewQueueCandidates),
+  reviewQueueCompeting: typed<ReviewQueueResponse>(reviewQueueCompeting),
+  reviewQueuePossibleMatch: typed<ReviewQueueResponse>(reviewQueuePossibleMatch),
+  statementDeleted: typed<StatementDeleteResult>(statementDeleted),
+  statementsFixtureChecking: typed<StatementListItem[]>(statementsFixtureChecking),
+  statementDetail: typed<StatementDetail>(statementDetail),
+  /** `GET /api/transactions?statementId=` for the fixture checking statement. */
+  transactionsStatement: typed<TransactionPage>(transactionsStatement),
 }
 
 /** `GET /api/chat/usage` with nothing spent and the default caps (hand-written: the capture runs with AI off). */

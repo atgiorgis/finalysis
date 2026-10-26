@@ -373,7 +373,7 @@ export interface ReviewQueueResponse {
 
 // ---------------------------------------------------------------------------- corrections (CAT-04, CAT-08; Phase 4)
 //
-// With alert dismissal (step 5), the only writes in the UI (docs/plans/phase-7.md §2.4).
+// With alert dismissal (step 5) and the Import tab (`imports`, step 7d), the writes in the UI (docs/plans/phase-7.md §2.4).
 
 export type RuleAction = 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'REMOVED' | 'NONE'
 
@@ -427,13 +427,275 @@ export const corrections = {
   undoNotTransfer: (id: number) => send<null>('DELETE', `/api/transactions/${id}/not-transfer`),
 }
 
-/** Alert dismissal (ANA-04, V20): with the corrections, the only writes in the UI. */
+/** Alert dismissal (ANA-04, V20). */
 export const dismissals = {
   /** Dismisses a current alert, with an optional note; answers the alert as it now is. */
   dismiss: (key: string, note: string | null) =>
     send<Alert>('PUT', `/api/alerts/${encodeURIComponent(key)}/dismissal`, note ? { note } : {}) as Promise<Alert>,
   /** Shows a dismissed alert again (204). */
   restore: (key: string) => send<null>('DELETE', `/api/alerts/${encodeURIComponent(key)}/dismissal`),
+}
+
+// ---------------------------------------------------------------------------- imports (UI-02, step 7d)
+//
+// The Import page's writes: add an account, import a file, save a CSV mapping (the suggested one, to retry an import
+// the API refused for want of one), delete a statement, and the review queue's statement, upload and transfer actions.
+
+export type StatementStatus = 'IMPORTED' | 'NEEDS_REVIEW' | 'RECONCILED'
+export type BalanceCheck = 'PASSED' | 'FAILED' | 'UNVERIFIED'
+export type UnparsedReason = 'UNRECOGNIZED_LAYOUT' | 'NO_TEXT_LAYER'
+
+/** One statement in `GET /api/accounts/{id}/statements`; `transactionCount` is the rows it owns. */
+export interface StatementListItem {
+  id: number
+  parser: string
+  periodStart: IsoDate
+  periodEnd: IsoDate
+  openingBalance: Money | null
+  closingBalance: Money | null
+  status: StatementStatus
+  balanceCheck: BalanceCheck
+  /** Rows in the file; null for statements imported before reconciliation existed. */
+  parsedCount: number | null
+  transactionCount: number
+  warningCount: number
+  importedAt: string
+  reviewedAt: string | null
+}
+
+/** `GET /api/statements/{id}`: the list item with its account and warnings. */
+export interface StatementDetail extends Omit<StatementListItem, 'warningCount'> {
+  accountId: number
+  warnings: string[]
+}
+
+/** `201` from an import: what was read, saved and skipped, and the warnings as returned. */
+export interface ImportSummary {
+  statementId: number
+  parser: string
+  periodStart: IsoDate
+  periodEnd: IsoDate
+  openingBalance: Money | null
+  closingBalance: Money | null
+  parsed: number
+  inserted: number
+  duplicates: number
+  status: StatementStatus
+  balanceCheck: BalanceCheck
+  warnings: string[]
+}
+
+/** `202` from an import: a PDF no parser recognized, held for review (ING-13). */
+export interface UnparsedUpload {
+  id: number
+  accountId: number
+  reason: UnparsedReason
+  fileName: string
+  createdAt: string
+  state: 'OPEN' | 'RESOLVED' | 'DISMISSED'
+  resolvedAt: string | null
+  resolvedStatementId: number | null
+  detail: string
+}
+
+export type ImportOutcome = { kind: 'imported'; summary: ImportSummary } | { kind: 'unparsed'; upload: UnparsedUpload }
+
+/** A CSV mapping as `PUT /api/accounts/{id}/csv-mapping` takes it; the preview suggests a complete one. */
+export interface CsvMapping {
+  headers: string[] | null
+  columnCount: number | null
+  delimiter: string | null
+  encoding: string | null
+  headerRow: boolean | null
+  skipRows: number | null
+  dateColumn: string | null
+  dateFormat: string | null
+  postDateColumn: string | null
+  descriptionColumns: string[]
+  amountMode: 'SINGLE' | 'DEBIT_CREDIT' | null
+  amountColumn: string | null
+  debitColumn: string | null
+  creditColumn: string | null
+  sign: 'AS_IS' | 'INVERTED' | null
+  balanceColumn: string | null
+  checkNumberColumn: string | null
+}
+
+export type MappingConfidence = 'MATCHED' | 'GUESSED' | 'MISSING'
+
+export interface SuggestedCsvMapping {
+  mapping: CsvMapping
+  confidence: Partial<Record<keyof CsvMapping, MappingConfidence>>
+  notes: string[]
+}
+
+/**
+ * `POST /api/accounts/{id}/imports/preview` (writes nothing): a CSV's headers, first rows and suggested mapping; other
+ * formats their period and count; an unrecognized PDF its reason. A mapping-mismatch problem carries it without rows.
+ */
+export interface ImportPreview {
+  format: string
+  delimiter?: string
+  encoding?: string
+  skipRows?: number
+  headers?: string[]
+  rows?: string[][] | null
+  mappingStatus?: 'NONE' | 'MATCHES' | 'MISMATCH'
+  suggestedMapping?: SuggestedCsvMapping
+  periodStart?: IsoDate
+  periodEnd?: IsoDate
+  transactionCount?: number
+  recognized?: boolean
+  reason?: UnparsedReason
+}
+
+export interface StatementDeleteResult {
+  statementId: number
+  transactionsDeleted: number
+  transferLinksRemoved: number
+}
+
+/** One side of a transfer as the review queue shows it. */
+export interface TxnSummary {
+  id: number
+  accountId: number
+  accountName: string
+  accountType: AccountType
+  statementId: number
+  txnDate: IsoDate
+  postDate: IsoDate | null
+  amount: Money
+  sourceSection: string | null
+  rawDescription: string
+}
+
+export interface PairSummary {
+  outTxnId: number
+  inTxnId: number
+  daysApart: number
+}
+
+/** The review-queue kinds the Import page resolves, typed (ING-07, docs/plans/phase-3c.md §4.1). */
+export interface StatementReviewItem {
+  kind: 'STATEMENT'
+  statementId: number
+  accountId: number
+  accountName: string
+  fileName: string
+  periodStart: IsoDate
+  periodEnd: IsoDate
+  balanceCheck: BalanceCheck
+  warnings: string[]
+  since: string
+}
+
+export interface UnparsedUploadItem {
+  kind: 'UNPARSED_UPLOAD'
+  uploadId: number
+  accountId: number
+  accountName: string
+  fileName: string
+  reason: UnparsedReason
+  since: string
+}
+
+export interface TransferCandidatesItem {
+  kind: 'TRANSFER_CANDIDATES'
+  key: string
+  txns: TxnSummary[]
+  pairs: PairSummary[]
+  since: string
+}
+
+export interface CompetingCandidateItem {
+  kind: 'COMPETING_CANDIDATE'
+  key: string
+  linkId: number
+  out: TxnSummary
+  in: TxnSummary
+  competitors: TxnSummary[]
+  pairs: PairSummary[]
+  since: string
+}
+
+export interface PossibleMatchItem {
+  kind: 'POSSIBLE_MATCH'
+  key: string
+  outLinkId: number
+  inLinkId: number
+  out: TxnSummary
+  in: TxnSummary
+  daysApart: number
+  since: string
+}
+
+export interface ImportReviewItems {
+  statements: StatementReviewItem[]
+  uploads: UnparsedUploadItem[]
+  candidates: TransferCandidatesItem[]
+  competing: CompetingCandidateItem[]
+  possibleMatches: PossibleMatchItem[]
+}
+
+/** The queue's items of the kinds the Import page resolves, by kind, in the queue's order. */
+export function importReviewItems(queue: ReviewQueueResponse): ImportReviewItems {
+  const of = <T,>(kind: ReviewItemKind) => queue.items.filter((item) => item.kind === kind) as unknown as T[]
+  return {
+    statements: of<StatementReviewItem>('STATEMENT'),
+    uploads: of<UnparsedUploadItem>('UNPARSED_UPLOAD'),
+    candidates: of<TransferCandidatesItem>('TRANSFER_CANDIDATES'),
+    competing: of<CompetingCandidateItem>('COMPETING_CANDIDATE'),
+    possibleMatches: of<PossibleMatchItem>('POSSIBLE_MATCH'),
+  }
+}
+
+/** The add-account form's body (`closedOn` is never set here). */
+export interface NewAccount {
+  name: string
+  institution: string
+  type: AccountType
+  lastFour: string
+}
+
+/** The multipart body the import and preview take: one part, `file`. */
+function fileBody(file: File): FormData {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  return form
+}
+
+export const imports = {
+  createAccount: (account: NewAccount) => send<Account>('POST', '/api/accounts', account) as Promise<Account>,
+  /** `201` is a statement, `202` an unparsed upload; a refusal throws its problem (409 already-imported included). */
+  importFile: async (accountId: number, file: File): Promise<ImportOutcome> => {
+    const res = await fetch(`/api/accounts/${accountId}/imports`, { method: 'POST', body: fileBody(file) })
+    if (!res.ok) {
+      throw await problemOf(res)
+    }
+    return res.status === 202 ? { kind: 'unparsed', upload: await res.json() } : { kind: 'imported', summary: await res.json() }
+  },
+  preview: async (accountId: number, file: File): Promise<ImportPreview> => {
+    const res = await fetch(`/api/accounts/${accountId}/imports/preview`, { method: 'POST', body: fileBody(file) })
+    if (!res.ok) {
+      throw await problemOf(res)
+    }
+    return res.json()
+  },
+  /** Saves a mapping for an account that has none (201); the page never replaces a used one. */
+  saveMapping: (accountId: number, mapping: CsvMapping) =>
+    send<unknown>('PUT', `/api/accounts/${accountId}/csv-mapping`, mapping),
+  deleteStatement: (id: number) =>
+    send<StatementDeleteResult>('DELETE', `/api/statements/${id}`) as Promise<StatementDeleteResult>,
+  /** Accepts a NEEDS_REVIEW statement as it is. */
+  reviewStatement: (id: number) => send<StatementDetail>('POST', `/api/statements/${id}/review`),
+  dismissUpload: (id: number) => send<UnparsedUpload>('POST', `/api/unparsed-uploads/${id}/dismiss`),
+  /** Links two txns by hand. */
+  link: (pair: { outTxnId: number; inTxnId: number }) => send<unknown>('POST', '/api/transfers', pair),
+  join: (outLinkId: number, inLinkId: number) => send<unknown>('POST', '/api/transfers/join', { outLinkId, inLinkId }),
+  dismissJoin: (outLinkId: number, inLinkId: number) =>
+    send<null>('POST', '/api/transfers/join/dismiss', { outLinkId, inLinkId }),
+  confirmLink: (linkId: number) => send<unknown>('POST', `/api/transfers/${linkId}/confirm`),
+  unlink: (linkId: number) => send<null>('DELETE', `/api/transfers/${linkId}`),
 }
 
 // ---------------------------------------------------------------------------- reads
@@ -563,6 +825,9 @@ export const reads = {
   transaction: (id: number | string) => getJson<Transaction>(`/api/transactions/${encodeURIComponent(id)}`),
   reviewQueue: (params: { kind?: ReviewItemKind; accountId?: number } = {}) =>
     getJson<ReviewQueueResponse>('/api/review-queue', params),
+  /** One account's statements, newest period first (step 7d). */
+  statements: (accountId: number) => getJson<StatementListItem[]>(`/api/accounts/${accountId}/statements`),
+  statement: (id: number | string) => getJson<StatementDetail>(`/api/statements/${encodeURIComponent(id)}`),
 }
 
 // ---------------------------------------------------------------------------- chat (CHT-01–CHT-06, Phase 6)
@@ -676,21 +941,35 @@ export interface Conversation {
   turns: StoredTurn[]
 }
 
-/** An RFC 9457 problem from the API, with its `detail` as the message. */
+/**
+ * An RFC 9457 problem from the API, with its `detail` as the message. `body` is the whole problem as returned, for
+ * the members some problems add (`statementId`, `line`, `preview`, `errors`).
+ */
 export class ApiProblem extends Error {
   constructor(
     readonly status: number,
     readonly type: string | undefined,
     detail: string,
+    readonly body: Record<string, unknown> = {},
   ) {
     super(detail)
+  }
+
+  /** The problem's `title`, if it has one. */
+  get title(): string | undefined {
+    return typeof this.body.title === 'string' ? this.body.title : undefined
+  }
+
+  /** The type's last segment (`urn:finalysis:problem:already-imported` → `already-imported`). */
+  get slug(): string | undefined {
+    return this.type?.split(':').at(-1)
   }
 }
 
 async function problemOf(res: Response): Promise<ApiProblem> {
   try {
     const body = await res.json()
-    return new ApiProblem(res.status, body.type, body.detail ?? `Request failed: ${res.status}`)
+    return new ApiProblem(res.status, body.type, body.detail ?? `Request failed: ${res.status}`, body)
   } catch {
     return new ApiProblem(res.status, undefined, `Request failed: ${res.status}`)
   }

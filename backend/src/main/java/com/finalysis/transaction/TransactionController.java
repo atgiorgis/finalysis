@@ -34,6 +34,7 @@ public class TransactionController {
     /** Newest {@code txn_date} first, paged; see {@link TransactionFilter} for the filters. */
     @GetMapping
     public TransactionPage list(@RequestParam(required = false) Long accountId,
+                                @RequestParam(required = false) Long statementId,
                                 @RequestParam(required = false) Long categoryId,
                                 @RequestParam(required = false) Boolean uncategorized,
                                 @RequestParam(required = false) CategorySource source,
@@ -43,7 +44,7 @@ public class TransactionController {
                                 @RequestParam(required = false) String merchant,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "" + TransactionFilter.DEFAULT_SIZE) int size) {
-        return transactions.list(new TransactionFilter(accountId, categoryId, uncategorized, source, isTransfer, from, to,
+        return transactions.list(new TransactionFilter(accountId, statementId, categoryId, uncategorized, source, isTransfer, from, to,
                 merchant, page, size));
     }
 

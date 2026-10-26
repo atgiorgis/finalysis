@@ -2,6 +2,7 @@
 export const TABS = [
   { path: '/overview', label: 'Overview' },
   { path: '/transactions', label: 'Transactions' },
+  { path: '/import', label: 'Import' },
   { path: '/alerts', label: 'Alerts' },
   { path: '/recurring', label: 'Recurring' },
   { path: '/chat', label: 'Chat' },

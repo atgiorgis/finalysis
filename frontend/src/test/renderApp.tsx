@@ -25,15 +25,18 @@ function LocationProbe() {
   return null
 }
 
-/** A write the app sent: method, URL and parsed JSON body. */
+/** A write the app sent: method, URL and parsed JSON body (a multipart body stays the `FormData` sent). */
 export interface Write {
   method: string
   url: string
   body: unknown
 }
 
-/** Answers a write; the default is a 404 problem, so a test notices a write it didn't expect. */
-export type WriteHandler = (write: Write) => Response | undefined
+/**
+ * Answers a write, now or later (a promise lets a test see the page while a write is in flight); the default is a 404
+ * problem, so a test notices a write it didn't expect.
+ */
+export type WriteHandler = (write: Write) => Response | undefined | Promise<Response | undefined>
 
 /**
  * Renders the whole app at `path` with `fetch` answered from fixtures (`routes` on top of the shell's); writes (PUT,
@@ -51,10 +54,15 @@ export function renderApp(path: string, routes: Record<string, unknown> = {}, on
         requests.push(input)
         return answer(input)
       }
-      const write = { method, url: input, body: init?.body ? JSON.parse(String(init.body)) : undefined }
+      const body = init?.body
+      const write = {
+        method,
+        url: input,
+        body: body instanceof FormData ? body : body ? JSON.parse(String(body)) : undefined,
+      }
       writes.push(write)
       return (
-        onWrite?.(write) ??
+        (await onWrite?.(write)) ??
         Response.json({ type: 'not-found', detail: `no handler for ${method} ${input}` }, { status: 404 })
       )
     }),

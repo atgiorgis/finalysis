@@ -1,0 +1,18 @@
+{
+  "statementId": 25,
+  "parser": "csv",
+  "periodStart": "2026-04-05",
+  "periodEnd": "2026-04-06",
+  "openingBalance": "1000.00",
+  "closingBalance": "978.75",
+  "parsed": 2,
+  "inserted": 2,
+  "duplicates": 0,
+  "status": "NEEDS_REVIEW",
+  "balanceCheck": "FAILED",
+  "warnings": [
+    "reconciliation failed: request balances: openingBalance + rows = closingBalance: expected -21.25, actual 0.01, difference 21.26",
+    "reconciliation failed: request openingBalance against the balance column: expected 1000.00, actual 0.00, difference -1000.00",
+    "reconciliation failed: request closingBalance against the balance column: expected 978.75, actual 0.01, difference -978.74"
+  ]
+}

@@ -117,3 +117,19 @@ export function formatDate(value: string | null | undefined, withYear = false): 
   const day = match[3].replace(/^0/, '')
   return `${MONTHS[index].slice(0, 3)} ${day}${withYear ? `, ${match[1]}` : ''}`
 }
+
+/** A statement's period: `May 1, 2026 to May 27, 2026`, as the transaction sheet writes it. */
+export function formatPeriod(start: string | null | undefined, end: string | null | undefined): string {
+  return `${formatDate(start, true)} to ${formatDate(end, true)}`
+}
+
+/** A count with thousands separators, by string handling: `48213` → `48,213`. */
+export function formatCount(value: number | string): string {
+  const digits = String(value)
+  return /^\d+$/.test(digits) ? group(digits) : digits
+}
+
+/** A file's size as the browser reports it, in bytes: `48,213 bytes`, `1 byte`. No rounding into KB or MB. */
+export function formatBytes(size: number): string {
+  return size === 1 ? '1 byte' : `${formatCount(size)} bytes`
+}

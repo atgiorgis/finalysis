@@ -65,6 +65,10 @@ class TransactionQuery {
             conditions.add("t.account_id = :accountId");
             params.addValue("accountId", filter.accountId());
         }
+        if (filter.statementId() != null) {
+            conditions.add("t.statement_id = :statementId");
+            params.addValue("statementId", filter.statementId());
+        }
         if (filter.categoryId() != null) {
             conditions.add("t.category_id = :categoryId");
             params.addValue("categoryId", filter.categoryId());

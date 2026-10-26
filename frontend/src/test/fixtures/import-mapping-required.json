@@ -1,0 +1,7 @@
+{
+  "detail": "Account 7 has no CSV mapping. Preview the file with POST /api/accounts/7/imports/preview, save its suggestedMapping (edited as needed) with PUT /api/accounts/7/csv-mapping, then import again",
+  "instance": "/api/accounts/7/imports",
+  "status": 422,
+  "title": "CSV mapping required",
+  "type": "urn:finalysis:problem:mapping-required"
+}

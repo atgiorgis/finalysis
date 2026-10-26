@@ -176,6 +176,35 @@ class TransactionApiTest {
         assertThat(ids(list(999_999_999))).isEmpty();
     }
 
+    /** Phase 7 step 7d: the Import page opens a statement's own rows in Transactions. */
+    @Test
+    void filtersByStatement() throws Exception {
+        long account = rows.account("Txn Api Statements", "CHECKING", "7110");
+        long first = rows.statementId();
+        long april = rows.txn("STATEMENT ONE A", "-1.00", "2026-04-10");
+        long aprilToo = rows.txn("STATEMENT ONE B", "-2.00", "2026-04-11");
+        long moved = rows.txn("STATEMENT TWO", "-3.00", "2026-07-02");
+        long second = jdbc.queryForObject("""
+                INSERT INTO statement (account_id, period_start, period_end, source_file_name, file_hash, parser)
+                VALUES (?, DATE '2026-07-01', DATE '2026-07-31', 'second.csv', 'hash-txn-api-second', 'fixture')
+                RETURNING id""", Long.class, account);
+        jdbc.update("UPDATE txn SET statement_id = ? WHERE id = ?", second, moved);
+        rows.account("Txn Api Statements Other", "CHECKING", "7111");
+        rows.txn("OTHER ACCOUNT", "-4.00", "2026-04-10");
+
+        assertThat(ids(get(TRANSACTIONS).param("statementId", String.valueOf(first))))
+                .containsExactly(aprilToo, april);
+        assertThat(ids(get(TRANSACTIONS).param("statementId", String.valueOf(second)))).containsExactly(moved);
+        assertThat(ids(list(account).param("statementId", String.valueOf(second)).param("from", "2026-07-03")))
+                .as("combines with the other filters").isEmpty();
+        assertThat(ids(get(TRANSACTIONS).param("statementId", "999999999"))).as("an unknown statement matches nothing")
+                .isEmpty();
+        JsonNode page = json(mockMvc.perform(get(TRANSACTIONS).param("statementId", String.valueOf(first))));
+        assertThat(page.get("total").asLong()).isEqualTo(2);
+        mockMvc.perform(get(TRANSACTIONS).param("statementId", "abc")).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("statementId"));
+    }
+
     @Test
     void filtersByCategorySourceAndUncategorized() throws Exception {
         long account = rows.account("Txn Api Sources", "CHECKING", "7105");

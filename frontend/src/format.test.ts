@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { formatDate, formatMoney, formatMonth, formatPercent, formatSpent } from './format'
+import {
+  formatBytes,
+  formatCount,
+  formatDate,
+  formatMoney,
+  formatMonth,
+  formatPercent,
+  formatPeriod,
+  formatSpent,
+} from './format'
 
 const MINUS = '−'
 
@@ -79,5 +88,22 @@ describe('formatSpent', () => {
     expect(formatSpent('85.00')).toBe('+$85.00')
     expect(formatSpent('0.00')).toBe('$0.00')
     expect(formatSpent(null)).toBe('\u2014')
+  })
+})
+
+describe('formatPeriod, formatCount and formatBytes (step 7d)', () => {
+  test('a period is both dates with their years', () => {
+    expect(formatPeriod('2026-05-01', '2026-05-27')).toBe('May 1, 2026 to May 27, 2026')
+    expect(formatPeriod('2026-12-10', '2027-01-09')).toBe('Dec 10, 2026 to Jan 9, 2027')
+  })
+
+  test('counts and sizes are grouped by string handling, never rounded', () => {
+    expect(formatCount(0)).toBe('0')
+    expect(formatCount(999)).toBe('999')
+    expect(formatCount(48213)).toBe('48,213')
+    expect(formatCount('1234567')).toBe('1,234,567')
+    expect(formatBytes(1)).toBe('1 byte')
+    expect(formatBytes(0)).toBe('0 bytes')
+    expect(formatBytes(10485760)).toBe('10,485,760 bytes')
   })
 })

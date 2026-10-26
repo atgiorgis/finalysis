@@ -1,0 +1,14 @@
+{
+  "statementId": 24,
+  "parser": "csv",
+  "periodStart": "2026-05-01",
+  "periodEnd": "2026-05-27",
+  "openingBalance": "5000.00",
+  "closingBalance": "5400.40",
+  "parsed": 12,
+  "inserted": 12,
+  "duplicates": 0,
+  "status": "RECONCILED",
+  "balanceCheck": "PASSED",
+  "warnings": []
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "id": 6,
+    "parser": "csv",
+    "periodStart": "2026-04-01",
+    "periodEnd": "2026-04-30",
+    "openingBalance": "3200.00",
+    "closingBalance": "4066.58",
+    "status": "RECONCILED",
+    "balanceCheck": "PASSED",
+    "parsedCount": 10,
+    "transactionCount": 10,
+    "warningCount": 0,
+    "importedAt": "2026-10-23T12:00:00Z",
+    "reviewedAt": null
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "detail": "This file was already imported as statement 24",
+  "instance": "/api/accounts/7/imports",
+  "status": 409,
+  "title": "Statement already imported",
+  "type": "urn:finalysis:problem:already-imported",
+  "statementId": 24
+}

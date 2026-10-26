@@ -8627,6 +8627,39 @@
                   "pm.test('the source line: its number and its text, which holds the description as printed', () => {",
                   "    pm.expect(t.sourceLine.number).to.be.a('number').and.above(1);",
                   "    pm.expect(t.sourceLine.text).to.be.a('string').and.include(t.rawDescription.split(' ')[0]);",
+                  "});",
+                  "pm.collectionVariables.set('ui_statement_id', t.statementId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transactions: one statement's rows",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/transactions?statementId={{ui_statement_id}}&size=200",
+            "description": "Step 7d, UI-02: the Import page opens a statement in Transactions with `statementId`. Every row is the statement's own, and the total is the statement's `transactionCount` (the rows it owns; duplicates of earlier imports belong to those)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const page = pm.response.json();",
+                  "const id = Number(pm.collectionVariables.get('ui_statement_id'));",
+                  "pm.test('every row belongs to the statement', () => {",
+                  "    pm.expect(page.items.length).to.be.above(0);",
+                  "    page.items.forEach(t => pm.expect(t.statementId).to.eql(id));",
+                  "});",
+                  "pm.sendRequest(pm.variables.replaceIn('{{baseUrl}}/api/statements/{{ui_statement_id}}'), (err, res) => {",
+                  "    pm.test('the total is the statement\\'s transactionCount', () => {",
+                  "        pm.expect(err).to.be.null;",
+                  "        pm.expect(page.total).to.eql(res.json().transactionCount);",
+                  "    });",
                   "});"
                 ]
               }

@@ -32,6 +32,27 @@ const byPath: Record<string, unknown> = {
   '/api/analytics/recurring': fixtures.recurringAll,
   '/api/chat/conversations': conversations,
   '/api/chat/conversations/7': conversation,
+  // The Import tab (step 7d).
+  ...Object.fromEntries(
+    Object.entries(fixtures.statementsByAccount).map(([id, list]) => [`/api/accounts/${id}/statements`, list]),
+  ),
+  [`/api/statements/${fixtures.statementDetail.id}`]: fixtures.statementDetail,
+}
+
+const STATUS = Symbol('status')
+
+/** An answer with a status other than 200, for a problem (409, 422) or a 201/202. */
+export interface WithStatus {
+  status: number
+  json: unknown
+}
+
+export function withStatus(status: number, json: unknown): WithStatus {
+  return { status, json, [STATUS]: true } as WithStatus
+}
+
+function isWithStatus(body: unknown): body is WithStatus {
+  return typeof body === 'object' && body !== null && STATUS in body
 }
 
 export async function mockApi(page: Page, overrides: Record<string, unknown> = {}) {
@@ -41,6 +62,8 @@ export async function mockApi(page: Page, overrides: Record<string, unknown> = {
     const body = overrides[key] ?? overrides[url.pathname] ?? exact[key] ?? byPath[url.pathname]
     if (body === undefined) {
       await route.fulfill({ status: 404, json: { type: 'not-found', detail: `no fixture for ${key}` } })
+    } else if (isWithStatus(body)) {
+      await route.fulfill({ status: body.status, json: body.json })
     } else {
       await route.fulfill({ json: body })
     }

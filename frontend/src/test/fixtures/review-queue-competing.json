@@ -1,0 +1,308 @@
+{
+  "counts": {
+    "statements": 2,
+    "unparsedUploads": 2,
+    "transferCandidates": 0,
+    "competingCandidates": 1,
+    "possibleMatches": 0,
+    "suggestedOneSidedTransfers": 10,
+    "aiCategoryReviews": 0,
+    "notTransferUncategorized": 0
+  },
+  "items": [
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-307",
+      "txn": {
+        "id": 307,
+        "accountId": 9,
+        "accountName": "Fixture Card",
+        "accountType": "CREDIT_CARD",
+        "statementId": 26,
+        "txnDate": "2026-05-14",
+        "postDate": null,
+        "amount": "144.20",
+        "sourceSection": "PAYMENT",
+        "rawDescription": "ONLINE PAYMENT - THANK YOU"
+      },
+      "categorySource": "RULE",
+      "ruleId": 9,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "COMPETING_CANDIDATE",
+      "key": "link-26",
+      "linkId": 26,
+      "out": {
+        "id": 297,
+        "accountId": 7,
+        "accountName": "Fixture Checking",
+        "accountType": "CHECKING",
+        "statementId": 24,
+        "txnDate": "2026-05-20",
+        "postDate": null,
+        "amount": "-200.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER"
+      },
+      "in": {
+        "id": 279,
+        "accountId": 8,
+        "accountName": "Fixture Savings",
+        "accountType": "SAVINGS",
+        "statementId": 22,
+        "txnDate": "2026-05-20",
+        "postDate": null,
+        "amount": "200.00",
+        "sourceSection": "DEPOSIT",
+        "rawDescription": "ONLINE TRANSFER FROM CHECKING"
+      },
+      "competitors": [
+        {
+          "id": 308,
+          "accountId": 9,
+          "accountName": "Fixture Card",
+          "accountType": "CREDIT_CARD",
+          "statementId": 26,
+          "txnDate": "2026-05-21",
+          "postDate": null,
+          "amount": "200.00",
+          "sourceSection": "PAYMENT",
+          "rawDescription": "ONLINE PAYMENT - THANK YOU"
+        }
+      ],
+      "pairs": [
+        {
+          "outTxnId": 297,
+          "inTxnId": 279,
+          "daysApart": 0
+        },
+        {
+          "outTxnId": 297,
+          "inTxnId": 308,
+          "daysApart": 1
+        }
+      ],
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "STATEMENT",
+      "statementId": 25,
+      "accountId": 10,
+      "accountName": "Fixture Ledger Checking",
+      "fileName": "csv-windows-1252.csv",
+      "periodStart": "2026-04-05",
+      "periodEnd": "2026-04-06",
+      "balanceCheck": "FAILED",
+      "warnings": [
+        "reconciliation failed: request balances: openingBalance + rows = closingBalance: expected -21.25, actual 0.01, difference 21.26",
+        "reconciliation failed: request openingBalance against the balance column: expected 1000.00, actual 0.00, difference -1000.00",
+        "reconciliation failed: request closingBalance against the balance column: expected 978.75, actual 0.01, difference -978.74"
+      ],
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "UNPARSED_UPLOAD",
+      "uploadId": 3,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "fileName": "pdf-no-text.pdf",
+      "reason": "NO_TEXT_LAYER",
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "UNPARSED_UPLOAD",
+      "uploadId": 2,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "fileName": "pdf-unrecognized-layout.pdf",
+      "reason": "UNRECOGNIZED_LAYOUT",
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-293",
+      "txn": {
+        "id": 293,
+        "accountId": 7,
+        "accountName": "Fixture Checking",
+        "accountType": "CHECKING",
+        "statementId": 24,
+        "txnDate": "2026-05-08",
+        "postDate": null,
+        "amount": "-144.20",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "SUMMIT CARD ONLINE PMT"
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-268",
+      "txn": {
+        "id": 268,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 21,
+        "txnDate": "2026-09-02",
+        "postDate": "2026-09-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-258",
+      "txn": {
+        "id": 258,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 20,
+        "txnDate": "2026-08-02",
+        "postDate": "2026-08-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-248",
+      "txn": {
+        "id": 248,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 19,
+        "txnDate": "2026-07-02",
+        "postDate": "2026-07-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-238",
+      "txn": {
+        "id": 238,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 18,
+        "txnDate": "2026-06-02",
+        "postDate": "2026-06-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "STATEMENT",
+      "statementId": 18,
+      "accountId": 1,
+      "accountName": "Northfield Bank Checking",
+      "fileName": "northfield-checking_2026-06.ofx",
+      "periodStart": "2026-06-01",
+      "periodEnd": "2026-06-30",
+      "balanceCheck": "FAILED",
+      "warnings": [
+        "reconciliation failed: continuity: statement 2's closingBalance + rows = closingBalance: expected 9135.55, actual 9125.55, difference -10.00"
+      ],
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-2",
+      "txn": {
+        "id": 2,
+        "accountId": 1,
+        "accountName": "Northfield Bank Checking",
+        "accountType": "CHECKING",
+        "statementId": 1,
+        "txnDate": "2026-04-02",
+        "postDate": "2026-04-02",
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-52",
+      "txn": {
+        "id": 52,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-02",
+        "postDate": null,
+        "amount": "-500.00",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "ONLINE TRANSFER TO SAVINGS XXXXXX1002"
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-54",
+      "txn": {
+        "id": 54,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-09",
+        "postDate": null,
+        "amount": "-842.17",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "APEX VISA AUTOPAY"
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "since": "2026-10-23T12:00:00Z"
+    },
+    {
+      "kind": "SUGGESTED_ONE_SIDED_TRANSFER",
+      "key": "txn-60",
+      "txn": {
+        "id": 60,
+        "accountId": 5,
+        "accountName": "Northfield Checking (imported twice)",
+        "accountType": "CHECKING",
+        "statementId": 6,
+        "txnDate": "2026-04-25",
+        "postDate": null,
+        "amount": "-512.40",
+        "sourceSection": "WITHDRAWAL",
+        "rawDescription": "SUMMIT CARD ONLINE PMT"
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "since": "2026-10-23T12:00:00Z"
+    }
+  ]
+}

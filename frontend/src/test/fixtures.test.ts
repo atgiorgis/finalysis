@@ -33,3 +33,26 @@ test('reads answer from the fetch stub, and an unknown read is a problem', async
 
   vi.unstubAllGlobals()
 })
+
+test('the import-pass fixtures agree with each other (step 7d)', () => {
+  // The statement imported, its detail and the rows `statementId` lists are the same statement.
+  expect(fixtures.statementDetail.id).toBe(fixtures.importSummary.statementId)
+  expect(fixtures.transactionsStatement.items.every((t) => t.statementId === fixtures.statementDetail.id)).toBe(true)
+  expect(fixtures.transactionsStatement.total).toBe(fixtures.statementDetail.transactionCount)
+  expect(fixtures.statementsFixtureChecking.map((s) => s.id)).toContain(fixtures.statementDetail.id)
+  // The second import of the same file names that statement.
+  expect(fixtures.importAlreadyImported.statementId).toBe(fixtures.importSummary.statementId)
+  // Between them, the three queues hold every kind the Import page resolves.
+  const kinds = new Set(
+    [fixtures.reviewQueueCandidates, fixtures.reviewQueueCompeting, fixtures.reviewQueuePossibleMatch].flatMap((q) =>
+      q.items.map((i) => i.kind),
+    ),
+  )
+  for (const kind of ['STATEMENT', 'UNPARSED_UPLOAD', 'TRANSFER_CANDIDATES', 'COMPETING_CANDIDATE', 'POSSIBLE_MATCH']) {
+    expect(kinds).toContain(kind)
+  }
+  // A mismatch carries the file's headers and no rows (SEC-10); the preview endpoint shows rows.
+  expect(fixtures.importMappingMismatch.preview?.headers?.length).toBeGreaterThan(0)
+  expect(fixtures.importMappingMismatch.preview?.rows).toBeUndefined()
+  expect(fixtures.importPreviewCsv.rows?.length).toBeGreaterThan(0)
+})

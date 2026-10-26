@@ -45,9 +45,9 @@ math (GR-01).
 | 4 | Categorization: rules, then AI on redacted text | CAT-01–CAT-05, CAT-08, SEC-01, SEC-02, SEC-08 | Done |
 | 5 | Analytics and alerts, no AI | ANA-01, ANA-03, ANA-06–ANA-08, ANA-02, ANA-04 | Done (ANA-02 and ANA-04 Planned for their remaining parts) |
 | 6 | Chatbot backend: read-only tools, grounding, citations, memory | CHT-01–CHT-06, ANA-05, SEC-03 | Done |
-| 7 | Chat UI, dashboard, polish (`docs/plans/phase-7.md`) | UI-01, UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | **In progress** |
+| 7 | Chat UI, dashboard, upload page, polish (`docs/plans/phase-7.md`) | UI-01, UI-02 (step 7d), UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | **In progress** |
 | 7b | Goals tab shell | GOAL-06 (the tab only) | Next, after 7 |
-| 8 | Upload page and review queue first; then encryption at rest, login and HTTPS for phone access, OCR, local PDF extraction, document Q&A, vision role | UI-02, UI-08 (login and HTTPS), SEC-04–SEC-07, ING-09, ING-14, CHT-07, AI-01 (vision role) | Future |
+| 8 | Encryption at rest, login and HTTPS for phone access, OCR, local PDF extraction, document Q&A, vision role | UI-08 (login and HTTPS), SEC-04–SEC-07, ING-09, ING-14, CHT-07, AI-01 (vision role) | Future |
 | 9 | Eval suites and benchmarks | QA-03, QA-04, AI-07 | Future |
 | 10 | Local AI: the `local` profile (Ollama) and model tiers | AI-03, AI-02, AI-04, AI-05, UI-06 | Future |
 | 11 | Portfolio polish: README, setup script, demo mode, ADRs | QA-05–QA-07 | Future |
@@ -61,8 +61,8 @@ used. ANA-04's missing and changed bills are in the Phase 5 backlog, with no pha
 
 ### Phase 7 (in progress)
 
-Plan approved: `docs/plans/phase-7.md` (decisions in §13). It narrows the scope below: UI-02 moves to Phase 8 (its
-first item), ANA-02's fixed vs. discretionary waits (phase to be assigned), UI-08 is decided as localhost only until
+Plan approved: `docs/plans/phase-7.md` (decisions in §13). It narrows the scope below: UI-02 moved to Phase 8 (its
+first item) and came back as step 7d on 2026-10-26 (the Import tab), ANA-02's fixed vs. discretionary waits (phase to be assigned), UI-08 is decided as localhost only until
 Phase 8's login and HTTPS, and every Phase 6 backlog item waits (the holdout guard for Phase 9). The scope as first
 listed:
 

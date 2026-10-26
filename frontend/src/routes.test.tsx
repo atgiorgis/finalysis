@@ -9,10 +9,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-test('lists the seven tabs in the plan’s order', () => {
+test('lists the eight tabs in the plan’s order, Import between Transactions and Alerts (step 7d)', () => {
   expect(TABS.map((tab) => tab.label)).toEqual([
     'Overview',
     'Transactions',
+    'Import',
     'Alerts',
     'Recurring',
     'Chat',

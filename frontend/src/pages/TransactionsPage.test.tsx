@@ -104,7 +104,7 @@ test('to review: transactions without a category, every month, with why they wai
   expect(screen.getByRole('button', { name: 'To review' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('to review: transfers without a match, and the kinds left to the API until Phase 8', async () => {
+test('to review: transfers without a match, and the other kinds link to the Import tab', async () => {
   renderApp('/transactions?view=review', ROUTES)
 
   const transfers = await screen.findByRole('region', { name: 'Transfers without a match' })
@@ -112,7 +112,11 @@ test('to review: transfers without a match, and the kinds left to the API until 
   expect(within(transfers).getAllByRole('button')[0]).toHaveTextContent('ONLINE TRANSFER TO SAVINGS XXXXXX1002')
   const elsewhere = screen.getByRole('region', { name: 'Also in the review queue' })
   expect(within(elsewhere).getByText('1 statement needs review')).toBeInTheDocument()
-  expect(elsewhere).toHaveTextContent('resolved through the API until the upload page (Phase 8)')
+  expect(elsewhere).not.toHaveTextContent('Phase 8')
+  expect(within(elsewhere).getByRole('link', { name: 'Resolve them on the Import tab' })).toHaveAttribute(
+    'href',
+    '/import#review',
+  )
 })
 
 test('nothing to review says so', async () => {
@@ -134,4 +138,38 @@ test('a failed list read is said plainly', async () => {
   renderApp('/transactions?month=2026-09', { ...ROUTES, [SEPTEMBER]: undefined })
 
   expect(await screen.findByText(/Couldn’t load the transactions/)).toBeInTheDocument()
+})
+
+test('a statement filter (the Import tab’s link) lists that statement’s rows, with a chip that clears it', async () => {
+  const user = userEvent.setup()
+  const STATEMENT = `/api/transactions?statementId=${fixtures.statementDetail.id}&page=0&size=50`
+  const { requests, location } = renderApp(`/transactions?month=2026-09&statement=${fixtures.statementDetail.id}`, {
+    ...ROUTES,
+    [STATEMENT]: fixtures.transactionsStatement,
+    [`/api/statements/${fixtures.statementDetail.id}`]: fixtures.statementDetail,
+  })
+
+  const chip = await screen.findByText('Statement May 1, 2026 to May 27, 2026')
+  const list = await screen.findByRole('region', { name: 'Transactions list' })
+  expect(list).toHaveTextContent(`${fixtures.transactionsStatement.total} transactions in this statement`)
+  expect(list.querySelectorAll('.txn-row')).toHaveLength(fixtures.transactionsStatement.items.length)
+  // Every row the statement owns, whatever its month: no date range in the request.
+  expect(requests).toContain(STATEMENT)
+  expect(requests).not.toContain(SEPTEMBER)
+
+  await user.click(within(chip).getByRole('button', { name: 'Clear the statement filter' }))
+  expect(location()).toBe('/transactions?month=2026-09')
+  expect(await screen.findByText(/transactions in September 2026/)).toBeInTheDocument()
+  expect(requests).toContain(SEPTEMBER)
+})
+
+test('a statement that can’t be read keeps its filter, says so, and can be cleared', async () => {
+  renderApp('/transactions?month=2026-09&statement=999', {
+    ...ROUTES,
+    '/api/transactions?statementId=999&page=0&size=50': { items: [], page: 0, size: 50, total: 0 },
+  })
+
+  expect(await screen.findByText('Statement 999')).toBeInTheDocument()
+  expect(await screen.findByText(/Couldn’t read the statement/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Clear the statement filter' })).toBeInTheDocument()
 })

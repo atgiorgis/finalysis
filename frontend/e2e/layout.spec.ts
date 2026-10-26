@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { fixtures } from '../src/test/fixtures'
-import { mockApi } from './mockApi'
+import { mockApi, withStatus } from './mockApi'
 
 /**
  * UI-07 (docs/plans/phase-7.md §7): every screen fits a 375 px phone with no horizontal scroll and its touch targets are
@@ -37,6 +37,30 @@ const SCREENS: { name: string; path: string; ready: string; overrides?: Record<s
   { name: 'chat list', path: '/chat', ready: 'New conversation' },
   { name: 'chat conversation', path: '/chat/7', ready: 'You spent $477.94' },
   { name: 'goals', path: '/goals', ready: 'No goals yet' },
+  {
+    name: 'import: statements and a candidate group',
+    path: '/import?account=1',
+    ready: 'Which transactions are one transfer?',
+    overrides: { '/api/review-queue': fixtures.reviewQueueCandidates },
+  },
+  {
+    name: 'import: a competing candidate',
+    path: '/import',
+    ready: 'An automatic link with a rival',
+    overrides: { '/api/review-queue': fixtures.reviewQueueCompeting },
+  },
+  {
+    name: 'import: a possible match',
+    path: '/import',
+    ready: 'One-sided transfers that may be one',
+    overrides: { '/api/review-queue': fixtures.reviewQueuePossibleMatch },
+  },
+  {
+    name: 'transactions: one statement',
+    path: `/transactions?month=2026-09&statement=${fixtures.statementDetail.id}`,
+    ready: 'in this statement',
+    overrides: { '/api/transactions': fixtures.transactionsStatement },
+  },
   { name: 'settings', path: '/settings', ready: 'Chat costs' },
 ]
 
@@ -44,7 +68,10 @@ const SCREENS: { name: string; path: string; ready: string; overrides?: Record<s
 async function smallTargets(page: Page): Promise<string[]> {
   return page.evaluate((min) => {
     const out: string[] = []
-    for (const el of document.querySelectorAll<HTMLElement>('a[href], button, select, input, textarea, [role="button"]')) {
+    for (const control of document.querySelectorAll<HTMLElement>('a[href], button, select, input, textarea, [role="button"]')) {
+      // A visually hidden input (the Import tab's file input) is reached through its label: measure the label.
+      const hiddenInput = control.tagName === 'INPUT' && control.getBoundingClientRect().width <= 1
+      const el = hiddenInput ? (control as HTMLInputElement).labels?.[0] ?? control : control
       const box = el.getBoundingClientRect()
       const style = getComputedStyle(el)
       if (box.width === 0 || box.height === 0 || style.visibility === 'hidden') {
@@ -104,9 +131,19 @@ test('the touch-target check finds a small button and skips inline links', async
     inline.textContent = 'inline'
     const p = document.createElement('p')
     p.append('text with an ', inline, ' link')
-    document.querySelector('main')?.append(small, p)
+    // A visually hidden file input is measured by its label.
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.id = 'tiny-file'
+    input.className = 'visually-hidden'
+    const label = document.createElement('label')
+    label.htmlFor = 'tiny-file'
+    label.textContent = 'tiny label'
+    label.style.display = 'inline-block'
+    label.style.height = '20px'
+    document.querySelector('main')?.append(small, p, label, input)
   })
-  expect(await smallTargets(page)).toEqual(['button "tiny" 20px'])
+  expect(await smallTargets(page)).toEqual(['button "tiny" 20px', 'label "tiny label" 20px'])
 })
 
 async function noHorizontalScroll(page: Page) {
@@ -182,4 +219,65 @@ test('the transaction sheet is a bottom sheet on a phone, a side panel on deskto
     expect(box.width).toBeLessThanOrEqual(420)
     expect(box.x + box.width).toBeCloseTo(viewport.width, 0)
   }
+})
+
+
+/** The Import tab's states that need a click: a result, the mapping step, the add-account form, a delete question. */
+const FILE = { name: 'transfers-northfield-checking_2026-05.csv', mimeType: 'text/csv', buffer: Buffer.from('Date\n') }
+
+async function fitsAt375(page: Page, phone: boolean) {
+  await noHorizontalScroll(page)
+  if (phone) {
+    expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+  }
+}
+
+async function importFile(page: Page) {
+  await page.getByLabel('Account').selectOption('1')
+  await page.getByLabel('Choose a file').setInputFiles(FILE)
+  await page.getByRole('button', { name: 'Import', exact: true }).click()
+}
+
+test('import: a result with long warnings fits', async ({ page }, info) => {
+  await mockApi(page, { '/api/accounts/1/imports': withStatus(201, fixtures.importNeedsReview) })
+  await page.goto('/import')
+  await importFile(page)
+  await expect(page.getByRole('heading', { name: 'Warnings' })).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+test('import: the mapping step’s wide preview scrolls inside its card', async ({ page }, info) => {
+  await mockApi(page, {
+    '/api/accounts/1/imports': withStatus(422, fixtures.importMappingRequired),
+    '/api/accounts/1/imports/preview': fixtures.importPreviewCsv,
+  })
+  await page.goto('/import')
+  await importFile(page)
+  await expect(page.getByRole('button', { name: 'Use this mapping' })).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+test('import: the already-imported notice fits', async ({ page }, info) => {
+  await mockApi(page, { '/api/accounts/1/imports': withStatus(409, fixtures.importAlreadyImported) })
+  await page.goto('/import')
+  await importFile(page)
+  await expect(page.getByText('Nothing was imported again.')).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+test('import: the add-account form fits', async ({ page }, info) => {
+  await mockApi(page)
+  await page.goto('/import')
+  await page.getByRole('button', { name: 'Add an account' }).click()
+  await expect(page.getByLabel('Last four digits')).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+test('import: the delete question fits', async ({ page }, info) => {
+  await mockApi(page)
+  await page.goto('/import')
+  const checking = page.getByRole('region', { name: 'Northfield Bank Checking ···1001' })
+  await checking.getByRole('button', { name: 'Delete the statement Sep 1, 2026 to Sep 30, 2026' }).click()
+  await expect(checking.getByRole('alertdialog')).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
 })

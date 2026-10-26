@@ -3,6 +3,7 @@ import AlertsPage from './pages/AlertsPage'
 import ChatPage from './pages/ChatPage'
 import DrillPage from './pages/DrillPage'
 import GoalsPage from './pages/GoalsPage'
+import ImportPage from './pages/ImportPage'
 import OverviewPage from './pages/OverviewPage'
 import RecurringPage from './pages/RecurringPage'
 import SettingsPage from './pages/SettingsPage'
@@ -34,6 +35,7 @@ export default function AppRoutes() {
           <Route path="/overview/*" element={<OverviewPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/transactions/:id" element={<TransactionLink />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/alerts/*" element={<AlertsPage />} />
           <Route path="/recurring/*" element={<RecurringPage />} />
           <Route path="/chat" element={<ChatPage />} />

@@ -1,0 +1,448 @@
+{
+  "items": [
+    {
+      "id": 300,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-27",
+      "postDate": null,
+      "amount": "-160.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "ONLINE PMT TO BRIGHTSTAR CARD",
+      "merchant": "ONLINE PMT TO BRIGHTSTAR CARD",
+      "counterparty": null,
+      "category": null,
+      "categorySource": null,
+      "ruleId": null,
+      "categorizedAt": null,
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": false,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 13,
+        "text": "05/27/2026,ONLINE PMT TO BRIGHTSTAR CARD,160.00,,5400.40"
+      }
+    },
+    {
+      "id": 299,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-25",
+      "postDate": null,
+      "amount": "75.00",
+      "sourceSection": "DEPOSIT",
+      "rawDescription": "SUMMIT CASH ADVANCE DEPOSIT",
+      "merchant": "SUMMIT CASH ADVANCE DEPOSIT",
+      "counterparty": null,
+      "category": null,
+      "categorySource": null,
+      "ruleId": null,
+      "categorizedAt": null,
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": false,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 12,
+        "text": "05/25/2026,SUMMIT CASH ADVANCE DEPOSIT,,75.00,5560.40"
+      }
+    },
+    {
+      "id": 298,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-22",
+      "postDate": null,
+      "amount": "-42.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "CORNER HARDWARE DEBIT CARD PURCHASE",
+      "merchant": "CORNER HARDWARE DEBIT CARD PURCHASE",
+      "counterparty": null,
+      "category": {
+        "id": 5,
+        "name": "Shopping",
+        "kind": "EXPENSE",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 79,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 11,
+        "text": "05/22/2026,CORNER HARDWARE DEBIT CARD PURCHASE,42.00,,5485.40"
+      }
+    },
+    {
+      "id": 297,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-20",
+      "postDate": null,
+      "amount": "-200.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "ONLINE TRANSFER",
+      "merchant": "ONLINE TRANSFER",
+      "counterparty": null,
+      "category": null,
+      "categorySource": null,
+      "ruleId": null,
+      "categorizedAt": null,
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 10,
+        "text": "05/20/2026,ONLINE TRANSFER,200.00,,5527.40"
+      }
+    },
+    {
+      "id": 296,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-17",
+      "postDate": null,
+      "amount": "-250.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "ONLINE TRANSFER TO SAVINGS",
+      "merchant": "ONLINE TRANSFER TO SAVINGS",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 9,
+        "text": "05/17/2026,ONLINE TRANSFER TO SAVINGS,250.00,,5727.40"
+      }
+    },
+    {
+      "id": 295,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-15",
+      "postDate": null,
+      "amount": "-250.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "ONLINE TRANSFER TO SAVINGS",
+      "merchant": "ONLINE TRANSFER TO SAVINGS",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 8,
+        "text": "05/15/2026,ONLINE TRANSFER TO SAVINGS,250.00,,5977.40"
+      }
+    },
+    {
+      "id": 294,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-12",
+      "postDate": null,
+      "amount": "-95.60",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "SUMMIT CARD ONLINE PMT",
+      "merchant": "SUMMIT CARD ONLINE PMT",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 7,
+        "text": "05/12/2026,SUMMIT CARD ONLINE PMT,95.60,,6227.40"
+      }
+    },
+    {
+      "id": 293,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-08",
+      "postDate": null,
+      "amount": "-144.20",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "SUMMIT CARD ONLINE PMT",
+      "merchant": "SUMMIT CARD ONLINE PMT",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": false,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 6,
+        "text": "05/08/2026,SUMMIT CARD ONLINE PMT,144.20,,6323.00"
+      }
+    },
+    {
+      "id": 292,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-08",
+      "postDate": null,
+      "amount": "-133.10",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "SUMMIT CARD ONLINE PMT",
+      "merchant": "SUMMIT CARD ONLINE PMT",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 5,
+        "text": "05/08/2026,SUMMIT CARD ONLINE PMT,133.10,,6467.20"
+      }
+    },
+    {
+      "id": 291,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-06",
+      "postDate": null,
+      "amount": "-410.25",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "SUMMIT CARD ONLINE PMT",
+      "merchant": "SUMMIT CARD ONLINE PMT",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 10,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 4,
+        "text": "05/06/2026,SUMMIT CARD ONLINE PMT,410.25,,6600.30"
+      }
+    },
+    {
+      "id": 290,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-04",
+      "postDate": null,
+      "amount": "-300.00",
+      "sourceSection": "WITHDRAWAL",
+      "rawDescription": "ONLINE TRANSFER TO SAVINGS",
+      "merchant": "ONLINE TRANSFER TO SAVINGS",
+      "counterparty": null,
+      "category": {
+        "id": 11,
+        "name": "Transfer",
+        "kind": "TRANSFER",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 8,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": true,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 3,
+        "text": "05/04/2026,ONLINE TRANSFER TO SAVINGS,300.00,,7010.55"
+      }
+    },
+    {
+      "id": 289,
+      "accountId": 7,
+      "accountName": "Fixture Checking",
+      "accountType": "CHECKING",
+      "statementId": 24,
+      "txnDate": "2026-05-01",
+      "postDate": null,
+      "amount": "2310.55",
+      "sourceSection": "DEPOSIT",
+      "rawDescription": "HARBORLINE FREIGHT PAYROLL DIRECT DEP",
+      "merchant": "HARBORLINE FREIGHT PAYROLL DIRECT DEP",
+      "counterparty": null,
+      "category": {
+        "id": 9,
+        "name": "Income",
+        "kind": "INCOME",
+        "parentId": null
+      },
+      "categorySource": "RULE",
+      "ruleId": 12,
+      "categorizedAt": "2026-10-23T12:00:00Z",
+      "categoryModel": null,
+      "categoryConfidence": null,
+      "categoryPromptVersion": null,
+      "aiReviewReason": null,
+      "isTransfer": false,
+      "transferExcluded": false,
+      "statement": {
+        "id": 24,
+        "periodStart": "2026-05-01",
+        "periodEnd": "2026-05-27"
+      },
+      "sourceLine": {
+        "number": 2,
+        "text": "05/01/2026,HARBORLINE FREIGHT PAYROLL DIRECT DEP,,2310.55,7310.55"
+      }
+    }
+  ],
+  "page": 0,
+  "size": 50,
+  "total": 12
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { reads, type ReviewQueueResponse, type Transaction, type TransactionPage } from '../api'
-import { formatDate, formatMoney, formatMonth } from '../format'
+import { Link, useSearchParams } from 'react-router-dom'
+import { reads, type ReviewQueueResponse, type StatementDetail, type Transaction, type TransactionPage } from '../api'
+import { formatDate, formatMoney, formatMonth, formatPeriod } from '../format'
 import { monthDays } from '../months'
 import { useDataVersion, useMonth, useShellData } from '../shell/ShellData'
 import { useTxnSheet } from '../shell/TxnSheet'
@@ -13,7 +13,7 @@ const REVIEW_REASONS: Record<string, string> = {
   INVALID_ANSWER: 'The AI’s answers were invalid',
 }
 
-/** Review kinds this page doesn't resolve: they wait for the upload page (UI-02, Phase 8). */
+/** Review kinds this page doesn't resolve: the Import tab does (UI-02, step 7d). */
 const ELSEWHERE: { key: keyof ReviewQueueResponse['counts']; one: string; many: string }[] = [
   { key: 'statements', one: 'statement needs review', many: 'statements need review' },
   { key: 'unparsedUploads', one: 'upload wasn’t recognized', many: 'uploads weren’t recognized' },
@@ -89,17 +89,46 @@ function countText(total: number | null, what: string): string {
   return total === null ? '' : total === 1 ? `1 ${what}` : `${total} ${what}s`
 }
 
-/** All transactions of the month, filtered by category and account (UI-02's list part; docs/plans/phase-7.md §2.4). */
+/** The statement a `?statement=` filter names, for its chip; null while loading or when it can't be read. */
+function useStatement(id: string | null): { statement: StatementDetail | null; error: string | null } {
+  const [statement, setStatement] = useState<StatementDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    setStatement(null)
+    setError(null)
+    if (!id) {
+      return
+    }
+    let live = true
+    reads
+      .statement(id)
+      .then((s) => live && setStatement(s))
+      .catch((e: Error) => live && setError(e.message))
+    return () => {
+      live = false
+    }
+  }, [id])
+  return { statement, error }
+}
+
+/**
+ * All transactions of the month, filtered by category and account (docs/plans/phase-7.md §2.4); or, with
+ * `?statement=` (the Import tab's link, step 7d), every row that statement imported, whatever its month.
+ */
 function AllTransactions({ month }: { month: string }) {
   const [params, setParams] = useSearchParams()
   const { accounts, categories } = useShellData()
   const { version } = useDataVersion()
   const category = params.get('category') ?? ''
   const accountId = params.get('accountId') ?? ''
+  const statementParam = params.get('statement')
+  const statementId = statementParam && /^\d{1,18}$/.test(statementParam) ? statementParam : null
+  const { statement, error: statementError } = useStatement(statementId)
   const { first, last } = monthDays(month)
   const query = {
-    from: first,
-    to: last,
+    from: statementId ? undefined : first,
+    to: statementId ? undefined : last,
+    statementId: statementId ?? undefined,
     categoryId: /^\d+$/.test(category) ? category : undefined,
     uncategorized: category === 'none' ? true : undefined,
     accountId: /^\d+$/.test(accountId) ? accountId : undefined,
@@ -117,8 +146,30 @@ function AllTransactions({ month }: { month: string }) {
       return updated
     })
 
+  const statementAccount = statement ? accounts.find((a) => a.id === statement.accountId) : undefined
+
   return (
     <>
+      {statementId && (
+        <div className="chips" aria-label="Statement filter">
+          <span className="chip chip-filter">
+            {statement
+              ? `Statement ${formatPeriod(statement.periodStart, statement.periodEnd)}${statementAccount ? ` · ${statementAccount.name}` : ''}`
+              : statementError
+                ? `Statement ${statementId}`
+                : 'Statement…'}
+            <button
+              type="button"
+              className="chip-clear"
+              aria-label="Clear the statement filter"
+              onClick={() => set('statement', '')}
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
+      {statementError && <p className="error">Couldn’t read the statement: {statementError}</p>}
       <div className="filters">
         <label>
           Category
@@ -149,7 +200,7 @@ function AllTransactions({ month }: { month: string }) {
       {list.loaded && (
         <section className="card" aria-label="Transactions list">
           <p className="muted">
-            {countText(list.total, 'transaction')} in {formatMonth(month)}
+            {countText(list.total, 'transaction')} {statementId ? 'in this statement' : `in ${formatMonth(month)}`}
           </p>
           {list.items.length === 0 ? <p>No transactions match.</p> : <TxnRows items={list.items} />}
           {list.hasMore && (
@@ -245,7 +296,9 @@ function Review({ queue }: { queue: Load<ReviewQueueResponse> }) {
               </li>
             ))}
           </ul>
-          <p className="muted">These are resolved through the API until the upload page (Phase 8).</p>
+          <p>
+            <Link to="/import#review">Resolve them on the Import tab</Link>
+          </p>
         </section>
       )}
     </>
