@@ -48,6 +48,7 @@ test('a tab’s sub-path stays on that tab', async () => {
 test('an unknown path goes to the Overview', async () => {
   const { location } = renderApp('/nowhere')
 
-  expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'October 2026' })).toBeInTheDocument()
+  expect(screen.getByText('/ Overview')).toBeInTheDocument()
   expect(location()).toBe('/overview')
 })

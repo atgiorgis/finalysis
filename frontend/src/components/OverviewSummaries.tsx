@@ -13,7 +13,7 @@ export function AtAGlance({ dashboard, onOpenIncome }: { dashboard: DashboardRes
     return null
   }
   return (
-    <section className="card" aria-labelledby="glance-title">
+    <section className="card overview-glance" aria-labelledby="glance-title">
       <h2 id="glance-title">{formatMonth(totals.month)} at a glance</h2>
       <dl className="facts">
         <dt>Income</dt>
@@ -58,7 +58,19 @@ export function AtAGlance({ dashboard, onOpenIncome }: { dashboard: DashboardRes
   )
 }
 
-/** The alerts of the three months to the month shown: counts per type and the newest three, with their basis. */
+/** The colour on an alert card's top edge, by type (mockup v2). */
+const ALERT_TONE: Record<AlertType, string> = {
+  CATEGORY_SPIKE: 's5',
+  LARGE_TRANSACTION: 's3',
+  POSSIBLE_DUPLICATE: 'spend',
+  RECURRING_PRICE_INCREASE: 's5',
+  NEW_RECURRING: 's6',
+}
+
+/**
+ * The alerts of the three months to the month shown: counts per type, and the newest three as cards with their basis,
+ * each card's top edge coloured by its type.
+ */
 export function AlertsSummary({ dashboard }: { dashboard: DashboardResponse }) {
   const month = dashboard.month
   if (!month) {
@@ -67,10 +79,15 @@ export function AlertsSummary({ dashboard }: { dashboard: DashboardResponse }) {
   const counts = Object.entries(dashboard.alerts.counts).filter(([, n]) => (n ?? 0) > 0) as [AlertType, number][]
   const range = dashboard.alerts.range
   return (
-    <section className="card" aria-labelledby="alerts-title">
-      <h2 id="alerts-title">Alerts</h2>
+    <section className="card overview-alerts" aria-labelledby="alerts-title">
+      <div className="card-head">
+        <h2 id="alerts-title">Alerts</h2>
+        <Link to={withMonth('/alerts', month)} className="card-head-link">
+          All alerts →
+        </Link>
+      </div>
       {range && (
-        <p className="muted">
+        <p className="muted card-sub">
           {formatMonth(range.from, 'short')} to {formatMonth(range.to, 'short')} · rule-based
         </p>
       )}
@@ -85,15 +102,20 @@ export function AlertsSummary({ dashboard }: { dashboard: DashboardResponse }) {
               </li>
             ))}
           </ul>
-          <ul className="summary-list">
+          <ul className="alert-tiles" aria-label="Newest alerts">
             {dashboard.alerts.newest.map((alert) => (
-              <li key={alert.key}>
-                <Link to={`/alerts?month=${encodeURIComponent(month)}&key=${encodeURIComponent(alert.key)}`}>
+              <li key={alert.key} className={`alert-tile alert-tone-${ALERT_TONE[alert.type]}`}>
+                <span className="alert-tile-kind" aria-hidden="true">
                   {ALERT_LABELS[alert.type]}
-                  {alertSubject(alert) && `: ${alertSubject(alert)}`}
+                </span>
+                <Link
+                  className="alert-tile-title"
+                  to={`/alerts?month=${encodeURIComponent(month)}&key=${encodeURIComponent(alert.key)}`}
+                  aria-label={`${ALERT_LABELS[alert.type]}${alertSubject(alert) ? `: ${alertSubject(alert)}` : ''}`}
+                >
+                  {alertSubject(alert) || ALERT_LABELS[alert.type]}
                 </Link>
-                <span className="muted">
-                  {' '}
+                <span className="alert-tile-basis muted">
                   {formatMonth(alert.month, 'short')} · {quantityText(alert.basis.observed)} against{' '}
                   {quantityText(alert.basis.threshold)}
                 </span>
@@ -102,12 +124,11 @@ export function AlertsSummary({ dashboard }: { dashboard: DashboardResponse }) {
           </ul>
         </>
       )}
-      <Link to={withMonth('/alerts', month)}>All alerts</Link>
     </section>
   )
 }
 
-/** The active recurring series (ANA-07): the first six, and how many there are. */
+/** The active recurring series (ANA-07): how many, and the first six with their typical amount. */
 export function RecurringSummary({ dashboard }: { dashboard: DashboardResponse }) {
   const month = dashboard.month
   if (!month) {
@@ -115,38 +136,32 @@ export function RecurringSummary({ dashboard }: { dashboard: DashboardResponse }
   }
   const { active, truncated, items } = dashboard.recurring
   return (
-    <section className="card" aria-labelledby="recurring-title">
-      <h2 id="recurring-title">Recurring charges</h2>
-      <p className="muted">
-        {active === 1 ? '1 active series' : `${active}${truncated ? '+' : ''} active series`} · detected from
-        repeating amounts
-      </p>
+    <section className="card overview-recurring" aria-labelledby="recurring-title">
+      <div className="card-head">
+        <h2 id="recurring-title">Recurring charges</h2>
+        <Link to={withMonth('/recurring', month)} className="card-head-link">
+          {active}
+          {truncated ? '+' : ''} active →
+        </Link>
+      </div>
+      <p className="muted card-sub">Detected from repeating amounts</p>
       {items.length > 0 && (
-        <table className="summary-table">
-          <thead>
-            <tr>
-              <th scope="col">Merchant</th>
-              <th scope="col" className="num">Typical</th>
-              <th scope="col" className="num">Next</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((r) => (
-              <tr key={`${r.accountId}-${r.merchant}`}>
-                <td>
-                  <Link to={`/recurring?month=${encodeURIComponent(month)}&series=${encodeURIComponent(seriesParam(r))}`}>
-                    {r.merchant}
-                  </Link>
-                  {r.category && <span className="muted"> · {r.category.name}</span>}
-                </td>
-                <td className="num">{formatMoney(r.typicalAmount, { sign: 'magnitude' })}</td>
-                <td className="num">{formatDate(r.nextExpectedDate)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="recurring-list" aria-label="Active recurring charges">
+          {items.map((r) => (
+            <li key={`${r.accountId}-${r.merchant}`}>
+              <span className="recurring-name">
+                <Link to={`/recurring?month=${encodeURIComponent(month)}&series=${encodeURIComponent(seriesParam(r))}`}>
+                  {r.merchant}
+                </Link>
+                <span className="muted">
+                  {r.category ? `${r.category.name} · ` : ''}next {formatDate(r.nextExpectedDate)}
+                </span>
+              </span>
+              <span className="recurring-amount">{formatMoney(r.typicalAmount, { sign: 'magnitude' })}</span>
+            </li>
+          ))}
+        </ul>
       )}
-      <Link to={withMonth('/recurring', month)}>All recurring charges</Link>
     </section>
   )
 }

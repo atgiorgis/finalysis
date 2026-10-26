@@ -3,8 +3,9 @@ import { fixtures } from '../src/test/fixtures'
 import { mockApi } from './mockApi'
 
 /**
- * UI-07 (docs/plans/phase-7.md §7): every screen fits a 375 px phone with no horizontal scroll, its touch targets are
- * at least 44 px tall, and the phone shows its bottom bar instead of the header tabs; on desktop, the reverse.
+ * UI-07 (docs/plans/phase-7.md §7): every screen fits a 375 px phone with no horizontal scroll and its touch targets are
+ * at least 44 px tall. Since step 7c one top bar and a slide-in menu serve every width: the menu button shows, the tabs
+ * don't until it is opened.
  */
 
 const MIN_TARGET = 44
@@ -16,11 +17,11 @@ const CLOUD = {
 
 /** Every screen, with the state that makes it widest: open panels, a sheet, long text. */
 const SCREENS: { name: string; path: string; ready: string; overrides?: Record<string, unknown> }[] = [
-  { name: 'overview', path: '/overview?month=2026-09', ready: 'Where the money went · September 2026' },
+  { name: 'overview', path: '/overview?month=2026-09', ready: 'Where it went' },
   {
     name: 'overview, cloud banner',
     path: '/overview?month=2026-09',
-    ready: 'Where the money went · September 2026',
+    ready: 'Where it went',
     overrides: { '/api/status': CLOUD },
   },
   { name: 'overview, partial month', path: '/overview?month=2026-10', ready: 'Data quality' },
@@ -79,8 +80,8 @@ for (const screen of SCREENS) {
     expect(scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(innerWidth)
 
     const phone = info.project.name === 'phone'
-    await expect(page.getByRole('navigation', { name: 'Main (phone)' })).toBeVisible({ visible: phone })
-    await expect(page.getByRole('navigation', { name: 'Main', exact: true })).toBeVisible({ visible: !phone })
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0)
 
     if (phone) {
       expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
@@ -108,15 +109,63 @@ test('the touch-target check finds a small button and skips inline links', async
   expect(await smallTargets(page)).toEqual(['button "tiny" 20px'])
 })
 
-test('the phone bar’s More opens the other tabs, each reachable', async ({ page }, info) => {
-  test.skip(info.project.name !== 'phone', 'phone only')
+async function noHorizontalScroll(page: Page) {
+  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }))
+  expect(scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(innerWidth)
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`the open menu fits, its targets are 44 px, and a tab is reachable (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+    await mockApi(page)
+    await page.goto('/overview?month=2026-09')
+    await expect(page.getByText('Where it went')).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+
+    await page.getByRole('button', { name: 'Open menu' }).click()
+    const menu = page.getByRole('dialog', { name: 'Menu' })
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('link', { name: 'Overview' })).toBeFocused()
+    // Measured once the slide-in has finished.
+    await expect.poll(async () => (await menu.boundingBox())!.x).toBe(0)
+    const box = (await menu.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+    await noHorizontalScroll(page)
+    if (info.project.name === 'phone') {
+      expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+    }
+
+    await menu.getByRole('link', { name: 'Recurring' }).click()
+    await expect(page.getByRole('heading', { level: 1, name: 'Recurring charges' })).toBeVisible()
+    await expect(menu).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused()
+    await noHorizontalScroll(page)
+  })
+}
+
+test('Escape closes the menu and focus returns to the menu button', async ({ page }) => {
   await mockApi(page)
   await page.goto('/settings')
-  const bar = page.getByRole('navigation', { name: 'Main (phone)' })
-  await bar.getByRole('button', { name: 'More' }).click()
-  await bar.getByRole('link', { name: 'Recurring' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Recurring charges' })).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+  await expect(page.getByText('Chat costs')).toBeVisible()
+  await page.getByRole('button', { name: 'Open menu' }).click()
+  await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Open menu' })).toBeFocused()
+})
+
+test('the light theme fits too: the Overview at its widest', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('finalysis.theme', 'light'))
+  await mockApi(page, { '/api/status': CLOUD })
+  await page.goto(`/overview?month=2026-09&detail=cat:${GROCERIES}`)
+  await expect(page.getByText('6-month trend').first()).toBeVisible()
+  await noHorizontalScroll(page)
+  if (info.project.name === 'phone') {
+    expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+  }
 })
 
 test('the transaction sheet is a bottom sheet on a phone, a side panel on desktop', async ({ page }, info) => {

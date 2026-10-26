@@ -26,7 +26,7 @@ function tiles(): Record<string, string[]> {
 test('without a month in the URL, the Overview asks for the latest complete month', async () => {
   const { requests } = renderApp('/overview', SEPTEMBER)
 
-  expect(await screen.findByRole('heading', { name: 'Where the money went · September 2026' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'September 2026' })).toBeInTheDocument()
   expect(requests).toContain('/api/dashboard?month=2026-09')
   expect(requests.filter((r) => r.startsWith('/api/dashboard?month=2026-10'))).toEqual([])
 })
@@ -34,7 +34,7 @@ test('without a month in the URL, the Overview asks for the latest complete mont
 test('one call for the month shown, with every KPI and its change as the API returns them', async () => {
   const { requests } = renderApp('/overview?month=2026-09', SEPTEMBER)
 
-  expect(await screen.findByRole('heading', { name: 'Where the money went · September 2026' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'September 2026' })).toBeInTheDocument()
   expect(requests.filter((r) => r.startsWith('/api/dashboard'))).toEqual(['/api/dashboard?month=2026-09'])
   expect(tiles()).toEqual({
     Spending: ['$3,549.07', `${MINUS}$924.03 (${MINUS}20.7%) vs Aug`],
@@ -119,7 +119,7 @@ test('choosing a month in the chart shows that month', async () => {
   await user.click(within(months).getByRole('button', { name: /^August 2026/ }))
 
   expect(location()).toBe('/overview?month=2026-08')
-  expect(await screen.findByRole('heading', { name: 'Where the money went · August 2026' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1, name: 'August 2026' })).toBeInTheDocument()
   expect(requests).toContain('/api/dashboard?month=2026-08')
 })
 
@@ -145,24 +145,39 @@ test('alerts: counts per type and the newest three with their basis, linked to t
   const first = within(alerts).getByRole('link', { name: 'Spending spike: Dining' })
   expect(first.getAttribute('href')).toMatch(/^\/alerts\?month=2026-09&key=category-spike\.2026-08\./)
   expect(first.parentElement).toHaveTextContent('Aug · $340.63 against $311.68')
-  expect(within(alerts).getByRole('link', { name: 'All alerts' })).toHaveAttribute('href', '/alerts?month=2026-09')
+  expect(within(alerts).getByRole('link', { name: 'All alerts →' })).toHaveAttribute('href', '/alerts?month=2026-09')
 })
 
-test('recurring: how many are active and the first six', async () => {
+test('each newest alert is a card whose top edge is coloured by its type', async () => {
+  renderApp('/overview?month=2026-09', SEPTEMBER)
+
+  const cards = within(await screen.findByRole('list', { name: 'Newest alerts' })).getAllByRole('listitem')
+  const types = fixtures.dashboardCompleteMonth.alerts.newest.map((a) => a.type)
+  const tone: Record<string, string> = {
+    CATEGORY_SPIKE: 'alert-tone-s5',
+    LARGE_TRANSACTION: 'alert-tone-s3',
+    POSSIBLE_DUPLICATE: 'alert-tone-spend',
+    RECURRING_PRICE_INCREASE: 'alert-tone-s5',
+    NEW_RECURRING: 'alert-tone-s6',
+  }
+  expect(cards.map((card) => [...card.classList].find((c) => c.startsWith('alert-tone-')))).toEqual(
+    types.map((t) => tone[t]),
+  )
+  // The card's title is the subject; its link still names the type for a screen reader.
+  expect(within(cards[0]).getByRole('link', { name: 'Spending spike: Dining' })).toHaveTextContent(/^Dining$/)
+})
+
+test('recurring: how many are active and the first six, as a simple list', async () => {
   renderApp('/overview?month=2026-09', SEPTEMBER)
 
   const recurring = await screen.findByRole('region', { name: 'Recurring charges' })
-  expect(recurring).toHaveTextContent('7 active series')
-  const rows = within(recurring).getAllByRole('row').slice(1)
+  expect(within(recurring).getByRole('link', { name: '7 active →' })).toHaveAttribute('href', '/recurring?month=2026-09')
+  const rows = within(within(recurring).getByRole('list', { name: 'Active recurring charges' })).getAllByRole('listitem')
   expect(rows).toHaveLength(6)
-  expect(rows[0]).toHaveTextContent('CITY OF ARLINGTON WATER UTIL PMT · Utilities$46.81Oct 22')
+  expect(rows[0]).toHaveTextContent('CITY OF ARLINGTON WATER UTIL PMTUtilities · next Oct 22$46.81')
   expect(within(rows[0]).getByRole('link', { name: 'CITY OF ARLINGTON WATER UTIL PMT' })).toHaveAttribute(
     'href',
     '/recurring?month=2026-09&series=1%3ACITY%20OF%20ARLINGTON%20WATER%20UTIL%20PMT',
-  )
-  expect(within(recurring).getByRole('link', { name: 'All recurring charges' })).toHaveAttribute(
-    'href',
-    '/recurring?month=2026-09',
   )
 })
 
@@ -206,4 +221,48 @@ test('a failed read is said plainly', async () => {
   renderApp('/overview?month=2026-09', { '/api/dashboard': undefined })
 
   expect(await screen.findByText(/Couldn’t load the overview/)).toBeInTheDocument()
+})
+
+test('the hero: complete-month badge with the account count, the month, and the lead sentence', async () => {
+  renderApp('/overview?month=2026-09', SEPTEMBER)
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'September 2026' })).toBeInTheDocument()
+  expect(screen.getByText(`Complete month · ${fixtures.accounts.length} accounts`)).toHaveClass('hero-badge-complete')
+  const lead = document.querySelector('.hero-lead')
+  expect(lead).toHaveTextContent(
+    'You kept $1,351.17 of what came in. That’s a 27.6% savings rate, up 18.9 points from August.',
+  )
+  expect([...lead!.querySelectorAll('strong')].map((s) => s.textContent)).toEqual(['$1,351.17', '27.6%', '18.9 points'])
+})
+
+test('the hero on a partial month: the partial badge, and the partial-month note in place of the sentence', async () => {
+  renderApp('/overview?month=2026-10', { '/api/dashboard': fixtures.dashboardLatest })
+
+  expect(await screen.findByText(`Partial month · ${fixtures.accounts.length} accounts`)).toHaveClass(
+    'hero-badge-partial',
+  )
+  expect(document.querySelector('.hero-note')).toHaveTextContent(/^October 2026 is partial: its figures can still grow/)
+  expect(document.querySelector('.hero-lead')).toBeNull()
+  expect(screen.queryByText(/You kept|You spent/)).not.toBeInTheDocument()
+})
+
+test('the hero without income: no lead sentence, the savings-rate card says why', async () => {
+  const noIncome = {
+    ...fixtures.dashboardCompleteMonth,
+    totals: { ...fixtures.dashboardCompleteMonth.totals, savingsRatePercent: null },
+  }
+  renderApp('/overview?month=2026-09', { '/api/dashboard': noIncome })
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'September 2026' })).toBeInTheDocument()
+  expect(document.querySelector('.hero-lead')).toBeNull()
+  expect(screen.getByText('No income this month')).toBeInTheDocument()
+})
+
+test('the KPI cards carry their coloured edge: spending, income, net, savings rate', async () => {
+  renderApp('/overview?month=2026-09', SEPTEMBER)
+
+  await screen.findByRole('heading', { level: 1, name: 'September 2026' })
+  expect(
+    [...document.querySelectorAll('.kpi-tile')].map((t) => [...t.classList].find((c) => c.startsWith('kpi-edge-'))),
+  ).toEqual(['kpi-edge-spend', 'kpi-edge-income', 'kpi-edge-accent', 'kpi-edge-rate'])
 })

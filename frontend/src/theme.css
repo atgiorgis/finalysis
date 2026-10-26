@@ -1,50 +1,103 @@
 /*
- * Theme tokens from the approved mockup (docs/plans/phase-7.md §4.2), named by role.
- * Light only for now: the mockup has no dark variant.
+ * Theme tokens from the approved mockup v2, "Midnight" (docs/plans/phase-7.md §4.2): dark by default, light on
+ * request (theme.ts sets data-theme on <html>). The two sets are the mockup's; where a light colour failed 4.5:1 as
+ * text it was darkened (income, spend) or given a darker text shade (the -ink tokens), and the fills kept.
+ * theme.test.ts checks every text/background pair below.
  */
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/manrope/800.css';
 
-:root {
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0a0b10;
+  --surface: #13151d;
+  --surface2: #1b1e2a;
+  --text: #f3f4f8;
+  --muted: #9ca2b8;
+  --border: #262a3b;
+  --accent: #8b7cff;
+  --on-accent: #0a0b10;
+  --income: #2dd4bf;
+  --spend: #fb7185;
+  --s1: #8b7cff;
+  --s2: #2dd4bf;
+  --s3: #fbbf24;
+  --s4: #f472b6;
+  --s5: #fb923c;
+  --s6: #38bdf8;
+  --s-other: #5b6075;
+  --s-uncat: #9aa0b4;
+  --s3-ink: #fbbf24;
+  --s5-ink: #fb923c;
+  --s6-ink: #38bdf8;
+  --switch-track: #8b7cff;
+  --backdrop: rgb(5 6 10 / 55%);
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
 
-  --bg: #f3f5f8;
+  --bg: #f6f6fa;
   --surface: #ffffff;
-  --surface-muted: #eef1f5;
-  --border: #e2e7ee;
-  --text: #17202b;
-  --text-muted: #5b6573;
-  --nav: #1b2b44;
-  --accent: #1d4ed8;
-  --accent-strong: #1e3a8a;
+  --surface2: #f0f0f7;
+  --text: #15171f;
+  --muted: #636a80;
+  --border: #e5e6ee;
+  --accent: #5b47e0;
+  --on-accent: #ffffff;
+  /* The mockup's #0D9488 and #E11D48 fail 4.5:1 as text on surface2 (3.30, 4.14). */
   --income: #0f766e;
-  --spending: #3b5bdb;
-  --warning: #b45309;
-  --warning-bg: #fdf0dc;
-  --danger: #b91c1c;
-  --danger-bg: #fdecec;
+  --spend: #be123c;
+  --s1: #5b47e0;
+  --s2: #0d9488;
+  --s3: #d97706;
+  --s4: #db2777;
+  --s5: #ea580c;
+  --s6: #0284c7;
+  --s-other: #9aa0b4;
+  --s-uncat: #cbd5e1;
+  /* The fills s3, s5 and s6 fail as text (2.81, 3.14, 3.61 on surface2); labels use these. */
+  --s3-ink: #92400e;
+  --s5-ink: #c2410c;
+  --s6-ink: #0369a1;
+  --switch-track: #c7c9d6;
+  --backdrop: rgb(21 23 31 / 40%);
+}
+
+:root {
+  /* Roles the pages use, mapped onto the set above. */
+  --surface-muted: var(--surface2);
+  --text-muted: var(--muted);
+  --accent-strong: var(--accent);
+  --spending: var(--spend);
+  --warning: var(--s3-ink);
+  --warning-bg: color-mix(in srgb, var(--s3) 14%, var(--surface));
+  --danger: var(--spend);
+  --danger-bg: color-mix(in srgb, var(--spend) 14%, var(--surface));
+  --positive-bg: color-mix(in srgb, var(--income) 14%, var(--surface));
+  --selected-bg: color-mix(in srgb, var(--accent) 16%, var(--surface));
 
   /*
-   * Chart series, checked with the data-viz palette validator (light surface): the mockup's slice colors failed the
-   * lightness band (#1e3a8a) and the chroma floor (#0f766e), so two were replaced and the order searched. Slices go by
-   * rank in the month (the plan's §4.2), so a slot meets its neighbours and, around the ring, slot 1 and the grays:
-   * every such pair passes the colorblind and normal-vision floors. The grays are below 3:1 against the surface, so
-   * every slice is also named in its legend row.
+   * Chart series. Slices go by rank in the month; Other and Uncategorized are the two greys, which differ in lightness
+   * from each other. Every slice is also named in its legend row, so no meaning rests on colour alone.
    */
-  --slice-1: #2f55c5;
-  --slice-2: #db2777;
-  --slice-3: #d97706;
-  --slice-4: #16a34a;
-  --slice-5: #ea580c;
-  --slice-6: #be185d;
-  --slice-other: #94a3b8;
-  --slice-uncat: #cbd5e1;
-  --series-income: #0d9488;
-  --series-spending: #3b5bdb;
+  --slice-1: var(--s1);
+  --slice-2: var(--s2);
+  --slice-3: var(--s3);
+  --slice-4: var(--s4);
+  --slice-5: var(--s5);
+  --slice-6: var(--s6);
+  --slice-other: var(--s-other);
+  --slice-uncat: var(--s-uncat);
+  --series-income: var(--income);
+  --series-spending: var(--spend);
+  --series-net: var(--s3);
 
-  --radius-card: 14px;
+  --radius-card: 16px;
   --radius-control: 10px;
   --radius-pill: 999px;
   --space-1: 4px;
@@ -52,11 +105,14 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
+  --space-6: 24px;
   --touch-target: 44px;
 
-  --font: Inter, system-ui, -apple-system, sans-serif;
+  --font: Manrope, system-ui, -apple-system, sans-serif;
 
   font-family: var(--font);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
@@ -73,9 +129,19 @@ a:hover {
   color: var(--accent-strong);
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
+}
+
+input,
+select,
+textarea {
+  background-color: var(--surface2);
+  border-color: var(--border);
 }
 
 :focus-visible {

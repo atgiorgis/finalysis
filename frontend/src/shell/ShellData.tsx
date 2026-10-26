@@ -144,3 +144,8 @@ export function useMonth(): { month: YearMonth | null; setMonth: (month: YearMon
   )
   return { month, setMonth }
 }
+
+/** "1 account", "4 accounts". */
+export function accountsLine(count: number): string {
+  return count === 1 ? '1 account' : `${count} accounts`
+}

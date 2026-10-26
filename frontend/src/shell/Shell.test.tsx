@@ -22,59 +22,123 @@ const cloud = (provider: string) => ({
 test('the root opens the Overview inside the shell', async () => {
   const { location } = renderApp('/')
 
-  expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
+  expect(await screen.findByText('/ Overview')).toBeInTheDocument()
   expect(location()).toBe('/overview')
   expect(screen.getByText('Finalysis')).toBeInTheDocument()
 })
 
-test('the header tabs are the seven tabs in order, and the current one is marked', async () => {
+const TAB_NAMES = ['Overview', 'Transactions', 'Alerts', 'Recurring', 'Chat', 'Goals', 'Settings']
+
+/** Opens the menu from the top bar and returns it. */
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Open menu' }))
+  return screen.getByRole('dialog', { name: 'Menu' })
+}
+
+test('one top bar at every width: the menu button, the logo, the tab shown, the picker and the theme switch', async () => {
   renderApp('/alerts')
 
-  const nav = await screen.findByRole('navigation', { name: 'Main' })
-  const links = within(nav).getAllByRole('link')
-  expect(links.map((link) => link.textContent)).toEqual([
-    'Overview',
-    'Transactions',
-    'Alerts',
-    'Recurring',
-    'Chat',
-    'Goals',
-    'Settings',
-  ])
-  expect(within(nav).getByRole('link', { name: 'Alerts' })).toHaveAttribute('aria-current', 'page')
+  const bar = await screen.findByRole('banner')
+  expect(within(bar).getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+  expect(within(bar).getByText('Finalysis')).toBeInTheDocument()
+  expect(within(bar).getByText('/ Alerts')).toBeInTheDocument()
+  expect(within(bar).getByRole('combobox', { name: 'Month' })).toBeInTheDocument()
+  expect(within(bar).getByRole('switch', { name: 'Dark theme' })).toBeInTheDocument()
+  // No tab bar and no bottom bar: the tabs are in the menu only, and the menu is closed.
+  expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('navigation', { name: 'Main (phone)' })).not.toBeInTheDocument()
 })
 
-test('the phone bar has three tabs and More, which opens the rest', async () => {
+test('the menu lists the seven tabs in order, the current one marked, and focus moves into it', async () => {
+  const user = userEvent.setup()
+  renderApp('/alerts')
+
+  const menu = await openMenu(user)
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'true')
+  expect(menu).toHaveAttribute('aria-modal', 'true')
+  const nav = within(menu).getByRole('navigation', { name: 'Main' })
+  const links = within(nav).getAllByRole('link')
+  expect(links.map((link) => link.textContent)).toEqual(TAB_NAMES)
+  expect(within(nav).getByRole('link', { name: 'Alerts' })).toHaveAttribute('aria-current', 'page')
+  expect(within(nav).getByRole('link', { name: 'Alerts' })).toHaveFocus()
+})
+
+test('choosing a tab closes the menu, goes there and returns focus to the menu button', async () => {
+  const user = userEvent.setup()
+  const { location } = renderApp('/overview?month=2026-09')
+
+  const menu = await openMenu(user)
+  await user.click(within(menu).getByRole('link', { name: 'Recurring' }))
+
+  expect(location()).toBe('/recurring?month=2026-09')
+  expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
+  expect(screen.getByText('/ Recurring')).toBeInTheDocument()
+})
+
+test('✕ closes the menu and returns focus', async () => {
+  const user = userEvent.setup()
+  const { location } = renderApp('/settings')
+
+  const menu = await openMenu(user)
+  await user.click(within(menu).getByRole('button', { name: 'Close menu' }))
+
+  expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
+  expect(location()).toBe('/settings')
+})
+
+test('the backdrop closes the menu and returns focus', async () => {
+  const user = userEvent.setup()
+  renderApp('/settings')
+
+  await openMenu(user)
+  await user.click(screen.getByTestId('sidebar-backdrop'))
+
+  expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
+})
+
+test('Escape closes the menu and returns focus', async () => {
+  const user = userEvent.setup()
+  renderApp('/settings')
+
+  await openMenu(user)
+  await user.keyboard('{Escape}')
+
+  expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
+})
+
+test('Tab stays inside the open menu, both ways', async () => {
   const user = userEvent.setup()
   renderApp('/overview')
 
-  const bar = await screen.findByRole('navigation', { name: 'Main (phone)' })
-  expect(within(bar).getAllByRole('link').map((link) => link.textContent)).toEqual([
-    'Overview',
-    'Transactions',
-    'Chat',
-  ])
-  const more = within(bar).getByRole('button', { name: 'More' })
-  expect(more).toHaveAttribute('aria-expanded', 'false')
+  const menu = await openMenu(user)
+  const close = within(menu).getByRole('button', { name: 'Close menu' })
+  const settings = within(menu).getByRole('link', { name: 'Settings' })
 
-  await user.click(more)
+  settings.focus()
+  await user.tab()
+  expect(close).toHaveFocus()
+  await user.tab({ shift: true })
+  expect(settings).toHaveFocus()
+})
 
-  expect(more).toHaveAttribute('aria-expanded', 'true')
-  expect(within(bar).getAllByRole('link').map((link) => link.textContent)).toEqual([
-    'Alerts',
-    'Recurring',
-    'Goals',
-    'Settings',
-    'Overview',
-    'Transactions',
-    'Chat',
-  ])
+test('the menu names the account count and the month shown', async () => {
+  const user = userEvent.setup()
+  renderApp('/overview')
+
+  const menu = await openMenu(user)
+  expect(menu).toHaveTextContent(`${fixtures.accounts.length} accounts`)
+  expect(menu).toHaveTextContent('Showing September 2026')
 })
 
 test('no banner while AI is off', async () => {
   renderApp('/overview')
 
-  expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
+  expect(await screen.findByRole('switch', { name: 'Dark theme' })).toBeInTheDocument()
+  expect(await screen.findByText('Where it went')).toBeInTheDocument()
   expect(screen.queryByText(/Cloud AI is on/)).not.toBeInTheDocument()
 })
 
@@ -91,12 +155,6 @@ test('an unknown cloud provider is named as the backend reports it', async () =>
   renderApp('/overview', { '/api/status': cloud('othercloud') })
 
   expect(await screen.findByText(/Cloud AI is on/)).toHaveTextContent('Cloud AI is on (othercloud)')
-})
-
-test('the header names the account count and the month shown', async () => {
-  renderApp('/overview')
-
-  expect(await screen.findByText(`${fixtures.accounts.length} accounts · September 2026`)).toBeInTheDocument()
 })
 
 test('the picker opens on the latest complete month and lists every month with data, partial ones marked', async () => {
@@ -123,9 +181,31 @@ test('choosing a month puts it in the URL, and the tabs keep it', async () => {
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), '2026-08')
 
   expect(location()).toBe('/overview?month=2026-08&keep=1')
-  expect(screen.getByText(`${fixtures.accounts.length} accounts · August 2026`)).toBeInTheDocument()
-  const nav = screen.getByRole('navigation', { name: 'Main' })
-  expect(within(nav).getByRole('link', { name: 'Alerts' })).toHaveAttribute('href', '/alerts?month=2026-08')
+  const menu = await openMenu(user)
+  expect(menu).toHaveTextContent('Showing August 2026')
+  expect(within(menu).getByRole('link', { name: 'Alerts' })).toHaveAttribute('href', '/alerts?month=2026-08')
+})
+
+test('‹ and › step through the months with data, and stop at either end', async () => {
+  const user = userEvent.setup()
+  const { location } = renderApp('/overview?month=2026-09')
+
+  const picker = await screen.findByRole('combobox', { name: 'Month' })
+  const previous = screen.getByRole('button', { name: 'Previous month' })
+  const next = screen.getByRole('button', { name: 'Next month' })
+
+  await user.click(previous)
+  expect(location()).toBe('/overview?month=2026-08')
+  expect(picker).toHaveValue('2026-08')
+
+  await user.click(next)
+  await user.click(next)
+  expect(picker).toHaveValue('2026-10')
+  expect(next).toBeDisabled()
+
+  await user.selectOptions(picker, '2026-05')
+  expect(previous).toBeDisabled()
+  expect(next).toBeEnabled()
 })
 
 test('a month without data in the URL falls back to the latest complete month', async () => {
@@ -154,7 +234,10 @@ test('without statements there is no picker and the tabs still work', async () =
 
   expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
   expect(screen.queryByRole('combobox', { name: 'Month' })).not.toBeInTheDocument()
-  expect(screen.getByText('0 accounts')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Previous month' })).not.toBeInTheDocument()
+  const menu = await openMenu(userEvent.setup())
+  expect(menu).toHaveTextContent('0 accounts')
+  expect(within(menu).getAllByRole('link')).toHaveLength(7)
 })
 
 test('an unreachable backend is said plainly', async () => {

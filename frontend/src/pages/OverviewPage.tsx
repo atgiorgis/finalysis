@@ -5,11 +5,13 @@ import CategoryDetails from '../components/CategoryDetails'
 import CashFlowChart from '../components/charts/CashFlowChart'
 import SpendingDonut from '../components/charts/SpendingDonut'
 import DataQualityTile from '../components/DataQualityTile'
-import KpiTiles from '../components/KpiTiles'
+import KpiTiles, { partialNote } from '../components/KpiTiles'
+import { leadSentence } from '../components/leadSentence'
 import { AlertsSummary, AtAGlance, RecurringSummary } from '../components/OverviewSummaries'
 import { detailParam, parseDetail, type Detail } from '../detailParam'
 import { formatMonth } from '../format'
-import { useDataVersion, useMonth, useShellData } from '../shell/ShellData'
+import { CheckIcon } from '../shell/icons'
+import { accountsLine, useDataVersion, useMonth, useShellData } from '../shell/ShellData'
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'done'; dashboard: DashboardResponse }
 
@@ -49,7 +51,7 @@ export default function OverviewPage() {
 
   return (
     <section className="page overview">
-      <h1>Overview</h1>
+      {!(load.state === 'done' && load.dashboard.totals) && <h1>Overview</h1>}
       {load.state === 'loading' && <p className="muted">Loading…</p>}
       {load.state === 'error' && <p className="error">Couldn’t load the overview: {load.message}</p>}
       {load.state === 'done' && (
@@ -104,16 +106,14 @@ function OverviewBody({
   const month = dashboard.month
   return (
     <div className="overview-grid">
-      <div className="overview-kpis">
-        <KpiTiles dashboard={dashboard} />
-        <DataQualityTile dashboard={dashboard} accounts={accounts} />
-      </div>
+      <OverviewHero dashboard={dashboard} accountCount={accounts.length} />
+      <KpiTiles dashboard={dashboard} />
       <section className="card overview-cash-flow" aria-labelledby="cash-flow-title">
-        <h2 id="cash-flow-title">Cash flow by month</h2>
+        <h2 id="cash-flow-title">Cash flow · 6 months</h2>
         <CashFlowChart months={dashboard.cashFlow} selected={month} onSelect={onSelectMonth} />
       </section>
       <section className="card overview-donut" aria-labelledby="donut-title">
-        <h2 id="donut-title">Where the money went · {formatMonth(month)}</h2>
+        <h2 id="donut-title">Where it went</h2>
         {dashboard.spendingSlices.rows.length === 0 ? (
           <p>No spending this month.</p>
         ) : (
@@ -131,9 +131,48 @@ function OverviewBody({
           <CategoryDetails dashboard={dashboard} detail={detail} onOpen={onDetail} onClose={() => onDetail(null)} />
         </div>
       )}
-      <AtAGlance dashboard={dashboard} onOpenIncome={() => onDetail({ kind: 'income' })} />
       <AlertsSummary dashboard={dashboard} />
       <RecurringSummary dashboard={dashboard} />
+      <DataQualityTile dashboard={dashboard} accounts={accounts} />
+      <AtAGlance dashboard={dashboard} onOpenIncome={() => onDetail({ kind: 'income' })} />
     </div>
+  )
+}
+
+const COVERAGE_BADGE = { COMPLETE: 'Complete month', PARTIAL: 'Partial month', NONE: 'No statements' } as const
+
+/**
+ * The top of the Overview (mockup v2): the coverage badge with the account count, the month, and the lead sentence
+ * from the API's figures, or on a partial month the partial-month note in its place.
+ */
+function OverviewHero({ dashboard, accountCount }: { dashboard: DashboardResponse; accountCount: number }) {
+  const totals = dashboard.totals
+  if (!totals) {
+    return null
+  }
+  const note = partialNote(dashboard)
+  const lead = note ? null : leadSentence(dashboard)
+  return (
+    <header className="overview-hero">
+      <p className={`hero-badge hero-badge-${totals.coverage.toLowerCase()}`}>
+        {totals.coverage === 'COMPLETE' && <CheckIcon />}
+        {COVERAGE_BADGE[totals.coverage]} · {accountsLine(accountCount)}
+      </p>
+      <h1>{formatMonth(dashboard.month)}</h1>
+      {note && <p className="hero-note">{note}</p>}
+      {lead && (
+        <p className="hero-lead">
+          {lead.map((part, i) =>
+            part.figure ? (
+              <strong key={i} className={`lead-figure lead-figure-${part.figure}`}>
+                {part.text}
+              </strong>
+            ) : (
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </p>
+      )}
+    </header>
   )
 }

@@ -1,8 +1,9 @@
 # Phase 7 plan: dashboard and chat UI
 
 Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 7b done (step notes); next: step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
-Requirements as of `docs/requirements.md` v1.72.
+in this file. Steps 0 to 7c done (step notes); next: the owner's smoke test (sample data, then real statements),
+then step 7d (UI fixes only, if the smoke test finds any) and step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
+Requirements as of `docs/requirements.md` v1.73.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
 line), UI-05 (the cloud-AI banner, in full), UI-07 (phone layout), UI-08 (the mobile-access decision, §9), and the
@@ -40,6 +41,10 @@ screen that uses them comes after, rendered in tests from fixed fixtures.
 - **The approved mockup**: the "Finalysis Dashboard" design canvas (approved at requirements v1.49, kept outside the
   repo), three artboards: **Main** (desktop page, 1440 wide), **Mobile** (390 × 844) and **Goals** (desktop page).
   Read for layout, copy, colors and spacing only; its numbers are synthetic and come from its own script.
+- **The approved mockup v2** (step 7c, 2026-10-26): the "Finalysis UI Directions" design canvas (kept outside the
+  repo), artboard **B · Midnight**: dark by default with a light switch, a top bar with a slide-in menu, colourful
+  charts. It replaces v1 for look, layout of the shell and the Overview; read for layout, spacing, colours and copy,
+  and overridden by the step 7c brief where they differ (§1.2). Artboards A and C were the directions not chosen.
 - **The brief** for this plan (the owner's, 2026-10-23), which overrides the mockup where they differ (§1.1).
 - **The API as built** (controllers and response records on `v1` at `ab9d5db`).
 - `docs/requirements.md` v1.71, `docs/plans/roadmap.md` and the Phase 7 backlog in `docs/plans/phase-6.md`.
@@ -54,6 +59,24 @@ screen that uses them comes after, rendered in tests from fixed fixtures.
 | "Sample data · 3 accounts" | The account count from `GET /api/accounts` | The sample data has four accounts; the line comes from the API. |
 | Inter from Google Fonts | Inter bundled with the app (`@fontsource/inter`) | Local-first: the app makes no request to a third party (§4.2). |
 | Details panel for "Other" with one transaction list | Its member categories, each with its total and its own drill-down | The drill-down takes one category; a multi-category drill-down would change Phase 5 code (§3.2). |
+
+### 1.2 Where the step 7c brief and mockup v2 differ
+
+| Mockup v2 (Midnight) | Built | Why |
+|---|---|---|
+| Light shades income `#0D9488`, spend `#E11D48`, s3/s5/s6 as label text | Light income `#0F766E` and spend `#BE123C`; s3/s5/s6 keep their fills, with text shades `#92400E`, `#C2410C`, `#0369A1` (`--s3-ink`, `--s5-ink`, `--s6-ink`) | Below 4.5:1 as text on the light surfaces (3.30, 4.14, 2.81, 3.14, 3.61 on surface2); `theme.test.ts` checks every pair |
+| White text on the accent | The page background colour on the accent in dark (`--on-accent`) | White on `#8B7CFF` is 3.27:1 |
+| No Uncategorized colour | `#9AA0B4` dark, `#CBD5E1` light, apart from Other in lightness | The donut has an Uncategorized slice |
+| Month picker: ‹ "Sep 2026 · complete" › | ‹ a list of the months with data › | The list picks any month directly and marks partial ones; the arrows step |
+| Picker and switch 40 px tall | 44 px | UI-07's touch targets |
+| An alert count badge on the menu's Alerts | None | It would be a sum of the per-type counts; the API returns no total |
+| "All 5 →" over the alerts | "All alerts →" | Same reason |
+| "Sample data · 4 accounts / Latest complete month" in the menu | "N accounts / Showing {month}" | The count from `GET /api/accounts`; the month shown, which is what the menu's links keep |
+| Lead sentence "You kept {net}…" for every month | "You spent {net without its minus} more than came in." when net is negative; no sentence without income; the partial-month note on a partial month | The owner's answers at the 7c plan |
+| No data-quality tile, no "at a glance" | Both kept, below alerts and recurring | ANA-08 and the transfers-excluded line are requirements; the mockup was drawn without them |
+| Recurring shows name and amount only | Name, amount, and a muted "category · next date" line | The list already returned them; the line keeps the old table's facts |
+| Cash flow with no month buttons | The six month buttons with their net stay under the chart | They select a month by tapping (UI-07) and give each net as text |
+| Google Fonts link for Manrope | Manrope bundled (`@fontsource/manrope` 5.3.0) | Local-first: no third-party request |
 
 ---
 
@@ -255,35 +278,33 @@ review queue, alerts and dismissal, recurring, coverage, conversations. No migra
 - `react-router-dom` (routes and URL state: the month and filters live in the URL, so a citation link or a reload
   lands on the same view);
 - `recharts` (the stack's chart library) for the cash-flow bars, the donut and the 6-month trend;
-- `@fontsource/inter` (400, 500, 600, 700);
+- `@fontsource/inter` (400, 500, 600, 700); replaced in step 7c by `@fontsource/manrope` 5.3.0 (500, 600, 700, 800);
 - dev: `@testing-library/user-event`. Step 7 adds Playwright for the layout check (§7.2, question 5).
 
 Exact versions, pinned in `package.json`; nothing loaded from a CDN at runtime.
 
-### 4.2 Theme tokens from the mockup
+### 4.2 Theme tokens (mockup v2, step 7c)
 
-CSS custom properties in `src/theme.css`, named by role, values from the mockup:
+CSS custom properties in `src/theme.css`, one set per theme on `:root[data-theme]`; `theme.ts` sets the attribute
+before the first render from `localStorage['finalysis.theme']` (read and written in try/catch; dark when unreadable or
+unset). The step 1–7 role names (`--text-muted`, `--warning`, `--danger`, `--slice-*`, `--series-*`, …) map onto the
+sets, so every page took the theme without markup changes.
 
-| Token | Value | Use |
-|---|---|---|
-| `--bg` | `#F3F5F8` | page |
-| `--surface` | `#FFFFFF` | cards |
-| `--surface-muted` | `#EEF1F5` | table heads, chips |
-| `--border` | `#E2E7EE` | card and row borders |
-| `--text` | `#17202B` | body |
-| `--text-muted` | `#5B6573` | labels, captions |
-| `--nav` | `#1B2B44` | header |
-| `--accent` / `--accent-strong` | `#1D4ED8` / `#1E3A8A` | links, focus ring, selection |
-| `--income` | `#0F766E` | income bars, positive change |
-| `--spending` | `#3B5BDB` | spending bars |
-| `--warning` / `--warning-bg` | `#B45309` / `#FDF0DC` | partial months, spikes, the banner |
-| `--danger` / `--danger-bg` | `#B91C1C` / `#FDECEC` | duplicates, failed reconciliation |
-| `--slice-1` … `--slice-6` | `#2F55C5`, `#DB2777`, `#D97706`, `#16A34A`, `#EA580C`, `#BE185D` (step 2: validated; the mockup's set failed) | donut, by rank |
-| `--slice-other` / `--slice-uncat` | `#94A3B8` / `#CBD5E1` | Other, Uncategorized |
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--bg` / `--surface` / `--surface2` | `#0A0B10` / `#13151D` / `#1B1E2A` | `#F6F6FA` / `#FFFFFF` / `#F0F0F7` | page, cards, controls and chips |
+| `--text` / `--muted` / `--border` | `#F3F4F8` / `#9CA2B8` / `#262A3B` | `#15171F` / `#636A80` / `#E5E6EE` | |
+| `--accent` / `--on-accent` | `#8B7CFF` / `#0A0B10` | `#5B47E0` / `#FFFFFF` | links, focus, selection; text on the accent |
+| `--income` / `--spend` | `#2DD4BF` / `#FB7185` | `#0F766E` / `#BE123C` (adjusted) | bars, edges, good and bad changes |
+| `--s1` … `--s6` | `#8B7CFF`, `#2DD4BF`, `#FBBF24`, `#F472B6`, `#FB923C`, `#38BDF8` | `#5B47E0`, `#0D9488`, `#D97706`, `#DB2777`, `#EA580C`, `#0284C7` | slices by rank; s3 the net line and savings edge |
+| `--s-other` / `--s-uncat` | `#5B6075` / `#9AA0B4` | `#9AA0B4` / `#CBD5E1` | Other, Uncategorized |
+| `--s3-ink` / `--s5-ink` / `--s6-ink` | as the fills | `#92400E` / `#C2410C` / `#0369A1` (added) | alert-type labels, warnings |
 
-Radii 12–14 px on cards, 999 px on pills; spacing on a 4 px scale (4, 8, 12, 16, 20). Contrast checked at 4.5:1 for
-text (the muted grey on white passes). A slice's color follows its rank in the month, so the same category can change
-color between months; the legend always names it (no meaning carried by color alone).
+Tinted backgrounds (`--warning-bg`, `--danger-bg`, `--positive-bg`, `--selected-bg`) are `color-mix` of a colour into
+the surface. `theme.test.ts` checks every text colour on every background it is used on at 4.5:1, in both themes.
+Radii 16 px on cards, 10 px on controls, 999 px on pills; Manrope with tabular figures. A slice's colour follows its
+rank in the month and the legend always names it; `--s-other` is 2.9:1 against the dark surface, a shape rather than
+text, named in its legend row.
 
 ### 4.3 Layout of the code
 
@@ -413,8 +434,9 @@ become 7x steps; chat findings go to the Phase 8 backlog.
 
 Mobile first: every screen is built for 375 px and widens at 768 px and 1200 px. On a phone:
 
-- navigation is a bottom bar with Overview, Transactions, Chat and More (Alerts, Recurring, Goals, Settings), each
-  target at least 44 px;
+- navigation (since step 7c, at every width) is the top bar's menu button opening a slide-in menu with the seven tabs;
+  it closes on a tab, ✕, the backdrop or Escape, keeps Tab inside while open and returns focus to the menu button; the
+  month picker takes the top bar's second row; every target at least 44 px (steps 1–7 had a bottom bar with More);
 - details (category details, a transaction, an alert's basis) open as a bottom sheet, as in the mockup;
 - charts tap instead of hover (a tapped bar or slice selects, the value shows below the chart, not in a tooltip);
 - tables become stacked rows; wide content scrolls inside its card, never the page;
@@ -474,6 +496,7 @@ would reach is protected on disk as well. UI-08 stays Planned with that note.
 | 6 | Chat UI: list, conversation, citations as links, emphasis markers stripped, cost, limits, AI off. `ChatPage.tsx` and its test deleted. | none | Chat tests, `chatText.test.ts` |
 | 7 | Mobile pass at 375 px for every screen: bottom bar, bottom sheets, tap, 44 px targets. Playwright layout check. | none | `test:layout` on every route |
 | 7b | Goals tab shell. | none | Goals test |
+| 7c | Restyle to mockup v2 (Midnight): dark default and light theme with a switch, top bar and slide-in menu at every width, the banner as a strip, the Overview's hero, lead sentence, KPI edges, net line, donut legend, alert cards and recurring list; Manrope. | none | theme, menu, lead-sentence and hero tests; `test:layout` with the menu open in both themes |
 | 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-03, UI-04, UI-05, UI-07, GOAL-06 tab; UI-08 stays Planned), CLAUDE.md current phase, tag `phase-7-done`. | none | full runs |
 
 ### Step 0 notes: scaffolding
@@ -779,15 +802,50 @@ Done: "Phase 7b: Goals tab shell (GOAL-06, tab only)". Backend 3,277 tests (Mave
 - Every tab is built, so step 0's placeholder page and the tabs' step numbers are removed; the routes follow the tab
   order. The layout check now waits for "No goals yet".
 
+### Step 7c notes: the Midnight restyle (mockup v2)
+
+Done: "Phase 7 step 7c: Midnight restyle, dark theme, menu shell (UI-01, UI-05, UI-07)". Backend 3,277 tests, 0 failures, 0 skipped (Maven
+summary, no backend change); frontend 196 tests (20 files); layout check 43 passed, 1 skipped (a phone-only check in
+the desktop run).
+
+- **Mockup v2** is the "Finalysis UI Directions" canvas, artboard B · Midnight (§1); the brief's differences are in
+  §1.2. No data-layer, API, chat or eval change.
+- **Theme** (`theme.css`, `theme.ts`): the two sets of §4.2 on `:root[data-theme]`, dark by default; `main.tsx`
+  applies the stored choice before the first render. Storage that throws gives dark and a switch that still works for
+  the visit. **Contrast:** every dark pair passes; in light, income, spend and the s3/s5/s6 labels failed and were
+  darkened (§1.2); white on the dark accent (3.27) became the page colour. `theme.test.ts` applies both sets, checks
+  each token, the switch, persistence, unreadable storage, and every text/background pair at 4.5:1 with `color-mix`
+  resolved.
+- **Shell:** `Navigation.tsx` (header tabs, bottom bar, More) is replaced by `TopBar.tsx` and `Sidebar.tsx`. The menu
+  is a modal dialog rendered only while open (fixed, inside a clipped layer, so it can't widen the page). Focus goes to
+  the current tab's link, Tab cycles inside, and the Layout returns focus to the menu button whenever it closes. The
+  backdrop is a pointer convenience, not a second "Close menu" button. The month picker gained ‹ › (stepping through
+  the months the picker lists, disabled at the ends); on a phone it takes the top bar's second row, and below 420 px
+  the brand name is hidden visually so the tab name fits.
+- **Banner:** the same component and SEC-01 wording, as a strip under the top bar; the tests still check the wording.
+- **Overview:** the hero (`Complete month · N accounts` or `Partial month · …`, the month as the page's `h1`, and the
+  lead sentence or the partial-month note), KPI cards with coloured edges, the cash flow as a `ComposedChart` with the
+  net line in s3 (net drawn with its sign, for drawing only, in `components/charts/`), the donut legend in two
+  columns, the newest alerts as cards with a top edge by type, recurring as a list. `leadSentence.ts` joins only
+  formatted API strings; a test holds every figure in it to one the API returned, across the full, no-last-month,
+  down, negative-net and large cases. The page's `h1` is "Overview" until the month loads.
+- **Other tabs:** no markup change; the shared CSS changed (surfaces, borders, 16/10 px radii, Manrope, tabular
+  figures) and the remaining hard-coded colours became tokens.
+- **Layout check:** the "bottom bar vs header tabs" assertion became "menu button shown, no tabs until opened"; the
+  More test became a menu test in both themes (fits inside 375 px, 44 px targets with it open, a tab reached, focus
+  back on the menu button), plus Escape, and the Overview with the details panel and the banner in the light theme.
+- **Found by looking at screenshots:** on desktop the cash-flow card stretched to the donut card's height, leaving an
+  empty block; the grid now aligns cards to the top.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Evidence |
 |---|---|---|
-| UI-01 | 2, 3 | dashboard tests, `DashboardMatchesEndpointsTest`, Overview and details tests |
+| UI-01 | 2, 3, 7c | dashboard tests, `DashboardMatchesEndpointsTest`, Overview and details tests, hero and lead-sentence tests |
 | UI-03 | 6 | Chat tests |
 | UI-04 | 3, 3b, 6 | `DashboardInvariantTest`, `TransactionSourceLineTest`, invariant UI test, citation link tests, newman 13 |
-| UI-05 | 1 | banner tests (wording, `CLOUD` and `OFF`) |
-| UI-07 | 7 | `test:layout`, phone-structure tests |
+| UI-05 | 1, 7c | banner tests (wording, `CLOUD` and `OFF`), unchanged under the 7c strip |
+| UI-07 | 7, 7c | `test:layout` (the menu open at 375 px in both themes), menu tests |
 | UI-08 | 1 (decision and binding) | `ServerAddressTest`; stays Planned (§9) |
 | GOAL-06 (tab shell) | 7b | Goals test |
 | ANA-02, UI-02 | none | notes only (§13): UI-02 is the first Phase 8 item; ANA-02 waits |

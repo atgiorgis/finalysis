@@ -1,15 +1,20 @@
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { DashboardResponse, YearMonth } from '../../api'
 import { formatMoney, formatMonth } from '../../format'
 
 type CashFlowMonth = DashboardResponse['cashFlow'][number]
 
 /**
- * Bar heights for drawing only: the API's strings are turned into numbers here and nowhere else, never shown or summed
- * (docs/plans/phase-7.md §6.2). Spending is drawn by its size, upwards, beside income.
+ * Bar heights and line points for drawing only: the API's strings are turned into numbers here and nowhere else,
+ * never shown or summed (docs/plans/phase-7.md §6.2). Spending is drawn by its size, upwards, beside income; the net
+ * line keeps its sign, so a month that spent more than came in dips below zero.
  */
 function height(value: string): number {
   return Math.abs(Number(value))
+}
+
+function point(value: string): number {
+  return Number(value)
 }
 
 interface Point {
@@ -17,6 +22,7 @@ interface Point {
   label: string
   income: number
   spending: number
+  net: number | null
   source: CashFlowMonth
 }
 
@@ -39,8 +45,8 @@ function TooltipBody({ active, payload }: { active?: boolean; payload?: { payloa
 }
 
 /**
- * "Cash flow by month" (UI-01): income against spending for six months, partial months striped, the month shown
- * marked. A bar or a month's button selects that month. Each month's net sits under the chart as text, so the chart
+ * "Cash flow · 6 months" (UI-01): income against spending for six months with the net as a line over them, partial
+ * months striped, the month shown marked. A bar or a month's button selects that month. Each month's net sits under the chart as text, so the chart
  * reads without hover.
  */
 export default function CashFlowChart({
@@ -57,6 +63,7 @@ export default function CashFlowChart({
     label: formatMonth(m.month, 'short'),
     income: height(m.income),
     spending: height(m.spending),
+    net: m.coverage === 'NONE' ? null : point(m.net),
     source: m,
   }))
   const pick = (point: { payload?: Point }) => {
@@ -71,7 +78,7 @@ export default function CashFlowChart({
     <figure className="cash-flow">
       <div className="cash-flow-plot" aria-hidden="true">
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={points} barGap={2} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
+          <ComposedChart data={points} barGap={3} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
             <defs>
               {(['income', 'spending'] as const).map((series) => (
                 <pattern
@@ -87,7 +94,7 @@ export default function CashFlowChart({
                 </pattern>
               ))}
             </defs>
-            <CartesianGrid vertical={false} stroke="var(--border)" />
+            <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
             <XAxis
               dataKey="label"
               interval={0}
@@ -97,17 +104,27 @@ export default function CashFlowChart({
             />
             <YAxis hide />
             <Tooltip content={<TooltipBody />} cursor={{ fill: 'var(--surface-muted)' }} />
-            <Bar dataKey="income" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
+            <Bar dataKey="income" radius={[6, 6, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
               {points.map((p) => (
                 <Cell key={p.month} fill={fill('income', p.source)} />
               ))}
             </Bar>
-            <Bar dataKey="spending" radius={[4, 4, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
+            <Bar dataKey="spending" radius={[6, 6, 0, 0]} onClick={pick} cursor="pointer" isAnimationActive={false}>
               {points.map((p) => (
                 <Cell key={p.month} fill={fill('spending', p.source)} />
               ))}
             </Bar>
-          </BarChart>
+            <Line
+              dataKey="net"
+              type="linear"
+              stroke="var(--series-net)"
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: 'var(--series-net)', stroke: 'var(--surface)', strokeWidth: 2 }}
+              activeDot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
       <ol className="cash-flow-months" aria-label="Months">
@@ -135,7 +152,8 @@ export default function CashFlowChart({
       <figcaption className="muted">
         <span className="legend-swatch legend-income" aria-hidden="true" /> Income{' '}
         <span className="legend-swatch legend-spending" aria-hidden="true" /> Spending{' '}
-        <span className="legend-swatch legend-partial" aria-hidden="true" /> Partial month (*). Net under each month.
+        <span className="legend-line legend-net" aria-hidden="true" /> Net each month{' '}
+        <span className="legend-swatch legend-partial" aria-hidden="true" /> Partial month (*). Net also under each month.
         Transfers between your accounts are excluded.
       </figcaption>
     </figure>

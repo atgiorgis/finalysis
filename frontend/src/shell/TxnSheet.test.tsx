@@ -109,7 +109,7 @@ test('an unknown transaction is said plainly', async () => {
 test('a malformed ?txn opens nothing and reads nothing', async () => {
   const { requests } = renderApp('/overview?month=2026-09&txn=1;DROP', ROUTES)
 
-  expect(await screen.findByRole('heading', { name: 'Where the money went · September 2026' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Where it went' })).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(requests.filter((r) => r.startsWith('/api/transactions/'))).toEqual([])
 })

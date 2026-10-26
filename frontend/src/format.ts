@@ -88,8 +88,8 @@ export function formatPercent(value: string | null | undefined, options: SignOpt
   return `${signOf(minus, whole, fraction, options)}${group(whole)}${fraction === undefined ? '' : `.${fraction}`}%`
 }
 
-/** `"2026-10"` → `October 2026` (`long`) or `Oct` (`short`). */
-export function formatMonth(value: string | null | undefined, style: 'long' | 'short' = 'long'): string {
+/** `"2026-10"` → `October 2026` (`long`), `October` (`name`) or `Oct` (`short`). */
+export function formatMonth(value: string | null | undefined, style: 'long' | 'name' | 'short' = 'long'): string {
   if (!value) {
     return EMPTY
   }
@@ -98,7 +98,10 @@ export function formatMonth(value: string | null | undefined, style: 'long' | 's
   if (!match || index < 0 || index > 11) {
     return value
   }
-  return style === 'long' ? `${MONTHS[index]} ${match[1]}` : MONTHS[index].slice(0, 3)
+  if (style === 'long') {
+    return `${MONTHS[index]} ${match[1]}`
+  }
+  return style === 'name' ? MONTHS[index] : MONTHS[index].slice(0, 3)
 }
 
 /** `"2026-10-04"` → `Oct 4`, or `Oct 4, 2026` with the year. */

@@ -60,6 +60,7 @@ describe('formatMonth and formatDate', () => {
   test('months', () => {
     expect(formatMonth('2026-10')).toBe('October 2026')
     expect(formatMonth('2026-01', 'short')).toBe('Jan')
+    expect(formatMonth('2026-08', 'name')).toBe('August')
     expect(formatMonth('2026-13')).toBe('2026-13')
     expect(formatMonth(null)).toBe('—')
   })
