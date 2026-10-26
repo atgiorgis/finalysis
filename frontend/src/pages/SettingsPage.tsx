@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react'
 import { reads, type AiStatus, type ChatDailyUsage } from '../api'
-import { formatDate, formatMoney } from '../format'
+import { AI_NAME, costText } from '../corgi'
+import { formatCount, formatDate, formatMoney, formatMonth } from '../format'
 import { providerName } from '../shell/CloudAiBanner'
 import { useShellData } from '../shell/ShellData'
 
+/** Corgi's roles by what it does; the search embedding isn't Corgi talking, so it keeps its own name. */
 const ROLE_LABELS: Record<string, string> = {
-  main: 'Chat',
-  categorization: 'Categorization',
-  embedding: 'Search (embedding)',
+  main: `${AI_NAME} · chat`,
+  categorization: `${AI_NAME} · categorization`,
+  embedding: 'Search (embedding) model',
 }
+
+/** Chat first, as the brief lists them. */
+const ROLE_ORDER = ['main', 'categorization', 'embedding']
 
 const MODE_TEXT: Record<AiStatus['mode'], string> = {
   OFF: 'Off. Categorization uses rules only, and chat is unavailable.',
@@ -17,16 +22,21 @@ const MODE_TEXT: Record<AiStatus['mode'], string> = {
 }
 
 function AiSection({ ai }: { ai: AiStatus }) {
-  const roles = Object.entries(ai.models ?? {})
+  const models = ai.models ?? {}
+  const roles = [
+    ...ROLE_ORDER.filter((role) => role in models),
+    ...Object.keys(models).filter((role) => !ROLE_ORDER.includes(role)),
+  ].map((role) => [role, models[role]] as const)
   return (
     <section className="card" aria-labelledby="settings-ai">
-      <h2 id="settings-ai">AI</h2>
+      <h2 id="settings-ai">{AI_NAME}</h2>
+      <p className="muted">{AI_NAME} is the name Finalysis gives its AI. The models behind it are listed below.</p>
       <dl className="facts">
         <dt>Mode</dt>
         <dd>{ai.mode === 'CLOUD' ? `Cloud (${providerName(ai)})` : MODE_TEXT[ai.mode]}</dd>
         {roles.map(([role, model]) => (
           <div key={role} className="facts-row">
-            <dt>{ROLE_LABELS[role] ?? role} model</dt>
+            <dt>{ROLE_LABELS[role] ?? role}</dt>
             <dd>
               <code>{model}</code>
             </dd>
@@ -41,7 +51,8 @@ function cap(value: string | null): string {
   return value === null ? 'Off' : formatMoney(value)
 }
 
-function UsageSection({ usage, error }: { usage: ChatDailyUsage | null; error: string | null }) {
+function UsageSection({ usage, error, ai }: { usage: ChatDailyUsage | null; error: string | null; ai: AiStatus | null }) {
+  const local = ai?.mode === 'LOCAL'
   return (
     <section className="card" aria-labelledby="settings-usage">
       <h2 id="settings-usage">Chat costs</h2>
@@ -50,7 +61,14 @@ function UsageSection({ usage, error }: { usage: ChatDailyUsage | null; error: s
       {usage && (
         <dl className="facts">
           <dt>Spent today ({formatDate(usage.day, true)})</dt>
-          <dd>{formatMoney(usage.spentToday)}</dd>
+          <dd>{local ? costText(usage.spentToday, ai) : formatMoney(usage.spentToday)}</dd>
+          <dt>This month ({formatMonth(usage.month)})</dt>
+          <dd>
+            {costText(usage.spentThisMonth, ai)}
+            {' · '}
+            {usage.questionsThisMonth === 1 ? '1 question' : `${formatCount(usage.questionsThisMonth)} questions`}
+            {!local && <span className="muted"> · estimated from list prices</span>}
+          </dd>
           <dt>Daily limit</dt>
           <dd>{cap(usage.maxDailyCost)}</dd>
           <dt>Limit per question</dt>
@@ -64,7 +82,7 @@ function UsageSection({ usage, error }: { usage: ChatDailyUsage | null; error: s
   )
 }
 
-/** Settings, read-only in Phase 7 (docs/plans/phase-7.md §2.8): the AI mode and models, the chat costs. */
+/** Settings, read-only in Phase 7 (docs/plans/phase-7.md §2.8): Corgi's mode and models, the chat costs. */
 export default function SettingsPage() {
   const { status } = useShellData()
   const [usage, setUsage] = useState<ChatDailyUsage | null>(null)
@@ -82,7 +100,7 @@ export default function SettingsPage() {
       <h1>Settings</h1>
       <p className="muted">Read-only: these are set in the backend’s configuration.</p>
       {status && <AiSection ai={status.ai} />}
-      <UsageSection usage={usage} error={error} />
+      <UsageSection usage={usage} error={error} ai={status?.ai ?? null} />
     </section>
   )
 }

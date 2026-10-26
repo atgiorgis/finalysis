@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { reads, type ReviewQueueResponse, type StatementDetail, type Transaction, type TransactionPage } from '../api'
+import CategorizeNow from '../components/categorize/CategorizeNow'
+import { AI_NAME } from '../corgi'
 import { formatDate, formatMoney, formatMonth, formatPeriod } from '../format'
 import { monthDays } from '../months'
 import { useDataVersion, useMonth, useShellData } from '../shell/ShellData'
@@ -9,8 +11,8 @@ import { useTxnSheet } from '../shell/TxnSheet'
 const PAGE_SIZE = 50
 
 const REVIEW_REASONS: Record<string, string> = {
-  LOW_CONFIDENCE: 'The AI wasn’t sure',
-  INVALID_ANSWER: 'The AI’s answers were invalid',
+  LOW_CONFIDENCE: `${AI_NAME} wasn’t sure`,
+  INVALID_ANSWER: `${AI_NAME}’s answers were invalid`,
 }
 
 /** Review kinds this page doesn't resolve: the Import tab does (UI-02, step 7d). */
@@ -232,6 +234,7 @@ function Review({ queue }: { queue: Load<ReviewQueueResponse> }) {
     <>
       <section className="card" aria-labelledby="review-uncategorized">
         <h2 id="review-uncategorized">Needs a category</h2>
+        <CategorizeNow uncategorized={uncategorized.total} />
         {uncategorized.error && <p className="error">Couldn’t load them: {uncategorized.error}</p>}
         {uncategorized.loaded &&
           (uncategorized.items.length === 0 ? (

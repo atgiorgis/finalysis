@@ -64,12 +64,14 @@ function reply(index = 0) {
   return screen.getAllByRole('listitem').filter((li) => li.classList.contains('chat-turn'))[index]
 }
 
-test('the conversation list: titles, question counts, and a new conversation', async () => {
+test('the conversation list: titles, turn counts with the backend’s total cost, and a new conversation', async () => {
   renderApp('/chat', ROUTES)
 
   const nav = await screen.findByRole('navigation', { name: 'Conversations' })
-  expect(await within(nav).findByRole('link', { name: /Groceries in September/ })).toHaveAttribute('href', '/chat/7')
-  expect(within(nav).getByRole('link', { name: /Untitled conversation/ })).toHaveTextContent('1 question · Oct 20')
+  const groceries = await within(nav).findByRole('link', { name: /Groceries in September/ })
+  expect(groceries).toHaveAttribute('href', '/chat/7')
+  expect(groceries).toHaveTextContent('2 turns · $0.01 · Oct 23')
+  expect(within(nav).getByRole('link', { name: /Untitled conversation/ })).toHaveTextContent('1 turn · Oct 20')
   expect(within(nav).getByRole('link', { name: 'New conversation' })).toHaveAttribute('href', '/chat')
 })
 
@@ -139,7 +141,11 @@ test('the turn’s model, estimated cost and checked figures; a failed stored tu
   renderApp('/chat/7', ROUTES)
 
   await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
-  expect(reply(0).querySelector('.chat-meta')).toHaveTextContent('test-main-model · $0.012345 estimated · 3 figures checked')
+  expect(reply(0).querySelector('.chat-figures')).toHaveTextContent(
+    'Figures computed by Finalysis, not by the model · 3 checked',
+  )
+  expect(reply(0).querySelector('.chat-figures svg')).toBeInTheDocument()
+  expect(reply(0).querySelector('.chat-meta')).toHaveTextContent(/^test-main-model · \$0\.012345 estimated$/)
   expect(reply(1)).toHaveTextContent('And in August?')
   expect(reply(1)).toHaveTextContent('This question failed: the AI service didn’t answer.')
 })
@@ -178,7 +184,8 @@ test('a fallback is labelled; a limit is said plainly; a gone transaction has no
   await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
   await ask(user, 'one')
   expect(await screen.findByText('The model’s answer couldn’t be checked, so here are the figures it used.')).toBeInTheDocument()
-  expect(reply(2).querySelector('.chat-meta')).toHaveTextContent('test-main-model · no price · 2 figures checked')
+  expect(reply(2).querySelector('.chat-meta')).toHaveTextContent(/^test-main-model · no price$/)
+  expect(reply(2).querySelector('.chat-figures')).toHaveTextContent('· 2 checked')
   await ask(user, 'two')
   expect(
     await screen.findByText('This answer stopped early: it reached the limit on cost for one question.'),
@@ -244,5 +251,131 @@ test('the question box counts to 1,000 characters', async () => {
 
   const box = await screen.findByRole('textbox', { name: 'Question' })
   expect(box).toHaveAttribute('maxlength', '1000')
-  expect(screen.getByText('0 / 1000')).toBeInTheDocument()
+  expect(screen.getByText('0 / 1,000')).toBeInTheDocument()
+})
+
+
+// ---------------------------------------------------------------------------- Corgi (step 7e)
+
+test('the header: Corgi’s avatar, name and promise, and a cloud badge from the status', async () => {
+  renderApp('/chat/7', ROUTES)
+
+  const section = await screen.findByRole('region', { name: 'Conversation' })
+  const head = section.querySelector('.corgi-head') as HTMLElement
+  expect(head).toHaveTextContent('CorgiReads your books. Never changes them.')
+  expect(head.querySelector('.corgi-avatar')).toHaveTextContent('C')
+  const badge = head.querySelector('.path-badge') as HTMLElement
+  expect(badge).toHaveTextContent('Cloud · Bedrock')
+  expect(badge).toHaveClass('path-badge-cloud')
+})
+
+test('the header badge says local with a local provider, from config, and is absent with AI off', async () => {
+  renderApp('/chat', {
+    ...ROUTES,
+    '/api/status': { ...CLOUD, ai: { ...CLOUD.ai, mode: 'LOCAL', provider: 'ollama' } },
+  })
+  const badge = await vi.waitFor(() => {
+    const found = document.querySelector('.path-badge')
+    expect(found).not.toBeNull()
+    return found as HTMLElement
+  })
+  expect(badge).toHaveTextContent('Local · Ollama')
+  expect(badge).toHaveClass('path-badge-local')
+  cleanup()
+
+  renderApp('/chat', { ...ROUTES, '/api/status': fixtures.statusOff })
+  await screen.findByRole('note')
+  expect(document.querySelector('.corgi-name')).toHaveTextContent('Corgi')
+  expect(document.querySelector('.path-badge')).toBeNull()
+})
+
+test('each answer is labelled Corgi; the figures note is omitted when no figure was checked', async () => {
+  const user = userEvent.setup()
+  const noFigures = {
+    ...richTurn,
+    turn: 3,
+    answer: 'I can only read your own statements.',
+    citations: [],
+    grounding: { status: 'NO_FIGURES', figuresChecked: 0, retried: false, ungrounded: 0 },
+  }
+  renderApp('/chat/7', ROUTES, chatWrites(noFigures))
+
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+  expect(reply(0).querySelector('.chat-speaker')).toHaveTextContent('Corgi')
+  expect(reply(0).querySelector('.corgi-avatar')).toHaveTextContent('C')
+  await ask(user, 'Who are you?')
+  await screen.findByText('I can only read your own statements.')
+  expect(reply(2).querySelector('.chat-speaker')).toHaveTextContent('Corgi')
+  expect(reply(2).querySelector('.chat-figures')).toBeNull()
+  expect(reply(2).querySelector('.chat-meta')).toHaveTextContent('test-main-model · $0.012345 estimated')
+  expect(reply(1).querySelector('.chat-speaker')).toBeNull() // a failed turn has no answer to label
+})
+
+test('while answering: the question, then “Corgi is thinking…” with the avatar', async () => {
+  const user = userEvent.setup()
+  let answer: (r: Response) => void = () => {}
+  renderApp('/chat/7', ROUTES, (w) =>
+    w.url.endsWith('/turns') ? new Promise<Response>((resolve) => (answer = resolve)) : undefined,
+  )
+
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+  await ask(user, 'Is that normal for me?')
+  const thinking = await screen.findByText('Corgi is thinking…')
+  const pending = thinking.closest('li') as HTMLElement
+  expect(pending).toHaveTextContent('Is that normal for me?')
+  expect(pending.querySelector('.corgi-avatar')).toBeInTheDocument()
+
+  answer(Response.json({ ...richTurn, turn: 3, answer: 'Yes.' }))
+  expect(await screen.findByText('Yes.')).toBeInTheDocument()
+  expect(screen.queryByText('Corgi is thinking…')).not.toBeInTheDocument()
+})
+
+test('the input: Corgi’s placeholder, the promise under it, and the counter', async () => {
+  renderApp('/chat', ROUTES)
+
+  const box = await screen.findByRole('textbox', { name: 'Question' })
+  expect(box).toHaveAttribute('placeholder', 'Ask Corgi about your spending')
+  const note = (await screen.findByText('Corgi reads your data and never changes it. It can’t give financial advice.'))
+    .parentElement as HTMLElement
+  expect(note).toHaveTextContent('0 / 1,000')
+})
+
+test('the header total is the backend’s, read again after each answer; the page adds nothing', async () => {
+  const user = userEvent.setup()
+  const { requests } = renderApp(
+    '/chat',
+    { ...ROUTES, '/api/chat/conversations/7': { ...conversation, totalCost: '0.029515' } },
+    chatWrites(richTurn),
+  )
+
+  await ask(user, 'How much on groceries in September?')
+  await screen.findByText(/You spent \$477\.94 on groceries/)
+  // The turn cost $0.012345; the header shows the conversation's sum as the API returned it.
+  expect(await screen.findByText('This conversation: $0.03 estimated')).toBeInTheDocument()
+  expect(requests).toContain('/api/chat/conversations/7')
+})
+
+test('a stored conversation shows its total in the header', async () => {
+  renderApp('/chat/7', ROUTES)
+
+  expect(await screen.findByText('This conversation: $0.01 estimated')).toBeInTheDocument()
+})
+
+test('the left column shows today’s budget from the usage read', async () => {
+  renderApp('/chat', { ...ROUTES, '/api/chat/usage': { ...usageFixture, spentToday: '0.214300' } })
+
+  const budget = await screen.findByRole('group', { name: 'Today’s chat budget' })
+  expect(budget).toHaveTextContent('$0.21 of $1.00 today · resets at midnight')
+})
+
+test('with a local model, every cost line says $0.00 · local', async () => {
+  const local = { ...CLOUD, ai: { ...CLOUD.ai, mode: 'LOCAL', provider: 'ollama' } }
+  renderApp('/chat/7', { ...ROUTES, '/api/status': local })
+
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+  await vi.waitFor(() => expect(reply(0).querySelector('.chat-meta')).toHaveTextContent('test-main-model · $0.00 · local'))
+  expect(screen.getByText('This conversation: $0.00 · local')).toBeInTheDocument()
+  expect(await screen.findByRole('group', { name: 'Today’s chat budget' })).toHaveTextContent('$0.00 · local')
+  const nav = screen.getByRole('navigation', { name: 'Conversations' })
+  expect(within(nav).getByRole('link', { name: /Untitled conversation/ })).toHaveTextContent('1 turn · $0.00 · local')
 })

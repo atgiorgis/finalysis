@@ -6,13 +6,17 @@ import {
   chat,
   createConversation,
   reads,
+  type AiStatus,
+  type ChatDailyUsage,
   type ChatTurn,
   type Conversation,
   type ConversationItem,
   type StoredTurn,
 } from '../api'
-import ChatTurnView, { type TurnEntry } from '../components/chat/ChatTurnView'
-import { formatDate, formatMoney } from '../format'
+import ChatTurnView, { PendingTurn, type TurnEntry } from '../components/chat/ChatTurnView'
+import CorgiAvatar from '../components/chat/CorgiAvatar'
+import { AI_NAME, CHAT_TAGLINE, costText, pathBadge } from '../corgi'
+import { formatCost, formatCount, formatDate, formatMoney } from '../format'
 import { useDataVersion, useShellData } from '../shell/ShellData'
 
 /** The longest question the API takes (`TurnRequest`: 1 to 1,000 characters). */
@@ -72,14 +76,35 @@ function fromTurn(question: string, t: ChatTurn): TurnEntry {
   }
 }
 
+/** "3 turns · $0.03": the count and the backend's sum; no cost shown when no turn had a price. */
+export function conversationLine(c: ConversationItem, ai: AiStatus | null | undefined): string {
+  const turns = c.turns === 1 ? '1 turn' : `${c.turns} turns`
+  const cost = c.totalCost === null && ai?.mode !== 'LOCAL' ? null : costText(c.totalCost, ai)
+  return cost ? `${turns} · ${cost}` : turns
+}
+
+/** Today's budget, as `GET /api/chat/usage` gives it. */
+export function budgetLine(usage: ChatDailyUsage, ai: AiStatus | null | undefined): string {
+  if (ai?.mode === 'LOCAL') {
+    return costText(usage.spentToday, ai)
+  }
+  return usage.maxDailyCost
+    ? `${formatCost(usage.spentToday)} of ${formatCost(usage.maxDailyCost)} today · resets at midnight`
+    : `${formatCost(usage.spentToday)} today · no daily limit`
+}
+
 function ConversationList({
   items,
   current,
   error,
+  usage,
+  ai,
 }: {
   items: ConversationItem[] | null
   current: number | null
   error: string | null
+  usage: ChatDailyUsage | null
+  ai: AiStatus | undefined
 }) {
   return (
     <nav className="chat-list" aria-label="Conversations">
@@ -95,14 +120,40 @@ function ConversationList({
               <Link to={`/chat/${c.id}`} aria-current={c.id === current ? 'page' : undefined} className="chat-list-item">
                 <span>{c.title ?? 'Untitled conversation'}</span>
                 <span className="muted">
-                  {c.turns === 1 ? '1 question' : `${c.turns} questions`} · {formatDate(c.updatedAt.slice(0, 10))}
+                  {conversationLine(c, ai)} · {formatDate(c.updatedAt.slice(0, 10))}
                 </span>
               </Link>
             </li>
           ))}
         </ul>
       )}
+      {usage && (
+        <div className="chat-budget" role="group" aria-label="Today’s chat budget">
+          <p className="chat-budget-title">Today’s chat budget</p>
+          <p className="muted">{budgetLine(usage, ai)}</p>
+        </div>
+      )}
     </nav>
+  )
+}
+
+/** Corgi's header: the avatar, name and promise, and where it runs, from the status. */
+function CorgiHeader({ ai }: { ai: AiStatus | undefined }) {
+  const badge = ai ? pathBadge(ai) : null
+  return (
+    <div className="corgi-head">
+      <CorgiAvatar size="large" />
+      <div className="corgi-head-text">
+        <p className="corgi-name">{AI_NAME}</p>
+        <p className="corgi-tagline muted">{CHAT_TAGLINE}</p>
+      </div>
+      {badge && (
+        <span className={`path-badge path-badge-${badge.tone}`}>
+          <span className="path-badge-dot" aria-hidden="true" />
+          {badge.label}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -128,6 +179,8 @@ export default function ChatPage() {
   const [asking, setAsking] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [listVersion, setListVersion] = useState(0)
+  const [usage, setUsage] = useState<ChatDailyUsage | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
   /** The conversation this page just created: its turns are the ones asked here, so it isn't read back over them. */
   const createdHere = useRef<string | null>(null)
 
@@ -136,6 +189,10 @@ export default function ChatPage() {
       .list()
       .then((page) => setList(page.items))
       .catch((e: Error) => setListError(e.message))
+    reads
+      .chatUsage()
+      .then(setUsage)
+      .catch(() => setUsage(null))
   }, [listVersion, version])
 
   useEffect(() => {
@@ -171,17 +228,28 @@ export default function ChatPage() {
       return
     }
     setAsking(true)
+    setPending(question)
     let conversationId = conversation?.id ?? null
     try {
       if (conversationId === null) {
         conversationId = (await createConversation()).id
         createdHere.current = String(conversationId)
-        setConversation({ id: conversationId, title: null, createdAt: '', updatedAt: '', turns: [] })
+        setConversation({ id: conversationId, title: null, totalCost: null, createdAt: '', updatedAt: '', turns: [] })
         navigate(`/chat/${conversationId}`, { replace: true })
       }
       const turn = await askTurn(conversationId, question)
       setEntries((current) => [...current, fromTurn(question, turn)])
       setMessage('')
+      // The total is the backend's sum: read it again rather than adding the turn's cost here.
+      const asked = conversationId
+      chat
+        .get(asked)
+        .then((c) =>
+          setConversation((current) =>
+            current && current.id === asked ? { ...current, title: c.title, totalCost: c.totalCost } : current,
+          ),
+        )
+        .catch(() => {})
     } catch (error) {
       const text = await problemText(error)
       setEntries((current) => [
@@ -200,6 +268,7 @@ export default function ChatPage() {
       ])
     } finally {
       setAsking(false)
+      setPending(null)
       setListVersion((v) => v + 1)
     }
   }
@@ -221,8 +290,15 @@ export default function ChatPage() {
     <section className={`page chat-page${id ? ' chat-page-open' : ''}`}>
       <h1>Chat</h1>
       <div className="chat-layout">
-        <ConversationList items={list} current={conversation?.id ?? null} error={listError} />
+        <ConversationList
+          items={list}
+          current={conversation?.id ?? null}
+          error={listError}
+          usage={usage}
+          ai={status?.ai}
+        />
         <section className="chat-conversation" aria-label="Conversation">
+          <CorgiHeader ai={status?.ai} />
           {id && (
             <Link to="/chat" className="chat-back">
               ‹ All conversations
@@ -231,7 +307,15 @@ export default function ChatPage() {
           {loadError && <p className="error">{loadError}</p>}
           {conversation && id && (
             <div className="chat-conversation-head">
-              <h2>{conversation.title ?? 'New conversation'}</h2>
+              <div className="chat-conversation-title">
+                <h2>{conversation.title ?? 'New conversation'}</h2>
+                {(conversation.totalCost !== null || status?.ai.mode === 'LOCAL') && (
+                  <p className="muted">
+                    This conversation: {costText(conversation.totalCost, status?.ai)}
+                    {status?.ai.mode !== 'LOCAL' && ' estimated'}
+                  </p>
+                )}
+              </div>
               {!confirmDelete ? (
                 <button type="button" className="link-button" onClick={() => setConfirmDelete(true)}>
                   Delete
@@ -259,6 +343,7 @@ export default function ChatPage() {
             {entries.map((entry) => (
               <ChatTurnView key={entry.key} entry={entry} />
             ))}
+            {pending !== null && <PendingTurn question={pending} />}
           </ol>
           {aiOff ? (
             <p className="card chat-ai-off" role="note">
@@ -267,22 +352,28 @@ export default function ChatPage() {
             </p>
           ) : (
             <form className="chat-form" onSubmit={(e) => void ask(e)}>
-              <label htmlFor="chat-question">Question</label>
-              <textarea
-                id="chat-question"
-                value={message}
-                maxLength={MAX_MESSAGE}
-                rows={3}
-                disabled={asking}
-                onChange={(e) => setMessage(e.target.value)}
-              />
+              <label htmlFor="chat-question" className="visually-hidden">
+                Question
+              </label>
               <div className="chat-form-row">
-                <span className="muted">
-                  {message.length} / {MAX_MESSAGE}
-                </span>
+                <textarea
+                  id="chat-question"
+                  value={message}
+                  maxLength={MAX_MESSAGE}
+                  rows={2}
+                  disabled={asking}
+                  placeholder={`Ask ${AI_NAME} about your spending`}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
                 <button type="submit" className="button-primary" disabled={asking || !message.trim()}>
                   {asking ? 'Answering…' : 'Ask'}
                 </button>
+              </div>
+              <div className="chat-form-note muted">
+                <span>{AI_NAME} reads your data and never changes it. It can’t give financial advice.</span>
+                <span>
+                  {formatCount(message.length)} / {formatCount(MAX_MESSAGE)}
+                </span>
               </div>
             </form>
           )}

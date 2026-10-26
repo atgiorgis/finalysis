@@ -98,7 +98,7 @@ test('to review: transactions without a category, every month, with why they wai
   expect(await within(section).findByText('2 transactions, every month')).toBeInTheDocument()
   expect(requests).toContain(UNCATEGORIZED)
   const rows = section.querySelectorAll('.txn-row')
-  expect(rows[0]).toHaveTextContent('Uncategorized · The AI wasn’t sure')
+  expect(rows[0]).toHaveTextContent('Uncategorized · Corgi wasn’t sure')
   expect(rows[1]).toHaveTextContent('CORNER KIOSK')
   expect(rows[1]).toHaveTextContent('Uncategorized · marked not a transfer')
   expect(screen.getByRole('button', { name: 'To review' })).toHaveAttribute('aria-pressed', 'true')

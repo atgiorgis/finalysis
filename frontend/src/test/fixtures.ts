@@ -16,6 +16,7 @@ import type {
   MerchantTotalsResponse,
   MonthlyTotalsResponse,
   RecurringChargesResponse,
+  CategorizationRun,
   ImportPreview,
   ImportSummary,
   ReviewQueueResponse,
@@ -35,6 +36,8 @@ import importMappingMismatch from './fixtures/import-mapping-mismatch.json' with
 import importMappingRequired from './fixtures/import-mapping-required.json' with { type: 'json' }
 import importNeedsReview from './fixtures/import-needs-review.json' with { type: 'json' }
 import importParseError from './fixtures/import-parse-error.json' with { type: 'json' }
+import importPreviewCard from './fixtures/import-preview-card.json' with { type: 'json' }
+import categorizationRunOff from './fixtures/categorization-run-off.json' with { type: 'json' }
 import importPreviewCsv from './fixtures/import-preview-csv.json' with { type: 'json' }
 import importSummary from './fixtures/import-summary.json' with { type: 'json' }
 import importUnparsed from './fixtures/import-unparsed.json' with { type: 'json' }
@@ -155,6 +158,10 @@ export const fixtures = {
   importMappingRequired: typed<ProblemBody>(importMappingRequired),
   /** The preview the page then reads: headers, first rows and the suggested mapping. */
   importPreviewCsv: typed<ImportPreview>(importPreviewCsv),
+  /** A card CSV whose sign the suggester guessed (INVERTED): it comes with one row read both ways (step 7e). */
+  importPreviewCard: typed<ImportPreview>(importPreviewCard),
+  /** `POST /api/categorization/run` with AI off, after the import pass: rules only (step 7e). */
+  categorizationRunOff: typed<CategorizationRun>(categorizationRunOff),
   /** 201: a CSV with balances that check out, no warnings. */
   importSummary: typed<ImportSummary>(importSummary),
   /** 201: NEEDS_REVIEW with "reconciliation failed" warnings. */
@@ -186,6 +193,9 @@ export const usageFixture = {
   maxTurnCost: '0.15',
   maxDailyCost: '1.00',
   resetsAt: '2026-10-24T00:00:00-04:00',
+  month: '2026-10',
+  spentThisMonth: '0.000000',
+  questionsThisMonth: 0,
 }
 
 /**

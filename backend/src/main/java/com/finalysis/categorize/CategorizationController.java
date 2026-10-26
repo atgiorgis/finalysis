@@ -29,13 +29,16 @@ public class CategorizationController {
     private final CategorizationService categorization;
     private final AiCategorizer aiCategorizer;
     private final MerchantIndexRefresh searchIndex;
+    private final UncategorizedCount uncategorized;
 
     public CategorizationController(RuleService rules, CategorizationService categorization,
-                                    AiCategorizer aiCategorizer, MerchantIndexRefresh searchIndex) {
+                                    AiCategorizer aiCategorizer, MerchantIndexRefresh searchIndex,
+                                    UncategorizedCount uncategorized) {
         this.rules = rules;
         this.categorization = categorization;
         this.aiCategorizer = aiCategorizer;
         this.searchIndex = searchIndex;
+        this.uncategorized = uncategorized;
     }
 
     /** In winning order (§3.2). */
@@ -75,7 +78,7 @@ public class CategorizationController {
      * one transaction; then, when AI is on and {@code ai} isn't false, the AI stage, with no transaction held across
      * its calls. {@code force} also asks again for txns the AI already categorized or left for review; USER and RULE
      * categories never change. After an AI run, the chat search index is refreshed (docs/plans/phase-6.md §4.2); its
-     * counts are logged, not returned.
+     * counts are returned (step 7e) with a summary the UI says in words.
      */
     @PostMapping("/run")
     public RunResponse run(@RequestParam(defaultValue = "false") boolean reclean,
@@ -83,9 +86,9 @@ public class CategorizationController {
                            @RequestParam(defaultValue = "false") boolean force) {
         RunResult rulesResult = categorization.run(reclean);
         AiRunResult aiResult = ai ? aiCategorizer.run(force) : AiRunResult.off();
-        if (aiResult.status() != AiCategorizer.Status.OFF) {
-            searchIndex.refresh();
-        }
-        return RunResponse.of(rulesResult, aiResult);
+        MerchantIndexRefresh.Refresh refreshed = aiResult.status() != AiCategorizer.Status.OFF
+                ? searchIndex.refreshCounted()
+                : new MerchantIndexRefresh.Refresh(MerchantEmbeddingStage.EmbeddingRunResult.off(), 0);
+        return RunResponse.of(rulesResult, aiResult, refreshed, uncategorized.count());
     }
 }

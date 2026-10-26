@@ -474,7 +474,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/categorization/rules` | Create a USER rule, applied at once; `matchCount`, `winCount` and `shadowedBy` say what it does | 201, `Location` | `rule-invalid`, `category-invalid`, `rule-exists` |
 | `PATCH` | `/api/categorization/rules/{id}` | Change a user rule; a seeded rule accepts only `active` | 200 | `rule-invalid`, `category-invalid`, `rule-exists`, `rule-seeded` |
 | `DELETE` | `/api/categorization/rules/{id}` | Delete a user rule; its txns are re-evaluated | 204 | `rule-seeded` |
-| `POST` | `/api/categorization/run` | Run every stage now. `?reclean=true` re-cleans merchants first, `?ai=false` skips the AI, `?force=true` asks the AI again for txns it answered or left for review | 200: rules-stage counts and an `ai` block (`status` `OFF` when AI is off) | — |
+| `POST` | `/api/categorization/run` | Run every stage now. `?reclean=true` re-cleans merchants first, `?ai=false` skips the AI, `?force=true` asks the AI again for txns it answered or left for review | 200: rules-stage counts, an `ai` block (`status` `OFF` when AI is off), the chat search index refresh (`searchIndex`) and a `summary` counted in Java: `{categorized, toReview, heldBack, modelCalls, merchantsIndexed}` | — |
 | `PUT` | `/api/accounts/{id}/closure` | `{closedOn}`: the account's last open day; coverage expects no statement after it (idempotent) | 200 | — |
 | `DELETE` | `/api/accounts/{id}/closure` | Reopen the account (idempotent) | 200 | — |
 | `GET` | `/api/analytics/months` | Month totals with coverage and data quality; `?from=&to=` (`yyyy-MM`), `?accountId=`. See [Analytics](#analytics) | 200 | — |
@@ -490,8 +490,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `PUT` | `/api/alerts/{key}/dismissal` | `{note?}`: dismiss a current alert (idempotent; the first time is kept, the note replaced) | 200 with the alert | — |
 | `DELETE` | `/api/alerts/{key}/dismissal` | Undo a dismissal (idempotent) | 204 | — |
 | `POST` | `/api/chat/conversations` | Start an empty conversation. See [Chat](#chat) | 201 `{id, createdAt}`, `Location` | — |
-| `GET` | `/api/chat/conversations` | Conversations, newest activity first; `?page=&size=` (default 20) | 200 `{items: [{id, title, turns, updatedAt}], page, size, totalPages}` | — |
-| `GET` | `/api/chat/conversations/{id}` | One conversation with its turns (question, answer, grounding, citations re-resolved, limit, usage) | 200 `{id, title, createdAt, updatedAt, turns}` | — |
+| `GET` | `/api/chat/conversations` | Conversations, newest activity first; `?page=&size=` (default 20) | 200 `{items: [{id, title, turns, totalCost, updatedAt}], page, size, totalPages}`; `totalCost` is the sum of its turns' estimated costs, null when none has a price | — |
+| `GET` | `/api/chat/conversations/{id}` | One conversation with its turns (question, answer, grounding, citations re-resolved, limit, usage) | 200 `{id, title, totalCost, createdAt, updatedAt, turns}` | — |
 | `DELETE` | `/api/chat/conversations/{id}` | Delete it with its turns and summary | 204 | — |
 | `POST` | `/api/chat/conversations/{id}/turns` | `{message}` (1–1,000 characters): ask a question. With AI off, 503 before the conversation is looked up | 200 `{conversationId, turn, answer, answerSource, grounding, citations, dataNotes, tools, usage, limitHit, redactions}` | `ai-off`, `turn-in-progress`, `chat-budget`, `chat-busy`, `ai-unavailable` |
 | `POST` | `/api/chat/summaries` | `{month?}` (`yyyy-MM`, default the latest complete month): the plain-English monthly summary (ANA-05); a Java template with AI off | 200 `{month, source: MODEL\|TEMPLATE, text, grounding, citations, dataNotes, usage}` | `chat-budget`, `ai-unavailable` |
@@ -772,12 +772,17 @@ read, with a suggested mapping unless the saved one already matches:
     "confidence": { "dateColumn": "MATCHED", "dateFormat": "MATCHED", "postDateColumn": "MATCHED",
                     "descriptionColumns": "MATCHED", "amountColumn": "MATCHED", "sign": "GUESSED" },
     "notes": ["sign: 6 of 7 amounts are positive, so purchases look positive (INVERTED)"]
-  }
+  },
+  "signExample": { "row": 1, "description": "AMZN MKTP US*7ETP43", "amount": "66.43",
+                   "asIs": "MONEY_IN", "inverted": "MONEY_OUT" }
 }
 ```
 
 - `rows` are the first 10 data rows. `mappingStatus` is `NONE` (no mapping), `MATCHES` (the saved
   mapping reads this file) or `MISMATCH`.
+- `signExample` comes only when the suggested sign is `GUESSED`: the first row with a non-zero amount, read by the
+  importer's amount reader with each sign (the amount without its sign; `asIs` and `inverted` say which way the money
+  moves). The Import tab asks "Purchases are negative/positive in this file" with it instead of saving the guess.
 - **Detection** finds the table even below a preamble (summary lines, a summary block with its
   own header, blank lines). Among the runs of consecutive records sharing one column count of 2
   or more (blank lines skipped), starting within the first 100 lines, with `,` `;` tab or `|`,
@@ -1289,6 +1294,10 @@ shops showing up a lot?"). Requirements CHT-01 to CHT-06 and ANA-05; design in
 [docs/plans/phase-6.md](docs/plans/phase-6.md). Chat needs cloud AI (`aws` profile, see
 [Turning on cloud AI](#turning-on-cloud-ai)); with AI off a question returns 503 `ai-off`, and the monthly summary
 falls back to its Java template.
+
+**Corgi** is the name the UI gives Finalysis's AI, in chat and wherever it says who categorized a transaction. It is a
+display name only, not a model or a persona: the model behind it is Sonnet 4.6 (or Haiku 4.5, the budget option) on
+Amazon Bedrock today, or a local model once the `local` profile exists. The chat header shows which path is in use.
 
 ### How a question is answered
 

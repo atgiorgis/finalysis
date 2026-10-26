@@ -37,7 +37,12 @@ public class ChatConversationStore {
     public record Created(long id, OffsetDateTime createdAt) {
     }
 
-    public record Summary(long id, String title, int turns, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    /**
+     * @param totalCost the sum of its turns' estimated costs (step 7e); null when no turn has a price. Summary calls
+     *                  aren't turns: they are in the ledger, which has no conversation id (V22)
+     */
+    public record Summary(long id, String title, int turns, BigDecimal totalCost, OffsetDateTime createdAt,
+                          OffsetDateTime updatedAt) {
     }
 
     public record Page(List<Summary> items, long total) {
@@ -133,13 +138,15 @@ public class ChatConversationStore {
         long total = jdbc.sql("SELECT count(*) FROM chat_conversation").query(Long.class).single();
         List<Summary> items = jdbc.sql("""
                         SELECT c.id, c.title, c.created_at, c.updated_at,
-                               (SELECT count(*) FROM chat_turn t WHERE t.conversation_id = c.id) AS turns
+                               (SELECT count(*) FROM chat_turn t WHERE t.conversation_id = c.id) AS turns,
+                               (SELECT sum(t.estimated_cost) FROM chat_turn t WHERE t.conversation_id = c.id)
+                                   AS total_cost
                         FROM chat_conversation c
                         ORDER BY c.updated_at DESC, c.id DESC
                         LIMIT :size OFFSET :offset""")
                 .param("size", size).param("offset", (long) page * size)
                 .query((rs, n) -> new Summary(rs.getLong("id"), rs.getString("title"), rs.getInt("turns"),
-                        rs.getObject("created_at", OffsetDateTime.class),
+                        rs.getBigDecimal("total_cost"), rs.getObject("created_at", OffsetDateTime.class),
                         rs.getObject("updated_at", OffsetDateTime.class)))
                 .list();
         return new Page(items, total);
@@ -149,11 +156,13 @@ public class ChatConversationStore {
     public Optional<Summary> find(long id) {
         return jdbc.sql("""
                         SELECT c.id, c.title, c.created_at, c.updated_at,
-                               (SELECT count(*) FROM chat_turn t WHERE t.conversation_id = c.id) AS turns
+                               (SELECT count(*) FROM chat_turn t WHERE t.conversation_id = c.id) AS turns,
+                               (SELECT sum(t.estimated_cost) FROM chat_turn t WHERE t.conversation_id = c.id)
+                                   AS total_cost
                         FROM chat_conversation c WHERE c.id = :id""")
                 .param("id", id)
                 .query((rs, n) -> new Summary(rs.getLong("id"), rs.getString("title"), rs.getInt("turns"),
-                        rs.getObject("created_at", OffsetDateTime.class),
+                        rs.getBigDecimal("total_cost"), rs.getObject("created_at", OffsetDateTime.class),
                         rs.getObject("updated_at", OffsetDateTime.class)))
                 .optional();
     }
@@ -272,6 +281,16 @@ public class ChatConversationStore {
     public BigDecimal costSince(OffsetDateTime from) {
         return jdbc.sql("SELECT coalesce(sum(estimated_cost), 0) FROM chat_usage WHERE created_at >= :from")
                 .param("from", from).query(BigDecimal.class).single();
+    }
+
+    /**
+     * Chat turns in the ledger since a time (step 7e): one row per question asked, a failed one included. The
+     * conversation summaries and monthly summaries are not questions. Rows older than the retention are purged.
+     */
+    @Transactional(readOnly = true)
+    public long turnsSince(OffsetDateTime from) {
+        return jdbc.sql("SELECT count(*) FROM chat_usage WHERE kind = :kind AND created_at >= :from")
+                .param("kind", UsageKind.TURN.name()).param("from", from).query(Long.class).single();
     }
 
     /** Adds a ledger row. A turn's row is written by {@link #saveTurn}, in the turn's transaction. */

@@ -51,6 +51,14 @@ export const CheckIcon = () => (
   </Icon>
 )
 
+/** A calculator: figures computed by Finalysis (step 7e). */
+export const CalculatorIcon = () => (
+  <Icon size={14}>
+    <rect x="5" y="3" width="14" height="18" rx="2" />
+    <path d="M8 7h8M8 12h2m2 0h2M8 16h2m2 0h2" />
+  </Icon>
+)
+
 /** The logo: a rising line on the accent-to-income tile. */
 export function LogoMark() {
   return (

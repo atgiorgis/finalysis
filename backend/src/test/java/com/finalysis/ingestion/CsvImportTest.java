@@ -331,8 +331,53 @@ class CsvImportTest {
                 .andExpect(jsonPath("$.suggestedMapping.mapping.sign").value("AS_IS"))
                 .andExpect(jsonPath("$.suggestedMapping.confidence.sign").value("GUESSED"))
                 .andExpect(jsonPath("$.suggestedMapping.notes[0]").value(containsString("purchases look negative")))
+                // Step 7e: a guessed sign comes with the first row read both ways, so the user chooses.
+                .andExpect(jsonPath("$.signExample.row").value(1))
+                .andExpect(jsonPath("$.signExample.description").value("SQ *BLUE BEAN CAFE 4412"))
+                .andExpect(jsonPath("$.signExample.amount").value("25.67"))
+                .andExpect(jsonPath("$.signExample.asIs").value("MONEY_OUT"))
+                .andExpect(jsonPath("$.signExample.inverted").value("MONEY_IN"))
                 .andExpect(jsonPath("$.periodStart").doesNotExist())
                 .andExpect(jsonPath("$.csv").doesNotExist());
+    }
+
+    /**
+     * Step 7e: the sign example is the first row with a non-zero amount that reads as one, its amount without a sign;
+     * a positive row reads money in as it is and money out inverted. A mismatch response carries none (no rows, SEC-10).
+     */
+    @Test
+    void aGuessedSignComesWithOneRowReadBothWays() throws Exception {
+        long card = support.account(AccountType.CREDIT_CARD, "3001");
+        byte[] file = ("Trans. Date,Merchant Name,Amount\n01-May-2026,ZERO ROW,0.00\n02-May-2026,NOT A NUMBER,n/a\n"
+                + "03-May-2026,ONLINE PAYMENT - THANK YOU,\"$1,410.25\"\n04-May-2026,SQ *CORNER BEAN CAFE,-4.50\n")
+                .getBytes(StandardCharsets.UTF_8);
+
+        JsonNode preview = json(support.preview(card, "card.csv", file).andExpect(status().isOk()).andReturn());
+        assertThat(preview.at("/suggestedMapping/confidence/sign").asString()).isEqualTo("GUESSED");
+        JsonNode example = preview.get("signExample");
+        assertThat(example.get("row").asInt()).isEqualTo(3);
+        assertThat(example.get("description").asString()).isEqualTo("ONLINE PAYMENT - THANK YOU");
+        assertThat(example.get("amount").asString()).isEqualTo("1410.25");
+        assertThat(example.get("asIs").asString()).isEqualTo("MONEY_IN");
+        assertThat(example.get("inverted").asString()).isEqualTo("MONEY_OUT");
+
+        support.putMapping(card, preview.at("/suggestedMapping/mapping").toString()).andExpect(status().isCreated());
+        String mismatch = support.upload(card, "other.csv",
+                        "Date,Payee,Amount\n2026-05-01,SOMEWHERE,-1.00\n".getBytes(StandardCharsets.UTF_8))
+                .andExpect(jsonPath("$.type").value(PROBLEM + "mapping-mismatch"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(mismatch).doesNotContain("signExample");
+    }
+
+    /** A sign that isn't a guess (debit and credit columns) has no example: there is nothing to choose. */
+    @Test
+    void aSignThatIsNotAGuessHasNoExample() throws Exception {
+        long checking = support.account(AccountType.CHECKING, "1001");
+        byte[] file = "Date,Description,Debit,Credit\n2026-05-01,SOMEWHERE,4.50,\n".getBytes(StandardCharsets.UTF_8);
+
+        JsonNode preview = json(support.preview(checking, "checking.csv", file).andExpect(status().isOk()).andReturn());
+        assertThat(preview.at("/suggestedMapping/confidence/sign").asString()).isNotEqualTo("GUESSED");
+        assertThat(preview.has("signExample")).isFalse();
     }
 
     @Test

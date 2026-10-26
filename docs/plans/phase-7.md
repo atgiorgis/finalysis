@@ -499,7 +499,7 @@ would reach is protected on disk as well. UI-08 stays Planned with that note.
 | 7b | Goals tab shell. | none | Goals test |
 | 7c | Restyle to mockup v2 (Midnight): dark default and light theme with a switch, top bar and slide-in menu at every width, the banner as a strip, the Overview's hero, lead sentence, KPI edges, net line, donut legend, alert cards and recurring list; Manrope. | none | theme, menu, lead-sentence and hero tests; `test:layout` with the menu open in both themes |
 | 7d | Import tab (UI-02, pulled forward from Phase 8): account picker and add-account, one file dropped or chosen, the import's result as returned, the CSV mapping step, statements by account with delete, the review queue's statements, uploads and transfer matches, the privacy line. | `statementId` filter on `GET /api/transactions` | `ImportPage.test.tsx`, Transactions statement filter, `TransactionApiTest.filtersByStatement`, `LastFourOutboundTest`, `LastFourChatPayloadTest`; `test:layout` for the Import screens; newman 13 |
-| 7e | UI fixes from the owner's smoke test (sample data, then real statements), if any. | none expected | per fix |
+| 7e | Corgi branding (UI only), cost display, and three import follow-ups from the owner's smoke test: Categorize now, the CSV sign choice, the embeddings line. | `totalCost` on conversations; this month on `GET /api/chat/usage`; `summary` and `searchIndex` on `POST /api/categorization/run`; `signExample` on the CSV preview | `ConversationCostTest`, `ChatUsageApiTest`, `RunResponseTest`, `AiCategorizerTest.theRunSummary…`, `CsvImportTest` sign examples, `AiStatusTest`; chat, Settings, `CategorizeNow`, naming and sign tests; `test:layout`; newman |
 | 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-03, UI-04, UI-05, UI-07, GOAL-06 tab; UI-08 stays Planned), CLAUDE.md current phase, tag `phase-7-done`. | none | full runs |
 
 ### Step 0 notes: scaffolding
@@ -924,12 +924,88 @@ layout check 61 passed, 1 skipped (a phone-only check in the desktop run); newma
   file button), with a case in its self-test. Found by looking at screenshots: the account select overflowed its card
   at 375 px with a long account name; it now fills the column.
 
+### Step 7e notes: Corgi, cost display, import follow-ups
+
+From the owner's brief (2026-10-26), read beside the "B · Chat with Corgi" artboard of the "Finalysis UI Directions"
+canvas (the brief wins where they differ). Plan answers: (1) "merchants indexed" only in the Categorize-now summary,
+since the import's AI runs in the background and its response can't know the count; (2) Settings keeps the model ids
+as facts under Corgi's roles; (3) newman on a throwaway backend. Done: "Phase 7 step 7e: Corgi, cost display, import
+follow-ups (UI-03, CHT-01, CAT-02, ING-01)". Backend 3,289 tests, 0 failures, 0 errors, 0 skipped
+(Maven summary); frontend 265 tests (24 files); layout check 69 passed, 1 skipped (the phone-only check in the desktop
+run); newman 266 requests, 0 failures.
+
+- **Corgi is a display name, UI only.** One constant, `AI_NAME` in `corgi.ts`, with the tagline and the path badge;
+  code identifiers, the system prompt (`chat-9`), the loop, tools, grounding, caps and eval are untouched (the Corgi
+  prompt is a Phase 8 step). `CorgiAvatar` draws the initial on the accent (`--on-accent` text, already in the contrast
+  check) and can take an image later. No gradient (the artboard's), no pun, no emoji, no new tokens.
+- **Chat header:** avatar, "Corgi", "Reads your books. Never changes them.", and the path badge from
+  `GET /api/status`, which already carried `provider`: CLOUD → "Cloud · Bedrock" in s3 ink, LOCAL → "Local · {provider}"
+  in the income colour (a provider the UI doesn't know shows as configured); none with AI off, where the AI-off note
+  stays. `AiStatusTest` checks the provider per mode; `AwsProfileWiringTest` already checked `bedrock` end to end. The
+  conversation's title, its total and Delete sit under the header.
+- **Each answer:** the small avatar and "Corgi" above it; under it "Figures computed by Finalysis, not by the model · n
+  checked" with a calculator icon when `grounding.figuresChecked > 0` (it replaced "n figures checked" in the meta
+  line), then the model and cost. A failed turn has no Corgi label: there is no answer.
+- **While answering:** the question and "Corgi is thinking…" with the avatar (`PendingTurn`), until the answer or the
+  problem replaces them. The input: placeholder "Ask Corgi about your spending" (the label stays, visually hidden),
+  and under it "Corgi reads your data and never changes it. It can't give financial advice." with the counter
+  ("0 / 1,000").
+- **Categorizer naming:** the sheet's "suggested by Corgi", the review reasons "Corgi wasn't sure" and "Corgi's
+  answers were invalid", Settings' "Corgi · chat" and "Corgi · categorization" (the search embedding keeps "Search
+  (embedding) model": it isn't Corgi answering). "rule" and "you" stay. `corgiNaming.test.tsx` renders each place and
+  checks its text and tooltips for "AI", "the model" and model names. Not renamed: the cloud banner and the import
+  privacy line (SEC-01's wording), Alerts' "no AI", and chat's AI-off and service messages (about the service).
+- **Conversation totals:** `totalCost` on the list and the detail, `sum(chat_turn.estimated_cost)` in the store's
+  queries (six decimals; unpriced turns add nothing; null when no turn has a price). Summary calls aren't included:
+  they are in the ledger, which has no conversation id (V22). The list shows "3 turns · $0.03 · Oct 23"; the header
+  "This conversation: $0.03 estimated". After each answer the page reads the conversation again for its total (and
+  the list and today's usage): the turn's own cost is never added to anything. `ConversationCostTest` (Testcontainers).
+- **Cost rounding, one exception to format.ts's rule:** costs stay exact in the API (six decimals). `formatCost` shows
+  them to the cent, half up, on the digit string (never a binary number), "under $0.01" for a cost above zero that
+  rounds to nothing; the per-turn line keeps the exact estimate as before. It is the only rounding in `format.ts`,
+  documented there and tested case by case; costs are estimates from list prices and labelled so.
+- **Budget and month:** the chat page's left column reads `GET /api/chat/usage`: "$0.21 of $1.00 today · resets at
+  midnight" ("· no daily limit" when the cap is off). The endpoint gains `month`, `spentThisMonth` (every ledger kind
+  since local midnight on the first) and `questionsThisMonth` (TURN rows, failed ones included); Settings shows
+  "This month (October 2026): $1.23 · 42 questions · estimated from list prices". The ledger is purged with
+  `retention-days` (default 90), so a retention under a month would undercount; said in the record's comment.
+- **Local:** with mode LOCAL every cost line (turn, conversation, list, budget, Settings) shows "$0.00 · local"
+  (`costText`). No local profile exists yet; the tests use a LOCAL status fixture.
+- **Categorize now** (`components/categorize/`): on the Import result and on "Needs a category", while the
+  uncategorized count is above zero (the page's own total on Transactions; one `size=1` read on the Import result). It
+  posts `POST /api/categorization/run`, shows a progress bar, then the backend's `summary` in words: "97 categorized,
+  34 to review, 1 held back for privacy, 4 model calls" ("rules only (Corgi is off)" with AI off), "126 merchants
+  indexed for search" when the refresh embedded any, and a plain line when Corgi stopped at its cap or on an error.
+  Then `dataChanged({ shell: true })`: every page reads again, and the summary stays. "Held back" is a button with the
+  redaction explanation as its tooltip and its description, shown inline on tap (UI-07: no hover-only text). This
+  replaces 7d's reason for not offering it: the copy says it covers every uncategorized transaction, not one statement.
+- **Run summary (backend):** `RunResponse` gains `searchIndex` (the refresh's counts, logged until now) and `summary`:
+  `categorized` = rule + memory + AI, `toReview` = `txn` rows without a category (the same rows
+  `?uncategorized=true` counts; `UncategorizedCount`), `heldBack` = the AI stage's `redactionBlocked`, `modelCalls` =
+  its `calls`, `merchantsIndexed` = merchant documents the refresh embedded (category names not counted;
+  `MerchantIndexRefresh.refreshCounted`, `refresh()` unchanged for its other callers).
+- **CSV sign choice:** when the suggestion's sign confidence is GUESSED, the preview carries `signExample`, the first row
+  with a non-zero amount read by `CsvAmount` with each sign (amount without its sign, `asIs` and `inverted` as
+  MONEY_OUT/MONEY_IN), so the page parses nothing. The page shows "Purchases are negative in this file" and "Purchases
+  are positive in this file", each with that row read its way ("$4.50 at SQ *CORNER BEAN CAFE → money out"), in place
+  of "Use this mapping"; the suggested mapping's sign row says "You choose below…" instead of the guess. The PUT body is
+  the suggestion with the chosen `sign`. A matched sign (debit/credit columns) keeps the single button. An error
+  response carries no example (no rows, SEC-10). This answers 7d's finding (the transfers card file guessed INVERTED).
+- **Fixtures:** two new captured files, `import-preview-card.json` (the transfers card CSV's preview, sign guessed, with
+  its example) and `categorization-run-off.json` (the run with AI off, last in the script); AI-on runs and chat costs
+  are hand-written in the tests. Every earlier fixture came out byte-identical. Captured on a throwaway Postgres
+  (port 55432) and backend (18080, the packaged jar, AI off) after the README's newman folders (266 requests, 760 assertions, 0 failures), both
+  removed afterwards; the dev database was not touched.
+- **Layout check:** the chat header with each badge, the figures line and the input note; the two sign buttons with
+  their examples; Categorize now with its summary and the held-back explanation open. "Held back" is a 44 px target.
+  Screenshots at 375 and 1280 looked as the artboard, without its gradient.
+
 ### Requirement mapping
 
 | Requirement | Step(s) | Evidence |
 |---|---|---|
 | UI-01 | 2, 3, 7c | dashboard tests, `DashboardMatchesEndpointsTest`, Overview and details tests, hero and lead-sentence tests |
-| UI-03 | 6 | Chat tests |
+| UI-03 | 6, 7e | Chat tests; Corgi header, badge, figures note, costs (`ChatPage.test.tsx`), `corgiNaming.test.tsx`, `ConversationCostTest`, `ChatUsageApiTest`, `test:layout` |
 | UI-04 | 3, 3b, 6 | `DashboardInvariantTest`, `TransactionSourceLineTest`, invariant UI test, citation link tests, newman 13 |
 | UI-05 | 1, 7c | banner tests (wording, `CLOUD` and `OFF`), unchanged under the 7c strip |
 | UI-07 | 7, 7c | `test:layout` (the menu open at 375 px in both themes), menu tests |

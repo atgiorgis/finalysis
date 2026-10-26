@@ -11,7 +11,7 @@ import {
 } from '../api'
 import AccountPicker from '../components/import/AccountPicker'
 import FileDrop from '../components/import/FileDrop'
-import ImportResult, { type ImportResultState } from '../components/import/ImportResult'
+import ImportResult, { type ImportResultState, type SignChoice } from '../components/import/ImportResult'
 import ReviewSections from '../components/import/ReviewSections'
 import StatementsList, { type StatementsByAccount } from '../components/import/StatementsList'
 import { useDataVersion, useShellData } from '../shell/ShellData'
@@ -148,15 +148,19 @@ export default function ImportPage() {
     }
   }
 
-  /** "Use this mapping": save the suggested mapping for the account, then import the same file again. */
-  async function applySuggestedMapping() {
+  /**
+   * "Use this mapping", or one of the two sign buttons: save the suggested mapping for the account, with the sign the
+   * user chose when the suggestion only guessed it, then import the same file again.
+   */
+  async function applySuggestedMapping(sign?: SignChoice) {
     if (result?.kind !== 'mapping' || !result.preview?.suggestedMapping || accountId === null || !file) {
       return
     }
     setSaving(true)
     setSaveError(null)
     try {
-      await imports.saveMapping(accountId, result.preview.suggestedMapping.mapping)
+      const suggested = result.preview.suggestedMapping.mapping
+      await imports.saveMapping(accountId, sign ? { ...suggested, sign } : suggested)
     } catch (e) {
       const problem = e instanceof ApiProblem ? e : null
       const fields = Array.isArray(problem?.body.errors)
@@ -206,7 +210,7 @@ export default function ImportPage() {
           </div>
         )}
       </section>
-      {result && <ImportResult result={result} saving={saving} saveError={saveError} onUseMapping={() => void applySuggestedMapping()} />}
+      {result && <ImportResult result={result} saving={saving} saveError={saveError} onUseMapping={(sign) => void applySuggestedMapping(sign)} />}
       <ReviewSections queue={queue} statements={statementsById} />
       <StatementsList accounts={accounts} statements={statements} deleted={deleted} onDeleted={setDeleted} />
     </section>

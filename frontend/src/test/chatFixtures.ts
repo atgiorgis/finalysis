@@ -127,6 +127,8 @@ function stored(turn: ChatTurn, question: string): StoredTurn {
 export const conversation: Conversation = {
   id: 7,
   title: 'Groceries in September',
+  /** The backend's sum of the stored turns' costs: the rich turn's; the failed turn has none. */
+  totalCost: '0.012345',
   createdAt: '2026-10-23T12:00:00Z',
   updatedAt: '2026-10-23T12:05:00Z',
   turns: [
@@ -148,8 +150,8 @@ export const conversation: Conversation = {
 
 export const conversations = {
   items: [
-    { id: 7, title: 'Groceries in September', turns: 2, updatedAt: '2026-10-23T12:05:00Z' },
-    { id: 3, title: null, turns: 1, updatedAt: '2026-10-20T08:00:00Z' },
+    { id: 7, title: 'Groceries in September', turns: 2, totalCost: '0.012345', updatedAt: '2026-10-23T12:05:00Z' },
+    { id: 3, title: null, turns: 1, totalCost: null, updatedAt: '2026-10-20T08:00:00Z' },
   ],
   page: 0,
   size: 50,

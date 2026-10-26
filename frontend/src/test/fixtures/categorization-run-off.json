@@ -1,0 +1,52 @@
+{
+  "merchantsCleaned": 0,
+  "ruleCategorized": 0,
+  "ruleCleared": 0,
+  "memoryApplied": 0,
+  "ai": {
+    "status": "OFF",
+    "itemsSelected": 0,
+    "itemsSent": 0,
+    "txnsCategorized": 0,
+    "itemsLowConfidence": 0,
+    "itemsInvalid": 0,
+    "personToPerson": 0,
+    "redactionBlocked": 0,
+    "calls": 0,
+    "retries": 0,
+    "callsWithoutUsage": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "itemsRemaining": 0,
+    "txnsRemaining": 0,
+    "itemsWithExamples": 0,
+    "itemsDirect": 0,
+    "embeddings": {
+      "status": "OFF",
+      "merchants": 0,
+      "cached": 0,
+      "embedded": 0,
+      "calls": 0,
+      "callsWithoutUsage": 0,
+      "inputTokens": 0,
+      "remaining": 0
+    }
+  },
+  "searchIndex": {
+    "status": "OFF",
+    "merchants": 0,
+    "cached": 0,
+    "embedded": 0,
+    "calls": 0,
+    "callsWithoutUsage": 0,
+    "inputTokens": 0,
+    "remaining": 0
+  },
+  "summary": {
+    "categorized": 0,
+    "toReview": 5,
+    "heldBack": 0,
+    "modelCalls": 0,
+    "merchantsIndexed": 0
+  }
+}

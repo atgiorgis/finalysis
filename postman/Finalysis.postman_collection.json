@@ -240,7 +240,11 @@
                   "const suggestion = body.suggestedMapping;",
                   "pm.test('suggested date format and sign', () => { pm.expect(suggestion.mapping.dateFormat).to.eql('dd-MMM-yyyy'); pm.expect(suggestion.mapping.sign).to.eql('AS_IS'); });",
                   "pm.test('description from Merchant Name', () => pm.expect(suggestion.mapping.descriptionColumns).to.eql(['Merchant Name']));",
-                  "pm.collectionVariables.set('summitMapping', JSON.stringify(suggestion.mapping));"
+                  "pm.collectionVariables.set('summitMapping', JSON.stringify(suggestion.mapping));",
+                  "pm.test('a guessed sign comes with the first row read both ways (step 7e)', () => {",
+                  "    pm.expect(suggestion.confidence.sign).to.eql('GUESSED');",
+                  "    pm.expect(body.signExample).to.eql({row: 1, description: 'SQ *BLUE BEAN CAFE 4412', amount: '25.67', asIs: 'MONEY_OUT', inverted: 'MONEY_IN'});",
+                  "});"
                 ]
               }
             }
@@ -4231,7 +4235,12 @@
                   "pm.test('AI not run: status OFF', () => pm.expect(body.ai.status).to.eql('OFF'));",
                   "pm.test('no calls, nothing sent, no tokens', () => pm.expect(_.pick(body.ai, ['itemsSelected', 'itemsSent', 'txnsCategorized', 'calls', 'retries', 'inputTokens', 'outputTokens'])).to.eql({itemsSelected: 0, itemsSent: 0, txnsCategorized: 0, calls: 0, retries: 0, inputTokens: 0, outputTokens: 0}));",
                   "pm.test('no embedding calls', () => { pm.expect(body.ai.embeddings.status).to.eql('OFF'); pm.expect(body.ai.embeddings.calls).to.eql(0); });",
-                  "pm.test('rules are idempotent: a second pass changes nothing', () => pm.expect(_.pick(body, ['ruleCategorized', 'ruleCleared', 'memoryApplied'])).to.eql({ruleCategorized: 0, ruleCleared: 0, memoryApplied: 0}));"
+                  "pm.test('rules are idempotent: a second pass changes nothing', () => pm.expect(_.pick(body, ['ruleCategorized', 'ruleCleared', 'memoryApplied'])).to.eql({ruleCategorized: 0, ruleCleared: 0, memoryApplied: 0}));",
+                  "pm.test('the summary says rules only: no model calls, nothing held back or indexed (step 7e)', () => {",
+                  "    pm.expect(_.pick(body.summary, ['categorized', 'heldBack', 'modelCalls', 'merchantsIndexed'])).to.eql({categorized: 0, heldBack: 0, modelCalls: 0, merchantsIndexed: 0});",
+                  "    pm.expect(body.summary.toReview).to.be.a('number').and.to.be.at.least(0);",
+                  "    pm.expect(body.searchIndex.status).to.eql('OFF');",
+                  "});"
                 ]
               }
             }
@@ -7828,7 +7837,8 @@
                       "pm.test('the id asked for, no turns', () => {",
                       "    pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('chatConversationId')));",
                       "    pm.expect(body.turns).to.eql([]);",
-                      "});"
+                      "});",
+                      "pm.test('no turns, so no total cost (step 7e)', () => pm.expect(body.totalCost).to.eql(null));"
                     ]
                   }
                 }
@@ -7851,7 +7861,8 @@
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
                       "const id = Number(pm.collectionVariables.get('chatConversationId'));",
                       "const item = pm.response.json().items.find(i => i.id === id);",
-                      "pm.test('listed with 0 turns', () => { pm.expect(item).to.be.an('object'); pm.expect(item.turns).to.eql(0); });"
+                      "pm.test('listed with 0 turns', () => { pm.expect(item).to.be.an('object'); pm.expect(item.turns).to.eql(0); });",
+                      "pm.test('no priced turn: totalCost null (step 7e)', () => pm.expect(item.totalCost).to.eql(null));"
                     ]
                   }
                 }
@@ -8390,6 +8401,11 @@
                   "pm.test('today and the next midnight', () => {",
                   "    pm.expect(body.day).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
                   "    pm.expect(new Date(body.resetsAt).getTime()).to.be.above(Date.now());",
+                  "});",
+                  "pm.test('this month: nothing spent and no questions with AI off (step 7e)', () => {",
+                  "    pm.expect(body.month).to.match(/^\\d{4}-\\d{2}$/);",
+                  "    pm.expect(body.spentThisMonth).to.eql('0.000000');",
+                  "    pm.expect(body.questionsThisMonth).to.eql(0);",
                   "});"
                 ]
               }

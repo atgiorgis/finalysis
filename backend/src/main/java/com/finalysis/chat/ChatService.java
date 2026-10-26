@@ -117,7 +117,8 @@ public class ChatService {
         }
         ChatConversationStore.Page stored = store.list(page, size);
         return new ConversationResponses.Page(stored.items().stream()
-                .map(c -> new ConversationResponses.Item(c.id(), c.title(), c.turns(), c.updatedAt())).toList(),
+                .map(c -> new ConversationResponses.Item(c.id(), c.title(), c.turns(),
+                        money(c.totalCost()), c.updatedAt())).toList(),
                 page, size, (int) ((stored.total() + size - 1) / size));
     }
 
@@ -132,7 +133,8 @@ public class ChatService {
                 new ChatTurnResponse.Usage(t.model(), t.rounds(), t.inputTokens(), t.outputTokens(),
                         t.cacheReadTokens(), t.cacheWriteTokens(), t.callsWithoutUsage(), money(t.estimatedCost())),
                 t.createdAt())).toList();
-        return new ConversationResponses.Detail(conversation.id(), conversation.title(), conversation.createdAt(),
+        return new ConversationResponses.Detail(conversation.id(), conversation.title(),
+                money(conversation.totalCost()), conversation.createdAt(),
                 conversation.updatedAt(), stored);
     }
 

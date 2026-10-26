@@ -1,10 +1,14 @@
 import { Link } from 'react-router-dom'
-import type { AnswerSource, Citation, ChatGrounding, ChatUsage, LimitHit } from '../../api'
+import type { AiStatus, AnswerSource, Citation, ChatGrounding, ChatUsage, LimitHit } from '../../api'
 import { alertHref, drillHref, seriesHref } from '../../citationLinks'
 import { answerParts, stripEmphasis } from '../../chatText'
+import { AI_NAME, costText } from '../../corgi'
 import { formatDate, formatMoney, formatMonth } from '../../format'
+import { CalculatorIcon } from '../../shell/icons'
+import { useShellData } from '../../shell/ShellData'
 import { useTxnSheet } from '../../shell/TxnSheet'
 import { ALERT_LABELS } from '../alertText'
+import CorgiAvatar from './CorgiAvatar'
 
 const LIMIT_TEXT: Record<LimitHit, string> = {
   ROUNDS: 'model calls',
@@ -97,8 +101,18 @@ function CitationItem({ citation }: { citation: Citation }) {
   }
 }
 
-/** One question and its answer: the text, its citations as links, how it was checked, its cost, any limit. */
+/** The turn's cost as the backend estimated it, exact; `$0.00 · local` with a local model. */
+function turnCost(usage: ChatUsage | null, ai: AiStatus | undefined): string {
+  return costText(usage?.estimatedCost, ai, (v) => (v ? `${formatMoney(v)} estimated` : 'no price'))
+}
+
+/**
+ * One question and its answer: Corgi's avatar and name, the text, its citations as links, the figures note when the
+ * backend checked any figure, then the model and cost; any limit.
+ */
 export default function ChatTurnView({ entry }: { entry: TurnEntry }) {
+  const { status } = useShellData()
+  const checked = entry.grounding?.figuresChecked ?? 0
   return (
     <li className="chat-turn">
       <p className="chat-question">{entry.question}</p>
@@ -111,40 +125,59 @@ export default function ChatTurnView({ entry }: { entry: TurnEntry }) {
         <p className="chat-error">This question failed: the AI service didn’t answer.</p>
       )}
       {entry.answer !== null && !entry.error && (
-        <div className="chat-reply">
-          {entry.answerSource === 'FALLBACK' && (
-            <p className="chat-note">The model’s answer couldn’t be checked, so here are the figures it used.</p>
-          )}
-          <Answer entry={entry} />
-          {entry.limitHit && (
-            <p className="chat-note">
-              This answer stopped early: it reached the limit on {LIMIT_TEXT[entry.limitHit]} for one question.
-            </p>
-          )}
-          {entry.citations.length > 0 && (
-            <ol className="chat-citations" aria-label="Citations">
-              {[...entry.citations]
-                .sort((a, b) => a.marker - b.marker)
-                .map((c) => (
-                  <li key={c.marker} id={anchor(entry.key, c.marker)} value={c.marker}>
-                    <CitationItem citation={c} />
-                  </li>
-                ))}
-            </ol>
-          )}
-          <p className="chat-meta muted">
-            {entry.usage?.model ?? 'model unknown'}
-            {' · '}
-            {entry.usage?.estimatedCost ? `${formatMoney(entry.usage.estimatedCost)} estimated` : 'no price'}
-            {entry.grounding && entry.grounding.figuresChecked > 0 && (
-              <>
-                {' · '}
-                {entry.grounding.figuresChecked === 1 ? '1 figure checked' : `${entry.grounding.figuresChecked} figures checked`}
-              </>
+        <div className="chat-answer-row">
+          <CorgiAvatar />
+          <div className="chat-answer-body">
+            <p className="chat-speaker">{AI_NAME}</p>
+            <div className="chat-reply">
+              {entry.answerSource === 'FALLBACK' && (
+                <p className="chat-note">The model’s answer couldn’t be checked, so here are the figures it used.</p>
+              )}
+              <Answer entry={entry} />
+              {entry.limitHit && (
+                <p className="chat-note">
+                  This answer stopped early: it reached the limit on {LIMIT_TEXT[entry.limitHit]} for one question.
+                </p>
+              )}
+              {entry.citations.length > 0 && (
+                <ol className="chat-citations" aria-label="Citations">
+                  {[...entry.citations]
+                    .sort((a, b) => a.marker - b.marker)
+                    .map((c) => (
+                      <li key={c.marker} id={anchor(entry.key, c.marker)} value={c.marker}>
+                        <CitationItem citation={c} />
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </div>
+            {checked > 0 && (
+              <p className="chat-figures muted">
+                <CalculatorIcon />
+                <span>Figures computed by Finalysis, not by the model · {checked} checked</span>
+              </p>
             )}
-          </p>
+            <p className="chat-meta muted">
+              {entry.usage?.model ?? 'model unknown'}
+              {' · '}
+              {turnCost(entry.usage, status?.ai)}
+            </p>
+          </div>
         </div>
       )}
+    </li>
+  )
+}
+
+/** While a question is being answered: the question, then Corgi thinking. */
+export function PendingTurn({ question }: { question: string }) {
+  return (
+    <li className="chat-turn">
+      <p className="chat-question">{question}</p>
+      <div className="chat-answer-row chat-thinking" role="status">
+        <CorgiAvatar />
+        <span className="muted">{AI_NAME} is thinking…</span>
+      </div>
     </li>
   )
 }

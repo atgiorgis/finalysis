@@ -542,11 +542,26 @@ export interface ImportPreview {
   rows?: string[][] | null
   mappingStatus?: 'NONE' | 'MATCHES' | 'MISMATCH'
   suggestedMapping?: SuggestedCsvMapping
+  /** When the suggested sign is a guess (step 7e): the first row with an amount, read both ways by the backend. */
+  signExample?: SignExample
   periodStart?: IsoDate
   periodEnd?: IsoDate
   transactionCount?: number
   recognized?: boolean
   reason?: UnparsedReason
+}
+
+export type Direction = 'MONEY_OUT' | 'MONEY_IN'
+
+/** One row of a CSV read with each sign: the amount without its sign, and its direction either way. */
+export interface SignExample {
+  row: number
+  description: string | null
+  amount: Money
+  /** Read as printed: purchases are negative in the file. */
+  asIs: Direction
+  /** Every amount flipped: purchases are positive in the file. */
+  inverted: Direction
 }
 
 export interface StatementDeleteResult {
@@ -698,6 +713,32 @@ export const imports = {
   unlink: (linkId: number) => send<null>('DELETE', `/api/transfers/${linkId}`),
 }
 
+// ---------------------------------------------------------------------------- categorization run (step 7e)
+
+export type AiRunStatus = 'OFF' | 'DONE' | 'CAP_REACHED' | 'STOPPED_ON_ERROR'
+
+/** `POST /api/categorization/run`: the stages' counts and a summary the backend added up. */
+export interface CategorizationRun {
+  merchantsCleaned: number
+  ruleCategorized: number
+  ruleCleared: number
+  memoryApplied: number
+  ai: { status: AiRunStatus; itemsRemaining: number; [count: string]: unknown }
+  searchIndex: { status: AiRunStatus; embedded: number; [count: string]: unknown }
+  summary: {
+    categorized: number
+    toReview: number
+    heldBack: number
+    modelCalls: number
+    merchantsIndexed: number
+  }
+}
+
+export const categorization = {
+  /** Rules, memory and, when AI is on, Corgi, over every transaction; then the search index. Can take a while. */
+  run: () => send<CategorizationRun>('POST', '/api/categorization/run') as Promise<CategorizationRun>,
+}
+
 // ---------------------------------------------------------------------------- reads
 
 type Params = Record<string, string | number | boolean | null | undefined>
@@ -795,6 +836,10 @@ export interface ChatDailyUsage {
   maxTurnCost: string | null
   maxDailyCost: string | null
   resetsAt: string
+  /** This month's spend and questions from the same ledger (step 7e). */
+  month: YearMonth
+  spentThisMonth: string
+  questionsThisMonth: number
 }
 
 export const reads = {
@@ -930,12 +975,16 @@ export interface ConversationItem {
   id: number
   title: string | null
   turns: number
+  /** Its turns' estimated costs, summed by the backend (six decimals); null when no turn has a price. */
+  totalCost: string | null
   updatedAt: string
 }
 
 export interface Conversation {
   id: number
   title: string | null
+  /** As on the list. */
+  totalCost: string | null
   createdAt: string
   updatedAt: string
   turns: StoredTurn[]

@@ -1,0 +1,98 @@
+{
+  "format": "csv",
+  "delimiter": ",",
+  "encoding": "UTF-8",
+  "skipRows": 0,
+  "headers": [
+    "Trans. Date",
+    "Merchant Name",
+    "Amount"
+  ],
+  "rows": [
+    [
+      "03-May-2026",
+      "SQ *CORNER BEAN CAFE",
+      "-4.50"
+    ],
+    [
+      "09-May-2026",
+      "ONLINE PAYMENT - THANK YOU",
+      "410.25"
+    ],
+    [
+      "11-May-2026",
+      "ONLINE PAYMENT - THANK YOU",
+      "95.60"
+    ],
+    [
+      "13-May-2026",
+      "ONLINE PAYMENT - THANK YOU",
+      "133.10"
+    ],
+    [
+      "14-May-2026",
+      "ONLINE PAYMENT - THANK YOU",
+      "144.20"
+    ],
+    [
+      "21-May-2026",
+      "ONLINE PAYMENT - THANK YOU",
+      "200.00"
+    ],
+    [
+      "24-May-2026",
+      "CORNER HARDWARE REFUND",
+      "42.00"
+    ],
+    [
+      "25-May-2026",
+      "CASH ADVANCE",
+      "-75.00"
+    ]
+  ],
+  "mappingStatus": "NONE",
+  "suggestedMapping": {
+    "mapping": {
+      "headers": [
+        "Trans. Date",
+        "Merchant Name",
+        "Amount"
+      ],
+      "columnCount": null,
+      "delimiter": ",",
+      "encoding": "UTF-8",
+      "headerRow": true,
+      "skipRows": 0,
+      "dateColumn": "Trans. Date",
+      "dateFormat": "dd-MMM-yyyy",
+      "postDateColumn": null,
+      "descriptionColumns": [
+        "Merchant Name"
+      ],
+      "amountMode": "SINGLE",
+      "amountColumn": "Amount",
+      "debitColumn": null,
+      "creditColumn": null,
+      "sign": "INVERTED",
+      "balanceColumn": null,
+      "checkNumberColumn": null
+    },
+    "confidence": {
+      "dateColumn": "MATCHED",
+      "dateFormat": "MATCHED",
+      "descriptionColumns": "MATCHED",
+      "amountColumn": "MATCHED",
+      "sign": "GUESSED"
+    },
+    "notes": [
+      "sign: 6 of 8 amounts are positive, so purchases look positive (INVERTED)"
+    ]
+  },
+  "signExample": {
+    "row": 1,
+    "description": "SQ *CORNER BEAN CAFE",
+    "amount": "4.50",
+    "asIs": "MONEY_OUT",
+    "inverted": "MONEY_IN"
+  }
+}

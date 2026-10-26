@@ -171,13 +171,19 @@ async function fixtureAccount(name, type, lastFour) {
   return expectStatus(created, 201, `create ${name}`)
 }
 
-/** Preview, save the suggested mapping (with `edits`), import: the page's "Use this mapping" path. */
-async function importCsv(accountId, file, edits = {}) {
+/**
+ * Preview, save the suggested mapping (with `edits`), import: the page's "Use this mapping" path, or a sign button's
+ * when `edits` sets the sign. With `previewName`, the preview is saved as that fixture.
+ */
+async function importCsv(accountId, file, edits = {}, previewName = null) {
   const preview = expectStatus(
     await write('POST', `/api/accounts/${accountId}/imports/preview`, fileForm(file)),
     200,
     `preview ${file}`,
   )
+  if (previewName) {
+    save(previewName, preview)
+  }
   expectStatus(
     await write('PUT', `/api/accounts/${accountId}/csv-mapping`, { ...preview.suggestedMapping.mapping, ...edits }),
     201,
@@ -212,8 +218,9 @@ save('csv-mapping-saved', expectStatus(
 const savings = await fixtureAccount('Fixture Savings', 'SAVINGS', '5102')
 await importCsv(savings.id, `${TRANSFERS}/transfers-northfield-savings_2026-05.csv`)
 const card = await fixtureAccount('Fixture Card', 'CREDIT_CARD', '5103')
-// More payments than purchases make the suggester guess INVERTED; the file prints money out as negative.
-await importCsv(card.id, `${TRANSFERS}/transfers-summit-card_2026-05.csv`, { sign: 'AS_IS' })
+// More payments than purchases make the suggester guess INVERTED; the file prints money out as negative. The guess
+// comes with a sign example (step 7e), and the page's "Purchases are negative" button saves AS_IS.
+await importCsv(card.id, `${TRANSFERS}/transfers-summit-card_2026-05.csv`, { sign: 'AS_IS' }, 'import-preview-card')
 const checkingImport = expectStatus(
   await importInto(checking.id, `${TRANSFERS}/transfers-northfield-checking_2026-05.csv`),
   201,
@@ -288,3 +295,7 @@ save('review-queue-possible-match', await get('/api/review-queue'))
 save('statements-fixture-checking', await get(`/api/accounts/${checking.id}/statements`))
 save('statement-detail', await get(`/api/statements/${checkingImport.statementId}`))
 save('transactions-statement', await get(`/api/transactions?statementId=${checkingImport.statementId}&size=50`))
+
+// "Categorize now" (step 7e) with AI off: the rules run again over everything; the summary says rules only. Last, so
+// nothing above sees its effect.
+save('categorization-run-off', expectStatus(await write('POST', '/api/categorization/run'), 200, 'categorization run'))

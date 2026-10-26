@@ -1,8 +1,9 @@
 /**
  * Display formatting for values the API returns as strings (money, percents, months, dates).
  *
- * String handling only: a value is never parsed into a number, so formatting can't round, drift or do arithmetic
- * (docs/plans/phase-7.md §4.3). A value that isn't in the expected shape is shown as it came.
+ * String handling only: a value is never parsed into a number, so formatting can't drift or do arithmetic
+ * (docs/plans/phase-7.md §4.3). Nothing rounds except `formatCost`, which rounds an estimated cost to the cent on its
+ * digits. A value that isn't in the expected shape is shown as it came.
  */
 
 const MINUS = '−'
@@ -65,6 +66,48 @@ export function formatMoney(value: string | null | undefined, options: SignOptio
   }
   const [, minus, whole, fraction] = match
   return `${signOf(minus, whole, fraction, options)}$${group(whole)}${fraction === undefined ? '' : `.${fraction}`}`
+}
+
+/**
+ * An estimated AI cost (`"0.029515"`, six decimals) to the cent, half up: `$0.03`. The one rounding in this file, for
+ * costs only: they are estimates from list prices, labelled so, and the exact value stays in the API. Done on the
+ * digits, never through a binary number. A cost above zero but under half a cent shows as `under $0.01`, so it never
+ * reads as free. Null shows as a dash.
+ */
+export function formatCost(value: string | null | undefined): string {
+  if (value === null || value === undefined) {
+    return EMPTY
+  }
+  const match = DECIMAL.exec(value)
+  if (!match || match[1]) {
+    return value
+  }
+  const [, , whole, fraction = ''] = match
+  const digits = (fraction + '00').slice(0, 2)
+  const roundUp = fraction.length > 2 && fraction[2] >= '5'
+  let cents = (whole + digits).replace(/^0+(?=\d)/, '')
+  if (roundUp) {
+    cents = increment(cents)
+  }
+  cents = cents.padStart(3, '0')
+  const rounded = `${cents.slice(0, -2)}.${cents.slice(-2)}`
+  if (/^0+\.00$/.test(rounded) && !isZero(whole, fraction || undefined)) {
+    return 'under $0.01'
+  }
+  return formatMoney(rounded)
+}
+
+/** A digit string plus one, carrying: `"099"` → `"100"`. */
+function increment(digits: string): string {
+  const chars = digits.split('')
+  for (let i = chars.length - 1; i >= 0; i--) {
+    if (chars[i] !== '9') {
+      chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1)
+      return chars.join('')
+    }
+    chars[i] = '0'
+  }
+  return `1${chars.join('')}`
 }
 
 /**

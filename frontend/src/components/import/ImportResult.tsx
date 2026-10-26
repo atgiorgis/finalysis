@@ -2,12 +2,15 @@ import { Link } from 'react-router-dom'
 import type {
   ApiProblem,
   CsvMapping,
+  Direction,
+  SignExample,
   ImportPreview,
   ImportSummary,
   MappingConfidence,
   UnparsedUpload,
 } from '../../api'
-import { formatPeriod } from '../../format'
+import { formatMoney, formatPeriod } from '../../format'
+import CategorizeNow from '../categorize/CategorizeNow'
 import { BALANCE_TEXT, REASON_TEXT, STATUS_TEXT } from './importText'
 
 /** What an import came back with, as the page shows it. */
@@ -34,7 +37,10 @@ const CONFIDENCE_TEXT: Record<MappingConfidence, string> = {
 }
 
 /** The mapping's fields as rows: label, value as the API suggested it, and how sure the suggestion is. */
-function mappingRows(mapping: CsvMapping): { field: keyof CsvMapping; label: string; value: string }[] {
+function mappingRows(
+  mapping: CsvMapping,
+  signGuessed: boolean,
+): { field: keyof CsvMapping; label: string; value: string }[] {
   const rows: { field: keyof CsvMapping; label: string; value: string | null }[] = [
     { field: 'dateColumn', label: 'Date', value: mapping.dateColumn },
     { field: 'dateFormat', label: 'Date format', value: mapping.dateFormat },
@@ -53,8 +59,9 @@ function mappingRows(mapping: CsvMapping): { field: keyof CsvMapping; label: str
     {
       field: 'sign',
       label: 'Amounts',
-      value:
-        mapping.sign === 'INVERTED'
+      value: signGuessed
+        ? 'You choose below which way purchases are printed'
+        : mapping.sign === 'INVERTED'
           ? 'Money out is printed positive: every amount is flipped'
           : mapping.sign === 'AS_IS'
             ? 'As printed: money out is negative'
@@ -65,6 +72,60 @@ function mappingRows(mapping: CsvMapping): { field: keyof CsvMapping; label: str
   return rows
     .filter((row) => row.value !== null || row.field !== 'postDateColumn')
     .map((row) => ({ ...row, value: row.value ?? 'not set' }))
+}
+
+export type SignChoice = 'AS_IS' | 'INVERTED'
+
+/** The suggester guessed the sign: the user says which way the file prints purchases (step 7e). */
+export function signGuessed(preview: ImportPreview | null): boolean {
+  return preview?.suggestedMapping?.confidence.sign === 'GUESSED'
+}
+
+const DIRECTION_TEXT: Record<Direction, string> = { MONEY_OUT: 'money out', MONEY_IN: 'money in' }
+
+/** "$52.48 at SQ *CORNER BEAN CAFE → money out": the backend's example row read one way. */
+export function signExampleText(example: SignExample, choice: SignChoice): string {
+  const where = example.description ? ` at ${example.description}` : ` (row ${example.row})`
+  return `${formatMoney(example.amount)}${where} → ${DIRECTION_TEXT[choice === 'AS_IS' ? example.asIs : example.inverted]}`
+}
+
+const SIGN_BUTTONS: { choice: SignChoice; label: string }[] = [
+  { choice: 'AS_IS', label: 'Purchases are negative in this file' },
+  { choice: 'INVERTED', label: 'Purchases are positive in this file' },
+]
+
+/** Two buttons in place of "Use this mapping" when the sign is a guess; each shows the example read its way. */
+function SignButtons({
+  example,
+  saving,
+  onChoose,
+}: {
+  example: SignExample | undefined
+  saving: boolean
+  onChoose: (sign: SignChoice) => void
+}) {
+  return (
+    <div className="sign-choice" role="group" aria-labelledby="sign-choice-title">
+      <p id="sign-choice-title">
+        Which way does this file print purchases? Nothing is assumed: your answer is saved with the mapping.
+      </p>
+      <div className="sign-choice-buttons">
+        {SIGN_BUTTONS.map(({ choice, label }) => (
+          <button
+            key={choice}
+            type="button"
+            className="button-secondary sign-choice-button"
+            disabled={saving}
+            onClick={() => onChoose(choice)}
+          >
+            <span className="sign-choice-label">{label}</span>
+            {example && <span className="sign-choice-example muted">{signExampleText(example, choice)}</span>}
+          </button>
+        ))}
+      </div>
+      {saving && <p className="muted">Saving and importing…</p>}
+    </div>
+  )
 }
 
 /** The file's first rows and the suggested mapping, as the preview returns them. */
@@ -102,12 +163,12 @@ function MappingPreview({ preview }: { preview: ImportPreview }) {
         <section aria-labelledby="suggested-mapping">
           <h4 id="suggested-mapping">Suggested mapping</h4>
           <dl className="facts">
-            {mappingRows(suggestion.mapping).map((row) => (
+            {mappingRows(suggestion.mapping, signGuessed(preview)).map((row) => (
               <div className="facts-row" key={row.field}>
                 <dt>{row.label}</dt>
                 <dd>
                   {row.value}
-                  {suggestion.confidence[row.field] && (
+                  {suggestion.confidence[row.field] && !(row.field === 'sign' && signGuessed(preview)) && (
                     <span className="muted"> · {CONFIDENCE_TEXT[suggestion.confidence[row.field]!]}</span>
                   )}
                 </dd>
@@ -153,7 +214,8 @@ export default function ImportResult({
   result: ImportResultState
   saving: boolean
   saveError: string | null
-  onUseMapping: () => void
+  /** Saves the suggested mapping, with the sign the user chose when the suggestion only guessed it. */
+  onUseMapping: (sign?: SignChoice) => void
 }) {
   switch (result.kind) {
     case 'imported': {
@@ -205,6 +267,7 @@ export default function ImportResult({
           <p className="muted">
             Categorization rules ran with the import. Anything they couldn’t place waits under “Needs a category”.
           </p>
+          <CategorizeNow />
         </section>
       )
     }
@@ -261,11 +324,15 @@ export default function ImportResult({
                   {saveError}
                 </p>
               )}
-              <div className="import-actions">
-                <button type="button" className="button-primary" disabled={saving} onClick={onUseMapping}>
-                  {saving ? 'Saving and importing…' : 'Use this mapping'}
-                </button>
-              </div>
+              {signGuessed(result.preview) ? (
+                <SignButtons example={result.preview.signExample} saving={saving} onChoose={onUseMapping} />
+              ) : (
+                <div className="import-actions">
+                  <button type="button" className="button-primary" disabled={saving} onClick={() => onUseMapping()}>
+                    {saving ? 'Saving and importing…' : 'Use this mapping'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </section>

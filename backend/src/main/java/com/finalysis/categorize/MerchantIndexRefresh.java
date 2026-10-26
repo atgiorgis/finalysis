@@ -71,10 +71,24 @@ public class MerchantIndexRefresh {
         this.readOnly.setReadOnly(true);
     }
 
+    /**
+     * One refresh's counts with its merchants apart (step 7e: the run summary says "merchants indexed").
+     *
+     * @param total             categories and merchants together, as {@link #refresh()} returns them
+     * @param merchantsEmbedded merchant documents embedded in this refresh
+     */
+    public record Refresh(EmbeddingRunResult total, int merchantsEmbedded) {
+    }
+
     /** Embeds what is missing, merchants in name order; one refresh at a time, no transaction held across calls. */
     public EmbeddingRunResult refresh() {
+        return refreshCounted().total();
+    }
+
+    /** {@link #refresh()}, with the merchants embedded counted apart from the categories. */
+    public Refresh refreshCounted() {
         if (!stage.enabled()) {
-            return EmbeddingRunResult.off();
+            return new Refresh(EmbeddingRunResult.off(), 0);
         }
         running.lock();
         try {
@@ -82,15 +96,17 @@ public class MerchantIndexRefresh {
             Map<String, String> merchants = readOnly.execute(status -> merchantDocuments());
             int cap = properties.maxEmbeddingsPerRun();
             EmbeddingRunResult result = stage.embedInto(categories, cap, store(SearchDocuments.Kind.CATEGORY));
+            EmbeddingRunResult merchantRun;
             if (result.status() == AiCategorizer.Status.STOPPED_ON_ERROR) {
-                result = result.plus(new EmbeddingRunResult(AiCategorizer.Status.STOPPED_ON_ERROR, merchants.size(),
-                        0, 0, 0, 0, 0, merchants.size()));
+                merchantRun = new EmbeddingRunResult(AiCategorizer.Status.STOPPED_ON_ERROR, merchants.size(),
+                        0, 0, 0, 0, 0, merchants.size());
             } else {
-                result = result.plus(stage.embedInto(merchants, Math.max(0, cap - result.calls()),
-                        store(SearchDocuments.Kind.MERCHANT)));
+                merchantRun = stage.embedInto(merchants, Math.max(0, cap - result.calls()),
+                        store(SearchDocuments.Kind.MERCHANT));
             }
+            result = result.plus(merchantRun);
             MerchantEmbeddingStage.log("Search index refresh", result);
-            return result;
+            return new Refresh(result, merchantRun.embedded());
         } finally {
             running.unlock();
         }

@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZonedDateTime;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code GET /api/chat/usage} (docs/plans/phase-7.md §3.4): today's estimated chat spend beside the cost limits, for
  * the Settings tab. Read-only. Today's spend is the same figure the daily cap checks
  * ({@link ChatConversationStore#costSince} from local midnight), so the UI shows what the cap enforces. Works with AI
- * off.
+ * off. This month's spend and question count (step 7e) come from the same ledger, for Settings.
  */
 @RestController
 public class ChatUsageController {
@@ -25,9 +26,14 @@ public class ChatUsageController {
      * @param maxTurnCost  the per-turn cap in dollars as configured, at least two decimals; null when off (0)
      * @param maxDailyCost the daily cap in dollars as configured, at least two decimals; null when off (0)
      * @param resetsAt     the next local midnight, when the daily spend starts again from 0
+     * @param month              the local month the monthly figures cover (step 7e)
+     * @param spentThisMonth     estimated dollars since the first of the month, local midnight, six decimals, from the
+     *                           same ledger as {@code spentToday}; rows older than the retention are purged
+     * @param questionsThisMonth chat turns in the ledger since then (summaries aren't questions)
      */
     public record ChatUsageResponse(LocalDate day, String spentToday, String maxTurnCost, String maxDailyCost,
-                                    OffsetDateTime resetsAt) {
+                                    OffsetDateTime resetsAt, YearMonth month, String spentThisMonth,
+                                    long questionsThisMonth) {
     }
 
     private final ChatConversationStore store;
@@ -45,8 +51,14 @@ public class ChatUsageController {
         ZonedDateTime now = ZonedDateTime.now(clock);
         ZonedDateTime midnight = now.toLocalDate().atStartOfDay(now.getZone());
         BigDecimal spent = store.costSince(midnight.toOffsetDateTime());
-        return new ChatUsageResponse(midnight.toLocalDate(), spent.setScale(6, RoundingMode.UNNECESSARY).toPlainString(),
-                cap(limits.maxTurnCost()), cap(limits.maxDailyCost()), midnight.plusDays(1).toOffsetDateTime());
+        OffsetDateTime monthStart = now.toLocalDate().withDayOfMonth(1).atStartOfDay(now.getZone()).toOffsetDateTime();
+        return new ChatUsageResponse(midnight.toLocalDate(), dollars(spent), cap(limits.maxTurnCost()),
+                cap(limits.maxDailyCost()), midnight.plusDays(1).toOffsetDateTime(), YearMonth.from(midnight),
+                dollars(store.costSince(monthStart)), store.turnsSince(monthStart));
+    }
+
+    private static String dollars(BigDecimal spent) {
+        return spent.setScale(6, RoundingMode.UNNECESSARY).toPlainString();
     }
 
     private static String cap(BigDecimal dollars) {

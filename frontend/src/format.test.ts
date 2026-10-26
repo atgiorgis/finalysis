@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   formatBytes,
+  formatCost,
   formatCount,
   formatDate,
   formatMoney,
@@ -105,5 +106,30 @@ describe('formatPeriod, formatCount and formatBytes (step 7d)', () => {
     expect(formatBytes(1)).toBe('1 byte')
     expect(formatBytes(0)).toBe('0 bytes')
     expect(formatBytes(10485760)).toBe('10,485,760 bytes')
+  })
+})
+
+describe('formatCost (step 7e): an estimated cost to the cent, half up, on the digits', () => {
+  test.each([
+    ['0.029515', '$0.03'],
+    ['0.214300', '$0.21'],
+    ['0.215000', '$0.22'],
+    ['0.214999', '$0.21'],
+    ['1.00', '$1.00'],
+    ['0.995000', '$1.00'],
+    ['9.999999', '$10.00'],
+    ['1234.565', '$1,234.57'],
+    ['0.000000', '$0.00'],
+    ['0', '$0.00'],
+    ['0.004100', 'under $0.01'],
+    ['0.005000', '$0.01'],
+  ])('%s → %s', (value, shown) => {
+    expect(formatCost(value)).toBe(shown)
+  })
+
+  test('null is a dash; anything else is shown as it came', () => {
+    expect(formatCost(null)).toBe('—')
+    expect(formatCost('-0.01')).toBe('-0.01')
+    expect(formatCost('n/a')).toBe('n/a')
   })
 })

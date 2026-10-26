@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { fixtures } from '../src/test/fixtures'
+import { fixtures, usageFixture } from '../src/test/fixtures'
 import { mockApi, withStatus } from './mockApi'
 
 /**
@@ -279,5 +279,60 @@ test('import: the delete question fits', async ({ page }, info) => {
   const checking = page.getByRole('region', { name: 'Northfield Bank Checking ···1001' })
   await checking.getByRole('button', { name: 'Delete the statement Sep 1, 2026 to Sep 30, 2026' }).click()
   await expect(checking.getByRole('alertdialog')).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+// ---------------------------------------------------------------------------- step 7e: Corgi, sign choice, run summary
+
+const CLOUD_STATUS = {
+  ...fixtures.statusOff,
+  ai: { mode: 'CLOUD', provider: 'bedrock', models: { main: 'test-main-model', categorization: 'c', embedding: 'e' } },
+}
+
+for (const [where, status, label] of [
+  ['cloud', CLOUD_STATUS, 'Cloud · Bedrock'],
+  ['local', { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, mode: 'LOCAL', provider: 'ollama' } }, 'Local · Ollama'],
+] as const) {
+  test(`chat: Corgi’s header with the ${where} badge fits, and the input line under it`, async ({ page }, info) => {
+    await mockApi(page, { '/api/status': status, '/api/chat/usage': { ...usageFixture, spentToday: '0.214300' } })
+    await page.goto('/chat/7')
+    await expect(page.getByText(label)).toBeVisible()
+    await expect(page.getByText('Reads your books. Never changes them.')).toBeVisible()
+    await expect(page.getByText('Figures computed by Finalysis, not by the model · 3 checked')).toBeVisible()
+    await expect(page.getByText('It can’t give financial advice.', { exact: false })).toBeVisible()
+    const badge = await page.locator('.path-badge').boundingBox()
+    expect(badge!.x + badge!.width, 'the badge stays on screen').toBeLessThanOrEqual(page.viewportSize()!.width)
+    await fitsAt375(page, info.project.name === 'phone')
+  })
+}
+
+test('import: the two sign buttons with their examples fit', async ({ page }, info) => {
+  await mockApi(page, {
+    '/api/accounts/1/imports': withStatus(422, fixtures.importMappingRequired),
+    '/api/accounts/1/imports/preview': fixtures.importPreviewCard,
+  })
+  await page.goto('/import')
+  await importFile(page)
+  await expect(page.getByRole('button', { name: /Purchases are negative in this file/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Purchases are positive in this file/ })).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+})
+
+test('transactions: Categorize now and its summary fit', async ({ page }, info) => {
+  const run = {
+    ...fixtures.categorizationRunOff,
+    ai: { ...fixtures.categorizationRunOff.ai, status: 'DONE' },
+    summary: { categorized: 97, toReview: 34, heldBack: 1, modelCalls: 4, merchantsIndexed: 126 },
+  }
+  await mockApi(page, {
+    '/api/transactions': { ...fixtures.transactionsUncategorized, total: 34 },
+    '/api/review-queue': fixtures.reviewQueue,
+    '/api/categorization/run': run,
+  })
+  await page.goto('/transactions?view=review')
+  await page.getByRole('button', { name: 'Categorize now' }).click()
+  await expect(page.getByText('126 merchants indexed for search')).toBeVisible()
+  await page.getByRole('button', { name: '1 held back for privacy' }).click()
+  await expect(page.getByText(/privacy check refused it/)).toBeVisible()
   await fitsAt375(page, info.project.name === 'phone')
 })

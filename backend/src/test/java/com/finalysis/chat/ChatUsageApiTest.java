@@ -54,7 +54,34 @@ class ChatUsageApiTest {
                 .andExpect(jsonPath("$.spentToday").value("0.000000"))
                 .andExpect(jsonPath("$.maxTurnCost").value("0.15"))
                 .andExpect(jsonPath("$.maxDailyCost").value("1.00"))
-                .andExpect(jsonPath("$.resetsAt").exists());
+                .andExpect(jsonPath("$.resetsAt").exists())
+                .andExpect(jsonPath("$.month").value("2026-10"))
+                .andExpect(jsonPath("$.spentThisMonth").value("0.000000"))
+                .andExpect(jsonPath("$.questionsThisMonth").value(0));
+    }
+
+    /** Step 7e: this month's spend is every kind since the first at local midnight; questions are the TURN rows. */
+    @Test
+    void thisMonthSumsEveryKindSinceTheFirstAndCountsTurnsAsQuestions() throws Exception {
+        ledgerRow("TURN", "0.010000", LocalDateTime.of(2026, 10, 1, 0, 0));
+        ledgerRow("TURN", "0.020000", LocalDateTime.of(2026, 10, 9, 14, 0));
+        ledgerRow("CONVERSATION_SUMMARY", "0.001000", LocalDateTime.of(2026, 10, 9, 14, 1));
+        ledgerRow("MONTHLY_SUMMARY", "0.000500", LocalDateTime.of(2026, 10, 15, 8, 0));
+        ledgerRow("TURN", "0.300000", LocalDateTime.of(2026, 9, 30, 23, 59, 59));
+        ledgerRow("TURN", null, LocalDateTime.of(2026, 10, 12, 10, 0)); // unpriced: a question that cost nothing known
+
+        mvc.perform(get("/api/chat/usage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.month").value("2026-10"))
+                .andExpect(jsonPath("$.spentThisMonth").value("0.031500"))
+                .andExpect(jsonPath("$.questionsThisMonth").value(3))
+                .andExpect(jsonPath("$.spentToday").value("0.000500"));
+
+        clock.set(LocalDateTime.of(2026, 11, 1, 0, 0));
+        mvc.perform(get("/api/chat/usage"))
+                .andExpect(jsonPath("$.month").value("2026-11"))
+                .andExpect(jsonPath("$.spentThisMonth").value("0.000000"))
+                .andExpect(jsonPath("$.questionsThisMonth").value(0));
     }
 
     @Test

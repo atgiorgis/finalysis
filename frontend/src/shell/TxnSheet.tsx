@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { reads, type CategorySource, type Transaction } from '../api'
+import { AI_NAME } from '../corgi'
 import { formatDate, formatMoney } from '../format'
 import { useDataVersion, useShellData } from './ShellData'
 import TxnActions from './TxnActions'
 
 const SOURCE_TEXT: Record<CategorySource, string> = {
   RULE: 'set by a rule',
-  AI: 'suggested by AI',
+  AI: `suggested by ${AI_NAME}`,
   USER: 'set by you',
 }
 

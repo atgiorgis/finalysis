@@ -13,14 +13,16 @@ public final class ConversationResponses {
     public record Created(long id, OffsetDateTime createdAt) {
     }
 
-    public record Item(long id, String title, int turns, OffsetDateTime updatedAt) {
+    /** @param totalCost its turns' estimated costs summed in SQL, six decimals; null when no turn has a price */
+    public record Item(long id, String title, int turns, String totalCost, OffsetDateTime updatedAt) {
     }
 
     public record Page(List<Item> items, int page, int size, int totalPages) {
     }
 
     /** One conversation with its turns; citations re-resolved, so a txn whose statement was deleted reads GONE. */
-    public record Detail(long id, String title, OffsetDateTime createdAt, OffsetDateTime updatedAt, List<Turn> turns) {
+    public record Detail(long id, String title, String totalCost, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+                         List<Turn> turns) {
     }
 
     /**

@@ -1540,6 +1540,173 @@
   }
 }
 
+/* ---- Corgi (step 7e): avatar, chat header, path badge, answer rows, budget ---- */
+
+.corgi-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 800;
+}
+
+.corgi-avatar-small {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.875rem;
+}
+
+.corgi-avatar-large {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.125rem;
+}
+
+.corgi-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.corgi-head-text {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.corgi-name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.corgi-tagline {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.path-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  background: var(--surface2);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.path-badge-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.path-badge-local {
+  color: var(--income);
+}
+
+.path-badge-cloud {
+  color: var(--s3-ink);
+}
+
+.path-badge-cloud .path-badge-dot {
+  background: var(--s3);
+}
+
+.chat-answer-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.chat-answer-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-speaker {
+  margin: 0 0 var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.chat-thinking {
+  align-items: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.chat-figures {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: var(--space-2) 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.chat-figures svg {
+  flex: none;
+}
+
+.chat-conversation-title {
+  min-width: 0;
+}
+
+.chat-conversation-title p {
+  margin: var(--space-1) 0 0;
+  font-size: 0.8125rem;
+}
+
+.chat-budget {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  font-size: 0.8125rem;
+}
+
+.chat-budget p {
+  margin: 0;
+}
+
+.chat-budget-title {
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
+.chat-form-row textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--touch-target);
+}
+
+.chat-form-row {
+  align-items: flex-end;
+}
+
+.chat-form-note {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 /* ---- Import (step 7d, UI-02): account, file, result, review queue, statements ---- */
 
 .card h3 {
@@ -1842,5 +2009,72 @@
 
   .statement-row > .confirm {
     grid-column: 1 / -1;
+  }
+}
+
+/* ---- Categorize now and the CSV sign choice (step 7e) ---- */
+
+.categorize-now {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.categorize-now-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.categorize-summary p {
+  margin: 0 0 var(--space-1);
+}
+
+.held-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  text-decoration: underline dotted;
+}
+
+.held-back-text {
+  font-size: 0.8125rem;
+}
+
+.sign-choice {
+  margin-top: var(--space-3);
+}
+
+.sign-choice-buttons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.sign-choice-button {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+  min-height: var(--touch-target);
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sign-choice-label {
+  font-weight: 700;
+}
+
+.sign-choice-example {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+@media (min-width: 700px) {
+  .sign-choice-buttons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

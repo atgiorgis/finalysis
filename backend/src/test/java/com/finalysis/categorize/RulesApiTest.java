@@ -394,7 +394,11 @@ class RulesApiTest {
                 .andExpect(jsonPath("$.memoryApplied").isNumber())
                 .andExpect(jsonPath("$.ai.status").value("OFF"))
                 .andExpect(jsonPath("$.ai.calls").value(0))
-                .andExpect(jsonPath("$.length()").value(5));
+                .andExpect(jsonPath("$.searchIndex.status").value("OFF")) // step 7e
+                .andExpect(jsonPath("$.summary.categorized").value(1))
+                .andExpect(jsonPath("$.summary.toReview").isNumber())
+                .andExpect(jsonPath("$.summary.length()").value(5))
+                .andExpect(jsonPath("$.length()").value(7));
         assertThat(rows.category(txn)).isEqualTo("Dining");
 
         mockMvc.perform(post("/api/categorization/run").param("reclean", "true"))

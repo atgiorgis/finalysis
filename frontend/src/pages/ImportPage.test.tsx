@@ -171,12 +171,12 @@ test('import: one multipart part named file to the account’s imports, progress
     'href',
     `/transactions?statement=${s.statementId}`,
   )
-  // No categorization run is offered for one statement (the endpoint runs over everything): the queue instead.
   expect(within(result).getByRole('link', { name: 'Review queue' })).toHaveAttribute('href', '#review')
   expect(within(result).getByRole('link', { name: 'Transactions that need a category' })).toHaveAttribute(
     'href',
     '/transactions?view=review',
   )
+  // Nothing is uncategorized here (no rows in ROUTES' count read): no "Categorize now".
   expect(within(result).queryByRole('button', { name: /categorize/i })).not.toBeInTheDocument()
 })
 
@@ -347,9 +347,83 @@ test('the suggested mapping says when amounts would be flipped, and that it is a
   await chooseAccountAndFile(user)
   await user.click(screen.getByRole('button', { name: 'Import' }))
 
-  expect(await screen.findByRole('region', { name: 'Suggested mapping' })).toHaveTextContent(
-    'AmountsMoney out is printed positive: every amount is flipped · guessed, check it',
+  const mapping = await screen.findByRole('region', { name: 'Suggested mapping' })
+  // A guessed sign isn't shown as the suggester's guess: the user chooses it below.
+  expect(mapping).toHaveTextContent('AmountsYou choose below which way purchases are printed')
+  expect(mapping).not.toHaveTextContent('flipped')
+  expect(screen.queryByRole('button', { name: 'Use this mapping' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Purchases are negative in this file/ })).toBeInTheDocument()
+})
+
+test('a matched sign keeps the single “Use this mapping” button and its found sign', async () => {
+  const user = userEvent.setup()
+  renderApp('/import', ROUTES, (w) =>
+    w.url.endsWith('/preview') ? json(fixtures.importPreviewCsv) : problem(fixtures.importMappingRequired),
   )
+  await chooseAccountAndFile(user)
+  await user.click(screen.getByRole('button', { name: 'Import' }))
+
+  expect(await screen.findByRole('button', { name: 'Use this mapping' })).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: /Which way does this file print purchases/ })).not.toBeInTheDocument()
+})
+
+test('a guessed sign: two buttons, each with the example row read its way; the chosen sign is saved', async () => {
+  const user = userEvent.setup()
+  const preview = fixtures.importPreviewCard
+  expect(preview.suggestedMapping!.confidence.sign).toBe('GUESSED')
+  let imports = 0
+  const { writes } = renderApp('/import', ROUTES, (w) => {
+    if (w.url === '/api/accounts/1/imports') {
+      imports += 1
+      return imports === 1 ? problem(fixtures.importMappingRequired) : json(fixtures.importSummary, 201)
+    }
+    if (w.url === '/api/accounts/1/imports/preview') {
+      return json(preview)
+    }
+    return w.url === '/api/accounts/1/csv-mapping' ? json({}, 201) : undefined
+  })
+  await chooseAccountAndFile(user, csvFile('transfers-summit-card_2026-05.csv'))
+  await user.click(screen.getByRole('button', { name: 'Import' }))
+
+  const choice = await screen.findByRole('group', { name: /Which way does this file print purchases/ })
+  const [negative, positive] = within(choice).getAllByRole('button')
+  const ex = preview.signExample!
+  expect(negative).toHaveTextContent(
+    `Purchases are negative in this file$${ex.amount} at ${ex.description} → ${ex.asIs === 'MONEY_OUT' ? 'money out' : 'money in'}`,
+  )
+  expect(positive).toHaveTextContent(
+    `Purchases are positive in this file$${ex.amount} at ${ex.description} → ${ex.inverted === 'MONEY_OUT' ? 'money out' : 'money in'}`,
+  )
+  expect(screen.queryByRole('button', { name: 'Use this mapping' })).not.toBeInTheDocument()
+
+  await user.click(positive)
+
+  expect(await screen.findByRole('region', { name: /^Imported / })).toBeInTheDocument()
+  const put = writes.find((w) => w.method === 'PUT')!
+  expect(put.url).toBe('/api/accounts/1/csv-mapping')
+  expect(put.body).toEqual({ ...preview.suggestedMapping!.mapping, sign: 'INVERTED' })
+})
+
+test('the other button saves the file read as printed', async () => {
+  const user = userEvent.setup()
+  const preview = fixtures.importPreviewCard
+  const { writes } = renderApp('/import', ROUTES, (w) => {
+    if (w.url === '/api/accounts/1/imports/preview') {
+      return json(preview)
+    }
+    if (w.url === '/api/accounts/1/csv-mapping') {
+      return json({}, 201)
+    }
+    return w.url === '/api/accounts/1/imports' && writes.length > 2
+      ? json(fixtures.importSummary, 201)
+      : problem(fixtures.importMappingRequired)
+  })
+  await chooseAccountAndFile(user, csvFile('transfers-summit-card_2026-05.csv'))
+  await user.click(screen.getByRole('button', { name: 'Import' }))
+  await user.click(await screen.findByRole('button', { name: /Purchases are negative in this file/ }))
+
+  await screen.findByRole('region', { name: /^Imported / })
+  expect(writes.find((w) => w.method === 'PUT')!.body).toEqual({ ...preview.suggestedMapping!.mapping, sign: 'AS_IS' })
 })
 
 // ---------------------------------------------------------------------------- statements list
