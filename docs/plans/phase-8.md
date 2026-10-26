@@ -577,7 +577,8 @@ no UI change, so no layout run.
 - `ChatEvalRunnerFlowTest` expects `chat-10`. `ConversationCostTest` keeps `'chat-9'`: it is a stored turn's version
   in test data, not the current prompt.
 - **Requirements v1.78:** a note on CHT-01. CLAUDE.md already says chat runs `chat-10` from this step.
-- **The owner's rerun (pending):** dev set, Sonnet 4.6, turn cost limit $0.15. When it lands: the report files in
+- **The owner's rerun (done, run 6):** 59/60 overall, 57/58 on the earlier questions, the one miss d-x06; see
+  `docs/eval/README.md` "Run 6". Dev set, Sonnet 4.6, turn cost limit $0.15. As planned: the report files in
   `docs/eval/`, and "Run 6" in `docs/eval/README.md` with the score on the 58 earlier questions next to run 5 (dev,
   `chat-8`, 56/58) and the holdout (`chat-9`, 56/58), each labelled with its prompt; the two IDENTITY answers quoted
   and read for length; d-i06 read for any quoted prompt text; and a line that the holdout was measured on `chat-9` and
