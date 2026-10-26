@@ -1,9 +1,9 @@
 # Phase 7 plan: dashboard and chat UI
 
-Status: **approved** (2026-10-23) with the answers under "Decisions at approval" (§13), which override anything older
-in this file. Steps 0 to 7d done (step notes); next: the owner's smoke test (sample data, then real statements),
-then step 7e (UI fixes only, if the smoke test finds any) and step 8, the close-out. Branch `v1`, starting after tag `phase-6-done` and the roadmap commit (`ab9d5db`).
-Requirements as of `docs/requirements.md` v1.74.
+Status: **done** (2026-10-26, tag `phase-7-done`). Approved 2026-10-23 with the answers under "Decisions at approval"
+(§13), which override anything older in this file. Steps 0 to 8 done, with 3b, 7b, 7c, 7d and 7e (step notes); the
+phase summary, known limitations and backlog are at the end of §11. Branch `v1`, starting after tag `phase-6-done` and
+the roadmap commit (`ab9d5db`). Requirements as of `docs/requirements.md` v1.76.
 
 Scope: UI-01 (dashboard), UI-03 (chat panel), UI-04 (every total and transaction traceable to its rows and source
 line), UI-05 (the cloud-AI banner, in full), UI-07 (phone layout), UI-08 (the mobile-access decision, §9), the
@@ -500,7 +500,7 @@ would reach is protected on disk as well. UI-08 stays Planned with that note.
 | 7c | Restyle to mockup v2 (Midnight): dark default and light theme with a switch, top bar and slide-in menu at every width, the banner as a strip, the Overview's hero, lead sentence, KPI edges, net line, donut legend, alert cards and recurring list; Manrope. | none | theme, menu, lead-sentence and hero tests; `test:layout` with the menu open in both themes |
 | 7d | Import tab (UI-02, pulled forward from Phase 8): account picker and add-account, one file dropped or chosen, the import's result as returned, the CSV mapping step, statements by account with delete, the review queue's statements, uploads and transfer matches, the privacy line. | `statementId` filter on `GET /api/transactions` | `ImportPage.test.tsx`, Transactions statement filter, `TransactionApiTest.filtersByStatement`, `LastFourOutboundTest`, `LastFourChatPayloadTest`; `test:layout` for the Import screens; newman 13 |
 | 7e | Corgi branding (UI only), cost display, and three import follow-ups from the owner's smoke test: Categorize now, the CSV sign choice, the embeddings line. | `totalCost` on conversations; this month on `GET /api/chat/usage`; `summary` and `searchIndex` on `POST /api/categorization/run`; `signExample` on the CSV preview | `ConversationCostTest`, `ChatUsageApiTest`, `RunResponseTest`, `AiCategorizerTest.theRunSummary…`, `CsvImportTest` sign examples, `AiStatusTest`; chat, Settings, `CategorizeNow`, naming and sign tests; `test:layout`; newman |
-| 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-03, UI-04, UI-05, UI-07, GOAL-06 tab; UI-08 stays Planned), CLAUDE.md current phase, tag `phase-7-done`. | none | full runs |
+| 8 | Close-out: re-capture fixtures (empty diff), newman all folders, README (a section per tab with screenshots on the sample data, the new endpoints, UI-08), requirements (UI-01, UI-02, UI-03, UI-04, UI-05, UI-07 Done; GOAL-06 tab and UI-08 noted, Planned), CLAUDE.md current phase, tag `phase-7-done`. The 7e frontend failures recorded; Vitest's JSON report kept. | none | full runs |
 
 ### Step 0 notes: scaffolding
 
@@ -999,6 +999,73 @@ run); newman 266 requests, 0 failures.
 - **Layout check:** the chat header with each badge, the figures line and the input note; the two sign buttons with
   their examples; Categorize now with its summary and the held-back explanation open. "Held back" is a 44 px target.
   Screenshots at 375 and 1280 looked as the artboard, without its gradient.
+
+### Step 8 notes: close-out
+
+Done: "Phase 7 step 8: close-out". Backend 3,289 tests, 0 failures, 0 errors, 0 skipped (Maven summary); frontend 265
+tests (24 files); layout check 69 passed, 1 skipped (the phone-only check in the desktop run); newman 266 requests,
+0 failures; fixtures re-captured with an empty diff.
+
+- **The 7e frontend failures, for matching a recurrence.** In step 7e, the first `npm test` after a full
+  `caffeinate -i ./mvnw clean verify` reported **7 failed tests in 7 of 24 files** (258 passed of 265). Their names
+  were not kept: that run's output was filtered to the summary lines, and Vitest's result cache was overwritten by the
+  next runs. The three runs that followed passed 265 of 265. A reproduction in step 8 ran `npm test` three times
+  during a full Maven verify (which itself passed, 3,289 tests): 265 of 265 each time, so it was **not reproduced**.
+  Most likely timeouts under load (`findBy…` waits a second by default); unconfirmed. From now on every run writes
+  `frontend/test-reports/vitest.json` (Vitest's JSON reporter, git-ignored, outside Playwright's `test-results/`,
+  which each layout run empties), so a failing run keeps the names of its failed tests. On a recurrence: copy that
+  file before the next run and record the names here.
+- **Fixtures re-captured: empty diff.** A throwaway Postgres (port 55432) and the packaged backend on port 18080
+  (AI off), the README's newman folders (266 requests, 760 assertions, 0 failures), then `npm run capture-fixtures`:
+  `git diff` over `src/test/fixtures/` is empty.
+- **Newman:** the README's folders (1–6, 8, 9, 12, 13) twice on fresh databases, 266 requests and 0 failures each.
+  Folders 7 (your own files), 10 (lookups) and 11 (live AI) are manual, as the README says, and weren't run.
+- **README:** a new "The app" section, one subsection per tab with a screenshot on the sample data
+  (`docs/screenshots/`, 1280 px, dark theme, plus the Overview at 375 px), and "Phone access (UI-08)". The screenshots
+  were taken from a second throwaway database holding the newman sample data only (the capture's import pass adds
+  "Fixture Bank" accounts), through a temporary Vite server on port 5175 proxying to 18080; the chat screenshot is the
+  tests' fixture with cloud AI shown on, said in its caption, since the sample-data backend runs with AI off. The
+  temporary config and script, both throwaway services and the jar copy were removed; the dev backend on 8080 and the
+  dev database weren't touched. The API table gains `GET /api/dashboard`, `/api/dashboard/details`,
+  `/api/chat/usage`, the `statementId` filter and the transaction's `statement` and `sourceLine`; the old "chat page is
+  a Phase 6 test surface" text is replaced. The Tests block names `test:layout` and the JSON report.
+- **Requirements v1.76:** UI-01, UI-02, UI-03, UI-04, UI-05 and UI-07 Done, each with its evidence; UI-08 and GOAL-06
+  stay Planned with their Phase 7 parts noted. Roadmap: Phases 7 and 7b Done. CLAUDE.md: the current phase line.
+
+### Phase summary
+
+Phase 7 turned the API into the app: eight tabs (Overview, Transactions, Import, Alerts, Recurring, Chat, Goals,
+Settings) from mockup v2, dark and light, one layout from 375 px up. Every figure on screen is a string the API
+returned; where the mockup needed a figure no endpoint had, the backend computes it (`/api/dashboard`,
+`/api/dashboard/details`, conversation totals, the run summary). Every Overview figure opens the transactions that add
+up to it with a ✓, every transaction its statement line, every chat citation the same targets. Corgi names the AI in
+the UI; chat's behavior is as evaluated in Phase 6. New backend: four reads and additive fields, no migration, no
+change to analytics counting or to chat.
+
+### Known limitations
+
+- **Costs are rounded to the cent in lists, budget and Settings' month** (`formatCost`), while Settings' "Spent today"
+  and each answer's line show the exact six-decimal estimate (the figure the daily cap checks). Both are estimates
+  from list prices.
+- **This month's chat spend undercounts if `retention-days` is under a month** (the ledger is purged with it).
+- **No streaming:** an answer appears whole, with "Corgi is thinking…" until then.
+- **Categorize now runs over every uncategorized transaction**, not one statement (the endpoint has no scope), and it
+  holds the request until the run ends.
+- **Settings is read-only;** AI mode, models, caps and thresholds change in configuration only.
+- **The import tab takes one file at a time**, and scanned images wait for OCR (Phase 8).
+- **No phone access** until Phase 8's login and HTTPS (UI-08).
+- **The 7e frontend failures** (step 8 notes) weren't reproduced; their names weren't kept.
+
+### Backlog (for later phases)
+
+- **Phase 8:** the Corgi system prompt (the owner's brief: a Phase 8 step; chat stays on `chat-9` until then);
+  h-u10 (figures where a refusal was expected) and h-x06 (a tool for a share of income), both with new dev questions;
+  login and HTTPS for phone access (UI-08); OCR for scanned statements.
+- **Phase 9:** the holdout guard per set rather than per model, with a decision on a second holdout run.
+- **Phase to be assigned:** ANA-02's fixed vs. discretionary (needs a setting the user edits); the monthly summary
+  (ANA-05) on the Overview; Settings edits.
+- **Observations kept:** Haiku 4.5 skips the search fallback about half the time (budget option only); the cost
+  estimator is conservative, and Settings shows the real spend beside the caps.
 
 ### Requirement mapping
 

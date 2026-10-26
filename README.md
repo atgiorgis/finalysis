@@ -32,13 +32,14 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The page calls `GET /api/status` and shows the backend status.
+Open http://localhost:5173 for the app ([The app](#the-app)). The backend listens on 127.0.0.1 only.
 
 ### Tests
 
 ```sh
 cd backend && ./mvnw verify
-cd frontend && npm test
+cd frontend && npm test              # Vitest; results also in frontend/test-reports/vitest.json (git-ignored)
+cd frontend && npm run test:layout   # Playwright: every screen at 375 px and 1280 px, API from fixtures
 ```
 
 Backend tests always run against a throwaway Testcontainers Postgres and never touch the dev
@@ -136,6 +137,78 @@ checks by its compose labels; other services and their volumes are never touched
 if anything suggests a non-local target: a remote `DOCKER_HOST` or Docker context, `DOCKER_CONTEXT`,
 `COMPOSE_FILE`, `COMPOSE_PROJECT_NAME` or `SPRING_DATASOURCE_URL` set, or a `POSTGRES_HOST` other
 than localhost.
+
+## The app
+
+Eight tabs behind the menu button, dark by default with a light switch, one responsive layout from 375 px up (UI-01,
+UI-02, UI-03, UI-05, UI-07). Every figure on screen comes from the API as a string: the frontend never computes a
+total, average or percent (a test fails any screen file that parses a value into a number). Screenshots are from the
+synthetic sample data. The month picker, the cloud-AI strip (whenever cloud AI is on, UI-05) and the menu are on every
+tab.
+
+### Overview
+
+![Overview, September 2026](docs/screenshots/overview.png)
+
+The month's spending, income, net and savings rate with their change from last month, six months of cash flow, where
+the money went by category, the newest alerts, recurring charges and the data-quality tile, all from one read
+(`GET /api/dashboard`). A category, Other or Uncategorized opens its details: its trend, top merchants, and its
+transactions with a ✓ when they add up to the figure clicked (`GET /api/dashboard/details`, UI-04).
+
+<img src="docs/screenshots/overview-phone.png" alt="Overview at 375 px" width="240">
+
+### Transactions
+
+![Transactions, September 2026](docs/screenshots/transactions.png)
+
+The month's transactions with category and account filters, or one statement's. **To review** lists what needs a
+category, every month, with why it waits, and **Categorize now** runs the rules and Corgi over them. A row opens its
+sheet: the statement and the line it came from (UI-04), the category and who set it (a rule, you, or Corgi), and the
+corrections (set a category, undo, not a transfer).
+
+### Import
+
+![Import](docs/screenshots/import.png)
+
+Choose an account (or add one), drop one statement file, and see the import's result as the API returns it. A CSV
+without a mapping shows its first rows and the suggested mapping; when the sign is a guess, you say which way the file
+prints purchases. Below: the review queue (statements to review, uploads not recognized, transfer matches) and the
+statements by account, each with delete (UI-02).
+
+### Alerts and Recurring
+
+![Alerts](docs/screenshots/alerts.png)
+
+Alerts for the picked month and the two before it, each with its basis (observed, baseline, threshold) and its
+transactions; dismiss and restore. Recurring lists monthly charges, active and ended, with their typical and last
+amounts and the next expected date.
+
+![Recurring](docs/screenshots/recurring.png)
+
+### Chat with Corgi
+
+![Chat with Corgi](docs/screenshots/chat.png)
+
+Questions about your own data, answered by **Corgi** (see [Chat](#chat)). Citations link to the transactions,
+totals, alerts and recurring series behind the figures; each answer says how many figures Finalysis checked and what
+the turn cost. The left column lists conversations with their cost and today's chat budget. *The screenshot's answer
+is the tests' hand-written fixture with cloud AI shown on; the sample-data backend runs with AI off, and no model was
+called for it.*
+
+### Goals and Settings
+
+![Goals](docs/screenshots/goals.png)
+
+Goals is the tab's shell (GOAL-06): its empty state; goal records come with Layer 2. Settings is read-only: Corgi's
+mode and the model behind each role, today's and this month's chat spend, and the cost limits.
+
+![Settings](docs/screenshots/settings.png)
+
+### Phone access (UI-08)
+
+Not yet. The backend binds to `127.0.0.1` (`server.address`) and the database too, so nothing on the network can reach
+your data. A phone needs login and HTTPS first (Phase 8). The layout is ready: every screen is checked at 375 px with
+44 px touch targets.
 
 ## Data model
 
@@ -465,8 +538,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/transactions/{id}/not-transfer` | Mark a txn not a transfer: removes its link (rejecting a MATCHED pair), excludes it from detection, and clears a rule or AI category of Transfer kind (a category you set stays) | 200 `{txnId, transferExcluded, removedLinkId}` | — |
 | `DELETE` | `/api/transactions/{id}/not-transfer` | Undo it; the next detection run may link the txn, and the next rules pass may categorize it | 204 | — |
 | `GET` | `/api/review-queue` | Everything waiting for the user, across accounts; `?kind=`, `?accountId=` filter. See [Review queue](#review-queue) | 200 | — |
-| `GET` | `/api/transactions` | List txns, newest first, paged (`?page=`, `?size=` up to 200); filters `accountId`, `categoryId`, `uncategorized`, `source=RULE\|AI\|USER`, `isTransfer`, `from`, `to`, `merchant` | 200 `{items, page, size, total}` | — |
-| `GET` | `/api/transactions/{id}` | One txn: merchant, category (`id`, `name`, `kind`), `categorySource`, the rule behind a RULE category, the model and confidence behind an AI one, `aiReviewReason`, `isTransfer`, `transferExcluded` | 200 | — |
+| `GET` | `/api/transactions` | List txns, newest first, paged (`?page=`, `?size=` up to 200); filters `accountId`, `statementId`, `categoryId`, `uncategorized`, `source=RULE\|AI\|USER`, `isTransfer`, `from`, `to`, `merchant` | 200 `{items, page, size, total}` | — |
+| `GET` | `/api/transactions/{id}` | One txn: merchant, category (`id`, `name`, `kind`), `categorySource`, the rule behind a RULE category, the model and confidence behind an AI one, `aiReviewReason`, `isTransfer`, `transferExcluded`, its `statement` (`{id, periodStart, periodEnd}`) and `sourceLine` (`{number, text}`) | 200 | — |
 | `PUT` | `/api/transactions/{id}/category` | `{categoryId, applyToMerchant}`: set your category (USER). By default also creates or updates a correction rule for the merchant and direction, so its other txns follow (CAT-04) | 200 `{txn, ruleId, ruleAction, otherTxnsUpdated, otherTxnsKeptUser, otherTxnsKeptOtherRule}` | `category-invalid` |
 | `DELETE` | `/api/transactions/{id}/category` | Clear your category; the rules run for the txn. `?removeRule=true` also deletes the merchant's correction rule and re-runs its rules | 200 `{txn, ruleId, ruleAction, otherTxnsUpdated}` | — |
 | `GET` | `/api/categorization/rules` | Rules in winning order; `?source=SEED\|USER\|USER_CORRECTION`, `?active=`, `?categoryId=` filter | 200 | — |
@@ -485,6 +558,8 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/analytics/transactions` | The txns behind any total, newest first, paged (`?size=` up to 200); `?month=` or `?from=&to=`, `bucket`, `measure=SPENT\|RECEIVED`, `accountId`, `categoryId`, `merchant`, `noMerchant` | 200 | — |
 | `GET` | `/api/analytics/coverage` | Covered spans, gaps and flagged statements per account | 200 | — |
 | `GET` | `/api/analytics/recurring` | Monthly recurring charges; `?status=ACTIVE\|ENDED\|ALL&accountId=&limit=` (50, at most 100) | 200 | — |
+| `GET` | `/api/dashboard` | The Overview in one read: `?month=` (default the latest); totals, changes from last month, six months of cash flow, spending slices (Other and Uncategorized included), newest alerts, recurring charges. Every figure equals its own endpoint's | 200 | — |
+| `GET` | `/api/dashboard/details` | One Overview figure's panel: `?month=` with `categoryId`, `uncategorized=true` or `line=INCOME`; total, share, trailing average, six-month trend, top merchants, and the drill-down whose rows add up to it | 200 | — |
 | `GET` | `/api/alerts` | Alerts with their basis, newest month first; `?from=&to=` (default the last 3 months), `type`, `accountId`, `includeDismissed`, `limit` (at most 100) | 200 `{items, counts, truncated, …}` | — |
 | `GET` | `/api/alerts/{key}` | One alert, computed for its key's month | 200 | — |
 | `PUT` | `/api/alerts/{key}/dismissal` | `{note?}`: dismiss a current alert (idempotent; the first time is kept, the note replaced) | 200 with the alert | — |
@@ -494,6 +569,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/chat/conversations/{id}` | One conversation with its turns (question, answer, grounding, citations re-resolved, limit, usage) | 200 `{id, title, totalCost, createdAt, updatedAt, turns}` | — |
 | `DELETE` | `/api/chat/conversations/{id}` | Delete it with its turns and summary | 204 | — |
 | `POST` | `/api/chat/conversations/{id}/turns` | `{message}` (1–1,000 characters): ask a question. With AI off, 503 before the conversation is looked up | 200 `{conversationId, turn, answer, answerSource, grounding, citations, dataNotes, tools, usage, limitHit, redactions}` | `ai-off`, `turn-in-progress`, `chat-budget`, `chat-busy`, `ai-unavailable` |
+| `GET` | `/api/chat/usage` | Today's estimated chat spend (the figure the daily cap checks), the caps, the next reset, and this month's spend and question count | 200 `{day, spentToday, maxTurnCost, maxDailyCost, resetsAt, month, spentThisMonth, questionsThisMonth}` | — |
 | `POST` | `/api/chat/summaries` | `{month?}` (`yyyy-MM`, default the latest complete month): the plain-English monthly summary (ANA-05); a Java template with AI off | 200 `{month, source: MODEL\|TEMPLATE, text, grounding, citations, dataNotes, usage}` | `chat-budget`, `ai-unavailable` |
 | `POST` | `/api/chat/search-index/refresh` | Embed merchants and categories missing from the chat search index (capped per run) | 200 `{status, merchants, cached, embedded, calls, callsWithoutUsage, inputTokens, remaining}`; `status: OFF` with AI off | — |
 
@@ -1317,11 +1393,11 @@ Amazon Bedrock today, or a local model once the `local` profile exists. The chat
 
 ### The chat page
 
-The frontend's chat page is a **minimal Phase 6 test surface**, not the chat UI: a question box (at most 1,000
-characters), the conversation, and under each answer its citations and the turn's estimated cost and model. The first
-question starts a conversation and follow-ups continue it; API problems (AI off, budget, busy) show their detail. The
-cloud-AI banner names chat while AI is on. **The full chat UI (conversation list, the chat panel, streaming progress)
-is Phase 7.**
+The Chat tab ([The app](#chat-with-corgi)): conversations with their total cost on the left, today's budget under them, and
+the conversation with Corgi's header and its path badge (cloud or local, from `GET /api/status`). Each answer shows its
+citations as links, "Figures computed by Finalysis, not by the model · n checked" when any figure was checked, and the
+model and estimated cost. A refused question (AI off, budget, busy, limit) is said in a plain sentence. Answers arrive
+whole: there is no streaming.
 
 ### Model choice
 

@@ -16,5 +16,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     // The layout check (e2e/, Playwright) runs on its own: npm run test:layout.
     include: ['src/**/*.test.{ts,tsx}'],
+    // Every run also writes its results, failed tests named, to test-reports/vitest.json (git-ignored; Playwright
+    // empties test-results/ on each layout run), so a failure that doesn't repeat can still be matched later.
+    reporters: ['default', ['json', { outputFile: 'test-reports/vitest.json' }]],
   },
 })
