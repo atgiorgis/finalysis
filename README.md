@@ -644,9 +644,10 @@ returned.
 
 ## Importing statements
 
-Upload one statement file per request to the account it belongs to. Supported today: OFX
-1.x/2.x, QFX and CSV. PDF parsing is paused ([Phase 3b](docs/plans/phase-3b.md)): a PDF is
-accepted and checked, but none is imported yet. A layout no parser recognizes becomes an
+Upload one statement file per request to the account it belongs to. Supported: OFX
+1.x/2.x, QFX and CSV. **PDF support is partial:** a PDF is accepted and checked, but none is
+imported; the PDF parsers ([Phase 3b](docs/plans/phase-3b.md), paused) and OCR are later,
+aspirational enhancements ([roadmap](docs/plans/roadmap.md#later-enhancements)), not part of the POC. A layout no parser recognizes becomes an
 **unparsed upload** (202 Accepted, `Location: /api/unparsed-uploads/{id}`) that waits in the
 [review queue](#review-queue), and the BoA checking layout, recognized but not yet readable, gets
 `422 parse-error`. Uploading the same PDF again re-runs detection instead of `409 already-imported`. Optional form fields: `periodStart` and
@@ -951,7 +952,8 @@ columns, and the header signature.
   downloaded later; import the original file again instead.
 - **Deleting a statement doesn't re-run its successor's continuity check**, which may have used it as
   the predecessor; the successor keeps its stored result.
-- **Not yet:** PDF statement parsing (Phase 3b, paused), non-USD statements. Transfer limitations are listed under
+- **Not yet:** PDF statement parsing (partial: PDFs are checked but not imported; a later, aspirational
+  enhancement), non-USD statements. Transfer limitations are listed under
   [Transfers](#transfer-limitations).
 
 ## Transfers and the review queue

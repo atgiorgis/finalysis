@@ -1,6 +1,6 @@
 # Finalysis Roadmap
 
-**Version:** 2 · **Date:** 2026-10-23 · **Requirements:** `docs/requirements.md` v1.72
+**Version:** 3 · **Date:** 2026-10-26 · **Requirements:** `docs/requirements.md` v1.77
 
 This file supersedes "Finalysis Roadmap V4", which was kept outside the repo. Requirement ids and phase numbers are
 unchanged; the requirements file stays the source of truth for each requirement's wording, phase and status.
@@ -20,7 +20,7 @@ the number, decides the order. These layers are not the three ingestion layers i
 
 | Layer | Phases | Status |
 |---|---|---|
-| 1. Your books | 1–6, 7, 7b, 3b (rest), 8–13, 15 | Phases 1–7 and 7b done |
+| 1. Your books | 1–6, 7, 7b, 8–13, 15 | Phases 1–7 and 7b done |
 | 2. Your plan | Goals (phase to be assigned), 14 | Future |
 | 3. Your education | None assigned | Future |
 | 4. Your accountant | None (ids keep their old numbers) | Out of scope (listed, not built) |
@@ -41,14 +41,14 @@ math (GR-01).
 | 1 | Project setup, synthetic sample data | QA-01, QA-02 (CI, deferred) | Done (QA-02 Planned) |
 | 2 | Accounts and data model | DAT-01–DAT-08 | Done |
 | 3, 3a, 3c | Ingestion: OFX/QFX, CSV, dedup, transfers, review queue | ING-01–ING-07, ING-10, ING-13, SEC-10, SEC-11 | Done (SEC-11 Planned until the first CSV export) |
-| 3b | PDF parsers (paused after step 5; resumes after Phase 7) | ING-08, ING-11, ING-12, ING-02 (PDF part), SEC-09 | ING-08/11/12 Deferred; SEC-09 Done |
+| 3b | PDF parsers (paused after step 5; the rest moved to [Later enhancements](#later-enhancements)) | SEC-09 (ING-08, ING-11, ING-12 moved) | SEC-09 Done |
 | 4 | Categorization: rules, then AI on redacted text | CAT-01–CAT-05, CAT-08, SEC-01, SEC-02, SEC-08 | Done |
 | 5 | Analytics and alerts, no AI | ANA-01, ANA-03, ANA-06–ANA-08, ANA-02, ANA-04 | Done (ANA-02 and ANA-04 Planned for their remaining parts) |
 | 6 | Chatbot backend: read-only tools, grounding, citations, memory | CHT-01–CHT-06, ANA-05, SEC-03 | Done |
 | 7 | Chat UI, dashboard, upload page, polish (`docs/plans/phase-7.md`) | UI-01, UI-02 (step 7d), UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | Done (UI-08 Planned: phone access is Phase 8) |
 | 7b | Goals tab shell | GOAL-06 (the tab only) | Done (GOAL-06 Planned for Layer 2) |
-| 8 | Encryption at rest, login and HTTPS for phone access, OCR, local PDF extraction, document Q&A, vision role | UI-08 (login and HTTPS), SEC-04–SEC-07, ING-09, ING-14, CHT-07, AI-01 (vision role) | Future |
-| 9 | Eval suites and benchmarks | QA-03, QA-04, AI-07 | Future |
+| 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Planned (plan approved) |
+| 9 | Eval suites and benchmarks; candidates from Phase 8: field-level encryption, the chat backlog (h-u10, h-x06, the holdout guard per model), document Q&A, recovery key rotation (`docs/plans/phase-8.md` §13) | QA-03, QA-04, AI-07; candidates SEC-05, CHT-07 | Future |
 | 10 | Local AI: the `local` profile (Ollama) and model tiers | AI-03, AI-02, AI-04, AI-05, UI-06 | Future |
 | 11 | Portfolio polish: README, setup script, demo mode, ADRs | QA-05–QA-07 | Future |
 | 12 | Categorization experiments | CAT-06, CAT-07 | Future |
@@ -146,3 +146,19 @@ judgment no tool result can ground (CHT-04). Moving money would also make the ap
 the chatbot's tools are read-only (SEC-03). Last, acting well needs market data, tax tables and live account access,
 which pull a local-first app toward sending more of the user's data out (SEC-01) and holding credentials it never
 needs to see.
+
+---
+
+## Later enhancements
+
+**Aspirational, outside the layers.** Nothing here is scheduled, and no layer waits for it. Moved here at the Phase 8
+plan's approval (2026-10-26, `docs/plans/phase-8.md` §16): CSV and OFX/QFX are the supported formats for the POC. The
+Import page still accepts PDFs (checked, then refused or held as unparsed uploads), and the README says PDF support is
+partial.
+
+| Item | Requirement ids | Notes |
+|---|---|---|
+| PDF parsers, from Phase 3b (paused after step 5) | ING-08, ING-11, ING-12, ING-02 (PDF part) | `docs/plans/phase-3b.md`; the BoA checking layout is recognized but not read |
+| OCR for scanned or photographed statements | ING-09 | Tesseract, with a vision-model fallback for low-confidence pages |
+| Local-model extraction of unknown PDF layouts | ING-14 | Never Bedrock; validated by reconciliation; needs a reviewed exception to SEC-09's no-AI rule |
+| The vision model role | AI-01 (vision role) | Used only by OCR's fallback |
