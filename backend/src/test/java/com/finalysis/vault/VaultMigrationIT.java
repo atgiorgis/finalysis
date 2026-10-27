@@ -61,7 +61,9 @@ class VaultMigrationIT {
     @Test
     void copiesEveryTableWithTheSameRowCountsAndPrintsCountsOnly() throws Exception {
         assumeTrue(VaultTestSupport.onMacWithHdiutil(), "the vault needs macOS");
+        Timer timer = new Timer();
         new SampleDataImport(support, jsonMapper).load();
+        timer.lap("sample import into the source database");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM txn", Long.class)).isGreaterThan(100);
 
         try (TempVault vault = new TempVault()) {
@@ -74,11 +76,16 @@ class VaultMigrationIT {
             expectZero(vault.mount());
             expectZero(vault.run("db-init.sh", password + "\n", vault.dir.toString(), bin, port));
             expectZero(vault.run("db-start.sh", null, vault.dir.toString(), bin, port));
+            timer.lap("vault: create, mount, initdb, start");
             String url = "jdbc:postgresql://127.0.0.1:" + port + "/finalysis";
             Flyway.configure().dataSource(url, "finalysis", password).locations("classpath:db/migration").load()
                     .migrate();
+            timer.lap("Flyway on the vault");
 
             Result migrated = migrate(vault, bin, port);
+            timer.lap("migrate-plain-to-vault.sh");
+            // The script's own phases (the dump and restore overlap: one streams into the other).
+            migrated.all().lines().filter(line -> line.startsWith("migrate: ")).forEach(timer::note);
 
             assertThat(migrated.exit()).as(migrated.all()).isZero();
             assertThat(migrated.out()).contains("every table has the same number of rows", "scripts/reset-dev-db.sh")
@@ -96,12 +103,31 @@ class VaultMigrationIT {
                         String.valueOf(jdbc.queryForObject("SELECT count(*) FROM txn WHERE is_transfer", Long.class)));
             }
             assertThat(copied).isEqualTo(plain);
+            timer.lap("compare in Java");
+            assertThat(migrated.all()).contains("migrate: dump finished after", "migrate: restore finished after",
+                    "migrate: compare took");
             assertThat(copied.get("txn")).isGreaterThan(100);
             assertThat(vault.mnt().resolve("secrets/pgpass")).doesNotExist();
 
             Result again = migrate(vault, bin, port);
             assertThat(again.exit()).isEqualTo(1);
             assertThat(again.err()).contains("already holds accounts");
+        }
+    }
+
+    /** Phase times, printed as they finish, so a slow run says where (the step 4 review). */
+    private static final class Timer {
+
+        private long last = System.nanoTime();
+
+        void lap(String phase) {
+            long now = System.nanoTime();
+            note(String.format("%s: %.1f s", phase, (now - last) / 1e9));
+            last = now;
+        }
+
+        void note(String line) {
+            System.out.println("VaultMigrationIT timing: " + line);
         }
     }
 

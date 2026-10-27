@@ -636,7 +636,9 @@ Proposed changes, each with a version bump:
 
 Recorded here and in the roadmap at close-out: field-level encryption (SEC-05); the chat backlog (h-u10, h-x06, the
 holdout guard per model, from `docs/plans/phase-7.md`'s backlog); document Q&A (CHT-07); the local model (`local`
-profile, Phase 10 in the roadmap); recovery key rotation (§16, decision 10); lock before sleep through a native helper.
+profile, Phase 10 in the roadmap); recovery key rotation (§16, decision 10); lock before sleep through a native helper;
+kept statement copies listed and downloadable per statement (step 4 review: today they are kept and deleted with their
+statement, but the UI neither lists nor serves them).
 
 Not Phase 9: the Phase 3b PDF parsers (ING-08, ING-11, ING-12), OCR (ING-09), local PDF extraction (ING-14) and the
 vision role (AI-01) are in the roadmap's "Later enhancements", outside the layers, aspirational (§16, decision 1).

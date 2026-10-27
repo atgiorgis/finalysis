@@ -10,7 +10,9 @@
 # pg_dump runs inside the Docker container (its own PostgreSQL 17 pg_dump, data only, triggers disabled, without
 # Flyway's history) and streams straight into the vault's psql, in one transaction that first empties the vault's
 # tables (the seed rows Flyway put there come back from the dump). Nothing is written to a file between them.
-# Then it compares row counts per table and prints counts only, never rows.
+# Then it compares row counts per table and prints counts only, never rows. Each phase prints its time (whole
+# seconds): when the dump finished, when the restore finished (they overlap: one streams into the other), and how long
+# the comparison took, so a slow run says where.
 #
 # Tests point it at another container with FINALYSIS_MIGRATE_SOURCE_CONTAINER (a container id).
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -62,6 +64,7 @@ vault_version="$(vault_sql -tAc "$latest_version")" || fail "cannot read the vau
 [[ "$(vault_sql -tAc "SELECT count(*) FROM account")" == 0 ]] || refuse "the vault already holds accounts; nothing was copied"
 
 echo "Copying the dev database (V$plain_version) into the vault..."
+copy_start=$SECONDS
 {
     cat <<'SQL'
 DO $$
@@ -73,7 +76,10 @@ SQL
     docker exec "$source_container" sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only --disable-triggers \
         --no-owner --no-privileges --exclude-table=flyway_schema_history' 2> >(dump_warnings >&2) \
         || echo 'SELECT 1/0;'  # pg_dump failed: make psql fail too, so the transaction rolls back
+    echo "migrate: dump finished after $((SECONDS - copy_start)) s" >&2
 } | vault_sql --single-transaction >/dev/null || fail "the copy failed and was rolled back; the vault is unchanged"
+echo "migrate: restore finished after $((SECONDS - copy_start)) s"
+compare_start=$SECONDS
 
 count_rows="SELECT string_agg(t || ' ' || n, E'\n' ORDER BY t) FROM (
     SELECT c.relname AS t, (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM public.%I', c.relname), false, true, '')))[1]::text AS n
@@ -92,6 +98,8 @@ printf '%-28s %12s %12s\n' table "dev database" vault
             printf "%-28s %12s %12s%s\n", t, p, v, (p == v ? "" : "   DIFFERENT")
         }
     }' | sort
+
+echo "migrate: compare took $((SECONDS - compare_start)) s"
 
 if [[ "$plain_counts" != "$vault_counts" ]]; then
     fail "the row counts differ (above)"
