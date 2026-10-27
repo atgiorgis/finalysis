@@ -114,6 +114,26 @@ three log counts, account ids and dates only, never amounts or descriptions. The
 nothing; untick it in the Collection Runner.
 Real statements stay in `private-data/`; don't save a file selection or response into the collection.
 
+### The vault's Postgres (Phase 8, in progress)
+
+The encrypted vault (Phase 8, [docs/plans/phase-8.md](docs/plans/phase-8.md) §4) keeps its database in an encrypted
+disk image, which Postgres in Docker can't use (§4.8), so the vault runs a native PostgreSQL from **Postgres.app**. The
+Docker database above stays for development without the vault, with synthetic data. The vault isn't usable yet; this
+is its setup on macOS (Intel or Apple silicon):
+
+1. Install [Postgres.app](https://postgresapp.com) with **PostgreSQL 17** (its universal build). It bundles pgvector;
+   Finalysis needs exactly **pgvector 0.8.6**, the version in Postgres.app's PostgreSQL 17 today.
+2. Open it once. Adding its `bin` folder to your path is optional; Finalysis uses
+   `/Applications/Postgres.app/Contents/Versions/17/bin` (`finalysis.vault.pg-bin` to change it).
+3. **Don't add, start or auto-start a server for Finalysis in Postgres.app.** Finalysis creates, starts and stops its
+   own cluster inside the vault. Postgres.app's default server (its own data directory, port 5432) is fine to keep;
+   the vault's cluster uses port 55432.
+4. **Turn off Postgres.app's automatic updates.** An update can change the bundled pgvector version; Finalysis then
+   refuses to unlock and says which version it found and which it needs, until the pin is updated deliberately.
+
+At startup Finalysis checks the PostgreSQL major version (17), the pgvector version (0.8.6), the port, and that
+neither a launchd job nor a Postgres.app server points at the vault; each failure is reported in plain words.
+
 ### Database client
 
 To browse the dev database with DBeaver or a similar client, create a PostgreSQL connection with

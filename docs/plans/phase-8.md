@@ -1,8 +1,9 @@
 # Phase 8 plan: encryption at rest, unlock, and phone access
 
-Status: **approved** (2026-10-26) with the answers under "Decisions at approval" (§16), which override anything older
-in this file. Step notes follow the step list in §15. Branch `v1`, starting after tag
-`phase-7-done`. Requirements as of `docs/requirements.md` v1.76.
+Status: **approved** (2026-10-26) with the answers under "Decisions at approval" (§16), which override anything older in
+this file. **Amendment A** (native Postgres for the vault, after step 1's spike, §4.8): approved 2026-10-27 with change
+1 (Postgres.app, §16); it changes §1, §4.4 to §4.8, §5.5, §8, §10, §12 and step 1 in §15. Step notes follow the step
+list in §15. Branch `v1`, starting after tag `phase-7-done`. Requirements as of `docs/requirements.md` v1.76.
 
 Goal: the data is unreadable on disk until the user types a password into the app, and a phone on the home network
 reaches the app only after login over HTTPS.
@@ -40,16 +41,16 @@ directory; the owner's real vault directory is never read, listed or touched by 
    Machine, a cloned drive, a copied home folder). The data sits in an encrypted disk image; without the password or
    the recovery key it is ciphertext.
 2. **Malware or a person with file access while the user is logged in but the app is locked.** The image is
-   unmounted, the database container stopped and the key not in memory; reading files gets ciphertext, and unlocking
+   unmounted, the vault's Postgres stopped and the key not in memory; reading files gets ciphertext, and unlocking
    needs the password (Argon2id, about half a second per guess, plus a rate limit on the unlock endpoint).
 
 **Does not protect against:** an attacker on the machine while the app is unlocked. The volume is mounted, the key is
 in memory (the kernel's and the JVM's), and the API answers on localhost. This is mitigated by auto-lock (15 minutes
 idle by default, a setting), the Lock button, lock on backend shutdown and lock after machine sleep (§5.4).
 
-**Assumed, not replaced:** full-disk encryption (FileVault) is on. It covers what this design can't: the Docker VM's
-disk and swap (§4.7), the hibernation file, browser caches (made unlikely by §8.3) and the OS's own caches. The README
-says so (SEC-07).
+**Assumed, not replaced:** full-disk encryption (FileVault) is on. It covers what this design can't: macOS swap,
+Docker's VM disk (§4.7), the hibernation file, browser caches (made unlikely by §8.3) and the OS's own caches. The
+README says so (SEC-07).
 
 **Also out of the model:** someone who knows the password; a compromised OS or Docker install; a phone that is itself
 compromised while logged in; loss of both password and recovery key (the data is gone, by design).
@@ -188,70 +189,183 @@ plaintext; the bundle itself is backed up as ciphertext.
 `cryptsetup luksFormat --key-file=-`, `cryptsetup open --key-file=-`, `mkfs.ext4`, `mount`; it needs root (or a
 `sudoers` rule for exactly these commands). The README describes it; the Java side only needs another `VaultMount`.
 
-### 4.4 Postgres on the vault
+### 4.4 Postgres on the vault (native, Amendment A)
 
-- `compose.yaml`'s `db` service bind-mounts `${FINALYSIS_PGDATA}` (`<mount>/pgdata`) with the long syntax and
-  `bind.create_host_path: false`, so a missing source is an error, never a new empty directory on the plain disk.
-- `restart: "no"` (today `unless-stopped`): Docker must never start the database by itself, for example after a reboot
-  with the vault locked.
-- The backend starts it (`docker compose up -d --wait db`) only after `status.sh` says `MOUNTED` for this image, and
-  stops it (`docker compose stop db`) before unmounting.
-- **Postgres's own logs** go to the container's stderr, which Docker keeps on its VM disk, outside the vault. Today they
-  can carry row values ("DETAIL: Key (x)=(y)"; `logServerErrorDetail: false` only hides them from the JDBC side). The
-  service gets `log_error_verbosity=terse`, `log_min_error_statement=panic`, `log_statement=none`,
-  `log_min_messages=warning`; a leak test proves a constraint violation with a marker leaves no marker in
-  `docker logs` (§8).
-- The `.env` keeps `POSTGRES_USER`/`POSTGRES_PASSWORD` as today; they guard the loopback port, not the disk.
+*Amended 2026-10-26 after step 1's spike (§4.8): Postgres in Docker can't run on the vault, so the vault's cluster is
+a native Postgres from Postgres.app (2026-10-27: Homebrew dropped Intel Macs in September 2026, and the owner's
+machine is an Intel MacBook). `compose.yaml` is unchanged and keeps its `db` service for development without the
+vault (§4.7).*
 
-**Step 1 starts with a spike**, because one part is uncertain: whether Docker Desktop's file sharing serves an APFS
-image mounted under `~/Library/...` to the container (crossing a mount point inside a shared folder), and whether
-Postgres accepts the ownership and `fsync` behaviour of that bind mount. If either fails, the step stops and asks.
-Fallbacks, in order (§16): first, add the mount point to Docker Desktop's shared folders as a documented setup step;
-last resort, Postgres run natively (Homebrew `postgresql@17` with pgvector) with its data directory in the vault, which
-needs the owner's approval before any work on it.
+**Binaries, pinned.** Postgres.app ([postgresapp.com](https://postgresapp.com)), its PostgreSQL 17 build (universal
+binaries, so the same install serves Intel and Apple silicon), with its bundled pgvector **0.8.6**. The binaries are
+read from `finalysis.vault.pg-bin`, default `/Applications/Postgres.app/Contents/Versions/17/bin`. Checked on the
+owner's machine on 2026-10-27: `postgres (PostgreSQL) 17.11 (Postgres.app)`, `vector--0.8.6.sql`, and every tool the
+scripts need (`initdb`, `pg_ctl`, `pg_dump`, `pg_restore`, `psql`, `pg_isready`, `pg_config`). The Docker image and
+the tests run PostgreSQL 17.11 with pgvector 0.8.7: the same major version, one pgvector patch apart (§12).
+
+**Postgres.app's own server management is never used.** Its window and menu bar item can create, start and auto-start
+servers; this cluster is never added there, and the README says so. The README setup: install Postgres.app with
+PostgreSQL 17, open it once (it asks to add its `bin` to the path; not needed by Finalysis), leave its server list
+alone (or keep its default server, which has its own data directory and port 5432), and turn off its automatic
+updates, because an update can change the bundled pgvector version, which the startup check then refuses until the
+pin is updated deliberately.
+
+**Startup check** (`scripts/vault/db-check.sh`, run at backend start and before setup and unlock). Each failure gives
+the vault state `NOT_READY` with a reason code on `/api/status` (never a path), refuses setup and unlock, and shows one
+plain sentence on the unlock screen. The version messages name both the installed and the required version:
+
+| Reason | Message (draft) |
+|---|---|
+| `postgres-missing` | "Finalysis needs PostgreSQL 17 from Postgres.app, and none was found. Install Postgres.app with PostgreSQL 17 (postgresapp.com), or set finalysis.vault.pg-bin." |
+| `postgres-wrong-version` | "Finalysis needs PostgreSQL 17; the installed one is PostgreSQL 16.4. Install Postgres.app's PostgreSQL 17." |
+| `pgvector-missing` | "Finalysis needs pgvector 0.8.6, and this PostgreSQL 17 has none installed. Use Postgres.app's PostgreSQL 17, which includes it." |
+| `pgvector-wrong-version` | "Finalysis needs pgvector 0.8.6; the installed one is 0.8.7. See the README's setup section." |
+| `launchd-conflict` | "A background service is set to start a database from the Finalysis vault. Remove it (see the README) and restart Finalysis." |
+| `postgresapp-conflict` | "Postgres.app has a server that uses the Finalysis vault. Remove that server in Postgres.app (keep its data) and restart Finalysis." |
+| `port-in-use` | "Port 55432 is already in use. Stop what uses it, or set finalysis.vault.db-port." |
+
+Versions are read from `postgres --version` (major must be 17; any 17.x minor passes, since minors share the data
+format) and from the `default_version` in pgvector's `vector.control` under `pg_config --sharedir` (must be exactly
+the pinned version). Changing a pin is a deliberate edit of one constant and the README, with the vault IT rerun.
+
+**The cluster** lives in `<mount>/pgdata` and is created at vault setup (§4.5) by `scripts/vault/db-init.sh`:
+
+- `initdb -D <mount>/pgdata --username=finalysis --pwfile=/dev/stdin --auth=scram-sha-256 --encoding=UTF8
+  --data-checksums`, then the database `finalysis`. The role is the cluster's superuser, as `POSTGRES_USER` is in the
+  Docker database today (Flyway creates the `vector` extension).
+- **The superuser password** is 32 random bytes from `SecureRandom` (base64), generated at setup and kept in
+  `<mount>/secrets/db-password` (mode 0600, directory 0700): inside the vault, readable only while it is mounted. It
+  goes to `initdb` on stdin and to the Hikari pool in memory; never in a file outside the vault, an environment
+  variable or a command line.
+- `postgresql.conf` (appended by the script, pinned by a test): `listen_addresses = '127.0.0.1'`,
+  `port = 55432` (`finalysis.vault.db-port`; not 5432, so it can't collide with the Docker dev database),
+  `unix_socket_directories = ''` (TCP on loopback only; no socket in `/tmp`), `password_encryption = scram-sha-256`.
+- `pg_hba.conf` replaced with one line: `host all all 127.0.0.1/32 scram-sha-256`. No `local` line, no `::1`.
+- **Collation:** the step 1 spike checks that a text `ORDER BY` over the sample merchants matches the Testcontainers
+  database (glibc `en_US.utf8`). If macOS's libc collation differs, `initdb` uses ICU (`--locale-provider=icu
+  --icu-locale=en-US`) and the result is recorded in the step 1 notes.
+
+**Logs stay inside the vault.** `logging_collector = on`, `log_directory = 'log'` (relative to `pgdata`, so inside the
+vault), `log_filename = 'postgresql-%a.log'`, `log_truncate_on_rotation = on`, `log_rotation_age = 1d` (seven files at
+most), and the terse flags first planned for the Docker service: `log_error_verbosity = terse`, `log_min_error_statement
+= panic`, `log_statement = none`, `log_min_messages = warning`. `pg_ctl` always gets `-l <mount>/pglog/pg_ctl.log`, so
+the server's early output never reaches the backend's own log or a terminal. Nothing is written to `~/Library/Logs`,
+Postgres.app's own data and log directories (`~/Library/Application Support/Postgres`), or anywhere else outside the
+vault.
+
+**Nothing but the backend starts this cluster.** No launchd job of our own, and never Postgres.app's server
+management. At startup (and before unlock) `db-check.sh` refuses:
+
+- `launchd-conflict` if any launchd job file in `~/Library/LaunchAgents`, `/Library/LaunchAgents` or
+  `/Library/LaunchDaemons` names the vault directory or the mount point;
+- `postgresapp-conflict` if Postgres.app's settings (`defaults export com.postgresapp.Postgres2`, its `Servers` list
+  and every other value, searched as text, so a renamed key still counts) name the vault directory or the mount point.
+  Postgres.app's default server, in its own data directory, is not a conflict.
+
+Only the job file's name or the setting's key goes to the log, never its contents or the path.
+
+**Start and stop** (`scripts/vault/db-start.sh`, `db-stop.sh`; same rules as §4.3: fixed arguments, no secrets on the
+command line, fixed messages):
+
+- Start: refuses unless `status.sh` says `MOUNTED` for this image and `<mount>/pgdata/PG_VERSION` exists; refuses
+  `port-in-use`; then `pg_ctl start -D <mount>/pgdata -l <mount>/pglog/pg_ctl.log -w -t 60`.
+- Stop: `pg_ctl stop -D <mount>/pgdata -m fast -w -t 30`; if that times out, `-m immediate` (a crash stop that WAL
+  replay repairs on the next start), logged as a warning. It then checks that `postmaster.pid` is gone and the port
+  is closed. **The volume is never unmounted while a postmaster runs on it.**
+
+`pg_ctl` starts the server detached from the JVM, so it outlives a killed backend (§4.6, §12).
 
 ### 4.5 Setup and the dev migration
 
-**First run** (no wrapper file, no image): state `NOT_SET_UP`. Setup takes a password (at least 12 characters, typed
-twice, and not one of the 1,000 most common passwords from a list bundled with the backend, checked ignoring case;
-§16), calibrates Argon2id, generates the recovery key, creates the image, writes the wrapper, mounts, starts
-Postgres on an empty `pgdata` (initdb), runs Flyway, and returns the recovery key **once** with a plain warning:
-"Without this key and your password, your data is gone. Write it down and keep it somewhere safe." The screen asks the
-user to type the last group back before continuing. Nothing is migrated: a fresh database.
+**First run** (no wrapper file, no image): state `NOT_SET_UP` (after the startup check of §4.4 passes; otherwise
+`NOT_READY`). Setup takes a password (at least 12 characters, typed twice, and not one of the 1,000 most common
+passwords from a list bundled with the backend, checked ignoring case; §16), calibrates Argon2id, generates the
+recovery key, creates the image, writes the wrapper, mounts, generates the database password, runs `db-init.sh`
+(initdb and the settings of §4.4), starts the cluster, runs Flyway, and returns the recovery key **once** with a plain
+warning: "Without this key and your password, your data is gone. Write it down and keep it somewhere safe." The screen
+asks the user to type the last group back before continuing. Nothing is migrated: a fresh database. A setup that fails
+partway stops the cluster, unmounts, and deletes the image and the wrapper it just created (never an older one), so
+the next attempt starts clean.
 
 A wrapper without an image, or the reverse, is state `BROKEN` with a plain message; the app never "repairs" by creating
 a new vault over an old one.
 
 **`scripts/vault/migrate-plain-to-vault.sh`** (dev environment, documented, the owner runs it):
 
-1. Requires the new vault set up and unlocked (schema at the same Flyway version as the plain database; checked).
-2. Starts the old plain database from its named volume on another loopback port, read-only.
-3. `pg_dump --data-only` (excluding `flyway_schema_history`), restored with `pg_restore --data-only
-   --disable-triggers` into the vault database, so `is_transfer` and every value come across as stored; sequences
-   follow.
-4. Compares row counts per table and prints counts only, never rows.
-5. Stops the old container and prints the command to delete the old volume, without running it.
+1. Requires the new vault set up and unlocked, and the Docker dev database (`compose.yaml`'s `db`, its named volume)
+   running; both at the same Flyway version (checked).
+2. `pg_dump --data-only --format=custom` (excluding `flyway_schema_history`) runs **inside** the Docker container
+   (`docker compose exec -T db`, its own 17.x `pg_dump`) and streams to the native `pg_restore --data-only
+   --disable-triggers` connected to the vault cluster on `127.0.0.1:55432`, so `is_transfer` and every value come
+   across as stored; sequences follow. Nothing is written to a file between them.
+3. Compares row counts per table and prints counts only, never rows.
+4. Prints, without running, the command to delete the old volume, and says why: the Docker database still holds a
+   readable copy. The README says the compose database is for development with synthetic data once the vault is in
+   use.
 
-Tested by me on throwaway databases with synthetic data only. Note for the owner: deleting the Docker volume frees its
-blocks inside Docker's VM disk but doesn't overwrite them; FileVault covers that disk.
+Tested by me on a throwaway Docker database and a throwaway vault, synthetic data only. Note for the owner: deleting
+the Docker volume frees its blocks inside Docker's VM disk but doesn't overwrite them; FileVault covers that disk.
 
 ### 4.6 Lock
 
 Lock = stop admitting requests (§5.2), wait for in-flight requests (up to 30 s, then they are cancelled), stop the
-background categorization run if any, close the connection pool, `docker compose stop db`, `unmount.sh`, zero the key
-bytes, invalidate every session (§9), close the LAN listener. Each part is attempted even if an earlier one fails; a
-failure leaves the app in state `LOCK_FAILED` (every gated endpoint still 423) and the status says which part failed.
+background categorization run if any, close the connection pool, `db-stop.sh` (§4.4), `unmount.sh`, zero the key bytes,
+invalidate every session (§9), close the LAN listener. Each part is attempted even if an earlier one fails, except that
+the unmount is skipped while a postmaster still runs on the volume; a failure leaves the app in state `LOCK_FAILED`
+(every gated endpoint still 423) and the status says which part failed.
+
+`unmount.sh` tries a plain `hdiutil detach` for up to 10 s. `-force` is a fallback only: used after that, logged as a
+warning with a fixed message, and reported on `/api/status` (`lastLockForced: true`) so a pattern would show. The vault
+IT (§10) proves the plain detach succeeds after a stop, five cycles in a row at the same mount point.
 
 **At backend startup**, if the image is still mounted (the backend was killed while unlocked), the backend locks it
-first: stop the container, unmount. A `kill -9` therefore leaves the data readable only until the next start or reboot;
-that is a known limitation (§12).
+first: `db-stop.sh` if a postmaster runs on it, then unmount. A `kill -9` therefore leaves Postgres running and the data
+readable until the next backend start or a reboot; that is a known limitation (§12).
 
 ### 4.7 What stays outside the vault
 
-Said plainly in the README: Docker Desktop's VM disk and its swap (Postgres's memory can be paged there; the README
-recommends setting the VM's swap to 0); the browser's memory and, without §8.3, its cache; macOS swap (encrypted by
-the OS) and the hibernation file (encrypted with FileVault on); QuickLook thumbnails if the user previews a kept
-statement in Finder. FileVault covers all of these at rest.
+Said plainly in the README: the Postgres binaries (Postgres.app, no data); the browser's memory and, without §8.3, its
+cache; macOS swap, where Postgres's memory can be paged (encrypted by the OS) and the hibernation file (encrypted with
+FileVault on); QuickLook thumbnails if the user previews a kept statement in Finder. In vault mode Docker holds no
+data: its VM disk keeps only the old plain dev volume until the owner deletes it (§4.5), and whatever the compose
+database holds for development. FileVault covers all of these at rest.
+
+### 4.8 Step 1 spike: Postgres in Docker on the vault (2026-10-26)
+
+Run before any step 1 code, on Docker Desktop 4.94.0 (engine 29.8.2), macOS 14.8.7 (Intel), image
+`pgvector/pgvector:pg17` (PostgreSQL 17.11, pgvector 0.8.7). Every run used a throwaway 1 GB AES-256 sparse bundle in
+a temporary directory, a synthetic key, its own container name and port, and 2,000 marker rows; the dev database was
+never touched (it restarted with Docker Desktop, three times, and came back on its own).
+
+**As planned (§4.4 before this amendment): fails on ownership.** Docker's VirtioFS file sharing crosses into the mounted
+image, and `initdb` wrote the cluster there, but the server refused to start: "data directory has wrong ownership".
+Running the container as the Mac user (`--user 501:20`) gave the same error; mounting the image with `-owners off` made
+the folder invisible to Docker ("not a directory").
+
+**Option 1, `PGDATA` in a subfolder of the bind mount (the image's advice): fails on lock and unlock.**
+Ownership was solved: Postgres started, created `vector`, wrote the rows with `fsync` on, a new container read all
+2,000 back, the image's bands held no marker after unmounting, and a container refused to start while the image was
+unmounted. But:
+
+- a plain `hdiutil detach` never succeeded after the container was stopped and removed, retried for 30 s; `lsof`
+  showed Apple's Virtualization framework process (the Docker VM's VirtioFS) holding the volume, so every lock would
+  need `-force`;
+- after a forced detach, mounting the same image at the **same mount point** again left Docker seeing "not a
+  directory" until Docker Desktop was restarted. The first passing runs had each used a new directory, which hid
+  this. The vault has one fixed mount point, so unlock would fail after the first lock.
+
+**Option 2, Docker Desktop's file sharing switched from VirtioFS to gRPC FUSE: fails to start.** With
+`UseGrpcfuse: true` and `UseVirtualizationFrameworkVirtioFS: false` in Docker Desktop's settings, the Docker VM crashed
+at every start (`com.apple.Virtualization.VirtualMachine crashed`; Docker Desktop offered "Quit" or "Reset to factory
+defaults"). A Docker Desktop update was being staged at the same moment, so the crash may be partly that; it was not
+retried. The original settings file was restored from a backup; Docker runs on VirtioFS again.
+
+**Side finding:** bind mounts from anywhere under `~/Documents` hung Docker (most likely a macOS privacy permission
+for Docker Desktop). Unrelated to the vault, whose default location is under `~/Library/Application Support`.
+
+**Conclusion:** Docker can't give a lock and unlock cycle at a fixed mount point with a plain unmount. Native Postgres
+takes Docker out of the vault's path entirely (§4.4, Amendment A); the step 1 spike repeats the five-cycle test on it
+before any code.
 
 ---
 
@@ -324,7 +438,7 @@ step 5, `com.finalysis.access` (login, sessions, LAN listener). Neither depends 
 only for the `VaultUnlocked` event (ArchUnit). CLAUDE.md's repo layout gains both.
 
 Interfaces keep the tests off the real machine: `VaultMount` (`HdiutilVaultMount`; a fake in tests) and
-`DatabaseRuntime` (`ComposeDatabaseRuntime`; in tests, one that points at a Testcontainers database). The test
+`DatabaseRuntime` (`NativeDatabaseRuntime`, calling §4.4's scripts; in tests, one that points at a Testcontainers database). The test
 profile turns the vault off (`finalysis.vault.enabled=false`, unlocked from the start, a plain Testcontainers database),
 so the existing suites run unchanged; a test pins that `application.yml` has it on.
 
@@ -370,8 +484,8 @@ rewritten for that (§11).
 
 ### 8.1 Nothing readable at rest
 
-- **Raw image:** create, mount, write a marker file and a Postgres row with the marker (through the Docker-on-vault
-  test, §10), unmount; scan every band of the bundle for the marker (ASCII and UTF-16): none.
+- **Raw image:** create, mount, write a marker file and a Postgres row with the marker (through the vault IT,
+  §10), unmount; scan every band of the bundle for the marker (ASCII and UTF-16): none.
 - **Locked means unreadable:** with the vault locked, the mount point is an empty directory and the database port
   refuses connections.
 
@@ -380,8 +494,8 @@ rewritten for that (§11).
 - **App logs and problem responses:** `SensitiveDataLeakTest` gains every vault and login path, with markers in the
   password, recovery key, new password and wrong passwords: none in the log (app packages at DEBUG) or any response.
   `ProcessBuilder` failures log the script name and exit code only.
-- **Postgres logs:** a constraint violation carrying a marker against a Testcontainers Postgres started with the
-  compose service's logging flags; `docker logs` holds no marker. A test pins the flags in `compose.yaml`.
+- **Postgres logs:** in the vault IT, a constraint violation carrying a marker; neither the cluster's `log/` nor
+  `pglog/pg_ctl.log` holds it, and both are inside the mount point. A test pins the flags `db-init.sh` writes.
 - **Crash dumps:** a test that the JVM isn't started with `HeapDumpOnOutOfMemoryError` (the `spring-boot:run` and
   packaged-jar arguments); the README says core dumps are off (macOS default) and why.
 - **Fixtures script:** `capture-fixtures.mjs` refuses unless `/api/status` reports `storage: PLAIN` (the vault off, a
@@ -455,8 +569,10 @@ browser), and non-GET requests with a foreign `Origin` get 403.
 |---|---|---|
 | Prompt | `SystemPromptRulesTest` (chat-9 lines kept in order, new sentences, `chat-10`); `ChatEvalSetTest` 60/68; holdout pin unchanged | 0 |
 | Vault scripts | `VaultScriptsTest` (macOS only, skipped elsewhere): create a 64 MB image in a temp dir, mount, write a marker, unmount, mount point empty, raw bands contain no marker; wrong key fails to mount; key never on a command line (process arguments checked) | 1 |
-| Docker on vault | `VaultDatabaseIT`: Postgres on the mounted temp image, a marker row, stop, unmount, no marker in the bands; start refused while unmounted (`create_host_path: false`) | 1 (§14: in `verify` or `-Pvault-it`) |
-| Dev migration | the script on two throwaway databases with synthetic data; row counts equal | 1 |
+| Vault database (native) | `VaultDatabaseIT` (`-Pvault-it`, §16 decision 4; skipped through a JUnit assumption, and reported as skipped, when `db-check.sh` finds no PostgreSQL 17 with pgvector 0.8.6 at `finalysis.vault.pg-bin`): on a throwaway image and port, setup's `db-init.sh`, a marker row, then **five lock and unlock cycles at the same mount point**, each with `db-stop.sh` and a **plain** `hdiutil detach` that must succeed without `-force`, the rows read back after every unlock; after the last lock, no marker in the bands; a constraint violation with a marker leaves none in `log/` or `pg_ctl.log`; the server answers on `127.0.0.1:<port>` only (no `::1`, no Unix socket), with SCRAM, and refuses a wrong password; `db-start.sh` refuses while unmounted; the database password never appears in a process's arguments | 1 |
+| Dev migration | the script from a throwaway Docker database (its own compose project and port, synthetic data) into a throwaway vault cluster; row counts equal; nothing written between dump and restore | 1 |
+| Startup checks | `db-check.sh` and its Java side on fakes: each `NOT_READY` reason (§4.4) from canned tool output; `launchd-conflict` from job files in temporary directories naming the vault path, `postgresapp-conflict` from a fake `defaults export` naming it, and no conflict for Postgres.app's default server in its own data directory; `port-in-use`; the messages contain no path | 1, 2 |
+| Cluster settings | a test that pins what `db-init.sh` writes (`listen_addresses`, port, empty socket directories, `pg_hba.conf`'s one line, the log settings) | 1 |
 | Key wrapping | wrap/unwrap round trip; wrong password; every byte of the wrapper flipped one at a time never unwraps; a header parameter changed never unwraps; unparseable file is `vault-file-damaged`; calibration within bounds | 2 |
 | Locked gate | `VaultGateTest`: **every** handler mapping (read from `RequestMappingHandlerMapping`, so a new endpoint is covered without editing the test) returns 423 while locked, except the allowlist; the data source refuses a connection while locked | 2 |
 | Lifecycle | `VaultLifecycleTest` (fake mount, Testcontainers database): no connection at startup; unlock runs Flyway and the schema check; lock closes connections (`pg_stat_activity`), stops the runtime, unmounts, invalidates; stale mount locked at startup; lock waits for an in-flight request; unlock rate limit | 2 |
@@ -496,7 +612,21 @@ Proposed changes, each with a version bump:
 - **`kill -9` leaves the vault mounted** until the next backend start or a reboot.
 - **A password change doesn't revoke old wrapper copies:** a Time Machine copy of `vault-key.json` still opens the
   vault with the old password. Revoking needs a new recovery key (rotation, §14).
-- **Docker's VM disk and swap** are outside the vault; FileVault covers them (§4.7).
+- **`kill -9` of the backend leaves Postgres running** on the mounted vault (`pg_ctl` detaches it), until the next
+  backend start locks it or a reboot (§4.6).
+- **Native Postgres is a setup step:** Postgres.app with PostgreSQL 17 and its bundled pgvector, pinned to 0.8.6
+  (§4.4). An update of Postgres.app that changes pgvector stops unlock until the pin is changed and the vault IT rerun;
+  the README says to turn its automatic updates off. A PostgreSQL major upgrade (18) needs `pg_upgrade` on an
+  unlocked vault; not built in this phase. Only Intel is tested here (the binaries are universal).
+- **A forced unmount is a fallback,** logged and reported on `/api/status` (§4.6); the vault IT shows the plain one
+  works, but not on every machine state.
+- **The vault runs a different Postgres build from the tests** (Postgres.app on macOS against Testcontainers' Debian
+  image): same major version, pgvector 0.8.6 against 0.8.7, and text collation can differ (§4.4); the vault IT covers
+  the difference the spike finds.
+- **Docker in vault mode holds no vault data,** but its VM disk keeps the old plain dev volume until the owner deletes
+  it (§4.5) and whatever the compose database is used for; FileVault covers it (§4.7).
+- **Docker can't serve the vault** (the spike, §4.8); the Docker route stays closed unless a later Docker Desktop
+  releases a mount cleanly.
 - **Deleting the original statement** works only in Chromium browsers (§7).
 - **The phone trusts a local CA** the user installed; the README says how to remove it.
 
@@ -542,7 +672,7 @@ vision role (AI-01) are in the roadmap's "Later enhancements", outside the layer
 | Step | Content | Backend | Tests |
 |---|---|---|---|
 | 0 | Corgi prompt `chat-10`; dev set revision 6 (d-n01, d-n02); the owner's dev rerun and its README entry | prompt text, `ChatPrompt.VERSION` | `SystemPromptRulesTest`, `ChatEvalSetTest`; holdout pin unchanged |
-| 1 | Spike: Postgres in Docker on a mounted APFS image (stop and ask if it fails). `scripts/vault/` create, mount, unmount, status; `compose.yaml` (bind mount, `restart: "no"`, Postgres log flags); the dev migration script; README draft of the vault layout | none in Java | `VaultScriptsTest`, `VaultDatabaseIT`, the migration on throwaway databases, the compose pins |
+| 1 | Spike on native Postgres first (§4.4, Amendment A): five lock and unlock cycles at one mount point with a plain unmount, the collation check, and that `initdb --pwfile=/dev/stdin` and `pg_ctl -w` work with TCP only (no Unix socket); stop and ask if any fails. `scripts/vault/` create, mount, unmount, status, db-check, db-init, db-start, db-stop; the dev migration script; README draft of the vault layout and the Postgres.app setup. `compose.yaml` unchanged | none in Java (the `NOT_READY` check's Java side is step 2) | `VaultScriptsTest`, `VaultDatabaseIT` (`-Pvault-it`), the migration on throwaway databases, the cluster settings pin, the startup checks on fakes |
 | 2 | Locked mode (one context, §16 decision 3); the common-password list (1,000, bundled) and its check: `VaultDataSource`, deferred Flyway and schema check, `VaultUnlocked` hooks, the gate; key wrapping (Bouncy Castle Argon2id, AES-GCM); setup with the recovery key, unlock, recover, lock, password change, activity; idle and wake lock; stale-mount lock at startup; shutdown hook; `V25__app_setting`; Postman 14 | `com.finalysis.vault`, `/api/vault/*`, `vault` on `/api/status` | key wrapping, `VaultGateTest`, `VaultLifecycleTest`, recovery, password change, idle and wake; newman on an unlocked temp vault |
 | 3 | Setup, recovery key, unlock and recover screens; 423 handling; Lock button; activity signal; Settings: auto-lock minutes, change password, lock now | settings write endpoint | screen tests, `test:layout` |
 | 4 | Statement files after import (keep a copy, delete the original, ask each time, Settings default); leak tests of §8 | copy on import, delete with statement; `Cache-Control: no-store` | §8's tests, statement file tests |
@@ -617,3 +747,24 @@ Additions:
 - **Step 2:** the setup screen's minimum password is 12 characters; the 1,000 most common passwords are also refused,
   from a list bundled with the backend, with a test. (The same check applies to the new password in password change
   and recovery.)
+
+**Amendment A (2026-10-26; approved 2026-10-27 with change 1 below).** Step 1's spike (§4.8) showed Postgres in Docker
+can't run on the vault: on VirtioFS the mount can't be released without `-force` and the same mount point can't be used
+again until Docker Desktop restarts; with gRPC FUSE the Docker VM crashed at start. The owner asked for native Postgres
+with these requirements, now in §4.4 to §4.6, §10 and §12: PostgreSQL 17 and pgvector, pinned, with a startup check in
+plain words; the cluster in `<mount>/pgdata`, created at setup with a superuser password kept in the vault, SCRAM,
+loopback only, port 55432; unlock = mount, `pg_ctl start -w`, Flyway, schema check; lock = close the pool, `pg_ctl stop
+-m fast -w`, a plain unmount, `-force` only as a logged fallback, with a five-cycle test at one mount point; Postgres
+logs inside the vault with the terse flags; a refusal if a launchd job names the vault path; tests stay on
+Testcontainers, the vault IT uses native Postgres on a throwaway image and skips without it; the dev migration reads the
+Docker volume into the vault cluster, run by the owner; `compose.yaml` unchanged. Decision 4 now applies to the native
+vault IT.
+
+**Amendment A, change 1 (2026-10-27).** Homebrew dropped Intel Macs in September 2026 and the owner's machine is an
+Intel MacBook, so the native Postgres is **Postgres.app**, its PostgreSQL 17 build (universal binaries) with bundled
+pgvector **0.8.6**, binaries at `finalysis.vault.pg-bin` (default
+`/Applications/Postgres.app/Contents/Versions/17/bin`). Its own server management is never used: the startup check also
+refuses (`postgresapp-conflict`) if any Postgres.app server, or any launchd item, points at the vault path. pgvector is
+pinned to 0.8.6, and the version messages name the installed and the required version. The rest of Amendment A stands.
+Approved with this change; step 1 starts with the native spike.
+
