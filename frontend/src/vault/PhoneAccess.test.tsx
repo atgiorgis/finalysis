@@ -134,6 +134,8 @@ test('Settings on the computer: turn phone access on; the address, the certifica
   expect(card).toHaveTextContent('https://192.168.1.157:8443')
   expect(card).toHaveTextContent(fingerprint)
   expect(within(card).getByRole('link', { name: 'Save the certificate' })).toHaveAttribute('href', '/api/access/ca.cer')
+  const steps = within(card).getAllByRole('listitem').map((li) => li.textContent ?? '')
+  expect(steps.findIndex((t) => t.startsWith('Android'))).toBeLessThan(steps.findIndex((t) => t.startsWith('iPhone')))
   expect(card).toHaveTextContent('Certificate Trust Settings')
 })
 

@@ -1,6 +1,6 @@
 # Finalysis Roadmap
 
-**Version:** 3 · **Date:** 2026-10-26 · **Requirements:** `docs/requirements.md` v1.77
+**Version:** 4 · **Date:** 2026-10-27 · **Requirements:** `docs/requirements.md` v1.79
 
 This file supersedes "Finalysis Roadmap V4", which was kept outside the repo. Requirement ids and phase numbers are
 unchanged; the requirements file stays the source of truth for each requirement's wording, phase and status.
@@ -47,8 +47,8 @@ math (GR-01).
 | 6 | Chatbot backend: read-only tools, grounding, citations, memory | CHT-01–CHT-06, ANA-05, SEC-03 | Done |
 | 7 | Chat UI, dashboard, upload page, polish (`docs/plans/phase-7.md`) | UI-01, UI-02 (step 7d), UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | Done (UI-08 Planned: phone access is Phase 8) |
 | 7b | Goals tab shell | GOAL-06 (the tab only) | Done (GOAL-06 Planned for Layer 2) |
-| 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Planned (plan approved) |
-| 9 | Eval suites and benchmarks; candidates from Phase 8: field-level encryption, the chat backlog (h-u10, h-x06, the holdout guard per model), document Q&A, recovery key rotation (`docs/plans/phase-8.md` §13) | QA-03, QA-04, AI-07; candidates SEC-05, CHT-07 | Future |
+| 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Built; closing (SEC-04, SEC-06, SEC-07, SEC-12 Done; UI-08 Planned until the owner's Android phone test; tag after it) |
+| 9 | Eval suites and benchmarks; candidates from Phase 8: field-level encryption, the chat backlog (h-u10, h-x06, the holdout guard per model), document Q&A, recovery key rotation, lock before sleep, kept statement copies listed and downloadable (`docs/plans/phase-8.md` §13) | QA-03, QA-04, AI-07; candidates SEC-05, CHT-07 | Future |
 | 10 | Local AI: the `local` profile (Ollama) and model tiers | AI-03, AI-02, AI-04, AI-05, UI-06 | Future |
 | 11 | Portfolio polish: README, setup script, demo mode, ADRs | QA-05–QA-07 | Future |
 | 12 | Categorization experiments | CAT-06, CAT-07 | Future |

@@ -17,7 +17,7 @@ compose.yaml  Postgres 17 + pgvector
 ## Local development
 
 **Prerequisites:** JDK 21+, Node.js 22+, Docker (for the development database and for Testcontainers), and for
-the encrypted vault, Postgres.app ([below](#the-vaults-postgres-phase-8-in-progress)).
+the encrypted vault, Postgres.app ([below](#the-vaults-postgres-phase-8)).
 
 The backend keeps its data in the **encrypted vault** by default (Phase 8): it starts locked, and every endpoint but
 the status answers 423 until the vault is set up or unlocked. The app opens on the vault's screens: setup (the
@@ -95,7 +95,7 @@ The run uses a **throwaway vault** (Phase 8): start the backend with the vault i
 begins with an empty database. **0. Vault setup** sets it up with a random password and stops the whole run unless the
 backend reports a vault that is not set up; **14. Vault and login** runs last (lock, the 423s, unlock, password change,
 recovery) and leaves it unlocked. Postgres.app with PostgreSQL 17 is needed ([The vault's
-Postgres](#the-vaults-postgres-phase-8-in-progress)).
+Postgres](#the-vaults-postgres-phase-8)).
 
 ```sh
 export FINALYSIS_VAULT_DIR="$(mktemp -d)/vault"          # a new, empty vault each run
@@ -130,7 +130,7 @@ three log counts, account ids and dates only, never amounts or descriptions. The
 nothing; untick it in the Collection Runner.
 Real statements stay in `private-data/`; don't save a file selection or response into the collection.
 
-### The vault's Postgres (Phase 8, in progress)
+### The vault's Postgres (Phase 8)
 
 The encrypted vault (Phase 8, [docs/plans/phase-8.md](docs/plans/phase-8.md) §4) keeps its database in an encrypted
 disk image, which Postgres in Docker can't use (§4.8), so the vault runs a native PostgreSQL from **Postgres.app**. The
@@ -156,27 +156,9 @@ take: with the vault unlocked, run `scripts/vault/db-refresh-collation.sh <vault
 /Applications/Postgres.app/Contents/Versions/17/bin 55432`, which rebuilds the indexes (`REINDEX DATABASE`) and
 records the new version (`ALTER DATABASE finalysis REFRESH COLLATION VERSION`); lock and unlock to clear the notice.
 
-**What stays off the disk outside the vault.** Every `/api` response says `Cache-Control: no-store`, so the browser's
-cache keeps no data; the app writes only its theme to `localStorage` and nothing to `sessionStorage` or IndexedDB
-(tests check both). `npm run capture-fixtures` refuses a backend with the vault on: committed fixtures come only from
-the plain dev database with sample data. The chat and categorization eval reports in `docs/eval/` are written only
-from their own Testcontainers database with the vault off, and any future export of chat or analytics follows the same
-rule.
-
-**No heap or core dumps.** Nothing starts the backend with a heap-dump-on-error option, and macOS writes no core
-dumps by default (`ulimit -c` is 0): a dump of an unlocked backend would hold decrypted data and the database password
-outside the vault. A test checks the build, the wrapper's JVM settings and the configuration for such an option.
-
-**Locking.** Lock with the Lock button in the top bar or the menu (or `POST /api/vault/lock`); the vault also locks
-after 15 idle minutes (Settings → Vault → Auto-lock; `vault.idle-lock-minutes` in `app_setting`), right after the
-machine wakes from sleep, and when the backend stops. Any locked answer (423) takes the app to the unlock screen and
-drops everything it showed; after unlock it opens on the same page. While unlocked the app reads the status every
-30 seconds, so an idle lock clears the screen without a click. A backend killed with `kill -9`
-leaves the vault open until the next start, which locks it first.
-
-**Layout (draft).** The vault directory (`finalysis.vault.dir`, default `~/Library/Application Support/Finalysis/vault`)
+**Layout.** The vault directory (`finalysis.vault.dir`, default `~/Library/Application Support/Finalysis/vault`)
 holds three things: `finalysis.sparsebundle`, the encrypted disk image (APFS, AES-256, growing up to its maximum
-size); `vault-key.json`, the password-wrapped recovery key (step 2); and `mnt/`, an empty folder while locked. Unlocked,
+size); `vault-key.json`, the password-wrapped recovery key; and `mnt/`, an empty folder while locked. Unlocked,
 the image is mounted at `mnt/` and holds `pgdata/` (the cluster, with its logs in `pgdata/log/`), `pglog/` (initdb's and
 pg_ctl's output), `secrets/` (the database password), `statements/` and `tls/`. A copy of the locked image is
 ciphertext, so a backup of it is an encrypted backup.
@@ -194,7 +176,7 @@ stdin only, never as an argument; output is fixed messages.
 | `db-start.sh <dir> <pg bin> <port>` / `db-stop.sh <dir> <pg bin>` | `pg_ctl start -w` / `pg_ctl stop -m fast -w` (immediate only as a reported fallback) |
 | `migrate-plain-to-vault.sh <dir> <pg bin> <port>` | copies the Docker dev database into an unlocked, empty vault (below) |
 
-**Moving the dev database into the vault** (once unlock exists, Phase 8 step 2). With the vault set up and unlocked and
+**Moving the dev database into the vault.** With the vault set up and unlocked and
 the Docker `db` running, `scripts/vault/migrate-plain-to-vault.sh <vault dir>
 /Applications/Postgres.app/Contents/Versions/17/bin 55432` streams the data in (no file in between), in one
 transaction, and prints row counts per table, never rows. It refuses if the schemas differ or the vault already holds
@@ -316,13 +298,20 @@ phone on your home network in:
    192.168/16, 10/8 or 172.16/12, are offered) and a port (8443 by default), and Save. The backend opens a second,
    HTTPS-only listener there; `127.0.0.1:8080` is unchanged.
 3. **Save the certificate** (`finalysis-local-ca.cer`, the app's own CA, made for this and kept in the vault) and send
-   it to the phone (AirDrop, or a message to yourself). Check that the phone shows the same SHA-256 fingerprint as
-   Settings. **iPhone:** install the profile (Settings → General → VPN & Device Management), then turn on full trust
-   (Settings → General → About → Certificate Trust Settings). **Android:** Settings → Security → Install a
-   certificate → CA certificate. The CA can only vouch for addresses in your home network's range (a name constraint),
-   so even if its key leaked it couldn't impersonate another site. To remove it later, delete the profile (iPhone) or
-   the user certificate (Android).
+   it to the phone (Nearby Share or AirDrop, a USB cable, or a message to yourself). Install it as a CA, and check that
+   the phone shows the same SHA-256 fingerprint as Settings:
+   - **Android:** Settings → Security & privacy → More security settings → Encryption & credentials → Install a
+     certificate → **CA certificate** (the wording varies by maker; search Settings for "CA certificate"). Android warns
+     that a network may be monitored: that is the point of a CA you installed yourself. Chrome then trusts it for
+     websites. To remove it: Encryption & credentials → User credentials (or Trusted credentials → User).
+   - **iPhone:** open the file (from AirDrop or Files) to download the profile, install it in Settings → General →
+     VPN & Device Management, then turn on **full trust** for it in Settings → General → About → Certificate Trust
+     Settings. To remove it: delete the profile.
+
+   The CA can only vouch for addresses in your home network's range (a name constraint), so even if its key leaked it
+   couldn't impersonate another site.
 4. On the phone, open the address Settings shows (`https://<address>:<port>`) and log in with the vault's password.
+   macOS may ask once whether Java may accept incoming connections: allow it, or the phone can't reach the listener.
 
 The phone can only log in while the vault is unlocked on the computer; it never unlocks it. A session lasts as long as
 the auto-lock minutes while idle. **Lock** on the phone locks Finalysis everywhere; any lock (idle, wake, the button,
@@ -765,7 +754,7 @@ returned.
 | 422 | `setting-invalid` | An auto-lock setting outside 1 to 240 minutes | Send a value in range |
 | 422 | `password-rejected` | A new vault password under 12 or over 256 characters; one of the 1,000 most common passwords, once or repeated, with only digits or symbols added before or after (`dragondragon`, `!!monkey2024`); or, at password change, one containing an account's name or institution (four letters or more, ignoring case, spaces and punctuation). Never quotes the password | Choose another password |
 | 409 | `vault-state` | Setup on a vault that exists, unlock or recovery on one that isn't locked, password change while locked, or anything with the vault off | Read `GET /api/status` for the state |
-| 503 | `vault-not-ready` | The startup check failed (`reason`: `postgres-missing`, `postgres-wrong-version`, `pgvector-missing`, `pgvector-wrong-version`, `launchd-conflict`, `postgresapp-conflict`, `port-in-use`); `detail` says what to do and names the installed and required versions | Fix it as the message says (see [The vault's Postgres](#the-vaults-postgres-phase-8-in-progress)) and try again |
+| 503 | `vault-not-ready` | The startup check failed (`reason`: `postgres-missing`, `postgres-wrong-version`, `pgvector-missing`, `pgvector-wrong-version`, `launchd-conflict`, `postgresapp-conflict`, `port-in-use`); `detail` says what to do and names the installed and required versions | Fix it as the message says (see [The vault's Postgres](#the-vaults-postgres-phase-8)) and try again |
 | 500 | `vault-file-damaged` | `vault-key.json` doesn't parse or names parameters outside the allowed range | Unlock with the recovery key (`POST /api/vault/recover`); it writes a new key file |
 | 500 | `mount-failed` | The disk image didn't open; nothing changed | Check that the image is in the vault folder and not open elsewhere |
 | 500 | `database-failed` | The image opened but the database didn't start, migrate or pass the schema check; the vault was locked again | Check the server log (step and exception class only) |
@@ -1600,6 +1589,128 @@ Java fallback was shown). The dev-to-holdout gap was zero. Details and every run
 - **Conversations are stored unencrypted** in Postgres until Phase 8, like the statements.
 
 ## Security
+
+Finalysis keeps a household's statements, so it is built for one owner on one computer, with the data unreadable on
+disk unless the owner has unlocked it. Phase 8 (`docs/plans/phase-8.md`) built the vault, locked mode, the leak rules
+and phone access; this section is the summary (SEC-04, SEC-06, SEC-07, SEC-12, UI-08).
+
+### Threat model (SEC-07)
+
+**Protected against:**
+
+1. **The disk read while Finalysis is locked or the computer is off**, backups and disk images included (Time
+   Machine, a cloned drive, a copied home folder). The data lives in an encrypted disk image; without the password or
+   the recovery key it is ciphertext.
+2. **A program or a person with file access while you are logged in but Finalysis is locked.** The image is
+   unmounted, the database stopped, the key not in memory; unlocking needs the password (Argon2id, about half a second
+   a guess, and a rate limit).
+
+**Not protected against:** someone on the computer while Finalysis is **unlocked**: the volume is mounted, the key is in
+memory and the API answers on localhost. Auto-lock (15 idle minutes by default), the Lock button, the lock after the
+computer wakes and the lock at shutdown keep that window short. **Also outside:** someone who knows the password; a
+compromised macOS or Docker install; a phone that is itself compromised while logged in; losing both the password and
+the recovery key (the data is then gone, by design).
+
+**Turn on FileVault** (System Settings → Privacy & Security → FileVault; BitLocker on Windows, LUKS full-disk
+encryption on Linux). It covers what the vault can't: macOS swap and the hibernation file (where Postgres's memory can
+land while unlocked), Docker's VM disk (the plain development database, and an old dev volume until you delete it), the
+browser's memory and caches, and Quick Look thumbnails of a kept statement you preview in Finder.
+
+### The vault (SEC-04, SEC-06)
+
+- **One encrypted volume** holds everything personal: the Postgres cluster (transactions, embeddings, chat history),
+  kept statement files and the phone listener's keys. It is an APFS sparse bundle encrypted with AES-256, in
+  `~/Library/Application Support/Finalysis/vault` (`finalysis.vault.dir`). SQL keeps doing all the math on it.
+- **Two secrets.** The image's passphrase is a **recovery key**: 256 random bits, shown once at setup as 13 groups of
+  four characters. You never type it day to day: `vault-key.json` holds it wrapped with AES-256-GCM under a key derived
+  from your **password** with Argon2id (64 MiB and about half a second on this computer, parameters in the file and
+  bound to it). Nothing goes to the Keychain.
+- **Unlock** = derive, unwrap, mount (the key goes to `hdiutil` on stdin, never a command line), start the vault's
+  Postgres, migrate, check the schema. **Lock** = stop admitting requests, wait for running ones (30 s), close the
+  database connections, stop Postgres, unmount, end every phone session. Locked, every endpoint but the status and the
+  vault's own answers 423, and the app shows only the unlock screen.
+- **Forgot the password?** Unlock with the recovery key on the unlock screen and choose a new password. **Lost the key
+  file?** The recovery key also opens the vault and writes a new one. **Lost both the password and the recovery key?**
+  The data is gone; nobody can recover it.
+- **Changing the password** rewraps the key file; the disk image isn't touched and the recovery key stays the same.
+  An old copy of `vault-key.json` (in a backup) still opens with the old password, so treat old backups of it as
+  holding that password; a new recovery key (rotation) is a Phase 9 candidate.
+- **Passwords:** at least 12 characters (and at most 256); not one of the 1,000 most common, repeated or padded with
+  digits or symbols; at a change, not containing an account's name or bank.
+
+**Backups.** Back up the vault folder (`finalysis.sparsebundle` and `vault-key.json`) **while Finalysis is locked**: a
+copy of the locked bundle is ciphertext, so the backup is encrypted. Time Machine does this as it is (it backs up the
+bundle's bands, not the mounted volume). To restore, put both back in the vault folder and unlock with your password
+(or with the recovery key and a new password). Keep the recovery key apart from the backup: on paper, or in a password
+manager you trust.
+
+### Locked mode and the leak rules (SEC-12)
+
+**Locking.** Lock with the Lock button in the top bar or the menu (or `POST /api/vault/lock`); the vault also locks
+after 15 idle minutes (Settings → Vault → Auto-lock; `vault.idle-lock-minutes` in `app_setting`), right after the
+machine wakes from sleep, and when the backend stops. Any locked answer (423) takes the app to the unlock screen and
+drops everything it showed; after unlock it opens on the same page. While unlocked the app reads the status every
+30 seconds, so an idle lock clears the screen without a click. A backend killed with `kill -9`
+leaves the vault open until the next start, which locks it first.
+
+**What stays off the disk outside the vault.** Every `/api` response says `Cache-Control: no-store`, so the browser's
+cache keeps no data; the app writes only its theme to `localStorage` and nothing to `sessionStorage` or IndexedDB
+(tests check both). `npm run capture-fixtures` refuses a backend with the vault on: committed fixtures come only from
+the plain dev database with sample data. The chat and categorization eval reports in `docs/eval/` are written only
+from their own Testcontainers database with the vault off, and any future export of chat or analytics follows the same
+rule.
+
+**No heap or core dumps.** Nothing starts the backend with a heap-dump-on-error option, and macOS writes no core
+dumps by default (`ulimit -c` is 0): a dump of an unlocked backend would hold decrypted data and the database password
+outside the vault. A test checks the build, the wrapper's JVM settings and the configuration for such an option.
+
+Nothing a test or tool writes is real data: tests use synthetic files only, the vault's tests create throwaway images in
+temporary folders, and no test opens a port on the network.
+
+### Phone access in short (UI-08)
+
+See [Phone access](#phone-access-ui-08) for the steps. In short: off by default; when on, a second listener on one of
+this computer's private addresses, HTTPS only, with a CA made by the app and limited by a name constraint to the home
+network's range; login with the vault's password; sessions in memory, ended by any lock; a `Host` and `Origin` check on
+every request; 20 failed logins in an hour close it until the next unlock.
+
+### Linux: an encrypted volume with LUKS (documented, not built)
+
+The Java side needs only another `VaultMount` (`scripts/vault/` is macOS's). On Linux the same design works with a
+LUKS2 container file on a loop device, which needs root (or a `sudoers` rule for exactly these commands):
+
+```sh
+truncate -s 50G finalysis.img
+cryptsetup luksFormat --type luks2 --key-file=- finalysis.img      # the recovery key on stdin
+cryptsetup open --key-file=- finalysis.img finalysis-vault           # unlock
+mkfs.ext4 /dev/mapper/finalysis-vault                                # once
+mount /dev/mapper/finalysis-vault <vault dir>/mnt
+umount <vault dir>/mnt && cryptsetup close finalysis-vault           # lock
+```
+
+with PostgreSQL 17 and pgvector from the distribution, and the key wrapping as on macOS.
+
+### Known limitations (Phase 8)
+
+- **Unlocked is unprotected** against someone on the computer; auto-lock limits the window.
+- **Sleep locks on wake, not before:** while asleep the volume stays mounted (FileVault and the login screen protect it
+  then).
+- **`kill -9` of the backend leaves Postgres running and the vault mounted** until the next start (which locks it
+  first) or a restart of the computer.
+- **A forced unmount** is a reported fallback (`lastLockForced` on the status); normally the unmount is plain.
+- **An old copy of `vault-key.json` opens with the old password** after a change; recovery key rotation is a Phase 9
+  candidate.
+- **The vault runs Postgres.app's build, the tests a Debian one:** same PostgreSQL 17, pgvector 0.8.6 against 0.8.7,
+  ICU against glibc collation (the same order for the sample data); a Postgres.app update can change pgvector (unlock
+  then refuses until the pin is updated) or ICU (Settings says to run `db-refresh-collation.sh`). Only Intel Macs are
+  tested.
+- **Deleting the original statement file** works only in Chrome and Edge, for a file chosen or dropped in the app.
+- **Kept statement copies** are kept and deleted with their statement, but not listed or downloadable yet (Phase 9).
+- **The phone trusts a CA you installed**; remove it as the steps say. A phone that is itself compromised while logged
+  in sees what you see.
+- **Docker in vault mode holds no vault data**, but its VM disk keeps the old plain dev volume until you delete it.
+
+### Upload hardening (SEC-10)
 
 Statement files are untrusted input and hold personal data, so uploads are hardened (SEC-10):
 

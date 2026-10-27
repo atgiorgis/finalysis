@@ -136,16 +136,19 @@ export default function PhoneAccessSettings() {
               <a href={access.caUrl} download="finalysis-local-ca.cer" className="button-secondary phone-ca-link">
                 Save the certificate
               </a>{' '}
-              and send it to the phone (AirDrop, or a message to yourself).
+              and send it to the phone (Nearby Share or AirDrop, a USB cable, or a message to yourself).
             </li>
             <li>
               Check that the phone shows this fingerprint (SHA-256):
               <code className="phone-fingerprint">{state.caFingerprint}</code>
             </li>
             <li>
+              Android: Settings → Security &amp; privacy → Encryption &amp; credentials → Install a certificate → CA
+              certificate (search Settings for “CA certificate” if the wording differs).
+            </li>
+            <li>
               iPhone: install the profile (Settings → General → VPN &amp; Device Management), then turn on full trust
-              (Settings → General → About → Certificate Trust Settings). Android: Settings → Security → Install a
-              certificate → CA certificate.
+              (Settings → General → About → Certificate Trust Settings).
             </li>
           </ol>
           <p className="muted">

@@ -605,30 +605,36 @@ Proposed changes, each with a version bump:
 
 ---
 
-## 12. Known limitations (expected; finalized at close-out)
+## 12. Known limitations (finalized at close-out, step 7)
 
-- **Unlocked is unprotected** (§1); auto-lock limits the window.
-- **Sleep locks on wake, not before** (§5.3).
-- **`kill -9` leaves the vault mounted** until the next backend start or a reboot.
+As built; the README's Security section carries the same list for the owner.
+
+- **Unlocked is unprotected** (§1): someone on the computer while it is unlocked sees the data; auto-lock, the Lock
+  button, the wake lock and the shutdown lock limit the window.
+- **Sleep locks on wake, not before** (§5.3): while asleep the volume stays mounted; FileVault and the login screen
+  cover it. Lock before sleep needs a native helper (Phase 9 candidate).
+- **`kill -9` of the backend leaves Postgres running and the vault mounted** (`pg_ctl` detaches it, §4.6), until the
+  next backend start locks it first, or a reboot.
 - **A password change doesn't revoke old wrapper copies:** a Time Machine copy of `vault-key.json` still opens the
-  vault with the old password. Revoking needs a new recovery key (rotation, §14).
-- **`kill -9` of the backend leaves Postgres running** on the mounted vault (`pg_ctl` detaches it), until the next
-  backend start locks it or a reboot (§4.6).
+  vault with the old password. Revoking needs a new recovery key (rotation, Phase 9 candidate).
 - **Native Postgres is a setup step:** Postgres.app with PostgreSQL 17 and its bundled pgvector, pinned to 0.8.6
   (§4.4). An update of Postgres.app that changes pgvector stops unlock until the pin is changed and the vault IT rerun;
-  the README says to turn its automatic updates off. A PostgreSQL major upgrade (18) needs `pg_upgrade` on an
-  unlocked vault; not built in this phase. Only Intel is tested here (the binaries are universal).
-- **A forced unmount is a fallback,** logged and reported on `/api/status` (§4.6); the vault IT shows the plain one
-  works, but not on every machine state.
+  one that changes ICU is reported in Settings with `db-refresh-collation.sh` as the fix. A PostgreSQL major upgrade
+  (18) needs `pg_upgrade` on an unlocked vault; not built. Only Intel is tested (the binaries are universal).
+- **A forced unmount is a fallback,** reported as `lastLockForced` on `/api/status` (§4.6); the vault IT shows the
+  plain one works, but not on every machine state.
 - **The vault runs a different Postgres build from the tests** (Postgres.app on macOS against Testcontainers' Debian
-  image): same major version, pgvector 0.8.6 against 0.8.7, and text collation can differ (§4.4); the vault IT covers
-  the difference the spike finds.
+  image): same major version, pgvector 0.8.6 against 0.8.7, ICU against glibc collation; the vault IT (`-Pvault-it`) runs the app's
+  migrations and the migration script's compare on the native build, the other suites on Testcontainers.
 - **Docker in vault mode holds no vault data,** but its VM disk keeps the old plain dev volume until the owner deletes
-  it (§4.5) and whatever the compose database is used for; FileVault covers it (§4.7).
-- **Docker can't serve the vault** (the spike, §4.8); the Docker route stays closed unless a later Docker Desktop
-  releases a mount cleanly.
-- **Deleting the original statement** works only in Chromium browsers (§7).
-- **The phone trusts a local CA** the user installed; the README says how to remove it.
+  it (§4.5); FileVault covers it (§4.7). **Docker can't serve the vault** (the spike, §4.8).
+- **Deleting the original statement** works only in Chromium browsers (§7), for a file chosen or dropped in the app.
+- **Kept statement copies** are kept and deleted with their statement, but not listed or downloadable (Phase 9
+  candidate).
+- **The phone trusts a local CA** the owner installed; the README says how to remove it. A compromised phone that is
+  logged in sees what the owner sees.
+- **Phone access is tested in Java and the browser, not yet on a real phone:** the owner's Android test (step 6) comes
+  before the tag; UI-08 stays Planned until then.
 
 ---
 
@@ -997,6 +1003,37 @@ throwaway vault, 310 requests, 816 assertions, 0 failures; no generated Spring S
 - **Observed:** the machine was under heavy load for part of the session (15-minute load average about 32), which made
   some runs slow; one `clean` failed while something else (the IDE's build, most likely) was writing `target/`, and
   passed when run again.
+
+
+### Step 6 notes: the phone test (deferred)
+
+- The owner deferred the phone test to the end of the phase, on Android. UI-08 stays Planned until the results; any
+  fixes from it, and the tag `phase-8-done`, come after.
+
+### Step 7 notes: close-out
+
+- **README:** a Security section in place of the upload-only one: the threat model (SEC-07, §1), FileVault and what it
+  covers, the vault (the two secrets, unlock and lock, forgot the password, lost the key file, password change),
+  backups as a copy of the locked bundle, locked mode and the leak rules (moved from the setup section), phone access
+  in short, the Linux LUKS route (documented, not built), the known limitations, then upload hardening (SEC-10) as
+  before. The setup section's headings lose "in progress" and "draft". Phone setup lists **Android first, iPhone
+  second** (the owner's phone test is on Android), in the README and in Settings → Phone access (a test checks the
+  order).
+- **Requirements v1.79** (§11): SEC-04 rewritten → Done; SEC-06 → Done (OS keychain dropped); SEC-07 → Done; SEC-12 →
+  Done; SEC-05 → Deferred. **UI-08 is not marked Done:** it is built and tested, but the plan's step 6 (a real phone)
+  hasn't happened; it is marked after the owner's Android results.
+- **Roadmap v4:** Phase 8 built, closing after the phone test; Phase 9's candidates add lock before sleep and kept
+  copies listed and downloadable (§13).
+- **CLAUDE.md:** current phase (close-out, phone test pending, no tag yet) and the `vault` and `access` packages in the
+  repo layout.
+- **Not done:** the tag `phase-8-done` (after the phone test, at the owner's word).
+- **Runs:** backend `clean verify` 3,447 tests, 0 failures; `-Pvault-it` 8 (the first try skipped the migration IT
+  on a passing Docker check, the rerun passed with timings dump 1 s, restore 1 s, compare 0 s); frontend 312;
+  `test:layout` 115 passed, 1 skipped; newman, all folders on a throwaway vault (ports 8081 and 55433), 310 requests
+  and 816 assertions, 0 failed.
+- **Observed:** the first newman run failed 89 assertions because the Mac went into deep idle sleep mid-run
+  (`pmset -g log`: 18:33 to 18:38) and the backend's wake lock locked the vault on waking: the feature as designed.
+  Rerun with `caffeinate -dims` around both processes, it passed.
 
 ---
 
