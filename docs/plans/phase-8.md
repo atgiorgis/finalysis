@@ -837,6 +837,9 @@ names) and `VaultLifecycleTest` (a password change refused for a name and for an
 
 ### Step 3 notes: the screens
 
+Requirement ids: SEC-06 (unlock, recovery) and UI-07 (the screens at 375 px). The step's commit message names UI-03
+(the chat panel) by mistake; corrected here rather than by rewriting the pushed commit.
+
 Done: "Phase 8 step 3: vault screens, Lock button, Settings". Backend 3,414 tests, 0 failures, 0 errors,
 0 skipped (Maven summary; 3,413 before, plus the settings test); frontend 286 tests (26 files), all passed (265 before,
 plus 21); `test:layout` 105 passed, 1 skipped (the phone-only check on desktop, as before); newman every README folder
