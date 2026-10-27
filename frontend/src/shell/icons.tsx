@@ -45,6 +45,13 @@ export const SunIcon = () => (
   </Icon>
 )
 
+export const LockIcon = () => (
+  <Icon size={18} width={2.2}>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </Icon>
+)
+
 export const CheckIcon = () => (
   <Icon size={13} width={2.8}>
     <path d="m5 12 5 5L20 7" />

@@ -2078,3 +2078,215 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- the vault (Phase 8 step 3): setup, recovery key, unlock, messages; the Lock button ---- */
+
+.lock-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* On a phone the icon carries the button; the label is still its name for screen readers. */
+.lock-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .lock-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+}
+
+.sidebar-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) var(--space-3) 0;
+}
+
+.vault-layer {
+  display: flex;
+  justify-content: center;
+}
+
+.vault-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 32rem;
+  min-width: 0;
+  padding: var(--space-6) var(--space-4) 48px;
+}
+
+.vault-brand {
+  align-self: center;
+}
+
+.vault-card {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.vault-card h1 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.vault-card p {
+  margin: 0 0 var(--space-3);
+}
+
+.vault-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.vault-form label {
+  display: grid;
+  gap: var(--space-1);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.vault-form input {
+  box-sizing: border-box;
+  min-height: var(--touch-target);
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+}
+
+.vault-form .button-primary,
+.vault-form .button-secondary {
+  justify-self: start;
+}
+
+.vault-form p {
+  margin: 0;
+}
+
+.vault-switch {
+  margin-top: var(--space-3);
+  text-align: left;
+}
+
+.vault-warning {
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-control);
+  background: var(--danger-bg);
+}
+
+.vault-notice {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+}
+
+.vault-notice p:last-child {
+  margin-bottom: 0;
+}
+
+.recovery-key {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-key code {
+  display: block;
+  padding: var(--space-2) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.vault-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.vault-connecting {
+  padding: var(--space-5) var(--space-4);
+}
+
+.settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.settings-form label {
+  display: grid;
+  gap: var(--space-1);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.settings-form input {
+  box-sizing: border-box;
+  min-height: var(--touch-target);
+  width: 100%;
+  max-width: 24rem;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+}
+
+.settings-form .button-primary,
+.settings-form .button-secondary {
+  justify-self: start;
+}
+
+.settings-form p {
+  margin: 0;
+}

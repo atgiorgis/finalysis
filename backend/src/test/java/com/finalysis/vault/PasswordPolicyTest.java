@@ -114,7 +114,8 @@ class PasswordPolicyTest {
 
     @Test
     void refusesAPasswordContainingAnAccountNameOrInstitution() {
-        java.util.List<String> terms = java.util.List.of("Everyday Checking", "Northfield Credit Union", "Apex", "Visa");
+        java.util.List<String> terms =
+                java.util.List.of("Everyday Checking", "Northfield Credit Union", "Apex", "Visa");
         assertThatThrownBy(() -> REAL.checkPersonal("my everydaychecking 2024", terms))
                 .hasMessageContaining("accounts or banks").message().doesNotContain("Everyday");
         assertThatThrownBy(() -> REAL.checkPersonal("NORTHFIELD-credit-union!!", terms))

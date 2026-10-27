@@ -3,8 +3,8 @@ package com.finalysis.vault;
 import java.time.Duration;
 
 /**
- * Counts the gated requests in flight, so a lock can wait for them (docs/plans/phase-8.md §4.6): up to 30 seconds, after
- * which closing the pool cancels what is left.
+ * Counts the gated requests in flight, so a lock can wait for them (docs/plans/phase-8.md §4.6): up to 30 seconds,
+ * after which closing the pool cancels what is left.
  */
 final class VaultRequests {
 

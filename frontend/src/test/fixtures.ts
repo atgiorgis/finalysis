@@ -210,6 +210,10 @@ export function fetchFrom(routes: Record<string, unknown>) {
     if (body === undefined) {
       return Response.json({ type: 'not-found', detail: `no fixture for ${url}` }, { status: 404 })
     }
+    // A function answers each request itself: a status that changes during a test, a 423, a 429 with Retry-After.
+    if (typeof body === 'function') {
+      return (body as (url: string) => Response | Promise<Response>)(url)
+    }
     return Response.json(body)
   }
 }

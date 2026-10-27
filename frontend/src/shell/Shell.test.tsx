@@ -42,7 +42,8 @@ test('one top bar at every width: the menu button, the logo, the tab shown, the 
   expect(within(bar).getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
   expect(within(bar).getByText('Finalysis')).toBeInTheDocument()
   expect(within(bar).getByText('/ Alerts')).toBeInTheDocument()
-  expect(within(bar).getByRole('combobox', { name: 'Month' })).toBeInTheDocument()
+  // The picker fills once the shell's reads are in (behind the vault gate's status read since Phase 8).
+  expect(await within(bar).findByRole('combobox', { name: 'Month' })).toBeInTheDocument()
   expect(within(bar).getByRole('switch', { name: 'Dark theme' })).toBeInTheDocument()
   // No tab bar and no bottom bar: the tabs are in the menu only, and the menu is closed.
   expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument()

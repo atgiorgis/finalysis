@@ -4,6 +4,7 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,6 +52,9 @@ class VaultController {
         }
     }
 
+    record SettingsRequest(Integer idleLockMinutes) {
+    }
+
     private final VaultService vault;
 
     VaultController(VaultService vault) {
@@ -87,6 +91,13 @@ class VaultController {
     @PostMapping("/password")
     ResponseEntity<Void> password(@RequestBody PasswordRequest request) {
         vault.changePassword(request.currentPassword(), request.newPassword());
+        return noContent();
+    }
+
+    /** Settings while unlocked: the auto-lock minutes (§6). */
+    @PutMapping("/settings")
+    ResponseEntity<Void> settings(@RequestBody SettingsRequest request) {
+        vault.setIdleLockMinutes(request.idleLockMinutes());
         return noContent();
     }
 

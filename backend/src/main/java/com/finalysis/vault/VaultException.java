@@ -44,6 +44,10 @@ public class VaultException extends RuntimeException {
         return new VaultException(HttpStatus.UNPROCESSABLE_CONTENT, "password-rejected", why);
     }
 
+    static VaultException settingInvalid(String why) {
+        return new VaultException(HttpStatus.UNPROCESSABLE_CONTENT, "setting-invalid", why);
+    }
+
     static VaultException notReady(ReadyCheck check) {
         return new VaultException(HttpStatus.SERVICE_UNAVAILABLE, "vault-not-ready", check.message(), check, null);
     }

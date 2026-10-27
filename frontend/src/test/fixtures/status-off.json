@@ -4,5 +4,16 @@
   "timestamp": "2026-10-23T12:00:00Z",
   "ai": {
     "mode": "OFF"
+  },
+  "vault": {
+    "state": "UNLOCKED",
+    "storage": "PLAIN",
+    "setUp": false,
+    "reason": null,
+    "message": null,
+    "idleLockMinutes": 15,
+    "lanAccess": false,
+    "lastLockForced": false,
+    "collation": null
   }
 }

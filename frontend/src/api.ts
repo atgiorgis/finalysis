@@ -7,19 +7,58 @@ export interface AiStatus {
   models?: Record<string, string>
 }
 
+export type VaultState =
+  | 'NOT_SET_UP'
+  | 'NOT_READY'
+  | 'LOCKED'
+  | 'UNLOCKING'
+  | 'UNLOCKED'
+  | 'LOCKING'
+  | 'LOCK_FAILED'
+  | 'BROKEN'
+
+/** The vault on `GET /api/status` (docs/plans/phase-8.md §5.2); never a path. `PLAIN` is the dev database, vault off. */
+export interface VaultStatus {
+  state: VaultState
+  storage: 'VAULT' | 'PLAIN'
+  /** A vault exists: offer unlock, not setup (matters when NOT_READY). */
+  setUp: boolean
+  reason: string | null
+  message: string | null
+  idleLockMinutes: number
+  lanAccess: boolean
+  lastLockForced: boolean
+  collation: { recorded: string; actual: string; action: string } | null
+}
+
 export interface StatusResponse {
   app: string
   status: string
   timestamp: string
   ai: AiStatus
+  vault: VaultStatus
 }
 
-export async function fetchStatus(): Promise<StatusResponse> {
-  const res = await fetch('/api/status')
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status}`)
+// ---------------------------------------------------------------------------- the vault's 423 (Phase 8 §6)
+
+type LockListener = () => void
+const lockListeners = new Set<LockListener>()
+
+/** Called whenever any request answers 423 (the vault is locked); returns the unsubscribe. */
+export function onVaultLocked(listener: LockListener): () => void {
+  lockListeners.add(listener)
+  return () => {
+    lockListeners.delete(listener)
   }
-  return res.json()
+}
+
+/** Every request of the app goes through here, so a 423 anywhere switches the app to the unlock screen. */
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init)
+  if (res.status === 423) {
+    lockListeners.forEach((listener) => listener())
+  }
+  return res
 }
 
 // ---------------------------------------------------------------------------- shared shapes
@@ -402,7 +441,7 @@ export interface NotTransferResult {
 }
 
 async function send<T>(method: 'PUT' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T | null> {
-  const res = await fetch(path, {
+  const res = await apiFetch(path, {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -683,14 +722,14 @@ export const imports = {
   createAccount: (account: NewAccount) => send<Account>('POST', '/api/accounts', account) as Promise<Account>,
   /** `201` is a statement, `202` an unparsed upload; a refusal throws its problem (409 already-imported included). */
   importFile: async (accountId: number, file: File): Promise<ImportOutcome> => {
-    const res = await fetch(`/api/accounts/${accountId}/imports`, { method: 'POST', body: fileBody(file) })
+    const res = await apiFetch(`/api/accounts/${accountId}/imports`, { method: 'POST', body: fileBody(file) })
     if (!res.ok) {
       throw await problemOf(res)
     }
     return res.status === 202 ? { kind: 'unparsed', upload: await res.json() } : { kind: 'imported', summary: await res.json() }
   },
   preview: async (accountId: number, file: File): Promise<ImportPreview> => {
-    const res = await fetch(`/api/accounts/${accountId}/imports/preview`, { method: 'POST', body: fileBody(file) })
+    const res = await apiFetch(`/api/accounts/${accountId}/imports/preview`, { method: 'POST', body: fileBody(file) })
     if (!res.ok) {
       throw await problemOf(res)
     }
@@ -757,7 +796,7 @@ export function withParams(path: string, params: Params = {}): string {
 
 /** GET a JSON body; a non-2xx answer throws its problem. */
 export async function getJson<T>(path: string, params: Params = {}): Promise<T> {
-  const res = await fetch(withParams(path, params))
+  const res = await apiFetch(withParams(path, params))
   if (!res.ok) {
     throw await problemOf(res)
   }
@@ -1009,6 +1048,9 @@ export class ApiProblem extends Error {
     return typeof this.body.title === 'string' ? this.body.title : undefined
   }
 
+  /** Seconds to wait, from a 429's `Retry-After`; null otherwise. */
+  retryAfter: number | null = null
+
   /** The type's last segment (`urn:finalysis:problem:already-imported` → `already-imported`). */
   get slug(): string | undefined {
     return this.type?.split(':').at(-1)
@@ -1016,12 +1058,34 @@ export class ApiProblem extends Error {
 }
 
 async function problemOf(res: Response): Promise<ApiProblem> {
+  let problem: ApiProblem
   try {
     const body = await res.json()
-    return new ApiProblem(res.status, body.type, body.detail ?? `Request failed: ${res.status}`, body)
+    problem = new ApiProblem(res.status, body.type, body.detail ?? `Request failed: ${res.status}`, body)
   } catch {
-    return new ApiProblem(res.status, undefined, `Request failed: ${res.status}`)
+    problem = new ApiProblem(res.status, undefined, `Request failed: ${res.status}`)
   }
+  const retryAfter = Number(res.headers?.get?.('Retry-After'))
+  problem.retryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null
+  return problem
+}
+
+// ---------------------------------------------------------------------------- the vault (Phase 8 §5.2)
+
+/** Setup, unlock, recovery, lock, password change and settings. Passwords are sent once and never kept. */
+export const vault = {
+  /** Creates the vault; answers the recovery key, shown once. */
+  setup: (password: string) =>
+    send<{ recoveryKey: string }>('POST', '/api/vault/setup', { password }) as Promise<{ recoveryKey: string }>,
+  unlock: (password: string) => send<null>('POST', '/api/vault/unlock', { password }),
+  recover: (recoveryKey: string, newPassword: string) =>
+    send<null>('POST', '/api/vault/recover', { recoveryKey, newPassword }),
+  lock: () => send<null>('POST', '/api/vault/lock'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    send<null>('POST', '/api/vault/password', { currentPassword, newPassword }),
+  saveSettings: (idleLockMinutes: number) => send<null>('PUT', '/api/vault/settings', { idleLockMinutes }),
+  /** The "user is here" signal for the idle lock; failures are ignored (a 423 still reaches the listeners). */
+  activity: () => send<null>('POST', '/api/vault/activity').catch(() => null),
 }
 
 export const chat = {
@@ -1035,7 +1099,7 @@ export const chat = {
 }
 
 export async function createConversation(): Promise<{ id: number }> {
-  const res = await fetch('/api/chat/conversations', { method: 'POST' })
+  const res = await apiFetch('/api/chat/conversations', { method: 'POST' })
   if (!res.ok) {
     throw await problemOf(res)
   }
@@ -1043,7 +1107,7 @@ export async function createConversation(): Promise<{ id: number }> {
 }
 
 export async function askTurn(conversationId: number, message: string): Promise<ChatTurn> {
-  const res = await fetch(`/api/chat/conversations/${conversationId}/turns`, {
+  const res = await apiFetch(`/api/chat/conversations/${conversationId}/turns`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),

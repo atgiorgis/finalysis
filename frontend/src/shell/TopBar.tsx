@@ -2,7 +2,8 @@ import { forwardRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { TABS } from '../tabs'
 import { useTheme } from '../theme'
-import { LogoMark, MenuIcon, MoonIcon, SunIcon } from './icons'
+import { hasVault, useVault } from '../vault/VaultContext'
+import { LockIcon, LogoMark, MenuIcon, MoonIcon, SunIcon } from './icons'
 import MonthPicker from './MonthPicker'
 
 /** The tab a path belongs to, for the "/ Overview" crumb; none for a page outside the tabs (`/drill`). */
@@ -28,9 +29,23 @@ function ThemeSwitch() {
   )
 }
 
+/** Locks the vault now (docs/plans/phase-8.md §6): an icon with its label; on a phone the label is for screen readers. */
+function LockButton() {
+  const { status, lock } = useVault()
+  if (!hasVault(status)) {
+    return null
+  }
+  return (
+    <button type="button" className="lock-button" onClick={() => void lock()}>
+      <LockIcon />
+      <span className="lock-label">Lock</span>
+    </button>
+  )
+}
+
 /**
- * The bar at the top of every page (step 7c): the menu button, the logo, the tab shown, the month picker and the theme
- * switch. On a phone the month picker takes a second row.
+ * The bar at the top of every page (step 7c): the menu button, the logo, the tab shown, the month picker, the theme
+ * switch and, with the vault, the Lock button. On a phone the month picker takes a second row.
  */
 const TopBar = forwardRef<HTMLButtonElement, { menuOpen: boolean; onOpenMenu: () => void }>(function TopBar(
   { menuOpen, onOpenMenu },
@@ -64,6 +79,7 @@ const TopBar = forwardRef<HTMLButtonElement, { menuOpen: boolean; onOpenMenu: ()
         <MonthPicker />
       </div>
       <ThemeSwitch />
+      <LockButton />
     </header>
   )
 })

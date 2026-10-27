@@ -5,6 +5,7 @@ package com.finalysis.vault;
  *
  * @param state           see {@link VaultState}
  * @param storage         {@code VAULT}, or {@code PLAIN} with the vault off (development and tests)
+ * @param setUp           a vault exists (key file and image): the screens offer unlock rather than setup
  * @param reason          why NOT_READY, LOCK_FAILED or BROKEN: a reason code, or the part that failed
  * @param message         one plain sentence for that reason, when there is one
  * @param idleLockMinutes the idle lock in force
@@ -12,8 +13,8 @@ package com.finalysis.vault;
  * @param lastLockForced  the last lock had to force the unmount (§4.6)
  * @param collation       set when the database's ICU collation version changed (§4.4): what to run
  */
-public record VaultStatus(VaultState state, String storage, String reason, String message, int idleLockMinutes,
-                          boolean lanAccess, boolean lastLockForced, Collation collation) {
+public record VaultStatus(VaultState state, String storage, boolean setUp, String reason, String message,
+                          int idleLockMinutes, boolean lanAccess, boolean lastLockForced, Collation collation) {
 
     /**
      * @param recorded the version the database recorded

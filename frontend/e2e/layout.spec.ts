@@ -336,3 +336,148 @@ test('transactions: Categorize now and its summary fit', async ({ page }, info) 
   await expect(page.getByText(/privacy check refused it/)).toBeVisible()
   await fitsAt375(page, info.project.name === 'phone')
 })
+
+// ---- the vault (Phase 8 step 3, docs/plans/phase-8.md §6): every vault screen at 375 px, both themes ----
+
+/** Controls that stick out of their card on the right (no page scroll shows it: the card is inside the page). */
+async function outsideTheirCard(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = []
+    for (const control of document.querySelectorAll<HTMLElement>('.card input, .card button, .card select')) {
+      const card = control.closest('.card')!.getBoundingClientRect()
+      const box = control.getBoundingClientRect()
+      if (box.width > 0 && box.right > card.right + 0.5) {
+        out.push(`${control.tagName.toLowerCase()} ${(control.getAttribute('aria-label') ?? control.textContent ?? '').trim().slice(0, 30)}`)
+      }
+    }
+    return out
+  })
+}
+
+function vaultStatus(state: string, extra: Record<string, unknown> = {}) {
+  return {
+    ...fixtures.statusOff,
+    vault: { ...fixtures.statusOff.vault, storage: 'VAULT', setUp: state !== 'NOT_SET_UP', state, ...extra },
+  }
+}
+
+const KEY = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789-ABCD-EFGH-JKMN-PQRS-TV0G'
+const LONG_REASON =
+  'Finalysis needs pgvector 0.8.6; the installed one is 0.8.7. See the README’s setup section, which explains how ' +
+  'to install the pinned version of Postgres.app and turn off its automatic updates.'
+
+/** Each vault screen, with what it takes to reach it and its widest state. */
+const VAULT_SCREENS: {
+  name: string
+  overrides: Record<string, unknown>
+  reach?: (page: Page) => Promise<void>
+  ready: string
+}[] = [
+  { name: 'setup', overrides: { '/api/status': vaultStatus('NOT_SET_UP') }, ready: 'Set up your vault' },
+  {
+    name: 'recovery key',
+    overrides: {
+      '/api/status': vaultStatus('NOT_SET_UP'),
+      '/api/vault/setup': withStatus(201, { recoveryKey: KEY }),
+    },
+    reach: async (page) => {
+      await page.getByLabel('Password', { exact: true }).fill('river stone lamp orbit')
+      await page.getByLabel('Password again').fill('river stone lamp orbit')
+      await page.getByRole('button', { name: 'Create the vault' }).click()
+    },
+    ready: 'Your recovery key',
+  },
+  { name: 'unlock', overrides: { '/api/status': vaultStatus('LOCKED') }, ready: 'Finalysis is locked' },
+  {
+    name: 'unlock, too many attempts',
+    overrides: {
+      '/api/status': vaultStatus('LOCKED'),
+      '/api/vault/unlock': withStatus(429, {
+        type: 'urn:finalysis:problem:too-many-attempts',
+        detail: 'Too many wrong attempts. Wait 15 minutes and try again.',
+      }),
+    },
+    reach: async (page) => {
+      await page.getByLabel('Password').fill('a wrong password')
+      await page.getByRole('button', { name: 'Unlock' }).click()
+      await expect(page.getByRole('alert')).toBeVisible()
+    },
+    ready: 'Finalysis is locked',
+  },
+  {
+    name: 'recovery',
+    overrides: { '/api/status': vaultStatus('LOCKED') },
+    reach: async (page) => {
+      await page.getByRole('button', { name: 'Forgot your password? Use your recovery key' }).click()
+    },
+    ready: 'Unlock with your recovery key',
+  },
+  {
+    name: 'not ready',
+    overrides: { '/api/status': vaultStatus('NOT_READY', { setUp: true, reason: 'pgvector-wrong-version', message: LONG_REASON }) },
+    ready: 'Finalysis is locked',
+  },
+  {
+    name: 'broken',
+    overrides: {
+      '/api/status': vaultStatus('BROKEN', {
+        reason: 'image-missing',
+        message: 'The vault’s key file is there but its disk image is missing. Restore the image from a backup.',
+      }),
+    },
+    ready: 'The vault needs attention',
+  },
+  {
+    name: 'lock failed',
+    overrides: { '/api/status': vaultStatus('LOCK_FAILED', { reason: 'unmount', message: 'Locking did not finish (unmount).' }) },
+    ready: 'Locking didn’t finish',
+  },
+]
+
+for (const theme of ['dark', 'light'] as const) {
+  for (const screen of VAULT_SCREENS) {
+    test(`vault: ${screen.name} fits (${theme})`, async ({ page }, info) => {
+      await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+      await mockApi(page, screen.overrides)
+      await page.goto('/overview')
+      await screen.reach?.(page)
+      await expect(page.getByRole('heading', { level: 1, name: screen.ready })).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      // Nothing of the app behind a vault screen.
+      await expect(page.getByRole('banner')).toHaveCount(0)
+
+      const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }))
+      expect(scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(innerWidth)
+      expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+      if (info.project.name === 'phone') {
+        expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+      }
+    })
+  }
+
+  test(`vault: the top bar with the Lock button and Settings → Vault fit (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+    await mockApi(page, { '/api/status': vaultStatus('UNLOCKED') })
+    await page.goto('/settings')
+    const bar = page.getByRole('banner')
+    const lock = bar.getByRole('button', { name: 'Lock' })
+    await expect(lock).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Lock now' })).toBeVisible()
+
+    const box = (await lock.boundingBox())!
+    expect(box.x + box.width, 'the Lock button stays on screen').toBeLessThanOrEqual(page.viewportSize()!.width)
+    const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }))
+    expect(scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(innerWidth)
+    expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+    if (info.project.name === 'phone') {
+      expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+    }
+  })
+}

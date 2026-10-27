@@ -20,8 +20,8 @@ compose.yaml  Postgres 17 + pgvector
 the encrypted vault, Postgres.app ([below](#the-vaults-postgres-phase-8-in-progress)).
 
 The backend keeps its data in the **encrypted vault** by default (Phase 8): it starts locked, and every endpoint but
-the status answers 423 until the vault is set up or unlocked (`POST /api/vault/setup`, `/unlock`; the screens come in
-step 3). For development with synthetic data, run it on the plain Docker database instead, unlocked from the start:
+the status answers 423 until the vault is set up or unlocked. The app opens on the vault's screens: setup (the
+password twice, then the recovery key, shown once), unlock, and recovery with the key. For development with synthetic data, run it on the plain Docker database instead, unlocked from the start:
 
 ```sh
 cp .env.example .env          # then set POSTGRES_PASSWORD
@@ -134,8 +134,8 @@ Real statements stay in `private-data/`; don't save a file selection or response
 
 The encrypted vault (Phase 8, [docs/plans/phase-8.md](docs/plans/phase-8.md) §4) keeps its database in an encrypted
 disk image, which Postgres in Docker can't use (§4.8), so the vault runs a native PostgreSQL from **Postgres.app**. The
-Docker database above stays for development without the vault, with synthetic data. The API can set up, unlock and
-lock the vault now; the screens come in Phase 8 step 3. Its setup on macOS (Intel or Apple silicon):
+Docker database above stays for development without the vault, with synthetic data. Its setup on macOS (Intel or Apple
+silicon):
 
 1. Install [Postgres.app](https://postgresapp.com) with **PostgreSQL 17** (its universal build). It bundles pgvector;
    Finalysis needs exactly **pgvector 0.8.6**, the version in Postgres.app's PostgreSQL 17 today.
@@ -156,8 +156,11 @@ take: with the vault unlocked, run `scripts/vault/db-refresh-collation.sh <vault
 /Applications/Postgres.app/Contents/Versions/17/bin 55432`, which rebuilds the indexes (`REINDEX DATABASE`) and
 records the new version (`ALTER DATABASE finalysis REFRESH COLLATION VERSION`); lock and unlock to clear the notice.
 
-**Locking.** Lock with `POST /api/vault/lock`; the vault also locks after 15 idle minutes (`vault.idle-lock-minutes` in
-`app_setting`), right after the machine wakes from sleep, and when the backend stops. A backend killed with `kill -9`
+**Locking.** Lock with the Lock button in the top bar or the menu (or `POST /api/vault/lock`); the vault also locks
+after 15 idle minutes (Settings → Vault → Auto-lock; `vault.idle-lock-minutes` in `app_setting`), right after the
+machine wakes from sleep, and when the backend stops. Any locked answer (423) takes the app to the unlock screen and
+drops everything it showed; after unlock it opens on the same page. While unlocked the app reads the status every
+30 seconds, so an idle lock clears the screen without a click. A backend killed with `kill -9`
 leaves the vault open until the next start, which locks it first.
 
 **Layout (draft).** The vault directory (`finalysis.vault.dir`, default `~/Library/Application Support/Finalysis/vault`)
@@ -276,8 +279,19 @@ called for it.*
 
 ![Goals](docs/screenshots/goals.png)
 
-Goals is the tab's shell (GOAL-06): its empty state; goal records come with Layer 2. Settings is read-only: Corgi's
-mode and the model behind each role, today's and this month's chat spend, and the cost limits.
+Goals is the tab's shell (GOAL-06): its empty state; goal records come with Layer 2. Settings starts with the vault
+(Phase 8): auto-lock minutes, change password and Lock now (with the vault off it only says the data is in the plain
+dev database). The rest is read-only: Corgi's mode and the model behind each role, today's and this month's chat
+spend, and the cost limits.
+
+### The vault's screens (Phase 8)
+
+Before the app, and instead of it while locked: **setup** (what the vault is in two sentences, the password twice),
+the **recovery key** once (13 groups of four, Copy, the warning, and the last group typed back before the app opens),
+**unlock** with the password (a wrong one said plainly, the time to try again after too many), and **recovery** with
+the key and a new password twice. A plain full-page message covers a vault that isn't ready (the startup check's
+sentence, above the form), one whose files don't match, and a lock that didn't finish. The Lock button is in the top
+bar (its label shows from tablet width) and in the menu. Nothing of the app is mounted behind these screens.
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -587,7 +601,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 
 | Method | Path | Purpose | Success | Problem types (besides 400/404) |
 |---|---|---|---|---|
-| `GET` | `/api/status` | Backend health, shown by the frontend, the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner, and the vault (`vault.state`, `storage` `VAULT` or `PLAIN`, `reason` and `message` when not ready or failed, `idleLockMinutes`, `lastLockForced`, `collation` when the ICU version changed). Answers while locked; never a path | 200 | — |
+| `GET` | `/api/status` | Backend health, shown by the frontend, the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner, and the vault (`vault.state`, `storage` `VAULT` or `PLAIN`, `setUp`, `reason` and `message` when not ready or failed, `idleLockMinutes`, `lastLockForced`, `collation` when the ICU version changed). Answers while locked; never a path | 200 | — |
 | `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details; answers while locked | 200 | — |
 | `POST` | `/api/vault/setup` | `{password}` (12+ characters, not a common one): create the vault in state `NOT_SET_UP` and unlock it. The recovery key is in the response **once**, with `Cache-Control: no-store` | 201 `{recoveryKey}` | `password-rejected`, `vault-state`, `vault-not-ready`, `setup-failed` |
 | `POST` | `/api/vault/unlock` | `{password}`: mount, start the database, migrate, check the schema | 204 | `wrong-password`, `too-many-attempts`, `vault-state`, `vault-not-ready`, `vault-file-damaged`, `mount-failed`, `database-failed` |
@@ -595,6 +609,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/vault/lock` | Lock now; any state, a no-op when nothing is open (and with the vault off) | 204 | — |
 | `POST` | `/api/vault/password` | `{currentPassword, newPassword}` while unlocked: rewrap the key; the image isn't touched | 204 | `wrong-password`, `password-rejected`, `too-many-attempts`, `vault-file-damaged` |
 | `POST` | `/api/vault/activity` | The UI's "user is here" signal (at most once a minute) for the idle lock | 204 | — |
+| `PUT` | `/api/vault/settings` | `{idleLockMinutes}` (1 to 240) while unlocked: saved in `app_setting`, in force at once | 204 | `setting-invalid` |
 | `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
 | `GET` | `/api/accounts/{id}` | Get one account | 200 | — |
@@ -695,6 +710,7 @@ returned.
 | 401 | `wrong-password` | The vault password is wrong (unlock, password change) | Try again; after five wrong attempts in a row each attempt waits |
 | 401 | `wrong-recovery-key` | The recovery key doesn't open this vault, or isn't a recovery key | Check the 13 groups; `O`/`0`, `I`/`L`/`1`, case and spaces don't matter |
 | 429 | `too-many-attempts` | Five or more wrong passwords or recovery keys in a row; `Retry-After` gives the seconds to wait (30 s, doubling to 15 minutes; a success resets) | Wait, then try again |
+| 422 | `setting-invalid` | An auto-lock setting outside 1 to 240 minutes | Send a value in range |
 | 422 | `password-rejected` | A new vault password under 12 or over 256 characters; one of the 1,000 most common passwords, once or repeated, with only digits or symbols added before or after (`dragondragon`, `!!monkey2024`); or, at password change, one containing an account's name or institution (four letters or more, ignoring case, spaces and punctuation). Never quotes the password | Choose another password |
 | 409 | `vault-state` | Setup on a vault that exists, unlock or recovery on one that isn't locked, password change while locked, or anything with the vault off | Read `GET /api/status` for the state |
 | 503 | `vault-not-ready` | The startup check failed (`reason`: `postgres-missing`, `postgres-wrong-version`, `pgvector-missing`, `pgvector-wrong-version`, `launchd-conflict`, `postgresapp-conflict`, `port-in-use`); `detail` says what to do and names the installed and required versions | Fix it as the message says (see [The vault's Postgres](#the-vaults-postgres-phase-8-in-progress)) and try again |

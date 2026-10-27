@@ -11,6 +11,7 @@ import TransactionsPage from './pages/TransactionsPage'
 import Layout from './shell/Layout'
 import { ShellDataProvider } from './shell/ShellData'
 import { TABS } from './tabs'
+import VaultGate from './vault/VaultGate'
 
 export { TABS }
 
@@ -25,27 +26,32 @@ function TransactionLink() {
   return <Navigate to={`/transactions?${next}`} replace />
 }
 
-/** Every route of the app, inside the shell, in tab order; `/` opens the Overview, `/drill` lists any total's rows. */
+/**
+ * Every route of the app, inside the shell, in tab order; `/` opens the Overview, `/drill` lists any total's rows. The
+ * vault gate stands in front of all of it (docs/plans/phase-8.md §6): nothing below mounts while the vault is locked.
+ */
 export default function AppRoutes() {
   return (
-    <ShellDataProvider>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route index element={<Navigate to="/overview" replace />} />
-          <Route path="/overview/*" element={<OverviewPage />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/transactions/:id" element={<TransactionLink />} />
-          <Route path="/import" element={<ImportPage />} />
-          <Route path="/alerts/*" element={<AlertsPage />} />
-          <Route path="/recurring/*" element={<RecurringPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:id" element={<ChatPage />} />
-          <Route path="/goals/*" element={<GoalsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/drill" element={<DrillPage />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Route>
-      </Routes>
-    </ShellDataProvider>
+    <VaultGate>
+      <ShellDataProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/overview" replace />} />
+            <Route path="/overview/*" element={<OverviewPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/transactions/:id" element={<TransactionLink />} />
+            <Route path="/import" element={<ImportPage />} />
+            <Route path="/alerts/*" element={<AlertsPage />} />
+            <Route path="/recurring/*" element={<RecurringPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/chat/:id" element={<ChatPage />} />
+            <Route path="/goals/*" element={<GoalsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/drill" element={<DrillPage />} />
+            <Route path="*" element={<Navigate to="/overview" replace />} />
+          </Route>
+        </Routes>
+      </ShellDataProvider>
+    </VaultGate>
   )
 }

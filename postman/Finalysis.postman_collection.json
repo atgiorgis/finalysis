@@ -8903,6 +8903,85 @@
           ]
         },
         {
+          "name": "Auto-lock: out of range",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"idleLockMinutes\":0}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 setting-invalid', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:setting-invalid');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auto-lock: 10 minutes",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"idleLockMinutes\":10}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: auto-lock is 10 minutes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('idleLockMinutes 10', () => pm.expect(pm.response.json().vault.idleLockMinutes).to.eql(10));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Password change: wrong current password",
           "request": {
             "method": "POST",

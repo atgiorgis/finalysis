@@ -835,6 +835,52 @@ feature's code. Passwords are capped at 256 characters, which bounds (a)'s searc
 tested). Tests: `PasswordPolicyTest` (20 refused and 9 accepted examples against the real list, the cap, the worst case,
 names) and `VaultLifecycleTest` (a password change refused for a name and for an institution, then accepted).
 
+### Step 3 notes: the screens
+
+Done: "Phase 8 step 3: vault screens, Lock button, Settings". Backend 3,414 tests, 0 failures, 0 errors,
+0 skipped (Maven summary; 3,413 before, plus the settings test); frontend 286 tests (26 files), all passed (265 before,
+plus 21); `test:layout` 105 passed, 1 skipped (the phone-only check on desktop, as before); newman every README folder
+on a throwaway vault, 294 requests, 796 assertions, 0 failures.
+
+- **The gate in the UI** (`src/vault/VaultGate.tsx`): in front of every route. The app renders only while the vault
+  is unlocked or off (`PLAIN`); every other state renders a vault screen with nothing of the app mounted. Any 423
+  (one `apiFetch` in `api.ts` that every request goes through notifies the gate), a status read that isn't
+  `UNLOCKED`, or the Lock button closes the app: it **unmounts**, so page data, chat turns and the shell's accounts are
+  dropped; after unlock it mounts afresh (a new key) and navigates back to the route, query included. While unlocked
+  it reads `GET /api/status` every 30 s, so an idle or wake lock clears the screen without a click, and sends
+  `POST /api/vault/activity` at most once a minute on pointer, key, wheel, scroll or touch.
+- **Screens:** setup (two sentences, the password twice, 12+ checked before sending, the backend's refusal in its own
+  words); the recovery key (13 groups, Copy, the warning word for word, the last group typed back, case-insensitive,
+  before Continue; the key is held only by that screen and dropped on Continue); unlock (a wrong password clears the
+  field; a 429 shows the backend's sentence plus "You can try again at …" from `Retry-After`); recovery (the key and a
+  new password twice); `NOT_READY` (the check's sentence above the setup or unlock form, chosen by the new `setUp`
+  flag on the status; any attempt checks again); `BROKEN` (message, Check again); `LOCK_FAILED` (message, Lock again);
+  `LOCKING`/`UNLOCKING` (re-read every second); the backend not answering.
+- **Lock button:** in the top bar, an icon with its label (the label is visually hidden below 768 px, where the top
+  bar has no room; it stays the button's name) and Lock now in the menu; neither shows with the vault off.
+- **Settings:** a Vault card first: auto-lock minutes (1 to 240, checked before sending; `noValidate` so the app's
+  sentence shows rather than the browser's), change password (new one twice), Lock now, and the collation notice when
+  there is one. With the vault off it says the data is in the plain dev database and offers nothing. Statement files
+  and phone access join it in steps 4 and 5.
+- **Backend:** `PUT /api/vault/settings {idleLockMinutes}` (1 to 240, `setting-invalid` otherwise; saved in
+  `app_setting`, in force at once); `setUp` on the vault status. Postman 14 gains the setting (422, 204, the status).
+- **Tests:** `VaultGate.test.tsx` (16: setup and the key, refusals, unlock, the 429 time, recovery, a 423 mid-page
+  returning to the same route with the app re-read, the Lock button and the menu entry, no Lock with the vault off, the
+  30-second poll, the once-a-minute activity signal, not ready both ways, broken, lock failed, unreachable) and
+  `VaultSettings.test.tsx` (5). `fetchFrom` lets a test route answer with a function (a changing status, a 423, a 429
+  with `Retry-After`). `test:layout` covers every vault screen in both themes at 375 px and desktop (36 checks) plus the
+  top bar with Lock and Settings → Vault, and now also checks that every control stays inside its card: the first run in
+  a real browser showed the vault forms' inputs running through the card's padding and past its edge (no page scroll, so
+  the existing check missed it); fixed with `box-sizing: border-box`, and the new check fails on the old CSS.
+- **Fixture:** `status-off.json` gained the `vault` block a plain-mode backend now returns (`PLAIN`, `UNLOCKED`,
+  `setUp: false`), by hand: `capture-fixtures` gets its PLAIN guard in step 4.
+- **The no-arithmetic guard** scans `shell/`, `pages/` and `components/`; `src/vault/` is outside it on purpose: its
+  two number conversions are a typed setting (minutes) and the wait time after too many attempts, never an API figure.
+- **In a real browser** (headless Chromium at 375 px, the backend on a throwaway vault with Postgres.app, Vite's
+  proxy): setup, the key (13 groups, Crockford alphabet), Continue after the last group, the app on the page it was
+  opened on, Lock, a wrong password ("The password is wrong."), unlock back on Settings, auto-lock saved (the backend
+  then reported 7 minutes). Stopping the backend locked the vault; the vault was deleted.
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

@@ -4,6 +4,7 @@ import { AI_NAME, costText } from '../corgi'
 import { formatCount, formatDate, formatMoney, formatMonth } from '../format'
 import { providerName } from '../shell/CloudAiBanner'
 import { useShellData } from '../shell/ShellData'
+import VaultSettings from '../vault/VaultSettings'
 
 /** Corgi's roles by what it does; the search embedding isn't Corgi talking, so it keeps its own name. */
 const ROLE_LABELS: Record<string, string> = {
@@ -82,7 +83,10 @@ function UsageSection({ usage, error, ai }: { usage: ChatDailyUsage | null; erro
   )
 }
 
-/** Settings, read-only in Phase 7 (docs/plans/phase-7.md §2.8): Corgi's mode and models, the chat costs. */
+/**
+ * Settings: the vault first (editable since Phase 8 step 3: auto-lock, password, Lock now), then Corgi's mode and
+ * models and the chat costs, read-only (docs/plans/phase-7.md §2.8).
+ */
 export default function SettingsPage() {
   const { status } = useShellData()
   const [usage, setUsage] = useState<ChatDailyUsage | null>(null)
@@ -98,7 +102,8 @@ export default function SettingsPage() {
   return (
     <section className="page">
       <h1>Settings</h1>
-      <p className="muted">Read-only: these are set in the backend’s configuration.</p>
+      <VaultSettings />
+      <p className="muted">{AI_NAME}’s models and the spending limits below are set in the backend’s configuration.</p>
       {status && <AiSection ai={status.ai} />}
       <UsageSection usage={usage} error={error} ai={status?.ai ?? null} />
     </section>

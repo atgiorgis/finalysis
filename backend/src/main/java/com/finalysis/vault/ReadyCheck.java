@@ -46,8 +46,10 @@ public record ReadyCheck(boolean ok, String reason, String installed, String req
                     + "none was found. Install Postgres.app with PostgreSQL 17 (postgresapp.com), or set "
                     + "finalysis.vault.pg-bin.";
             case "postgres-wrong-version" -> "Finalysis needs PostgreSQL " + or(required, "17") + "; the installed one "
-                    + "is PostgreSQL " + or(installed, "of another version") + ". Install Postgres.app's PostgreSQL 17.";
-            case "pgvector-missing" -> "Finalysis needs pgvector " + or(required, "") + ", and this PostgreSQL has none "
+                    + "is PostgreSQL " + or(installed, "of another version")
+                    + ". Install Postgres.app's PostgreSQL 17.";
+            case "pgvector-missing" -> "Finalysis needs pgvector " + or(required, "")
+                    + ", and this PostgreSQL has none "
                     + "installed. Use Postgres.app's PostgreSQL 17, which includes it.";
             case "pgvector-wrong-version" -> "Finalysis needs pgvector " + or(required, "") + "; the installed one is "
                     + or(installed, "another version") + ". See the README's setup section.";

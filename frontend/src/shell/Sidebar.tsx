@@ -2,7 +2,8 @@ import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
 import { formatMonth } from '../format'
 import { TABS } from '../tabs'
-import { CloseIcon, LogoMark, TAB_ICONS } from './icons'
+import { hasVault, useVault } from '../vault/VaultContext'
+import { CloseIcon, LockIcon, LogoMark, TAB_ICONS } from './icons'
 import { accountsLine, useMonth, useShellData } from './ShellData'
 
 /** A tab's link, keeping the chosen month. */
@@ -23,6 +24,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
   const href = useTabHref()
   const { status, accounts } = useShellData()
   const { month } = useMonth()
+  const vault = useVault()
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -96,6 +98,19 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
             )
           })}
         </nav>
+        {hasVault(vault.status) && (
+          <button
+            type="button"
+            className="button-secondary sidebar-lock"
+            onClick={() => {
+              onClose()
+              void vault.lock()
+            }}
+          >
+            <LockIcon />
+            Lock now
+          </button>
+        )}
         {status && (
           <p className="sidebar-foot">
             <strong>{accountsLine(accounts.length)}</strong>

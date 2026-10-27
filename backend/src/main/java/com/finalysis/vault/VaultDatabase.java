@@ -10,9 +10,9 @@ import org.flywaydb.core.Flyway;
 import org.hibernate.SessionFactory;
 
 /**
- * Opens and closes the database behind {@link VaultDataSource} (docs/plans/phase-8.md §5.1): the pool, then Flyway, then
- * Hibernate's check that every entity matches the schema (what {@code ddl-auto: validate} did at startup), then the
- * collation-version check. Closing aborts every connection.
+ * Opens and closes the database behind {@link VaultDataSource} (docs/plans/phase-8.md §5.1): the pool, then Flyway,
+ * then Hibernate's check that every entity matches the schema (what {@code ddl-auto: validate} did at startup), then
+ * the collation-version check. Closing aborts every connection.
  */
 class VaultDatabase {
 
@@ -106,6 +106,19 @@ class VaultDatabase {
             return java.util.List.of();
         }
         return terms;
+    }
+
+    /** Writes {@code vault.idle-lock-minutes} to app_setting. */
+    void saveIdleLockMinutes(int minutes) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO app_setting (key, value) VALUES ('vault.idle-lock-minutes', ?) "
+                             + "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()")) {
+            statement.setString(1, String.valueOf(minutes));
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("the setting could not be saved", e);
+        }
     }
 
     /** {@code vault.idle-lock-minutes} from app_setting, or the default when unset or out of range. */

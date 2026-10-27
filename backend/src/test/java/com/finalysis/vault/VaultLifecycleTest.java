@@ -386,6 +386,26 @@ class VaultLifecycleTest {
     }
 
     @Test
+    void theAutoLockSettingIsSavedAndInForceAtOnce() throws Exception {
+        vault.setup(PASSWORD);
+        try {
+            assertThat(putJson("/api/vault/settings", "{\"idleLockMinutes\":0}").getStatus()).isEqualTo(422);
+            assertThat(putJson("/api/vault/settings", "{\"idleLockMinutes\":241}").getStatus()).isEqualTo(422);
+            assertThat(putJson("/api/vault/settings", "{}").getStatus()).isEqualTo(422);
+            assertThat(putJson("/api/vault/settings", "{\"idleLockMinutes\":3}").getStatus()).isEqualTo(204);
+
+            assertThat(status().get("idleLockMinutes").asInt()).isEqualTo(3);
+            assertThat(scalar("SELECT value FROM app_setting WHERE key = 'vault.idle-lock-minutes'")).isEqualTo("3");
+            clock.advance(Duration.ofMinutes(4));
+            vault.tick();
+            assertThat(vault.state()).isEqualTo(VaultState.LOCKED);
+            assertThat(putJson("/api/vault/settings", "{\"idleLockMinutes\":10}").getStatus()).isEqualTo(423);
+        } finally {
+            execute("DELETE FROM app_setting WHERE key = 'vault.idle-lock-minutes'");
+        }
+    }
+
+    @Test
     void afterASleepTheNextRequestLocksFirstAndIsRefused() throws Exception {
         vault.setup(PASSWORD);
         clock.sleep(Duration.ofMinutes(5));
@@ -519,6 +539,11 @@ class VaultLifecycleTest {
 
     private MockHttpServletResponse postJson(String path, String body) throws Exception {
         return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
+    }
+
+    private MockHttpServletResponse putJson(String path, String body) throws Exception {
+        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(path)
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
     }
 
     private int get200(String path) throws Exception {

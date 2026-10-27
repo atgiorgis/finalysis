@@ -314,7 +314,7 @@ public class VaultService {
         }
     }
 
-    /** Unlocks with the recovery key and sets a new password (§4.2): for a forgotten password or a damaged key file. */
+    /** Unlocks with the recovery key and sets a new password (§4.2): a forgotten password or a damaged key file. */
     void recover(String recoveryKey, String newPassword) {
         transition.lock();
         try {
@@ -380,6 +380,25 @@ public class VaultService {
                     Arrays.fill(raw, (byte) 0);
                 }
             }
+        } finally {
+            transition.unlock();
+        }
+    }
+
+    /** The idle lock in minutes (1 to 240), saved in app_setting and in force at once (§5.3, §6). */
+    void setIdleLockMinutes(Integer minutes) {
+        transition.lock();
+        try {
+            if (!properties.enabled() || state != VaultState.UNLOCKED) {
+                throw VaultException.state(state, "settings can only be changed while unlocked.");
+            }
+            if (minutes == null || minutes < 1 || minutes > 240) {
+                throw VaultException.settingInvalid("Auto-lock must be between 1 and 240 minutes.");
+            }
+            database.saveIdleLockMinutes(minutes);
+            idleLockMinutes = minutes;
+            touch();
+            log.info("Vault auto-lock set to {} minutes", minutes);
         } finally {
             transition.unlock();
         }
@@ -614,8 +633,8 @@ public class VaultService {
 
     public VaultStatus status() {
         VaultDatabase.CollationChange change = collation;
-        return new VaultStatus(state, properties.enabled() ? "VAULT" : "PLAIN", reason, message, idleLockMinutes,
-                false, lastLockForced,
+        return new VaultStatus(state, properties.enabled() ? "VAULT" : "PLAIN", setUp, reason, message,
+                idleLockMinutes, false, lastLockForced,
                 change == null ? null : new VaultStatus.Collation(change.recorded(), change.actual(), REFRESH_ACTION));
     }
 
