@@ -1,6 +1,9 @@
 spring:
   application:
     name: finalysis
+  autoconfigure:
+    # Phone login uses the vault's own password (docs/plans/phase-8.md §9.3): no user store, no generated password.
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   # Load DB credentials from the repo-root .env (run from backend/ or the repo root).
   config:
     import:
@@ -58,6 +61,16 @@ spring:
 
 server:
   port: 8080
+  servlet:
+    session:
+      # Only the phone has sessions (the LAN listener, HTTPS); localhost is stateless (§9.3). In memory only.
+      tracking-modes: cookie
+      cookie:
+        name: __Host-finalysis
+        secure: true
+        http-only: true
+        same-site: strict
+        path: /
   # Local only (UI-08, docs/plans/phase-7.md §9): nothing else on the network can reach the API. Phone access needs
   # login and HTTPS first (Phase 8).
   address: 127.0.0.1
@@ -90,6 +103,11 @@ logging:
     io.netty: WARN
 
 finalysis:
+  # Phone access (docs/plans/phase-8.md §9): off until turned on in Settings, on one of this computer's private
+  # addresses, over HTTPS with a local CA, after login.
+  access:
+    ui-dir: ../frontend/dist   # the built UI (npm run build) the phone loads
+    default-port: 8443
   # The vault (docs/plans/phase-8.md §4, §5): the data lives in an encrypted disk image, opened by a password.
   # enabled=false runs on the plain database above, unlocked from the start (development and tests only).
   vault:

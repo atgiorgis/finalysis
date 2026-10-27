@@ -97,6 +97,17 @@
             <artifactId>bcprov-jdk18on</artifactId>
             <version>${bouncycastle.version}</version>
         </dependency>
+        <!-- The LAN listener's local CA and server certificate (docs/plans/phase-8.md §9.2); the JDK can't build one. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
+        </dependency>
+        <!-- Login for the phone (docs/plans/phase-8.md §9.3, §16 decision 7). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
         <!-- Compile scope: pgvector's PGvector extends the driver's PGobject. -->
         <dependency>
             <groupId>org.postgresql</groupId>

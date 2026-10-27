@@ -308,9 +308,33 @@ bar (its label shows from tablet width) and in the menu. Nothing of the app is m
 
 ### Phone access (UI-08)
 
-Not yet. The backend binds to `127.0.0.1` (`server.address`) and the database too, so nothing on the network can reach
-your data. A phone needs login and HTTPS first (Phase 8). The layout is ready: every screen is checked at 375 px with
-44 px touch targets.
+Off by default: the backend answers on `127.0.0.1` only. With the vault unlocked, **Settings → Phone access** lets a
+phone on your home network in:
+
+1. On the computer, `npm run build` in `frontend/` once (the phone loads the built app from the backend).
+2. Tick **Allow phones on this network**, pick this computer's home-network address (only private addresses,
+   192.168/16, 10/8 or 172.16/12, are offered) and a port (8443 by default), and Save. The backend opens a second,
+   HTTPS-only listener there; `127.0.0.1:8080` is unchanged.
+3. **Save the certificate** (`finalysis-local-ca.cer`, the app's own CA, made for this and kept in the vault) and send
+   it to the phone (AirDrop, or a message to yourself). Check that the phone shows the same SHA-256 fingerprint as
+   Settings. **iPhone:** install the profile (Settings → General → VPN & Device Management), then turn on full trust
+   (Settings → General → About → Certificate Trust Settings). **Android:** Settings → Security → Install a
+   certificate → CA certificate. The CA can only vouch for addresses in your home network's range (a name constraint),
+   so even if its key leaked it couldn't impersonate another site. To remove it later, delete the profile (iPhone) or
+   the user certificate (Android).
+4. On the phone, open the address Settings shows (`https://<address>:<port>`) and log in with the vault's password.
+
+The phone can only log in while the vault is unlocked on the computer; it never unlocks it. A session lasts as long as
+the auto-lock minutes while idle. **Lock** on the phone locks Finalysis everywhere; any lock (idle, wake, the button,
+shutdown) logs every phone out and closes the listener until the next unlock. After 5 wrong passwords from one
+address each attempt waits (30 s doubling to 15 minutes); after 20 in an hour the listener stays closed until you
+unlock on the computer. The session cookie is `__Host-`, `Secure`, `HttpOnly` and `SameSite=Strict`, and every write
+from the phone must come from the app's own origin. If the computer moves to another network, the listener stays
+closed and Settings says why; choose the new address. Every screen is checked at 375 px with 44 px touch targets.
+
+On localhost too, a request whose `Host` isn't `localhost`, `127.0.0.1` or `::1` gets 421 (a web page that points its
+own name at 127.0.0.1 can't reach the API), and a write from another web origin gets 403; the app's own (Vite on
+5173) and tools that send no `Origin` (curl, newman) are fine.
 
 ## Data model
 
@@ -620,6 +644,11 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/vault/lock` | Lock now; any state, a no-op when nothing is open (and with the vault off) | 204 | — |
 | `POST` | `/api/vault/password` | `{currentPassword, newPassword}` while unlocked: rewrap the key; the image isn't touched | 204 | `wrong-password`, `password-rejected`, `too-many-attempts`, `vault-file-damaged` |
 | `POST` | `/api/vault/activity` | The UI's "user is here" signal (at most once a minute) for the idle lock | 204 | — |
+| `GET` | `/api/access` | Phone access, from the computer only: `enabled`, `address`, `port`, `open`, `reason` when closed, `url`, `caFingerprint`, `availableAddresses` (this machine's private IPv4 addresses), `sessions` | 200 | `local-only` |
+| `PUT` | `/api/access` | `{enabled, address, port}` from the computer: saved, and the listener opens or closes at once | 200 (the status) | `setting-invalid`, `local-only` |
+| `GET` | `/api/access/ca.cer` | The local CA to install on the phone (`application/pkix-cert`, a download) | 200 | `no-certificate`, `local-only` |
+| `POST` | `/api/access/login` | `{password}` on the phone's HTTPS listener only: the vault's password; a new session cookie | 204 | `wrong-password`, `too-many-attempts`, `lan-only` |
+| `GET` | `/api/access/session` | `{authenticated, lan}`: whether this browser needs to log in | 200 | — |
 | `PUT` | `/api/vault/settings` | `{idleLockMinutes}` (1 to 240) while unlocked: saved in `app_setting`, in force at once | 204 | `setting-invalid` |
 | `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
@@ -722,6 +751,12 @@ returned.
 | Status | `type` | Meaning | What to do |
 |---|---|---|---|
 | 423 | `vault-locked` | The vault isn't unlocked: every endpoint answers this except `GET /api/status`, `/actuator/health` and the vault's setup, unlock, recover and lock. No `detail` | Unlock (`POST /api/vault/unlock`), or set up a new vault |
+| 401 | `login-required` | On the phone's listener, without a session (or after it ended) | Log in (`POST /api/access/login`) |
+| 403 | `lan-only` | Logging in from the computer: it needs no login | — |
+| 403 | `local-only` | Changing phone access, or downloading its CA, from the phone | Do it on the computer |
+| 403 | `origin-refused` | A write from another web page's origin (on the phone: any but the listener's own) | — |
+| 404 | `no-certificate` | The CA before phone access was first turned on | Turn it on in Settings |
+| 421 | `host-refused` | A `Host` header that isn't this machine's (DNS rebinding) | Use `localhost` or `127.0.0.1` |
 | 401 | `wrong-password` | The vault password is wrong (unlock, password change) | Try again; after five wrong attempts in a row each attempt waits |
 | 401 | `wrong-recovery-key` | The recovery key doesn't open this vault, or isn't a recovery key | Check the 13 groups; `O`/`0`, `I`/`L`/`1`, case and spaces don't matter |
 | 429 | `too-many-attempts` | Five or more wrong passwords or recovery keys in a row; `Retry-After` gives the seconds to wait (30 s, doubling to 15 minutes; a success resets) | Wait, then try again |

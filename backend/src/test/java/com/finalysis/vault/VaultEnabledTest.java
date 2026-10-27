@@ -26,5 +26,5 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, VaultFakes.Config.class})
 @Testcontainers(disabledWithoutDocker = true)
-@interface VaultEnabledTest {
+public @interface VaultEnabledTest {
 }

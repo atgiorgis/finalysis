@@ -43,6 +43,7 @@ export interface StatusResponse {
 
 type LockListener = () => void
 const lockListeners = new Set<LockListener>()
+const loginListeners = new Set<LockListener>()
 
 /** Called whenever any request answers 423 (the vault is locked); returns the unsubscribe. */
 export function onVaultLocked(listener: LockListener): () => void {
@@ -52,11 +53,31 @@ export function onVaultLocked(listener: LockListener): () => void {
   }
 }
 
-/** Every request of the app goes through here, so a 423 anywhere switches the app to the unlock screen. */
+/** Called whenever a request on the phone answers 401 `login-required` (no session, or it ended). */
+export function onLoginRequired(listener: LockListener): () => void {
+  loginListeners.add(listener)
+  return () => {
+    loginListeners.delete(listener)
+  }
+}
+
+/**
+ * Every request of the app goes through here, so a 423 anywhere switches the app to the unlock screen, and a 401
+ * `login-required` (the phone, Phase 8 §9.3) to the login screen.
+ */
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(input, init)
   if (res.status === 423) {
     lockListeners.forEach((listener) => listener())
+  } else if (res.status === 401) {
+    const type = await res
+      .clone()
+      .json()
+      .then((body: { type?: string }) => body.type)
+      .catch(() => undefined)
+    if (type === 'urn:finalysis:problem:login-required') {
+      loginListeners.forEach((listener) => listener())
+    }
   }
   return res
 }
@@ -1081,6 +1102,32 @@ async function problemOf(res: Response): Promise<ApiProblem> {
   const retryAfter = Number(res.headers?.get?.('Retry-After'))
   problem.retryAfter = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null
   return problem
+}
+
+// ---------------------------------------------------------------------------- phone access (Phase 8 §9)
+
+export interface AccessStatus {
+  enabled: boolean
+  address: string | null
+  port: number
+  open: boolean
+  /** Why it isn't open: `address-gone`, `too-many-failures`, `listener-failed`, `locked`, `no-server`. */
+  reason: string | null
+  url: string | null
+  caFingerprint: string | null
+  availableAddresses: string[]
+  sessions: number
+}
+
+export const access = {
+  /** Whether this browser is logged in; `lan` is true on the phone (the LAN listener). */
+  session: () => getJson<{ authenticated: boolean; lan: boolean }>('/api/access/session'),
+  login: (password: string) => send<null>('POST', '/api/access/login', { password }),
+  status: () => getJson<AccessStatus>('/api/access'),
+  save: (setting: { enabled: boolean; address: string | null; port: number }) =>
+    send<AccessStatus>('PUT', '/api/access', setting) as Promise<AccessStatus>,
+  /** The local CA, to save and send to the phone. */
+  caUrl: '/api/access/ca.cer',
 }
 
 // ---------------------------------------------------------------------------- the vault (Phase 8 §5.2)

@@ -4,6 +4,7 @@ import { AI_NAME, costText } from '../corgi'
 import { formatCount, formatDate, formatMoney, formatMonth } from '../format'
 import { providerName } from '../shell/CloudAiBanner'
 import { useShellData } from '../shell/ShellData'
+import PhoneAccessSettings from '../vault/PhoneAccessSettings'
 import VaultSettings from '../vault/VaultSettings'
 import AfterImportSettings from '../components/import/AfterImportSettings'
 
@@ -104,6 +105,7 @@ export default function SettingsPage() {
     <section className="page">
       <h1>Settings</h1>
       <VaultSettings />
+      <PhoneAccessSettings />
       <AfterImportSettings />
       <p className="muted">{AI_NAME}’s models and the spending limits below are set in the backend’s configuration.</p>
       {status && <AiSection ai={status.ai} />}

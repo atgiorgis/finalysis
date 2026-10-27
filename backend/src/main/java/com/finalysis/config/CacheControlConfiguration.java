@@ -37,7 +37,7 @@ public class CacheControlConfiguration {
         FilterRegistrationBean<OncePerRequestFilter> registration = new FilterRegistrationBean<>(filter);
         registration.addUrlPatterns("/*");
         // Right after the vault gate, which answers its own 423s with no-store.
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 2);
         registration.setName("noStoreFilter");
         return registration;
     }

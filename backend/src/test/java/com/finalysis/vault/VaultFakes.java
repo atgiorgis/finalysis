@@ -23,7 +23,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * "mount point" a temporary folder), a database runtime that opens a scratch database in the Testcontainers Postgres,
  * a clock the test moves, and a cheap Argon2 policy. The vault's state machine, key file, gate and endpoints are real.
  */
-final class VaultFakes {
+public final class VaultFakes {
 
     static final String SCRATCH_DATABASE = "vault_lifecycle";
 
@@ -31,7 +31,7 @@ final class VaultFakes {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class Config {
+    public static class Config {
 
         @Bean
         @Primary
@@ -74,7 +74,7 @@ final class VaultFakes {
     }
 
     /** The image: created once with a passphrase, mounted only with the same one. */
-    static final class FakeVaultMount implements VaultMount {
+    public static final class FakeVaultMount implements VaultMount {
 
         private final Path mountPoint;
         volatile State state = State.NO_IMAGE;
@@ -163,7 +163,7 @@ final class VaultFakes {
     }
 
     /** The cluster: a scratch database in the Testcontainers Postgres, created on first start. */
-    static final class FakeDatabaseRuntime implements DatabaseRuntime {
+    public static final class FakeDatabaseRuntime implements DatabaseRuntime {
 
         private final PostgreSQLContainer postgres;
         volatile ReadyCheck check = ReadyCheck.OK;
@@ -235,7 +235,7 @@ final class VaultFakes {
     }
 
     /** Wall and monotonic time the test moves; {@link #sleep} moves only the wall clock, as a machine's sleep does. */
-    static final class MutableVaultClock implements VaultClock {
+    public static final class MutableVaultClock implements VaultClock {
 
         private volatile Instant wall = Instant.parse("2026-10-27T12:00:00Z");
         private volatile long monotonic = 1_000_000_000L;
@@ -250,18 +250,18 @@ final class VaultFakes {
             return monotonic;
         }
 
-        synchronized void advance(Duration duration) {
+        public synchronized void advance(Duration duration) {
             wall = wall.plus(duration);
             monotonic += duration.toNanos();
         }
 
-        synchronized void sleep(Duration duration) {
+        public synchronized void sleep(Duration duration) {
             wall = wall.plus(duration);
         }
     }
 
     /** Counts the vault's events. */
-    static final class VaultEvents {
+    public static final class VaultEvents {
 
         final List<Object> seen = new ArrayList<>();
 

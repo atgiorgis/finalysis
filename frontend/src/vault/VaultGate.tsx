@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { onVaultLocked, reads, vault, type VaultStatus } from '../api'
+import { ApiProblem, onLoginRequired, onVaultLocked, reads, vault, type VaultStatus } from '../api'
+import LoginScreen from './LoginScreen'
 import RecoveryKeyScreen from './RecoveryKeyScreen'
 import SetupScreen from './SetupScreen'
 import UnlockScreen from './UnlockScreen'
@@ -26,6 +27,8 @@ export default function VaultGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<VaultStatus | null>(null)
   const [unreachable, setUnreachable] = useState<string | null>(null)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  /** The phone without a session (Phase 8 §9.3): the login screen, nothing of the app. */
+  const [needsLogin, setNeedsLogin] = useState(false)
   const [session, setSession] = useState(0)
   const location = useLocation()
   const navigate = useNavigate()
@@ -40,6 +43,13 @@ export default function VaultGate({ children }: { children: ReactNode }) {
       setUnreachable(null)
       return read
     } catch (e) {
+      if (e instanceof ApiProblem && e.slug === 'login-required') {
+        setNeedsLogin(true)
+        return null
+      }
+      // Not answering: drop what the app shows. On the phone this is what a lock on the computer looks like (the
+      // listener closes), so nothing may stay on screen.
+      setStatus(null)
       setUnreachable((e as Error).message)
       return null
     }
@@ -59,9 +69,22 @@ export default function VaultGate({ children }: { children: ReactNode }) {
   }, [refresh])
 
   useEffect(() => onVaultLocked(closed), [closed])
+  useEffect(
+    () =>
+      onLoginRequired(() => {
+        if (returnTo.current === null) {
+          returnTo.current = here.current
+        }
+        setNeedsLogin(true)
+      }),
+    [],
+  )
 
   const open =
-    status !== null && recoveryKey === null && (status.storage === 'PLAIN' || status.state === 'UNLOCKED')
+    !needsLogin &&
+    status !== null &&
+    recoveryKey === null &&
+    (status.storage === 'PLAIN' || status.state === 'UNLOCKED')
   const watching = open && status?.storage === 'VAULT'
 
   useEffect(() => {
@@ -133,6 +156,17 @@ export default function VaultGate({ children }: { children: ReactNode }) {
   function onCreated(key: string) {
     setRecoveryKey(key)
     void refresh()
+  }
+
+  if (needsLogin) {
+    return (
+      <LoginScreen
+        onLoggedIn={() => {
+          setNeedsLogin(false)
+          void unlocked()
+        }}
+      />
+    )
   }
 
   if (status === null) {

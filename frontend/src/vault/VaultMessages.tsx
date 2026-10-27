@@ -79,6 +79,7 @@ export function UnreachableScreen({ error, onRetry }: { error: string; onRetry: 
       <p role="alert" className="error">
         Backend unreachable: {error}
       </p>
+      <p className="muted">On a phone, this is also what a lock looks like: unlock Finalysis on the computer, then try again.</p>
       <button type="button" className="button-secondary" onClick={onRetry}>
         Try again
       </button>

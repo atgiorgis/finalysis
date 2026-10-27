@@ -933,6 +933,71 @@ throwaway vault, 302 requests, 808 assertions, 0 failures.
   `VaultDatabaseIT` ran in 18 s right after); not investigated. The owner's own backend was running on 8080 during
   the final run, so newman ran against a throwaway backend on 8081 with its cluster on 55433.
 
+### Step 5 notes: login, the LAN listener, HTTPS
+
+Done: "Phase 8 step 5: phone login, LAN listener with HTTPS, localhost hardening". Requirement ids: UI-08 (phone access),
+SEC-12 (the Host and Origin rules). Backend 3,447 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,428
+before, plus 19); `-Pvault-it` 8 tests, 0 failures, 0 skipped; frontend 312 tests (30 files), all passed (305 before,
+plus 7); `test:layout` 115 passed, 1 skipped (the phone-only check on desktop); newman every README folder on a
+throwaway vault, 310 requests, 816 assertions, 0 failures; no generated Spring Security password in the log.
+
+- **`com.finalysis.access`** (§5.5): uses the vault (the password check, the TLS folder, the lock and unlock events) and
+  no feature; nothing outside it uses it, and the vault doesn't know it (ArchUnit).
+- **Spring Security** (§16 decision 7), two filter chains. On the LAN listener a session with the phone's role is needed
+  for everything but `POST /api/access/login`, `GET /api/access/session` and the UI's files (`/api/status` included);
+  no session gets a 401 `login-required` problem. On localhost every request is let through as before and no session
+  is made. CSRF tokens, login pages, basic auth, the logout endpoint and saved requests are off; Spring's own
+  Cache-Control header is off (ours is `no-store`). Boot's default user is excluded
+  (`UserDetailsServiceAutoConfiguration`), so no generated password is logged. Each chain is written as separate
+  statements: one chained expression of nested lambdas kept javac in overload resolution for minutes.
+- **Login** (§9.3): the vault's password, checked by `VaultService.verifyPassword` (unwraps the key file; only while
+  unlocked; changes nothing). Per address, five wrong passwords then a wait doubling from 30 s to 15 minutes; 20 wrong
+  in an hour from any addresses close the listener until the next local unlock. Success: any session already there is
+  invalidated and a new one made (fixation), lasting the auto-lock minutes idle, in memory only. The cookie is
+  `__Host-finalysis`, `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`. Logout is the Lock button. A lock (any)
+  ends every session through `VaultLocking` and closes the listener a moment later, off the request thread, so a
+  lock sent from the phone gets its answer.
+- **The LAN listener** (§9.1): a second Tomcat connector added at runtime to the running server, HTTPS only (TLS 1.2
+  and 1.3), on the chosen address and port, with the server key in an in-memory PKCS12 store. It opens on unlock and on
+  saving the setting, when the setting is on, the address is one of this machine's private IPv4 addresses and the
+  vault holds the certificates; otherwise `reason` says why (`address-gone`, `too-many-failures`, `listener-failed`,
+  `locked`). The setting refuses a public or foreign address, a port under 1024, the app's own port, the vault
+  database's and 5432. The end-to-end test found that Tomcat hands the address back as an `InetAddress` printing
+  `/127.0.0.1`, which broke the URL, the Host and the Origin checks; the listener keeps the address as typed.
+- **Certificates** (§9.2): Bouncy Castle `bcpkix` 1.84. The CA (ECDSA P-256, 2 years, path length 0) has a critical
+  name constraint permitting only the address's private range; the server certificate (1 year, under the 398 days
+  browsers allow) names the IP. Kept in `<mount>/tls/` (0600; keys as PKCS#8: the traditional EC form didn't read back
+  on this JDK), reused while right, the server one renewed on a new address or 30 days before it ends, the CA on a new
+  range. `GET /api/access/ca.cer` gives the CA to send to the phone, with its SHA-256 fingerprint in Settings. The
+  JDK's own PKIX ignores a root's name constraints (and refuses them on a trust anchor), so the test issues the CA
+  again under a throwaway root and shows PKIX rejecting a certificate for 8.8.8.8 signed with the CA's key. Phones
+  and Chrome enforce a root's own constraints; step 6's phone test confirms iOS accepts a constrained root.
+- **Host and Origin** (§9.5, decision 9): ahead of every filter. A `Host` other than `localhost`, `127.0.0.1`, `::1`
+  or the open LAN address gets 421 `host-refused`. A write from a foreign `Origin` gets 403 `origin-refused` on
+  localhost (Vite's 5173 and tools without an `Origin` pass); on the LAN listener every write needs the listener's own
+  origin. Filter order: Host and Origin, the vault gate, no-store.
+- **The UI on the phone** (§9.4): the built frontend (`finalysis.access.ui-dir`, default `../frontend/dist`) is served on
+  the LAN listener only; any non-file path is `index.html`, `/` included. Localhost development stays on Vite.
+- **Frontend:** a 401 `login-required` (one place, `apiFetch`) shows the login screen and unmounts the app, like a
+  423; after login the app opens on the page asked for. The backend not answering while the app is open now also
+  unmounts it: on the phone that is what a lock looks like (the listener closes), and nothing may stay on screen.
+  Settings → Phone access: on the computer, the switch, the address (from this machine's list), the port, the reason
+  when closed, the URL, the CA download with its fingerprint, and the iPhone and Android steps; on the phone, a line
+  saying it is set on the computer; nothing with the vault off.
+- **Tests:** `PhoneAccessTest` (a real server, the vault on with fakes, the listener on 127.0.0.1 with
+  `finalysis.access.loopback-for-tests`, so no test opens a port on the network; a client trusting only the CA the app
+  hands out: the setting's refusals, HTTPS with the IP in the SAN, a client without the CA refused, plain HTTP refused,
+  401 before login, the Origin check, a wrong password, the cookie's flags, data with the session, the setting refused
+  from the phone, localhost stateless, the UI files, lock from the phone ending every session and closing the
+  listener, unlock opening it with the old session gone); `LanCertificatesTest`, `LanAddressesTest`, `LanLoginTest`
+  (the limits with mocks), `HostOriginFilterTest`; ArchUnit; frontend `PhoneAccess.test.tsx` (7); layout: the login
+  screen in both themes and the open Phone access card. Postman 14: the setting and its refusals, login refused on
+  localhost, the session, a foreign Origin refused (the phone's own login needs the app's CA, so it is tested in Java).
+- **Not done here:** a real phone (step 6). Loopback is accepted as a "LAN" address only with the test switch.
+- **Observed:** the machine was under heavy load for part of the session (15-minute load average about 32), which made
+  some runs slow; one `clean` failed while something else (the IDE's build, most likely) was writing `target/`, and
+  passed when run again.
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

@@ -117,7 +117,8 @@ class VaultConfiguration {
     FilterRegistrationBean<VaultGate> vaultGate(VaultService vault, VaultRequests requests) {
         FilterRegistrationBean<VaultGate> registration = new FilterRegistrationBean<>(new VaultGate(vault, requests));
         registration.addUrlPatterns("/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        // Right after the Host and Origin checks (access), ahead of everything else.
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         registration.setName("vaultGate");
         return registration;
     }

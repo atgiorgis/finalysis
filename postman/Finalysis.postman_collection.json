@@ -8860,7 +8860,7 @@
     },
     {
       "name": "14. Vault and login",
-      "description": "Lock, unlock, password change and recovery on the throwaway vault from folder 0 (docs/plans/phase-8.md §5.2, §10). Runs last and leaves the vault unlocked. Login and HTTPS join it in step 5.",
+      "description": "Lock, unlock, password change and recovery on the throwaway vault from folder 0 (docs/plans/phase-8.md §5.2, §10). Runs last and leaves the vault unlocked. Phone access: the setting and its refusals from localhost; the phone's login over HTTPS is tested in the backend (PhoneAccessTest), since it needs the app's own CA.",
       "item": [
         {
           "name": "Status: unlocked",
@@ -9168,6 +9168,225 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('kept', () => pm.expect(pm.response.json().fileKept).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phone access: off by default",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/access"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, off, nothing open', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const s = pm.response.json();",
+                  "    pm.expect(s.enabled).to.eql(false);",
+                  "    pm.expect(s.open).to.eql(false);",
+                  "    pm.expect(s.availableAddresses).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phone access: a public address is refused",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/access",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\":true,\"address\":\"8.8.8.8\",\"port\":18443}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 setting-invalid', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:setting-invalid');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phone access: the app's own port is refused",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/access",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\":true,\"address\":\"192.168.1.1\",\"port\":8080}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 setting-invalid', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:setting-invalid');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phone access: off",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/access",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"enabled\":false}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, off', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().open).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Phone access: no certificate while off",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/access/ca.cer"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 no-certificate', () => {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:no-certificate');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login is for the phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/access/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"anything at all\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 lan-only', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:lan-only');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The computer needs no login",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/access/session"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('authenticated, not the phone', () => {",
+                  "    pm.expect(pm.response.json()).to.eql({ authenticated: true, lan: false });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A write from a foreign Origin is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "https://attacker.example"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/activity"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 origin-refused', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:origin-refused');",
+                  "});"
                 ]
               }
             }

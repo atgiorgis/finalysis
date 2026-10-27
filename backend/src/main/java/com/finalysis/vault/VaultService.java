@@ -385,6 +385,35 @@ public class VaultService {
         }
     }
 
+    /**
+     * Whether this is the vault's password (phone login, docs/plans/phase-8.md §9.3): the key file unwraps with it.
+     * Only while unlocked, so the phone never unlocks the vault; no state changes; about half a second (Argon2id). The
+     * caller rate-limits. Damaged or locked: false.
+     */
+    public boolean verifyPassword(String password) {
+        if (!properties.enabled() || state != VaultState.UNLOCKED || password == null) {
+            return false;
+        }
+        char[] chars = password.toCharArray();
+        byte[] raw = null;
+        try {
+            raw = VaultKeyFile.unwrap(VaultKeyFile.read(properties.keyFile(), kdf.floor()), chars);
+            return true;
+        } catch (VaultKeyFile.WrongPasswordException | VaultKeyFile.DamagedException e) {
+            return false;
+        } finally {
+            Arrays.fill(chars, '\0');
+            if (raw != null) {
+                Arrays.fill(raw, (byte) 0);
+            }
+        }
+    }
+
+    /** The idle lock in force, in minutes: the phone's session lasts as long (§9.3). */
+    public int idleLockMinutes() {
+        return idleLockMinutes;
+    }
+
     /** The idle lock in minutes (1 to 240), saved in app_setting and in force at once (§5.3, §6). */
     void setIdleLockMinutes(Integer minutes) {
         transition.lock();
@@ -556,7 +585,7 @@ public class VaultService {
             } catch (RuntimeException e) {
                 failed.add("unmount");
             }
-            // Sessions and the LAN listener close here from step 5 on (§9).
+            // Phone sessions end and the LAN listener closes on VaultLocking, published above (access, §9).
             collation = null;
             if (failed.isEmpty()) {
                 state = VaultState.LOCKED;

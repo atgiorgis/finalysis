@@ -2324,3 +2324,53 @@
   color: var(--text);
   font: inherit;
 }
+
+/* ---- phone access (Phase 8 step 5): the Settings card ---- */
+
+.settings-form .settings-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.settings-form .settings-check input {
+  width: 22px;
+  min-height: 22px;
+  height: 22px;
+  margin: 0;
+}
+
+.phone-access-steps {
+  margin-top: var(--space-4);
+}
+
+.phone-access-steps ol {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+}
+
+.phone-url,
+.phone-fingerprint {
+  overflow-wrap: anywhere;
+}
+
+.phone-fingerprint {
+  display: block;
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.phone-ca-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

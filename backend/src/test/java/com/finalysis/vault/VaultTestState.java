@@ -8,12 +8,12 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 
 /** Puts the shared vault context back to "not set up" between tests. */
-final class VaultTestState {
+public final class VaultTestState {
 
     private VaultTestState() {
     }
 
-    static void reset(VaultService vault, VaultProperties properties, FakeVaultMount mount,
+    public static void reset(VaultService vault, VaultProperties properties, FakeVaultMount mount,
                       FakeDatabaseRuntime runtime, VaultEvents events) {
         mount.failUnmount = false;
         vault.lock("test reset");

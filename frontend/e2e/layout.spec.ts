@@ -461,6 +461,11 @@ const VAULT_SCREENS: {
     ready: 'The vault needs attention',
   },
   {
+    name: 'phone login',
+    overrides: { '/api/status': withStatus(401, { type: 'urn:finalysis:problem:login-required', status: 401 }) },
+    ready: 'Log in to Finalysis',
+  },
+  {
     name: 'lock failed',
     overrides: { '/api/status': vaultStatus('LOCK_FAILED', { reason: 'unmount', message: 'Locking did not finish (unmount).' }) },
     ready: 'Locking didn’t finish',
@@ -508,6 +513,34 @@ for (const theme of ['dark', 'light'] as const) {
       innerWidth: window.innerWidth,
     }))
     expect(scrollWidth, 'no horizontal scroll').toBeLessThanOrEqual(innerWidth)
+    expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+    if (info.project.name === 'phone') {
+      expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])
+    }
+  })
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`phone access: the open card with its address, certificate and steps fits (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+    await mockApi(page, {
+      '/api/status': vaultStatus('UNLOCKED'),
+      '/api/access/session': { authenticated: true, lan: false },
+      '/api/access': {
+        enabled: true,
+        address: '192.168.100.157',
+        port: 18443,
+        open: true,
+        reason: null,
+        url: 'https://192.168.100.157:18443',
+        caFingerprint: Array.from({ length: 32 }, () => 'AB').join(':'),
+        availableAddresses: ['192.168.100.157', '10.250.250.250'],
+        sessions: 1,
+      },
+    })
+    await page.goto('/settings')
+    await expect(page.getByRole('link', { name: 'Save the certificate' })).toBeVisible()
+    await noHorizontalScroll(page)
     expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
     if (info.project.name === 'phone') {
       expect(await smallTargets(page), 'touch targets at least 44 px').toEqual([])

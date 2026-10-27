@@ -16,11 +16,20 @@ public class VaultFiles {
         this.vault = vault;
     }
 
+    /** {@code <mount>/tls}: the LAN listener's CA and server keys (§9.2). Empty while locked, or with the vault off. */
+    public Optional<Path> tlsDirectory() {
+        return folder("tls");
+    }
+
     /** {@code <mount>/statements}: kept statement files. Empty while locked, or with the vault off. */
     public Optional<Path> statementsDirectory() {
+        return folder("statements");
+    }
+
+    private Optional<Path> folder(String name) {
         if (!vault.enabled() || vault.state() != VaultState.UNLOCKED) {
             return Optional.empty();
         }
-        return Optional.of(vault.mountPoint().resolve("statements"));
+        return Optional.of(vault.mountPoint().resolve(name));
     }
 }

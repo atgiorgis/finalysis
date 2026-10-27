@@ -164,11 +164,28 @@ class PackageDependencyTest {
                     "com.finalysis.categorize..", "com.finalysis.chat..", "com.finalysis.analytics..",
                     "com.finalysis.alert..", "com.finalysis.transfer..", "com.finalysis.review..",
                     "com.finalysis.transaction..", "com.finalysis.dashboard..", "com.finalysis.ai..",
-                    "com.finalysis.api..")
+                    "com.finalysis.api..", "com.finalysis.access..")
             .because("the vault opens and closes the database for every feature and must not know any of them");
 
+    /**
+     * Phone access (docs/plans/phase-8.md §5.5, §9) sits beside the vault: it uses the vault (the password check, the
+     * TLS folder, the lock events) and no feature; nothing but its own package uses it.
+     */
+    static final ArchRule ACCESS_KNOWS_NO_FEATURE = noClasses()
+            .that().resideInAPackage("com.finalysis.access..")
+            .should().dependOnClassesThat().resideInAnyPackage("com.finalysis.account..", "com.finalysis.ingestion..",
+                    "com.finalysis.categorize..", "com.finalysis.chat..", "com.finalysis.analytics..",
+                    "com.finalysis.alert..", "com.finalysis.transfer..", "com.finalysis.review..",
+                    "com.finalysis.transaction..", "com.finalysis.dashboard..", "com.finalysis.ai..")
+            .because("login and the LAN listener guard every feature and must not know any of them");
+
+    static final ArchRule NOTHING_ELSE_USES_ACCESS = noClasses()
+            .that().resideOutsideOfPackage("com.finalysis.access..")
+            .should().dependOnClassesThat().resideInAPackage("com.finalysis.access..")
+            .because("phone access is wired by its own configuration");
+
     static final ArchRule FEATURES_USE_ONLY_THE_VAULTS_EVENTS = noClasses()
-            .that().resideOutsideOfPackages("com.finalysis.vault..", "com.finalysis.api..")
+            .that().resideOutsideOfPackages("com.finalysis.vault..", "com.finalysis.api..", "com.finalysis.access..")
             .should().dependOnClassesThat(DescribedPredicate.describe("vault classes other than its events and files",
                     c -> c.getPackageName().startsWith("com.finalysis.vault")
                             && !c.isEquivalentTo(VaultUnlocked.class) && !c.isEquivalentTo(VaultLocking.class)
@@ -266,6 +283,9 @@ class PackageDependencyTest {
         assertThat(app.contain(VaultService.class)).isTrue();
         VAULT_KNOWS_NO_FEATURE.check(app);
         FEATURES_USE_ONLY_THE_VAULTS_EVENTS.check(app);
+        assertThat(app.contain(com.finalysis.access.LanListener.class)).isTrue();
+        ACCESS_KNOWS_NO_FEATURE.check(app);
+        NOTHING_ELSE_USES_ACCESS.check(app);
 
         JavaClasses vaultViolation = new ClassFileImporter().importClasses(com.finalysis.vault.UsesAccount.class);
         JavaClasses featureViolation = new ClassFileImporter()
