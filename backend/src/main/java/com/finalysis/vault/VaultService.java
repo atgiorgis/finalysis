@@ -358,6 +358,7 @@ public class VaultService {
             }
             attempts.check();
             passwords.check(newPassword);
+            passwords.checkPersonal(newPassword, database.accountTerms());
             VaultKeyFile.Contents contents = readKeyFile();
             char[] current = currentPassword == null ? new char[0] : currentPassword.toCharArray();
             char[] next = newPassword.toCharArray();

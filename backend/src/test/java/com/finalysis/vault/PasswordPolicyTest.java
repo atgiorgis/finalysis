@@ -10,6 +10,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** The vault password rule (docs/plans/phase-8.md §4.5, §16): 12 characters and none of the 1,000 most common. */
 class PasswordPolicyTest {
@@ -64,5 +66,70 @@ class PasswordPolicyTest {
             assertThat(new String(in.readAllBytes()).lines().mapToInt(String::length).max().orElse(0))
                     .isLessThan(PasswordPolicy.MIN_LENGTH);
         }
+    }
+
+    // ---- rule (a): a common password repeated or padded (step 2 review) ------------------------------------------
+
+    private static final PasswordPolicy REAL = new PasswordPolicy();
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "dragondragon", "DragonDragon", "monkeymonkeymonkey", "passwordpassword",
+            "password1234", "!!!password!!!", "2024monkey!!", "Monkey12345!", "    football    ",
+            "qwertyqwerty", "abc123abc123", "1qaz2wsx1qaz2wsx", "1qaz2wsx!!!!",
+            "123456123456", "1234567890123", "111111111111", "!!1990!!1990!!", "000000000000", "#$%^&*1234&*",
+            "dragon!dragon", "superman2024!"})
+    void refusesACommonPasswordRepeatedOrPaddedWithDigitsOrSymbols(String password) {
+        if (password.equals("dragon!dragon")) {
+            // A symbol between the repeats isn't padding: dragon!dragon is not dragon repeated. Accepted.
+            assertThatCode(() -> REAL.check(password)).doesNotThrowAnyException();
+            return;
+        }
+        assertThatThrownBy(() -> REAL.check(password)).as(password).isInstanceOf(VaultException.class)
+                .hasMessageContaining("most common").message().doesNotContain(password.strip());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "correct horse battery staple", "dragon fruit salad", "my dragon is 42!", "monkeyXmonkeyX12",
+            "Tr0ub4dor&3 plus more", "9 lazy otters swim", "x7#kQ2!mZ9@p", "passwordX1234"})
+    void acceptsLongPasswordsThatMerelyContainACommonWord(String password) {
+        assertThatCode(() -> REAL.check(password)).as(password).doesNotThrowAnyException();
+    }
+
+    @Test
+    void refusesOverlongPasswords() {
+        assertThatThrownBy(() -> REAL.check("a7#".repeat(90))).hasMessageContaining("at most 256");
+    }
+
+    @Test
+    void stays_fast_on_a_worst_case() {
+        String worst = "1".repeat(127) + "a" + "1".repeat(127);
+        long start = System.nanoTime();
+        assertThatCode(() -> REAL.check(worst)).doesNotThrowAnyException();
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isLessThan(java.time.Duration.ofSeconds(2));
+    }
+
+    // ---- rule (b): account names and institutions (step 2 review) -------------------------------------------------
+
+    @Test
+    void refusesAPasswordContainingAnAccountNameOrInstitution() {
+        java.util.List<String> terms = java.util.List.of("Everyday Checking", "Northfield Credit Union", "Apex", "Visa");
+        assertThatThrownBy(() -> REAL.checkPersonal("my everydaychecking 2024", terms))
+                .hasMessageContaining("accounts or banks").message().doesNotContain("Everyday");
+        assertThatThrownBy(() -> REAL.checkPersonal("NORTHFIELD-credit-union!!", terms))
+                .isInstanceOf(VaultException.class);
+        assertThatThrownBy(() -> REAL.checkPersonal("love my apex card 77", terms))
+                .isInstanceOf(VaultException.class);
+        // Fewer than four letters and digits: not checked.
+        assertThatCode(() -> REAL.checkPersonal("boa and td are too short to check", java.util.List.of("BoA", "TD")))
+                .doesNotThrowAnyException();
+        // Four exactly is checked.
+        assertThatThrownBy(() -> REAL.checkPersonal("my visa card password", java.util.List.of("Visa")))
+                .isInstanceOf(VaultException.class);
+        assertThatCode(() -> REAL.checkPersonal("a perfectly unrelated passphrase", terms))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> REAL.checkPersonal("anything at all here", java.util.List.of()))
+                .doesNotThrowAnyException();
     }
 }

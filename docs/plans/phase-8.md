@@ -825,6 +825,16 @@ Done: "Phase 8 step 2: locked mode, key wrapping, unlock and lock". Backend 3,38
 - **Not in this step:** the screens (step 3; until then the UI gets 423s with the vault on), sessions and the LAN
   listener (step 5; the lock has a marked place for them), the leak tests of §8 (step 4).
 
+**Step 2 follow-up (review, 2026-10-27): the password rule.** The 12-character minimum stays; instead of a longer list,
+`PasswordPolicy` also refuses (a) a top-1,000 password repeated or padded at either end with digits or symbols
+(`dragondragon`, `!!monkey2024`, `123456123456`; a password with no letter at all is refused when it contains one of
+the list's 126 letter-free entries anywhere), and (b) at password change, a password containing any account name or
+institution from the user's data (lower case, letters and digits only; names under four letters and digits are not
+checked). (b) reads `SELECT name, institution FROM account` in `VaultDatabase`, so the vault still depends on no
+feature's code. Passwords are capped at 256 characters, which bounds (a)'s search (a worst case is under two seconds,
+tested). Tests: `PasswordPolicyTest` (20 refused and 9 accepted examples against the real list, the cap, the worst case,
+names) and `VaultLifecycleTest` (a password change refused for a name and for an institution, then accepted).
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

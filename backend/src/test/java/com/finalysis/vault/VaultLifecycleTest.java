@@ -313,6 +313,30 @@ class VaultLifecycleTest {
                 .isEqualTo(204);
     }
 
+    @Test
+    void passwordChangeRefusesAPasswordContainingAnAccountNameOrInstitution() throws Exception {
+        vault.setup(PASSWORD);
+        execute("INSERT INTO account (name, institution, type, last_four) "
+                + "VALUES ('Household Checking', 'Synthetic Credit Union', 'CHECKING', '9911')");
+        try {
+            MockHttpServletResponse byName = postJson("/api/vault/password", "{\"currentPassword\":\"" + PASSWORD
+                    + "\",\"newPassword\":\"our household-checking pw\"}");
+            MockHttpServletResponse byInstitution = postJson("/api/vault/password", "{\"currentPassword\":\""
+                    + PASSWORD + "\",\"newPassword\":\"SyntheticCreditUnion#1\"}");
+
+            for (MockHttpServletResponse response : new MockHttpServletResponse[] {byName, byInstitution}) {
+                assertThat(response.getStatus()).isEqualTo(422);
+                assertThat(problemType(response)).isEqualTo("urn:finalysis:problem:password-rejected");
+                assertThat(response.getContentAsString()).doesNotContainIgnoringCase("household")
+                        .doesNotContainIgnoringCase("synthetic credit");
+            }
+            assertThat(postJson("/api/vault/password", "{\"currentPassword\":\"" + PASSWORD
+                    + "\",\"newPassword\":\"" + NEW_PASSWORD + "\"}").getStatus()).isEqualTo(204);
+        } finally {
+            execute("DELETE FROM account WHERE last_four = '9911' AND institution = 'Synthetic Credit Union'");
+        }
+    }
+
     // ---- idle, wake, startup, shutdown ----------------------------------------------------------------------------
 
     @Test

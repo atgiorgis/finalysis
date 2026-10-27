@@ -89,6 +89,25 @@ class VaultDatabase {
         }
     }
 
+    /**
+     * Every account's name and institution, for the password rule at password change (step 2 review). Read from the
+     * table, so the vault depends on no feature's code; empty if it can't be read.
+     */
+    java.util.List<String> accountTerms() {
+        java.util.List<String> terms = new java.util.ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT name, institution FROM account");
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                terms.add(rows.getString(1));
+                terms.add(rows.getString(2));
+            }
+        } catch (SQLException e) {
+            return java.util.List.of();
+        }
+        return terms;
+    }
+
     /** {@code vault.idle-lock-minutes} from app_setting, or the default when unset or out of range. */
     int idleLockMinutes(int fallback) {
         try (Connection connection = dataSource.getConnection();
