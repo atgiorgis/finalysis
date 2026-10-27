@@ -2290,3 +2290,37 @@
 .settings-form p {
   margin: 0;
 }
+
+/* ---- after an import (Phase 8 step 4): keep a copy, delete the original ---- */
+
+.after-import p {
+  margin: 0 0 var(--space-3);
+}
+
+.after-import-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.after-import-confirm {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-control);
+  background: var(--danger-bg);
+}
+
+.settings-form select {
+  box-sizing: border-box;
+  min-height: var(--touch-target);
+  width: 100%;
+  max-width: 24rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+}

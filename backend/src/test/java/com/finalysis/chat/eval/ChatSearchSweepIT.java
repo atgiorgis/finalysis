@@ -1,5 +1,9 @@
 package com.finalysis.chat.eval;
 
+import com.finalysis.support.EvalDatabaseGuard;
+import com.finalysis.vault.PlainDatabaseConnection;
+import com.finalysis.vault.VaultService;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.chat.ToolExecutor;
@@ -46,6 +50,10 @@ import org.springframework.test.context.TestPropertySource;
         "finalysis.ai.categorization.run-after-import=false"})
 class ChatSearchSweepIT {
 
+    private final PlainDatabaseConnection plainDatabase;
+    private final VaultService vault;
+    private final PostgreSQLContainer postgres;
+
     static final String RUN_SWEEP = "sweep";
 
     private static GitState git;
@@ -55,8 +63,13 @@ class ChatSearchSweepIT {
     private final ChatCallRecorder recorder;
     private final ConfigurableEnvironment environment;
 
-    ChatSearchSweepIT(SearchSweepRunner runner, ChatCallRecorder recorder, ConfigurableEnvironment environment) {
+    ChatSearchSweepIT(SearchSweepRunner runner, ChatCallRecorder recorder, ConfigurableEnvironment environment,
+            PlainDatabaseConnection plainDatabase,
+            VaultService vault, PostgreSQLContainer postgres) {
         this.runner = runner;
+        this.plainDatabase = plainDatabase;
+        this.vault = vault;
+        this.postgres = postgres;
         this.recorder = recorder;
         this.environment = environment;
     }
@@ -90,6 +103,7 @@ class ChatSearchSweepIT {
         SearchSweepReport report = new SearchSweepReport(git.commit(), git.dirty(), startedAt.toString(),
                 environment.getProperty("finalysis.ai.roles.embedding"),
                 ChatEvalRunner.settings(environment), sweep);
+        EvalDatabaseGuard.check(plainDatabase, vault.status(), postgres);
         List<Path> files = report.write(ChatLiveEvalIT.RESULTS);
         System.out.println(report.summaryTable());
         System.out.println("Results: " + files.get(0) + " and " + files.get(1));

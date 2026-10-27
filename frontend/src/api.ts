@@ -750,7 +750,20 @@ export const imports = {
     send<null>('POST', '/api/transfers/join/dismiss', { outLinkId, inLinkId }),
   confirmLink: (linkId: number) => send<unknown>('POST', `/api/transfers/${linkId}/confirm`),
   unlink: (linkId: number) => send<null>('DELETE', `/api/transfers/${linkId}`),
+  /** Keeps a copy of the statement's file in the vault (Phase 8 §7): the same file again; another is refused. */
+  keepFile: async (statementId: number, file: File): Promise<{ statementId: number; fileKept: boolean }> => {
+    const res = await apiFetch(`/api/statements/${statementId}/file`, { method: 'PUT', body: fileBody(file) })
+    if (!res.ok) {
+      throw await problemOf(res)
+    }
+    return res.json()
+  },
+  settings: () => getJson<{ afterImport: AfterImport }>('/api/imports/settings'),
+  saveSettings: (afterImport: AfterImport) => send<null>('PUT', '/api/imports/settings', { afterImport }),
 }
+
+/** What happens to a statement file after a successful import (Phase 8 §7); ASK offers the choices each time. */
+export type AfterImport = 'ASK' | 'KEEP' | 'DELETE' | 'BOTH' | 'LEAVE'
 
 // ---------------------------------------------------------------------------- categorization run (step 7e)
 

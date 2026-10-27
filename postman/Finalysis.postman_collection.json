@@ -8877,7 +8877,8 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));",
-                  "pm.test('never a path', () => pm.expect(pm.response.text()).to.not.match(/\\/Users\\/|\\/private\\/|\\/var\\/folders/));"
+                  "pm.test('never a path', () => pm.expect(pm.response.text()).to.not.match(/\\/Users\\/|\\/private\\/|\\/var\\/folders/));",
+                  "pm.test('Cache-Control: no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
                 ]
               }
             }
@@ -8976,6 +8977,197 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "pm.test('idleLockMinutes 10', () => pm.expect(pm.response.json().vault.idleLockMinutes).to.eql(10));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import settings: ask by default",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/imports/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ASK', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().afterImport).to.eql('ASK');",
+                  "});",
+                  "pm.test('Cache-Control: no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import settings: an unknown choice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/imports/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"afterImport\":\"SHRED\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import settings: keep",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/imports/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"afterImport\":\"KEEP\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import settings: back to ask",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/imports/settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"afterImport\":\"ASK\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Keep a statement file: not its file",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{statementId}}/file",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/ofx/northfield-checking_2026-05.ofx"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 file-mismatch', () => {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:file-mismatch');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Keep a statement file",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{statementId}}/file",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "sample-data/ofx/northfield-checking_2026-04.ofx"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 kept', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().fileKept).to.eql(true);",
+                  "});",
+                  "pm.test('Cache-Control: no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The statement's file is kept",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{statementId}}/file"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('kept', () => pm.expect(pm.response.json().fileKept).to.eql(true));"
                 ]
               }
             }
@@ -9139,6 +9331,29 @@
                   "    pm.expect(body.type).to.eql('urn:finalysis:problem:vault-locked');",
                   "    pm.expect(body).to.not.have.property('detail');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Kept files answer 423 while locked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/statements/{{statementId}}/file"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "});",
+                  "pm.test('Cache-Control: no-store', () => pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store'));"
                 ]
               }
             }

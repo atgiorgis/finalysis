@@ -5,6 +5,7 @@ import { formatCount, formatDate, formatMoney, formatMonth } from '../format'
 import { providerName } from '../shell/CloudAiBanner'
 import { useShellData } from '../shell/ShellData'
 import VaultSettings from '../vault/VaultSettings'
+import AfterImportSettings from '../components/import/AfterImportSettings'
 
 /** Corgi's roles by what it does; the search embedding isn't Corgi talking, so it keeps its own name. */
 const ROLE_LABELS: Record<string, string> = {
@@ -103,6 +104,7 @@ export default function SettingsPage() {
     <section className="page">
       <h1>Settings</h1>
       <VaultSettings />
+      <AfterImportSettings />
       <p className="muted">{AI_NAME}’s models and the spending limits below are set in the backend’s configuration.</p>
       {status && <AiSection ai={status.ai} />}
       <UsageSection usage={usage} error={error} ai={status?.ai ?? null} />

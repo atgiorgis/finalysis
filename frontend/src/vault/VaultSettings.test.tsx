@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import type { VaultStatus } from '../api'
@@ -117,3 +117,36 @@ test('with the vault off, Settings says the data is in the plain dev database an
   expect(section).toHaveTextContent('vault is off')
   expect(within(section).queryByRole('button')).not.toBeInTheDocument()
 })
+
+test('statement files: the default after an import, saved with PUT', async () => {
+  const user = userEvent.setup()
+  const { writes } = renderApp(
+    '/settings',
+    { '/api/status': status(), '/api/imports/settings': { afterImport: 'ASK' } },
+    () => noContent(),
+  )
+
+  const card = await screen.findByRole('region', { name: 'Statement files' })
+  const select = within(card).getByLabelText('After a successful import')
+  await waitFor(() => expect(select).toHaveValue('ASK'))
+  expect(within(card).getAllByRole('option').map((o) => o.textContent)).toContain('Keep a copy in the vault')
+
+  await user.selectOptions(select, 'BOTH')
+  await user.click(within(card).getByRole('button', { name: 'Save' }))
+
+  expect(await within(card).findByRole('status')).toHaveTextContent('Saved.')
+  expect(writes).toEqual([{ method: 'PUT', url: '/api/imports/settings', body: { afterImport: 'BOTH' } }])
+})
+
+test('statement files with the vault off: no choice that keeps a copy', async () => {
+  renderApp('/settings', { '/api/imports/settings': { afterImport: 'ASK' } })
+
+  const card = await screen.findByRole('region', { name: 'Statement files' })
+  await waitFor(() => expect(within(card).getByLabelText('After a successful import')).toHaveValue('ASK'))
+  expect(within(card).getAllByRole('option').map((o) => o.textContent)).toEqual([
+    'Ask each time',
+    'Delete the original (asks first)',
+    'Leave it',
+  ])
+})
+

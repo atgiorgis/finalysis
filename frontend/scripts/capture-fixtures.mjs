@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Saves the reads the UI uses as JSON test fixtures (docs/plans/phase-7.md §6.1).
 //
-// Run it against a backend holding the sample data only, with AI off: a fresh database, then the newman folders
-// listed in the README. Never against a database with real statements: the fixtures are committed.
+// Run it against a backend holding the sample data only, with AI off: a fresh plain dev database (the vault off,
+// FINALYSIS_VAULT_ENABLED=false), then the newman folders listed in the README. Never against a database with real
+// statements: the fixtures are committed. It refuses a backend with the vault on (fixtureGuard.mjs).
 //
 //   FINALYSIS_URL=http://localhost:8080 npm run capture-fixtures
 //
@@ -12,6 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { refuseUnlessPlain } from './fixtureGuard.mjs'
 
 const BASE = process.env.FINALYSIS_URL ?? 'http://localhost:8080'
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'test', 'fixtures')
@@ -44,10 +46,7 @@ function save(name, body) {
   console.log(`saved ${name}.json`)
 }
 
-const status = await get('/api/status')
-if (status.ai?.mode !== 'OFF') {
-  throw new Error(`AI must be off while capturing fixtures (mode ${status.ai?.mode})`)
-}
+const status = refuseUnlessPlain(await get('/api/status'))
 mkdirSync(OUT, { recursive: true })
 save('status-off', status)
 

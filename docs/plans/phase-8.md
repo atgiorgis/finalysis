@@ -884,6 +884,53 @@ on a throwaway vault, 294 requests, 796 assertions, 0 failures.
   opened on, Lock, a wrong password ("The password is wrong."), unlock back on Settings, auto-lock saved (the backend
   then reported 7 minutes). Stopping the backend locked the vault; the vault was deleted.
 
+### Step 4 notes: statement files after import, leak tests
+
+Done: "Phase 8 step 4: statement files after import, leak tests". Requirement ids: SEC-04 (kept files encrypted in
+the vault), SEC-12 (the leak rules). Backend 3,428 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,414
+before, plus 14); `-Pvault-it` 8 tests, 0 failures, 0 skipped; frontend 305 tests (29 files), all passed (286 before,
+plus 19); `test:layout` 107 passed, 1 skipped (the phone-only check on desktop); newman every README folder on a
+throwaway vault, 302 requests, 808 assertions, 0 failures.
+
+- **Keep a copy** (§7): the bytes are discarded at import (SEC-10), and the choice comes after it, so the browser sends
+  the same file again: `PUT /api/statements/{id}/file`. It must hash (SHA-256) to the statement's `file_hash`, else
+  `409 file-mismatch`; with the vault off, `409 no-vault`. Stored as `<mount>/statements/<id>-<12 hex>.<ext>`, the
+  extension from the content (`%PDF-`) or the parser, never the client's name; mode 0600, through a temporary file and
+  an atomic rename; idempotent. Deleted after the statement's delete commits (`StatementDeleted`). `GET .../file`
+  says whether one is kept. Not done: listing kept copies per statement in the UI, or downloading one.
+- **The vault's file area:** ingestion learns the folder from `VaultFiles.statementsDirectory()` (empty while locked or
+  with the vault off). It is the one vault class features may use beyond the two events; the ArchUnit rule and §5.5's
+  "events only" are widened for it, and nothing else.
+- **Delete the original:** the File System Access API, feature-checked. Where `showOpenFilePicker` exists (Chromium),
+  "Choose a file" is a button that opens it and keeps the handle; a drop asks `getAsFileSystemHandle()` during the
+  drop event and attaches the handle when it arrives (the file shows at once). Deletion asks the browser's readwrite
+  permission, then `remove()`; it is **always confirmed first**, saying it is permanent and not to the Trash, even when
+  the Settings default is Delete or Both. Without a handle the app says which file to delete yourself.
+- **The choice and the default:** after a successful import, a card offers Keep a copy in the vault / Delete the
+  original / Both / Leave it (Keep and Both only with the vault). Settings → Statement files saves the default
+  (`statements.after-import` in `app_setting`; `GET`/`PUT /api/imports/settings`, `ASK` by default); a non-ASK default
+  is applied without the card's question, deletion still confirmed.
+- **Leak tests (§8):** §8.1's raw-image checks were already in place (`VaultScriptsTest`: a marker file in
+  `statements/` unreadable in the bands; `VaultDatabaseIT`: marker rows); newman's run adds a kept OFX file, and after
+  the lock no OFX header or sample merchant was readable in the image. §8.2: `VaultLeakTest` (markers in the password,
+  a wrong one, the new ones at recovery and change, a wrong recovery key, a malformed body, through every vault
+  endpoint, app packages at DEBUG: no marker or recovery key in the log; no marker in any response; the key in exactly
+  one response, setup's); `VaultScriptsOutputTest` (a script's stdout, stderr, argument and stdin secret never logged;
+  the secret's bytes zeroed); Postgres logs (step 1's IT); `CrashDumpConfigTest` (no heap-dump option in the build,
+  the wrapper's JVM settings or the config; the README says why); `capture-fixtures` refuses unless the status says
+  `PLAIN` with AI off (`scripts/fixtureGuard.mjs`, tested); `EvalDatabaseGuard` before every eval report is written
+  (the vault off, the test's own Testcontainers database; the live evals weren't run: no live AI); every `/api`
+  response is `Cache-Control: no-store` (a filter; `NoStoreTest` over every handler mapping, success or problem);
+  the app writes only the theme to `localStorage`, nothing to `sessionStorage`, IndexedDB, the Cache API or cookies
+  (`browserStorage.test.ts`: a source scan and a run through the vault screens and tabs).
+- **Tests changed on purpose:** the layout check's Import tests now replace Chromium's picker with one returning a
+  synthetic file (the hidden input isn't rendered there any more); Phase 7's "Settings has no control" is narrowed to
+  the Corgi and chat-cost cards, which stay read-only. `StatementFileStore` no longer zeroes the bytes it was given:
+  a test's mock multipart file shares the caller's array, and zeroing a short-lived copy protected nothing.
+- **Observed during the runs:** `VaultMigrationIT` took 1,155 s in one run (about 20 s before; it passed, and
+  `VaultDatabaseIT` ran in 18 s right after); not investigated. The owner's own backend was running on 8080 during
+  the final run, so newman ran against a throwaway backend on 8081 with its cluster on 55433.
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

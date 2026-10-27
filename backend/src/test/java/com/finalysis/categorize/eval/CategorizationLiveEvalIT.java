@@ -1,5 +1,9 @@
 package com.finalysis.categorize.eval;
 
+import com.finalysis.support.EvalDatabaseGuard;
+import com.finalysis.vault.PlainDatabaseConnection;
+import com.finalysis.vault.VaultService;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import com.finalysis.categorize.eval.EvalGuards.EvalRefusedException;
 import com.finalysis.categorize.eval.EvalGuards.GitState;
 import com.finalysis.categorize.eval.EvalRunner.EvalInputs;
@@ -43,6 +47,10 @@ import org.springframework.test.context.ActiveProfiles;
 @Import({EvalSeeder.class, EvalRunner.class})
 class CategorizationLiveEvalIT {
 
+    private final PlainDatabaseConnection plainDatabase;
+    private final VaultService vault;
+    private final PostgreSQLContainer postgres;
+
     static final Path REPOSITORY = ImportTestSupport.SAMPLE_DATA.getParent();
     static final Path RESULTS = REPOSITORY.resolve("docs/eval");
     static final String DEV = "dev";
@@ -55,8 +63,12 @@ class CategorizationLiveEvalIT {
 
     private final EvalRunner runner;
 
-    CategorizationLiveEvalIT(EvalRunner runner) {
+    CategorizationLiveEvalIT(EvalRunner runner, PlainDatabaseConnection plainDatabase,
+            VaultService vault, PostgreSQLContainer postgres) {
         this.runner = runner;
+        this.plainDatabase = plainDatabase;
+        this.vault = vault;
+        this.postgres = postgres;
     }
 
     @BeforeAll
@@ -81,6 +93,7 @@ class CategorizationLiveEvalIT {
     void evaluate() throws Exception {
         EvalResult result = runner.run(EvalSet.load(set, setFile(set)), inputs, EvalPrices.load());
         EvalReport report = EvalReport.of(git, startedAt, result);
+        EvalDatabaseGuard.check(plainDatabase, vault.status(), postgres);
         List<Path> files = report.write(RESULTS);
         System.out.println(report.consoleSummary());
         System.out.println("Results: " + files.get(0) + " and " + files.get(1));

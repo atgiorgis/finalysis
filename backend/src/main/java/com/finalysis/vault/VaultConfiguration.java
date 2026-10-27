@@ -109,6 +109,11 @@ class VaultConfiguration {
     }
 
     @Bean
+    VaultFiles vaultFiles(VaultService vault) {
+        return new VaultFiles(vault);
+    }
+
+    @Bean
     FilterRegistrationBean<VaultGate> vaultGate(VaultService vault, VaultRequests requests) {
         FilterRegistrationBean<VaultGate> registration = new FilterRegistrationBean<>(new VaultGate(vault, requests));
         registration.addUrlPatterns("/*");

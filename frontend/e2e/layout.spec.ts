@@ -232,11 +232,44 @@ async function fitsAt375(page: Page, phone: boolean) {
   }
 }
 
+/**
+ * Chromium offers the File System Access picker, so the Import tab shows a button that opens it (Phase 8 §7). The check
+ * replaces the browser's picker with one that hands back a synthetic file and a handle that deletes nothing.
+ */
+async function chooseFile(page: Page) {
+  await page.evaluate(({ name, text }) => {
+    const file = new File([text], name, { type: 'text/csv' })
+    ;(window as unknown as { showOpenFilePicker: unknown }).showOpenFilePicker = async () => [
+      { name, getFile: async () => file, requestPermission: async () => 'granted', remove: async () => {} },
+    ]
+  }, { name: FILE.name, text: FILE.buffer.toString() })
+  await page.getByRole('button', { name: 'Choose a file' }).click()
+  await expect(page.getByText(FILE.name)).toBeVisible()
+}
+
 async function importFile(page: Page) {
   await page.getByLabel('Account').selectOption('1')
-  await page.getByLabel('Choose a file').setInputFiles(FILE)
+  await chooseFile(page)
   await page.getByRole('button', { name: 'Import', exact: true }).click()
 }
+
+test('import: the choice after an import, and its delete question, fit', async ({ page }, info) => {
+  await mockApi(page, {
+    '/api/status': vaultStatus('UNLOCKED'),
+    '/api/accounts/1/imports': withStatus(201, fixtures.importSummary),
+    '/api/imports/settings': { afterImport: 'ASK' },
+  })
+  await page.goto('/import')
+  await importFile(page)
+  await expect(page.getByRole('button', { name: 'Keep a copy in the vault' })).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+  expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+
+  await page.getByRole('button', { name: 'Delete the original' }).click()
+  await expect(page.getByRole('button', { name: 'Delete it permanently' })).toBeVisible()
+  await fitsAt375(page, info.project.name === 'phone')
+  expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+})
 
 test('import: a result with long warnings fits', async ({ page }, info) => {
   await mockApi(page, { '/api/accounts/1/imports': withStatus(201, fixtures.importNeedsReview) })

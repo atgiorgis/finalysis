@@ -10,7 +10,9 @@ import {
   type StatementListItem,
 } from '../api'
 import AccountPicker from '../components/import/AccountPicker'
+import AfterImport from '../components/import/AfterImport'
 import FileDrop from '../components/import/FileDrop'
+import type { PickedFile } from '../components/import/fileHandles'
 import ImportResult, { type ImportResultState, type SignChoice } from '../components/import/ImportResult'
 import ReviewSections from '../components/import/ReviewSections'
 import StatementsList, { type StatementsByAccount } from '../components/import/StatementsList'
@@ -58,7 +60,9 @@ export default function ImportPage() {
   const { version, dataChanged } = useDataVersion()
   const asked = params.get('account')
   const accountId = accounts.find((a) => String(a.id) === asked)?.id ?? null
-  const [file, setFile] = useState<File | null>(null)
+  const [file, setFile] = useState<PickedFile | null>(null)
+  /** The file just imported, for the choice of what happens to it (Phase 8 §7); dropped with the next import. */
+  const [imported, setImported] = useState<{ statementId: number; picked: PickedFile } | null>(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<ImportResultState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -105,9 +109,11 @@ export default function ImportPage() {
     setResult(null)
   }
 
-  async function runImport(target: number, chosen: File) {
+  async function runImport(target: number, picked: PickedFile) {
+    const chosen = picked.file
     setRunning(true)
     setResult(null)
+    setImported(null)
     setSaveError(null)
     try {
       const outcome = await imports.importFile(target, chosen)
@@ -116,6 +122,9 @@ export default function ImportPage() {
           ? { kind: 'imported', fileName: chosen.name, summary: outcome.summary }
           : { kind: 'unparsed', fileName: chosen.name, upload: outcome.upload },
       )
+      if (outcome.kind === 'imported') {
+        setImported({ statementId: outcome.summary.statementId, picked })
+      }
       setFile(null)
       dataChanged({ shell: true })
     } catch (e) {
@@ -190,6 +199,7 @@ export default function ImportPage() {
           onFile={(f) => {
             setFile(f)
             setResult(null)
+            setImported(null)
           }}
         />
         <div className="import-actions">
@@ -206,11 +216,12 @@ export default function ImportPage() {
         {running && (
           <div className="import-progress" role="status">
             <progress aria-label="Importing" />
-            <span>Importing {file?.name}…</span>
+            <span>Importing {file?.file.name}…</span>
           </div>
         )}
       </section>
       {result && <ImportResult result={result} saving={saving} saveError={saveError} onUseMapping={(sign) => void applySuggestedMapping(sign)} />}
+      {imported && <AfterImport key={imported.statementId} statementId={imported.statementId} picked={imported.picked} />}
       <ReviewSections queue={queue} statements={statementsById} />
       <StatementsList accounts={accounts} statements={statements} deleted={deleted} onDeleted={setDeleted} />
     </section>

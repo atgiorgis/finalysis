@@ -24,6 +24,7 @@ import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
 import com.finalysis.transfer.TransferDetector;
+import com.finalysis.vault.VaultFiles;
 import com.finalysis.vault.VaultLocking;
 import com.finalysis.vault.VaultService;
 import com.finalysis.vault.VaultUnlocked;
@@ -154,7 +155,8 @@ class PackageDependencyTest {
 
     /**
      * The vault (docs/plans/phase-8.md §5.5) holds the database's lifecycle and depends on no feature; features depend
-     * on it only for its two events. {@code api} reads its status for {@code GET /api/status}.
+     * on it only for its two events and, since step 4, {@link VaultFiles} (where kept statement files go, §7).
+     * {@code api} reads its status for {@code GET /api/status}.
      */
     static final ArchRule VAULT_KNOWS_NO_FEATURE = noClasses()
             .that().resideInAPackage("com.finalysis.vault..")
@@ -167,10 +169,12 @@ class PackageDependencyTest {
 
     static final ArchRule FEATURES_USE_ONLY_THE_VAULTS_EVENTS = noClasses()
             .that().resideOutsideOfPackages("com.finalysis.vault..", "com.finalysis.api..")
-            .should().dependOnClassesThat(DescribedPredicate.describe("vault classes other than its events",
+            .should().dependOnClassesThat(DescribedPredicate.describe("vault classes other than its events and files",
                     c -> c.getPackageName().startsWith("com.finalysis.vault")
-                            && !c.isEquivalentTo(VaultUnlocked.class) && !c.isEquivalentTo(VaultLocking.class)))
-            .because("features react to unlock and lock; only the status endpoint reads the vault itself");
+                            && !c.isEquivalentTo(VaultUnlocked.class) && !c.isEquivalentTo(VaultLocking.class)
+                            && !c.isEquivalentTo(VaultFiles.class)))
+            .because("features react to unlock and lock and keep files where the vault says; only the status "
+                    + "endpoint reads the vault itself");
 
     private static JavaClasses app;
 

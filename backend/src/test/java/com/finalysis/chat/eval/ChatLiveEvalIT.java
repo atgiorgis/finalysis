@@ -1,5 +1,9 @@
 package com.finalysis.chat.eval;
 
+import com.finalysis.support.EvalDatabaseGuard;
+import com.finalysis.vault.PlainDatabaseConnection;
+import com.finalysis.vault.VaultService;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import com.finalysis.chat.eval.ChatEvalGuards.EvalRefusedException;
 import com.finalysis.chat.eval.ChatEvalGuards.GitState;
 import com.finalysis.chat.eval.ChatEvalResults.Run;
@@ -54,6 +58,10 @@ import org.springframework.test.context.TestPropertySource;
         "finalysis.ai.categorization.run-after-import=false"})
 class ChatLiveEvalIT {
 
+    private final PlainDatabaseConnection plainDatabase;
+    private final VaultService vault;
+    private final PostgreSQLContainer postgres;
+
     static final Path REPOSITORY = ImportTestSupport.SAMPLE_DATA.getParent();
     static final Path RESULTS = REPOSITORY.resolve("docs/eval");
     static final String RUN_PROPERTY = "eval.run";
@@ -69,8 +77,12 @@ class ChatLiveEvalIT {
 
     private final ChatEvalRunner runner;
 
-    ChatLiveEvalIT(ChatEvalRunner runner) {
+    ChatLiveEvalIT(ChatEvalRunner runner, PlainDatabaseConnection plainDatabase,
+            VaultService vault, PostgreSQLContainer postgres) {
         this.runner = runner;
+        this.plainDatabase = plainDatabase;
+        this.vault = vault;
+        this.postgres = postgres;
     }
 
     @BeforeAll
@@ -104,6 +116,7 @@ class ChatLiveEvalIT {
         ChatEvalSet questions = ChatEvalSet.load(setFile(set));
         Run run = runner.run(questions, model, prices, maxCost, maxTurnCost != null);
         ChatEvalReport report = ChatEvalReport.of(git, startedAt, questions, run);
+        EvalDatabaseGuard.check(plainDatabase, vault.status(), postgres);
         List<Path> files = report.write(RESULTS);
         System.out.println(report.consoleSummary());
         System.out.println("Results: " + files.get(0) + " and " + files.get(1));

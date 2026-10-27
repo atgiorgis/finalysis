@@ -7,6 +7,7 @@ import com.finalysis.categorize.RuleInvalidException;
 import com.finalysis.categorize.RuleSeededException;
 import com.finalysis.ingestion.ImportProblem;
 import com.finalysis.ingestion.ImportRejectedException;
+import com.finalysis.ingestion.StatementFileStore;
 import com.finalysis.ingestion.StatementNotReviewableException;
 import com.finalysis.ingestion.UploadAlreadyResolvedException;
 import com.finalysis.ingestion.csv.CsvMappingLockedException;
@@ -146,6 +147,24 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setType(URI.create("urn:finalysis:problem:account-exists"));
         problem.setTitle("Account already exists");
         problem.setProperty("accountId", ex.getAccountId());
+        return problem;
+    }
+
+    /** Keeping a statement file needs the vault (docs/plans/phase-8.md §7). */
+    @ExceptionHandler(StatementFileStore.NoVaultException.class)
+    ProblemDetail handleNoVault(StatementFileStore.NoVaultException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:no-vault"));
+        problem.setTitle("The vault is off");
+        return problem;
+    }
+
+    /** The file sent to keep isn't the statement's; never says what it was instead. */
+    @ExceptionHandler(StatementFileStore.FileMismatchException.class)
+    ProblemDetail handleFileMismatch(StatementFileStore.FileMismatchException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:finalysis:problem:file-mismatch"));
+        problem.setTitle("Not the statement's file");
         return problem;
     }
 

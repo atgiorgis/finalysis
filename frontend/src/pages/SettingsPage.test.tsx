@@ -96,12 +96,15 @@ test('a failed usage read is said plainly, and the AI section still shows', asyn
   expect(screen.getByRole('region', { name: 'Corgi' })).toBeInTheDocument()
 })
 
-test('Settings has no control that changes anything', async () => {
+// Since Phase 8 the vault and statement-file cards are editable (docs/plans/phase-8.md §6); Corgi and the chat costs
+// stay read-only, set in the backend's configuration.
+test('Corgi and the chat costs have no control that changes anything', async () => {
   renderApp('/settings')
 
-  const page = await screen.findByRole('heading', { level: 1, name: 'Settings' })
-  const section = page.closest('section') as HTMLElement
-  expect(within(section).queryAllByRole('button')).toEqual([])
-  expect(within(section).queryAllByRole('textbox')).toEqual([])
-  expect(within(section).queryAllByRole('combobox')).toEqual([])
+  for (const name of ['Corgi', 'Chat costs']) {
+    const card = (await screen.findByRole('heading', { level: 2, name })).closest('section') as HTMLElement
+    expect(within(card).queryAllByRole('button')).toEqual([])
+    expect(within(card).queryAllByRole('textbox')).toEqual([])
+    expect(within(card).queryAllByRole('combobox')).toEqual([])
+  }
 })

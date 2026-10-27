@@ -156,6 +156,17 @@ take: with the vault unlocked, run `scripts/vault/db-refresh-collation.sh <vault
 /Applications/Postgres.app/Contents/Versions/17/bin 55432`, which rebuilds the indexes (`REINDEX DATABASE`) and
 records the new version (`ALTER DATABASE finalysis REFRESH COLLATION VERSION`); lock and unlock to clear the notice.
 
+**What stays off the disk outside the vault.** Every `/api` response says `Cache-Control: no-store`, so the browser's
+cache keeps no data; the app writes only its theme to `localStorage` and nothing to `sessionStorage` or IndexedDB
+(tests check both). `npm run capture-fixtures` refuses a backend with the vault on: committed fixtures come only from
+the plain dev database with sample data. The chat and categorization eval reports in `docs/eval/` are written only
+from their own Testcontainers database with the vault off, and any future export of chat or analytics follows the same
+rule.
+
+**No heap or core dumps.** Nothing starts the backend with a heap-dump-on-error option, and macOS writes no core
+dumps by default (`ulimit -c` is 0): a dump of an unlocked backend would hold decrypted data and the database password
+outside the vault. A test checks the build, the wrapper's JVM settings and the configuration for such an option.
+
 **Locking.** Lock with the Lock button in the top bar or the menu (or `POST /api/vault/lock`); the vault also locks
 after 15 idle minutes (Settings → Vault → Auto-lock; `vault.idle-lock-minutes` in `app_setting`), right after the
 machine wakes from sleep, and when the backend stops. Any locked answer (423) takes the app to the unlock screen and
@@ -622,7 +633,11 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `GET` | `/api/accounts/{id}/statements` | List the account's statements, newest period first; `?status=IMPORTED\|RECONCILED\|NEEDS_REVIEW` filters | 200 | — |
 | `GET` | `/api/statements/{id}` | Get one imported statement with its warnings and `reviewedAt` | 200 | — |
 | `POST` | `/api/statements/{id}/review` | Accept a NEEDS_REVIEW statement: sets `reviewedAt`, keeps status and warnings | 200 | `not-reviewable` |
-| `DELETE` | `/api/statements/{id}` | Delete a statement of any status with its rows; their transfer links go too, then detection re-runs | 200 `{statementId, transactionsDeleted, transferLinksRemoved}` | — |
+| `DELETE` | `/api/statements/{id}` | Delete a statement of any status with its rows; their transfer links go too, then detection re-runs; a kept copy of its file goes too | 200 `{statementId, transactionsDeleted, transferLinksRemoved}` | — |
+| `PUT` | `/api/statements/{id}/file` | Keep a copy of the statement's file in the vault (multipart `file`): the same file again, checked by its SHA-256; stored as `<id>-<hash>.<ext>`, never under its original name | 200 `{statementId, fileKept}` | `file-mismatch`, `no-vault`, `payload-too-large` |
+| `GET` | `/api/statements/{id}/file` | Whether a copy is kept | 200 `{statementId, fileKept}` | — |
+| `GET` | `/api/imports/settings` | What the Import tab does after a successful import: `afterImport` `ASK` (the default), `KEEP`, `DELETE`, `BOTH` or `LEAVE` | 200 | — |
+| `PUT` | `/api/imports/settings` | `{afterImport}` | 204 | — |
 | `GET` | `/api/unparsed-uploads/{id}` | One unparsed upload with its `state` (OPEN, RESOLVED, DISMISSED) | 200 | — |
 | `POST` | `/api/unparsed-uploads/{id}/dismiss` | Dismiss an open unparsed upload | 200 | `already-resolved` |
 | `GET` | `/api/transfers` | List transfer links, newest first; `?status=MATCHED\|UNMATCHED`, `?confirmed=true\|false`, `?accountId=` filter | 200 | — |
@@ -710,6 +725,8 @@ returned.
 | 401 | `wrong-password` | The vault password is wrong (unlock, password change) | Try again; after five wrong attempts in a row each attempt waits |
 | 401 | `wrong-recovery-key` | The recovery key doesn't open this vault, or isn't a recovery key | Check the 13 groups; `O`/`0`, `I`/`L`/`1`, case and spaces don't matter |
 | 429 | `too-many-attempts` | Five or more wrong passwords or recovery keys in a row; `Retry-After` gives the seconds to wait (30 s, doubling to 15 minutes; a success resets) | Wait, then try again |
+| 409 | `file-mismatch` | The file sent to keep isn't the one the statement was imported from; nothing is stored | Choose the statement's own file |
+| 409 | `no-vault` | Keeping a copy with the vault off (the plain dev database): there is no encrypted volume | Turn the vault on, or leave the file |
 | 422 | `setting-invalid` | An auto-lock setting outside 1 to 240 minutes | Send a value in range |
 | 422 | `password-rejected` | A new vault password under 12 or over 256 characters; one of the 1,000 most common passwords, once or repeated, with only digits or symbols added before or after (`dragondragon`, `!!monkey2024`); or, at password change, one containing an account's name or institution (four letters or more, ignoring case, spaces and punctuation). Never quotes the password | Choose another password |
 | 409 | `vault-state` | Setup on a vault that exists, unlock or recovery on one that isn't locked, password change while locked, or anything with the vault off | Read `GET /api/status` for the state |
@@ -766,6 +783,13 @@ statement's balances as printed on paper, for files that don't carry them (card 
 are checked against the rows (see [Reconciliation](#reconciliation)). If the file prints a
 balance and the request disagrees, the file's value is kept and the check fails. Balances are
 plain decimal text such as `1234.56`: at most two decimals, no exponent or thousands separator.
+
+**After a successful import** (Phase 8), the Import tab asks what happens to the file, or applies the default set in
+Settings → Statement files: **keep a copy in the vault** (the browser sends the same file again; it is stored
+encrypted in the vault under its statement id and hash, never its original name, and deleted with its statement),
+**delete the original**, **both**, or **leave it**. Deleting the original works only in Chrome and Edge, for a file
+chosen with the app's own picker or dropped on it (the File System Access API): it is permanent, not to the Trash,
+and is always confirmed first, even as the default. Other browsers say which file to delete yourself.
 
 ### Pipeline
 
@@ -1057,9 +1081,9 @@ columns, and the header signature.
   transfer description or a person's name in a Zelle payment stays in `raw_description`. They are
   never logged or returned in errors, and redacted before any cloud call (SEC-08, see
   [What leaves the machine](#what-leaves-the-machine)).
-- **File bytes are discarded** after parsing until encrypted storage (SEC-04, Phase 8). Only the
-  hash, the file name and each row's source line are kept, so a statement can't be re-parsed or
-  downloaded later; import the original file again instead.
+- **File bytes are discarded** after parsing unless you keep a copy in the vault (Phase 8, below). Only
+  the hash, the file name and each row's source line are kept with the statement; a kept copy is not
+  re-parsed or downloadable from the app yet.
 - **Deleting a statement doesn't re-run its successor's continuity check**, which may have used it as
   the predecessor; the successor keeps its stored result.
 - **Not yet:** PDF statement parsing (partial: PDFs are checked but not imported; a later, aspirational
