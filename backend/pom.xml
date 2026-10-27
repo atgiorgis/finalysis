@@ -30,9 +30,9 @@
         <!-- The AWS SDK version Spring AI 2.0.1's Bedrock modules bring; keep them equal when upgrading. -->
         <aws-sdk.version>2.51.2</aws-sdk.version>
         <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke, ai-eval and chat-eval profiles flip
-             these. -->
+             these. The vault's native-Postgres tests are opt-in too (vault-it profile). -->
         <surefire.groups></surefire.groups>
-        <surefire.excludedGroups>live-ai,ai-eval,chat-eval</surefire.excludedGroups>
+        <surefire.excludedGroups>live-ai,ai-eval,chat-eval,vault-it</surefire.excludedGroups>
         <finalysis.live-ai>false</finalysis.live-ai>
         <finalysis.ai-eval>false</finalysis.ai-eval>
         <finalysis.chat-eval>false</finalysis.chat-eval>
@@ -231,6 +231,31 @@
                 <surefire.groups>chat-eval</surefire.groups>
                 <surefire.excludedGroups>live-ai,ai-eval</surefire.excludedGroups>
                 <finalysis.chat-eval>true</finalysis.chat-eval>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Opt-in vault tests on a native Postgres.app PostgreSQL 17 inside throwaway encrypted images
+             (VaultDatabaseIT, VaultMigrationIT; docs/plans/phase-8.md §10, §16 decision 4). macOS, Postgres.app with
+             PostgreSQL 17 and pgvector 0.8.6, and Docker (Testcontainers) for the migration's source database.
+               cd backend && ./mvnw test -Pvault-it
+             Each test skips, through an assumption, when Postgres.app's PostgreSQL 17 isn't found. -->
+        <profile>
+            <id>vault-it</id>
+            <properties>
+                <surefire.groups>vault-it</surefire.groups>
+                <surefire.excludedGroups>live-ai,ai-eval,chat-eval</surefire.excludedGroups>
             </properties>
             <build>
                 <plugins>

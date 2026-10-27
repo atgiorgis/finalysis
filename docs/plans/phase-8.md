@@ -714,6 +714,51 @@ no UI change, so no layout run.
   and read for length; d-i06 read for any quoted prompt text; and a line that the holdout was measured on `chat-9` and
   isn't rerun.
 
+### Step 1 notes: the vault scripts on native Postgres
+
+Done: "Phase 8 step 1: vault scripts on native Postgres.app". Backend 3,314 tests, 0 failures, 0 errors, 0 skipped
+(Maven summary; 3,291 before, plus 23: `VaultScriptsTest` 6, `VaultDbCheckTest` 13, `VaultClusterSettingsTest` 4);
+`-Pvault-it` 7 tests, 0 failures, 0 skipped (`VaultDatabaseIT` 6, `VaultMigrationIT` 1); frontend 265 tests,
+all passed; no UI change. No Java outside tests (the `NOT_READY` mapping is step 2). `compose.yaml` unchanged.
+
+- **The native spike** (Postgres.app 17.11, pgvector 0.8.6, a throwaway 1 GB image): `initdb --pwfile=/dev/stdin`
+  works; `pg_ctl start -w` works with TCP only (`unix_socket_directories = ''`, no socket in `/tmp`); `::1` refused;
+  a wrong password refused; the password in no process's arguments; 2,000 rows survive **five lock and unlock cycles
+  at one mount point, every plain `hdiutil detach` succeeding on the first try**; no marker in the bands afterwards;
+  nothing left running. The case Docker failed (§4.8) passes.
+- **Collation** (§4.4): `initdb` without a locale picks `C`, whose `lower()` and `ILIKE` ignore non-ASCII letters
+  (`'café' ILIKE 'CAFÉ'` is false; true on the Docker image's glibc `en_US.utf8`). Against glibc, the 40 distinct
+  sample descriptions sort identically under `C`, the builtin `C.UTF-8` and ICU `en-US`; edge strings with punctuation
+  and mixed case differ under all three. As §4.4 says, `db-init.sh` uses **ICU `en-US`** (case mapping as glibc's,
+  linguistic order). The alternative, builtin `C.UTF-8` (code-point order, no ICU version to track), is noted for
+  review; changing it later needs a new cluster or a reindex.
+- **Scripts** (`scripts/vault/`, with `lib.sh` holding the shared rules: a fixed `PATH`, `umask 077`, absolute paths
+  resolved without symlinks, secrets read from stdin once and passed to tools by the shell's `printf`, fixed
+  messages). Beyond §4.3: `status.sh` also prints `ELSEWHERE` (this image attached at another place) and `NO_IMAGE`;
+  `unmount.sh` exits 3 when it had to force and 4 when a server still runs on the volume; `db-stop.sh` exits 3 after
+  an immediate stop; `create.sh` also makes `pglog/` and `secrets/` (§4.4 needs them). `db-check.sh` prints `OK` or
+  `NOT_READY <reason> installed=… required=… item=…`; `item` is a file name, a settings domain or a port, never a
+  path. The settings `db-init.sh` applies live in `postgresql.vault.conf` and `pg_hba.vault.conf`, pinned by
+  `VaultClusterSettingsTest` and checked on the running server by `VaultDatabaseIT`.
+- **Spotlight and Time Machine:** `mdutil -i off` needs root, so the volume gets `.metadata_never_index` and stays out
+  of Finder with `-nobrowse`. `tmutil addexclusion` was dropped: Time Machine doesn't descend into another mounted
+  volume, and the bundle itself is backed up as ciphertext.
+- **Logs:** terse verbosity drops the DETAIL line, so a duplicate key's value isn't logged (tested). A primary message
+  can still quote a value (for example "invalid input syntax for type integer: …"); those lines stay in `pgdata/log/`,
+  inside the vault, and the cycle test shows nothing readable in the bands.
+- **The dev migration** (§4.5) differs in one point: a plain `pg_dump --data-only --disable-triggers` from inside the
+  container streams into the vault's `psql --single-transaction`, after a `TRUNCATE … RESTART IDENTITY` of the vault's
+  tables in the same transaction. Flyway seeds `category` and `categorization_rule` in both databases, so a
+  data-only restore must replace those rows; `pg_restore` alone can't do that atomically. A failed `pg_dump` makes the
+  transaction fail, so the vault is unchanged. It refuses unless both databases are at the same Flyway version and
+  the vault holds no account. `VaultMigrationIT` moves the imported sample data and checks equal counts per table,
+  equal `sum(amount)` and transfer counts, counts-only output, and the refusal on a second run. pg_dump's warning
+  about `category`'s self-reference is filtered (the dump disables triggers); its other messages pass.
+- **For step 2:** `app_setting` already exists (V13, key-value with a key pattern), so §5.4's `V25__app_setting` is
+  likely not needed; step 2 adds its keys instead.
+- **Docker Desktop** is back on its original settings (VirtioFS) since §4.8's gRPC FUSE trial; the dev database was
+  restarted with it and is untouched.
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

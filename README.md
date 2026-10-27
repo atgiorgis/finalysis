@@ -9,7 +9,7 @@ backend/      Spring Boot 4 REST API (Java 21, Maven wrapper) — runs on :8080
 frontend/     React 19 + Vite app — runs on :5173, proxies /api to :8080
 sample-data/  Synthetic bank and card statements (see "Sample data")
 postman/      Postman collection and local environment for the API
-scripts/      Developer scripts (dev database reset)
+scripts/      Developer scripts (dev database reset; scripts/vault/ for the encrypted vault)
 tools/        Sample data generator
 compose.yaml  Postgres 17 + pgvector
 ```
@@ -133,6 +133,37 @@ is its setup on macOS (Intel or Apple silicon):
 
 At startup Finalysis checks the PostgreSQL major version (17), the pgvector version (0.8.6), the port, and that
 neither a launchd job nor a Postgres.app server points at the vault; each failure is reported in plain words.
+
+**Layout (draft).** The vault directory (`finalysis.vault.dir`, default `~/Library/Application Support/Finalysis/vault`)
+holds three things: `finalysis.sparsebundle`, the encrypted disk image (APFS, AES-256, growing up to its maximum
+size); `vault-key.json`, the password-wrapped recovery key (step 2); and `mnt/`, an empty folder while locked. Unlocked,
+the image is mounted at `mnt/` and holds `pgdata/` (the cluster, with its logs in `pgdata/log/`), `pglog/` (initdb's and
+pg_ctl's output), `secrets/` (the database password), `statements/` and `tls/`. A copy of the locked image is
+ciphertext, so a backup of it is an encrypted backup.
+
+**Scripts** (`scripts/vault/`, macOS; the backend calls them, and you can run them by hand). Keys and passwords go on
+stdin only, never as an argument; output is fixed messages.
+
+| Script | Does |
+|---|---|
+| `create.sh <dir> <max size>` | creates the image (key on stdin) and its folders; never over an existing one |
+| `mount.sh <dir>` / `unmount.sh <dir>` | mounts at `<dir>/mnt` (key on stdin) / unmounts, plainly, forcing only after 10 s (exit 3); refuses while Postgres runs on it (exit 4) |
+| `status.sh <dir>` | `MOUNTED`, `UNMOUNTED`, `ELSEWHERE` or `NO_IMAGE`, for this image only |
+| `db-check.sh <dir> <pg bin> <port>` | the startup check: `OK` or `NOT_READY <reason>` |
+| `db-init.sh <dir> <pg bin> <port>` | creates the cluster in the mounted vault (database password on stdin) |
+| `db-start.sh <dir> <pg bin> <port>` / `db-stop.sh <dir> <pg bin>` | `pg_ctl start -w` / `pg_ctl stop -m fast -w` (immediate only as a reported fallback) |
+| `migrate-plain-to-vault.sh <dir> <pg bin> <port>` | copies the Docker dev database into an unlocked, empty vault (below) |
+
+**Moving the dev database into the vault** (once unlock exists, Phase 8 step 2). With the vault set up and unlocked and
+the Docker `db` running, `scripts/vault/migrate-plain-to-vault.sh <vault dir>
+/Applications/Postgres.app/Contents/Versions/17/bin 55432` streams the data in (no file in between), in one
+transaction, and prints row counts per table, never rows. It refuses if the schemas differ or the vault already holds
+accounts. Afterwards the Docker database still holds a readable copy: delete it with `scripts/reset-dev-db.sh`, and
+use the Docker database only with synthetic data from then on.
+
+Vault tests: `VaultScriptsTest`, `VaultDbCheckTest` and `VaultClusterSettingsTest` run in `./mvnw verify` on macOS
+(throwaway 64 MB images; skipped elsewhere). The tests on a real Postgres.app cluster are opt-in:
+`cd backend && ./mvnw test -Pvault-it` (`VaultDatabaseIT`, `VaultMigrationIT`).
 
 ### Database client
 
