@@ -5,12 +5,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.finalysis.config.SchedulingConfiguration;
 import com.finalysis.support.ChatIntegrationTest;
 import com.finalysis.support.MutableClock;
+import com.finalysis.vault.VaultLocking;
+import com.finalysis.vault.VaultUnlocked;
 import java.sql.Timestamp;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -100,8 +101,11 @@ class RetentionTest {
 
     @Test
     void itRunsAtStartupAndNightly() throws Exception {
+        // "Startup" is each time the database opens: unlock, or startup with the vault off (docs/plans/phase-8.md §5.1).
         assertThat(ChatRetention.class.getMethod("atStartup").getAnnotation(EventListener.class).value())
-                .containsExactly(ApplicationReadyEvent.class);
+                .containsExactly(VaultUnlocked.class);
+        assertThat(ChatRetention.class.getMethod("onLocking").getAnnotation(EventListener.class).value())
+                .containsExactly(VaultLocking.class);
         assertThat(ChatRetention.class.getMethod("nightly").getAnnotation(Scheduled.class).cron())
                 .isEqualTo("0 30 3 * * *");
         assertThat(SchedulingConfiguration.class.getAnnotation(EnableScheduling.class)).isNotNull();

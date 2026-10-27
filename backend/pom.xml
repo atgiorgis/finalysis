@@ -27,6 +27,8 @@
         <pdfbox.version>3.0.8</pdfbox.version>
         <archunit.version>1.5.1</archunit.version>
         <jqwik.version>1.9.3</jqwik.version>
+        <!-- Argon2id for the vault's password key (docs/plans/phase-8.md §4.2); the JDK has no Argon2. -->
+        <bouncycastle.version>1.84</bouncycastle.version>
         <!-- The AWS SDK version Spring AI 2.0.1's Bedrock modules bring; keep them equal when upgrading. -->
         <aws-sdk.version>2.51.2</aws-sdk.version>
         <!-- No live AI in the build (docs/plans/phase-4.md §10); the ai-smoke, ai-eval and chat-eval profiles flip
@@ -89,6 +91,11 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>${bouncycastle.version}</version>
         </dependency>
         <!-- Compile scope: pgvector's PGvector extends the driver's PGobject. -->
         <dependency>

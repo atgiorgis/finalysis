@@ -759,6 +759,72 @@ all passed; no UI change. No Java outside tests (the `NOT_READY` mapping is step
 - **Docker Desktop** is back on its original settings (VirtioFS) since §4.8's gRPC FUSE trial; the dev database was
   restarted with it and is untouched.
 
+### Step 2 notes: locked mode, keys, unlock and lock
+
+Done: "Phase 8 step 2: locked mode, key wrapping, unlock and lock". Backend 3,380 tests, 0 failures, 0 errors,
+0 skipped (Maven summary; 3,314 before, plus 66); `-Pvault-it` 8 tests, 0 failures, 0 skipped (`VaultDatabaseIT` 7,
+`VaultMigrationIT` 1); frontend 265 tests, all passed; newman 291 requests, 792 assertions, 0 failures (below). Reviewed decisions from step 1 applied: ICU `en-US` kept, with the collation-version check; the
+`pg_dump | psql` migration kept; **no `V25`**: the idle minutes are the key `vault.idle-lock-minutes` in the existing
+`app_setting` (V13).
+
+- **One context** (§5.1, §16 decision 3): `VaultDataSource` is the only `DataSource`; it refuses connections
+  (SQL state 08003) until a pool opens. Hibernate starts without JDBC metadata (`allow_jdbc_metadata_access: false`,
+  PostgreSQL 17 named through `jakarta.persistence.database-major-version`; `ddl-auto: none`). `VaultDatabase` opens
+  the pool, runs Flyway and `SchemaManager.validateMappedObjects()` (what `ddl-auto: validate` did), then reads the
+  collation versions and `vault.idle-lock-minutes`. Boot's Flyway is used for its configuration only and always
+  migrates through `VaultDataSource`: under `@ServiceConnection` Boot binds its Flyway to the container's own database,
+  which the first lifecycle test caught. DB health is off (`management.health.db.enabled: false`): health is the app's,
+  the status is the vault's.
+- **Vault off** (`finalysis.vault.enabled=false`, every existing test and development on the Docker database): the
+  lifecycle opens the plain database at startup (the service connection in tests, `spring.datasource` otherwise),
+  storage `PLAIN`, unlocked, lock a no-op. `DevDatabaseGuard` also checks the new `PlainDatabaseConnection` bean, since
+  the pool is no longer a bean. The vault paths are bound as text: Spring's String-to-Path conversion went through
+  servlet resources and broke the six real-server tests (`RANDOM_PORT`), and would have read an absolute path like
+  Postgres.app's as one inside the web application.
+- **Events:** `VaultUnlocked` replaces `ApplicationReadyEvent` for the categorization backfill and chat retention (both
+  now run at each unlock); `VaultLocking` stops chat's nightly purge until the next unlock and makes the background AI
+  run drop its queue and interrupt itself. ArchUnit: the vault depends on no feature, and features use only these two
+  events (`api`'s status endpoint reads the vault's status).
+- **The gate** (§5.2): a filter ahead of all others; 423 with `vault-locked` and no detail for everything outside the
+  allowlist (`GET /api/status`, `GET /actuator/health`, `POST /api/vault/{setup,unlock,recover,lock}`), unknown paths
+  included. `VaultGateTest` walks every `RequestMappingHandlerMapping` entry (every method and pattern) and checks that
+  the allowlist is exactly the five controller entries. Requests in flight are counted for the lock's 30-second wait,
+  except `/api/vault/*`, which take the transition lock themselves.
+- **States:** §5.2's list plus `LOCKING` (a lock in progress, refused like the others) and `NOT_READY` (§4.4). A
+  `NOT_READY` vault re-runs the check on each setup or unlock; a pass returns it to `LOCKED` or `NOT_SET_UP`.
+  `BROKEN` covers a key file without an image or the reverse, the image attached elsewhere, and an image still mounted
+  after the startup lock.
+- **Keys** (§4.2): Bouncy Castle 1.84 (`bcprov-jdk18on`, new dependency) for Argon2id v1.3; calibration measures one
+  derivation at the floor (64 MiB, 3, 1) and raises the iterations toward 0.5 s, capped at 12; the key file names
+  version 19 and is read only within the floor and a ceiling (4 GiB, 64, 16).
+  `argon2idMatchesAnIndependentImplementation` pins Bouncy Castle's output against argon2-cffi 23.1.0, run once in a
+  throwaway virtual environment; a library upgrade that changed it would lock every vault. Recovery keys are read
+  leniently (case, spaces, dashes, `O`/`0`, `I`/`L`/`1`) and a non-zero padding bit is refused.
+- **The common-password list:** SecLists' `xato-net-10-million-passwords-1000.txt` at commit `c205c36`, MIT, with a
+  NOTICE and a SHA-256 pin; 1,000 lines, 997 distinct ignoring case. **None of them has 12 characters**, so with the
+  12-character minimum this check can't refuse anything today (a test records it). It would matter only with a lower
+  minimum or a longer list; see the step 2 summary.
+- **Collation-version check** (decided at step 1's review): it needs the running server, so it runs at each unlock
+  (and at startup with the vault off), not in `db-check.sh`, which runs locked. A difference sets `vault.collation`
+  on the status (recorded, actual, the step) and logs a warning; it doesn't block. The step is
+  `scripts/vault/db-refresh-collation.sh`: `REINDEX DATABASE`, then `ALTER DATABASE … REFRESH COLLATION VERSION`
+  (`VaultDatabaseIT` fakes an ICU change by rewriting `datcollversion` and runs it; `VaultLifecycleTest` checks the
+  status).
+- **Found by the run on a real vault, not by the fakes:** a first start had no vault directory, `db-check.sh` refused,
+  and the state was `NOT_READY`. The backend now creates the directory (0700) at startup; a lifecycle test pins it.
+- **Postman:** **0. Vault setup** (first: refuses to continue unless the backend reports a `VAULT` that is `NOT_SET_UP`;
+  a random password per run) and **14. Vault and login** (last: activity, password change, lock, 423s, unlock,
+  recovery, unlock with the recovered password). Newman 6.2.1 ran every README folder (0, 1–6, 8, 9, 12, 13, 14) against
+  the backend on a throwaway vault in the session's temporary directory, on Postgres.app and a real encrypted image:
+  291 requests, 792 assertions, 0 failures. Stopping the backend (SIGTERM) locked it: database stopped, plain unmount,
+  mount point empty. Afterwards no sample merchant was readable in the image's bands, and the backend log held no
+  password and nothing shaped like a recovery key. The vault was then deleted.
+- **README:** the vault endpoints in the API table and their problems in the error catalogue; local development now
+  says the vault is on by default and shows `FINALYSIS_VAULT_ENABLED=false` for the Docker database; the newman run
+  uses a throwaway vault; locking and the collation step are described.
+- **Not in this step:** the screens (step 3; until then the UI gets 423s with the vault on), sessions and the LAN
+  listener (step 5; the lock has a marked place for them), the leak tests of §8 (step 4).
+
 ---
 
 ## 16. Decisions at approval (2026-10-26)

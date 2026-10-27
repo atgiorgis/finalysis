@@ -1,5 +1,6 @@
 package com.finalysis.support;
 
+import com.finalysis.vault.PlainDatabaseConnection;
 import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -44,6 +45,10 @@ public class DevDatabaseGuard implements ContextCustomizerFactory {
                 public Object postProcessAfterInitialization(Object bean, String beanName) {
                     if (bean instanceof HikariDataSource dataSource) {
                         check(dataSource.getJdbcUrl());
+                    }
+                    // With the vault off, the app opens this database at startup (docs/plans/phase-8.md §5.5).
+                    if (bean instanceof PlainDatabaseConnection connection) {
+                        check(connection.url());
                     }
                     return bean;
                 }

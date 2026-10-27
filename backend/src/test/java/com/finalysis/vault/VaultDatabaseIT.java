@@ -170,6 +170,32 @@ class VaultDatabaseIT {
 
     @Test
     @Order(6)
+    void theCollationHelperRebuildsAndRecordsTheVersionAfterAnIcuChange() throws SQLException {
+        String versions = "SELECT datcollversion, pg_database_collation_actual_version(oid) FROM pg_database "
+                + "WHERE datname = 'finalysis'";
+        try (Connection c = connect(); Statement s = c.createStatement()) {
+            // What an ICU update looks like to the database: the recorded version no longer matches the library's.
+            s.execute("UPDATE pg_database SET datcollversion = '0.0' WHERE datname = 'finalysis'");
+            try (ResultSet rs = s.executeQuery(versions)) {
+                rs.next();
+                assertThat(rs.getString(1)).isEqualTo("0.0").isNotEqualTo(rs.getString(2));
+            }
+        }
+
+        Result refreshed = vault.run("db-refresh-collation.sh", null, vault.dir.toString(),
+                VaultTestSupport.POSTGRES_APP_BIN.toString(), port);
+
+        assertThat(refreshed.exit()).as(refreshed.all()).isZero();
+        assertThat(refreshed.out()).contains("0.0 -> ", "db-refresh-collation: done").doesNotContain(password);
+        try (Connection c = connect(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(versions)) {
+            rs.next();
+            assertThat(rs.getString(1)).isEqualTo(rs.getString(2));
+        }
+        assertThat(vault.mnt().resolve("secrets/pgpass")).doesNotExist();
+    }
+
+    @Test
+    @Order(7)
     void fiveLockAndUnlockCyclesAtOneMountPointEachWithAPlainUnmount() throws Exception {
         String bin = VaultTestSupport.POSTGRES_APP_BIN.toString();
         String marker = "ROWMARKER" + VaultTestSupport.syntheticKey();

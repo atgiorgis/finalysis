@@ -6,10 +6,13 @@ spring:
     import:
       - optional:file:../.env[.properties]
       - optional:file:.env[.properties]
+  # The plain database (compose.yaml), used only with the vault off (finalysis.vault.enabled=false: development with
+  # synthetic data, and the tests). With the vault on, the database is the vault's own cluster, opened on unlock
+  # (docs/plans/phase-8.md §4.4, §5.1); the hikari settings below apply to both.
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:finalysis}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    username: ${POSTGRES_USER:}
+    password: ${POSTGRES_PASSWORD:}
     hikari:
       data-source-properties:
         # Postgres puts row values in error details ("Failing row contains (...)", "Key (x)=(y)").
@@ -40,9 +43,16 @@ spring:
       chat: none
       embedding: none
   jpa:
-    # Flyway owns the schema; Hibernate only checks that every entity matches it at startup.
+    # Flyway owns the schema. The app starts without a database (locked, docs/plans/phase-8.md §5.1), so Hibernate
+    # reads no JDBC metadata at startup and is told the dialect; Flyway and the check that every entity matches the
+    # schema (what ddl-auto: validate did) run when the database opens: on unlock, or at startup with the vault off.
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
+    properties:
+      hibernate.boot.allow_jdbc_metadata_access: false
+      jakarta.persistence.database-product-name: PostgreSQL
+      jakarta.persistence.database-major-version: 17
+      jakarta.persistence.database-minor-version: 0
     # No lazy loading outside service transactions.
     open-in-view: false
 
@@ -53,6 +63,10 @@ server:
   address: 127.0.0.1
 
 management:
+  health:
+    # The database is closed while the vault is locked; health reports the app, not the vault (GET /api/status does).
+    db:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -76,6 +90,16 @@ logging:
     io.netty: WARN
 
 finalysis:
+  # The vault (docs/plans/phase-8.md §4, §5): the data lives in an encrypted disk image, opened by a password.
+  # enabled=false runs on the plain database above, unlocked from the start (development and tests only).
+  vault:
+    enabled: ${FINALYSIS_VAULT_ENABLED:true}
+    dir: ${FINALYSIS_VAULT_DIR:${user.home}/Library/Application Support/Finalysis/vault}
+    pg-bin: /Applications/Postgres.app/Contents/Versions/17/bin  # Postgres.app's PostgreSQL 17 (§4.4)
+    db-port: 55432            # the vault's cluster, on 127.0.0.1 only; not 5432, the Docker dev database's
+    scripts: ../scripts/vault # run from backend/ (./mvnw spring-boot:run)
+    image-size: 50g           # the image's maximum size, set at creation; it grows as needed
+    idle-lock-minutes: 15     # until the setting is changed in the app (app_setting vault.idle-lock-minutes)
   ai:
     # OFF here; CLOUD only from application-aws.yml, LOCAL later from application-local.yml.
     mode: OFF

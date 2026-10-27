@@ -24,6 +24,9 @@ import com.finalysis.categorize.CategorizationModelClient;
 import com.finalysis.review.ReviewQueueService;
 import com.finalysis.transaction.TransactionController;
 import com.finalysis.transfer.TransferDetector;
+import com.finalysis.vault.VaultLocking;
+import com.finalysis.vault.VaultService;
+import com.finalysis.vault.VaultUnlocked;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaAccess;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -149,6 +152,26 @@ class PackageDependencyTest {
             .should().dependOnClassesThat().resideInAPackage(BEDROCK_CONFIG)
             .because("the provider's client configuration is picked up by profile, never called");
 
+    /**
+     * The vault (docs/plans/phase-8.md §5.5) holds the database's lifecycle and depends on no feature; features depend
+     * on it only for its two events. {@code api} reads its status for {@code GET /api/status}.
+     */
+    static final ArchRule VAULT_KNOWS_NO_FEATURE = noClasses()
+            .that().resideInAPackage("com.finalysis.vault..")
+            .should().dependOnClassesThat().resideInAnyPackage("com.finalysis.account..", "com.finalysis.ingestion..",
+                    "com.finalysis.categorize..", "com.finalysis.chat..", "com.finalysis.analytics..",
+                    "com.finalysis.alert..", "com.finalysis.transfer..", "com.finalysis.review..",
+                    "com.finalysis.transaction..", "com.finalysis.dashboard..", "com.finalysis.ai..",
+                    "com.finalysis.api..")
+            .because("the vault opens and closes the database for every feature and must not know any of them");
+
+    static final ArchRule FEATURES_USE_ONLY_THE_VAULTS_EVENTS = noClasses()
+            .that().resideOutsideOfPackages("com.finalysis.vault..", "com.finalysis.api..")
+            .should().dependOnClassesThat(DescribedPredicate.describe("vault classes other than its events",
+                    c -> c.getPackageName().startsWith("com.finalysis.vault")
+                            && !c.isEquivalentTo(VaultUnlocked.class) && !c.isEquivalentTo(VaultLocking.class)))
+            .because("features react to unlock and lock; only the status endpoint reads the vault itself");
+
     private static JavaClasses app;
 
     @BeforeAll
@@ -232,6 +255,19 @@ class PackageDependencyTest {
 
         JavaClasses violation = new ClassFileImporter().importClasses(com.finalysis.ai.outbound.UsesCategorize.class);
         assertThat(OUTBOUND_KNOWS_NO_FEATURE.evaluate(violation).hasViolation()).isTrue();
+    }
+
+    @Test
+    void theVaultKnowsNoFeatureAndFeaturesKnowOnlyItsEvents() {
+        assertThat(app.contain(VaultService.class)).isTrue();
+        VAULT_KNOWS_NO_FEATURE.check(app);
+        FEATURES_USE_ONLY_THE_VAULTS_EVENTS.check(app);
+
+        JavaClasses vaultViolation = new ClassFileImporter().importClasses(com.finalysis.vault.UsesAccount.class);
+        JavaClasses featureViolation = new ClassFileImporter()
+                .importClasses(com.finalysis.chat.UsesVaultService.class);
+        assertThat(VAULT_KNOWS_NO_FEATURE.evaluate(vaultViolation).hasViolation()).isTrue();
+        assertThat(FEATURES_USE_ONLY_THE_VAULTS_EVENTS.evaluate(featureViolation).hasViolation()).isTrue();
     }
 
     /** The rules catch a violation. */

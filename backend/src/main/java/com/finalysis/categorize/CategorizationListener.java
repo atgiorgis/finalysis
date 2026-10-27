@@ -3,23 +3,24 @@ package com.finalysis.categorize;
 import com.finalysis.categorize.CategorizationService.RulesResult;
 import com.finalysis.categorize.MerchantCleaningService.CleaningResult;
 import com.finalysis.ingestion.StatementImported;
+import com.finalysis.vault.VaultUnlocked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Runs the categorization pipeline (docs/plans/phase-4.md §1.2) after every import and once at startup:
+ * Runs the categorization pipeline (docs/plans/phase-4.md §1.2) after every import and each time the database opens
+ * (at unlock, or at startup with the vault off; docs/plans/phase-8.md §5.1):
  * merchant cleaning (stage 1), then rules and merchant memory (stages 2–3). After an import it then asks for the AI
  * stage (5) in the background ({@link BackgroundAiCategorization}), which does nothing while AI is off. No AI at
  * startup.
  *
  * <p>After an import commits, it runs after transfer detection ({@link #AFTER_TRANSFER_DETECTION}), since
- * later stages need to know which txns are linked. At startup it runs on the main thread once the app
- * is ready; requests are already being served, and the categorization lock keeps it apart from imports.
+ * later stages need to know which txns are linked. When the database opens it runs on the opening thread; the
+ * categorization lock keeps it apart from imports.
  *
  * <p>A failure never affects the import, which has committed: it is logged with the statement id and the
  * exception type only, never its message, which could quote a description (SEC-10). Each stage is tried on
@@ -73,7 +74,7 @@ class CategorizationListener {
         }
     }
 
-    @EventListener(ApplicationReadyEvent.class)
+    @EventListener(VaultUnlocked.class)
     void onReady() {
         try {
             CleaningResult result = cleaning.backfill();

@@ -16,15 +16,20 @@ compose.yaml  Postgres 17 + pgvector
 
 ## Local development
 
-**Prerequisites:** JDK 21+, Node.js 22+, Docker (for the database and for Testcontainers).
+**Prerequisites:** JDK 21+, Node.js 22+, Docker (for the development database and for Testcontainers), and for
+the encrypted vault, Postgres.app ([below](#the-vaults-postgres-phase-8-in-progress)).
+
+The backend keeps its data in the **encrypted vault** by default (Phase 8): it starts locked, and every endpoint but
+the status answers 423 until the vault is set up or unlocked (`POST /api/vault/setup`, `/unlock`; the screens come in
+step 3). For development with synthetic data, run it on the plain Docker database instead, unlocked from the start:
 
 ```sh
 cp .env.example .env          # then set POSTGRES_PASSWORD
 docker compose up -d db
 
-# Terminal 1 — backend (Flyway applies migrations at startup)
+# Terminal 1 — backend on the plain dev database (Flyway applies migrations at startup)
 cd backend
-./mvnw spring-boot:run
+FINALYSIS_VAULT_ENABLED=false ./mvnw spring-boot:run
 
 # Terminal 2 — frontend
 cd frontend
@@ -50,8 +55,8 @@ each context's connection pool at 3; Spring caches about ten contexts per run.
 ### Postman
 
 `postman/` holds a collection with tests for every endpoint and a local environment
-(`baseUrl` = `http://localhost:8080`). It runs top to bottom against a **freshly reset** dev
-database: **1. Setup** creates the four sample accounts, saves the Apex mapping by hand and the
+(`baseUrl` = `http://localhost:8080`). It runs top to bottom against an **empty** database (a new throwaway
+vault, below): **1. Setup** creates the four sample accounts, saves the Apex mapping by hand and the
 Summit mapping from the preview's suggestion, imports four statements (two `IMPORTED`, one
 `RECONCILED`, one `NEEDS_REVIEW`), imports the April checking statement a second time into a
 second checking account with the same last four at another institution (the "wrong account"
@@ -86,15 +91,26 @@ the chat requests and compared field by field after them. Three folders are manu
 **11. Live AI (aws profile)**, which makes live Bedrock calls and needs the backend started with
 `SPRING_PROFILES_ACTIVE=aws`. In the Collection Runner, untick those three.
 
+The run uses a **throwaway vault** (Phase 8): start the backend with the vault in a new temporary directory, so the run
+begins with an empty database. **0. Vault setup** sets it up with a random password and stops the whole run unless the
+backend reports a vault that is not set up; **14. Vault and login** runs last (lock, the 423s, unlock, password change,
+recovery) and leaves it unlocked. Postgres.app with PostgreSQL 17 is needed ([The vault's
+Postgres](#the-vaults-postgres-phase-8-in-progress)).
+
 ```sh
-scripts/reset-dev-db.sh                    # wipes the dev database; see below
-(cd backend && ./mvnw spring-boot:run)     # in another terminal, without the aws profile
+export FINALYSIS_VAULT_DIR="$(mktemp -d)/vault"          # a new, empty vault each run
+(cd backend && ./mvnw spring-boot:run)                    # in another terminal, without the aws profile
 npx newman run postman/Finalysis.postman_collection.json \
     -e postman/Finalysis-Local.postman_environment.json --working-dir . \
-    --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
+    --folder "0. Vault setup" --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
     --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
-    --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)" --folder "13. UI reads"
+    --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)" --folder "13. UI reads" \
+    --folder "14. Vault and login"
+# then stop the backend (it locks the vault) and delete the temporary directory
 ```
+
+The same folders without 0 and 14 still run against the plain dev database (`scripts/reset-dev-db.sh`, then the
+backend with `FINALYSIS_VAULT_ENABLED=false`).
 
 Run newman from the repo root: uploads use paths such as `sample-data/ofx/…`. In the Postman app,
 import both files, select the **Finalysis Local** environment, set the working directory
@@ -118,8 +134,8 @@ Real statements stay in `private-data/`; don't save a file selection or response
 
 The encrypted vault (Phase 8, [docs/plans/phase-8.md](docs/plans/phase-8.md) §4) keeps its database in an encrypted
 disk image, which Postgres in Docker can't use (§4.8), so the vault runs a native PostgreSQL from **Postgres.app**. The
-Docker database above stays for development without the vault, with synthetic data. The vault isn't usable yet; this
-is its setup on macOS (Intel or Apple silicon):
+Docker database above stays for development without the vault, with synthetic data. The API can set up, unlock and
+lock the vault now; the screens come in Phase 8 step 3. Its setup on macOS (Intel or Apple silicon):
 
 1. Install [Postgres.app](https://postgresapp.com) with **PostgreSQL 17** (its universal build). It bundles pgvector;
    Finalysis needs exactly **pgvector 0.8.6**, the version in Postgres.app's PostgreSQL 17 today.
@@ -133,6 +149,16 @@ is its setup on macOS (Intel or Apple silicon):
 
 At startup Finalysis checks the PostgreSQL major version (17), the pgvector version (0.8.6), the port, and that
 neither a launchd job nor a Postgres.app server points at the vault; each failure is reported in plain words.
+
+**After a Postgres.app update.** At each unlock Finalysis compares the collation version the database recorded with
+the one Postgres.app's ICU library reports. If they differ, `GET /api/status` shows `vault.collation` with the step to
+take: with the vault unlocked, run `scripts/vault/db-refresh-collation.sh <vault dir>
+/Applications/Postgres.app/Contents/Versions/17/bin 55432`, which rebuilds the indexes (`REINDEX DATABASE`) and
+records the new version (`ALTER DATABASE finalysis REFRESH COLLATION VERSION`); lock and unlock to clear the notice.
+
+**Locking.** Lock with `POST /api/vault/lock`; the vault also locks after 15 idle minutes (`vault.idle-lock-minutes` in
+`app_setting`), right after the machine wakes from sleep, and when the backend stops. A backend killed with `kill -9`
+leaves the vault open until the next start, which locks it first.
 
 **Layout (draft).** The vault directory (`finalysis.vault.dir`, default `~/Library/Application Support/Finalysis/vault`)
 holds three things: `finalysis.sparsebundle`, the encrypted disk image (APFS, AES-256, growing up to its maximum
@@ -561,8 +587,14 @@ Applied migrations are never edited. Every schema change is a new migration.
 
 | Method | Path | Purpose | Success | Problem types (besides 400/404) |
 |---|---|---|---|---|
-| `GET` | `/api/status` | Backend health, shown by the frontend, and the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner | 200 | — |
-| `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details | 200 | — |
+| `GET` | `/api/status` | Backend health, shown by the frontend, the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner, and the vault (`vault.state`, `storage` `VAULT` or `PLAIN`, `reason` and `message` when not ready or failed, `idleLockMinutes`, `lastLockForced`, `collation` when the ICU version changed). Answers while locked; never a path | 200 | — |
+| `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details; answers while locked | 200 | — |
+| `POST` | `/api/vault/setup` | `{password}` (12+ characters, not a common one): create the vault in state `NOT_SET_UP` and unlock it. The recovery key is in the response **once**, with `Cache-Control: no-store` | 201 `{recoveryKey}` | `password-rejected`, `vault-state`, `vault-not-ready`, `setup-failed` |
+| `POST` | `/api/vault/unlock` | `{password}`: mount, start the database, migrate, check the schema | 204 | `wrong-password`, `too-many-attempts`, `vault-state`, `vault-not-ready`, `vault-file-damaged`, `mount-failed`, `database-failed` |
+| `POST` | `/api/vault/recover` | `{recoveryKey, newPassword}`: unlock with the recovery key (forgotten password, damaged key file) and set a new password | 204 | `wrong-recovery-key`, `password-rejected`, `too-many-attempts`, `vault-state`, `vault-not-ready`, `mount-failed`, `database-failed` |
+| `POST` | `/api/vault/lock` | Lock now; any state, a no-op when nothing is open (and with the vault off) | 204 | — |
+| `POST` | `/api/vault/password` | `{currentPassword, newPassword}` while unlocked: rewrap the key; the image isn't touched | 204 | `wrong-password`, `password-rejected`, `too-many-attempts`, `vault-file-damaged` |
+| `POST` | `/api/vault/activity` | The UI's "user is here" signal (at most once a minute) for the idle lock | 204 | — |
 | `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
 | `GET` | `/api/accounts/{id}` | Get one account | 200 | — |
@@ -659,6 +691,17 @@ returned.
 
 | Status | `type` | Meaning | What to do |
 |---|---|---|---|
+| 423 | `vault-locked` | The vault isn't unlocked: every endpoint answers this except `GET /api/status`, `/actuator/health` and the vault's setup, unlock, recover and lock. No `detail` | Unlock (`POST /api/vault/unlock`), or set up a new vault |
+| 401 | `wrong-password` | The vault password is wrong (unlock, password change) | Try again; after five wrong attempts in a row each attempt waits |
+| 401 | `wrong-recovery-key` | The recovery key doesn't open this vault, or isn't a recovery key | Check the 13 groups; `O`/`0`, `I`/`L`/`1`, case and spaces don't matter |
+| 429 | `too-many-attempts` | Five or more wrong passwords or recovery keys in a row; `Retry-After` gives the seconds to wait (30 s, doubling to 15 minutes; a success resets) | Wait, then try again |
+| 422 | `password-rejected` | A new vault password under 12 characters or one of the 1,000 most common | Choose a longer password |
+| 409 | `vault-state` | Setup on a vault that exists, unlock or recovery on one that isn't locked, password change while locked, or anything with the vault off | Read `GET /api/status` for the state |
+| 503 | `vault-not-ready` | The startup check failed (`reason`: `postgres-missing`, `postgres-wrong-version`, `pgvector-missing`, `pgvector-wrong-version`, `launchd-conflict`, `postgresapp-conflict`, `port-in-use`); `detail` says what to do and names the installed and required versions | Fix it as the message says (see [The vault's Postgres](#the-vaults-postgres-phase-8-in-progress)) and try again |
+| 500 | `vault-file-damaged` | `vault-key.json` doesn't parse or names parameters outside the allowed range | Unlock with the recovery key (`POST /api/vault/recover`); it writes a new key file |
+| 500 | `mount-failed` | The disk image didn't open; nothing changed | Check that the image is in the vault folder and not open elsewhere |
+| 500 | `database-failed` | The image opened but the database didn't start, migrate or pass the schema check; the vault was locked again | Check the server log (step and exception class only) |
+| 500 | `setup-failed` | Setup stopped partway; what it had made was removed | Try again; check the server log |
 | 400 | — | Invalid field, unknown field (`"is not allowed"`), bad enum value (lists the allowed values), a JSON number for money, a balance form field with more than two decimals, an inverted period. `errors[]` names each field | Fix the named fields and resend |
 | 400 | — | Malformed JSON, or a non-numeric id | Send valid JSON and numeric ids |
 | 404 | — | Unknown id (`Account 42 not found`), or an account without a CSV mapping on `GET …/csv-mapping` | Check the id with `GET /api/accounts`; save a mapping first |

@@ -74,7 +74,7 @@ class VaultClusterSettingsTest {
         String lib = Files.readString(VaultTestSupport.SCRIPTS.resolve("lib.sh"));
         assertThat(lib).contains("export PATH=/usr/bin:/bin:/usr/sbin:/sbin", "umask 077", "set -euo pipefail");
         for (String script : List.of("create.sh", "mount.sh", "unmount.sh", "status.sh", "db-check.sh", "db-init.sh",
-                "db-start.sh", "db-stop.sh", "migrate-plain-to-vault.sh")) {
+                "db-start.sh", "db-stop.sh", "migrate-plain-to-vault.sh", "db-refresh-collation.sh")) {
             String text = Files.readString(VaultTestSupport.SCRIPTS.resolve(script));
             assertThat(text).as(script).contains("source \"$(dirname \"${BASH_SOURCE[0]}\")/lib.sh\"")
                     .containsPattern("\\[\\[ \\$# -eq \\d \\]\\] \\|\\| refuse");

@@ -6,6 +6,160 @@
   },
   "item": [
     {
+      "name": "0. Vault setup",
+      "description": "Sets up a **throwaway** vault (docs/plans/phase-8.md §5.2): run it only against a backend started with FINALYSIS_VAULT_DIR pointing at a new temporary directory (README, Postman). It stops the whole run unless the backend reports a vault that is NOT_SET_UP, so it can never touch a vault in use. The password is random per run and the recovery key is kept in a collection variable for folder 14 only; neither is ever logged.",
+      "item": [
+        {
+          "name": "Status: a vault, not set up",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const vault = pm.response.json().vault || {};",
+                  "pm.test('vault storage, NOT_SET_UP', () => {",
+                  "    pm.expect(vault.storage).to.eql('VAULT');",
+                  "    pm.expect(vault.state).to.eql('NOT_SET_UP');",
+                  "});",
+                  "if (vault.storage !== 'VAULT' || vault.state !== 'NOT_SET_UP') {",
+                  "    // Not a fresh throwaway vault: stop here rather than set anything up.",
+                  "    pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Everything else answers 423 before setup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked, no detail', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "    pm.expect(body).to.not.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup refuses a short password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/setup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"too short\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 password-rejected', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:password-rejected');",
+                  "});",
+                  "pm.test('the password is not echoed', () => pm.expect(pm.response.text()).to.not.include('too short'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/setup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"{{vaultPassword}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh random password per run: this folder only ever runs against a throwaway vault.",
+                  "pm.collectionVariables.set('vaultPassword', 'newman ' + Date.now() + ' ' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 with the recovery key, not stored by any cache', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store');",
+                  "    pm.expect(pm.response.json().recoveryKey).to.match(/^([0-9A-HJKMNP-TV-Z]{4}-){12}[0-9A-HJKMNP-TV-Z]{4}$/);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('vaultRecoveryKey', pm.response.json().recoveryKey);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: unlocked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "1. Setup",
       "item": [
         {
@@ -8703,6 +8857,525 @@
           ]
         }
       ]
+    },
+    {
+      "name": "14. Vault and login",
+      "description": "Lock, unlock, password change and recovery on the throwaway vault from folder 0 (docs/plans/phase-8.md §5.2, §10). Runs last and leaves the vault unlocked. Login and HTTPS join it in step 5.",
+      "item": [
+        {
+          "name": "Status: unlocked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));",
+                  "pm.test('never a path', () => pm.expect(pm.response.text()).to.not.match(/\\/Users\\/|\\/private\\/|\\/var\\/folders/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activity",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/vault/activity"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password change: wrong current password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"currentPassword\":\"not the current password\",\"newPassword\":\"a new long enough password\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 wrong-password', () => {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:wrong-password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password change: new password too short",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"currentPassword\":\"{{vaultPassword}}\",\"newPassword\":\"short\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 password-rejected', () => {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:password-rejected');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password change",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"currentPassword\":\"{{vaultPassword}}\",\"newPassword\":\"{{vaultPassword2}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh random password per run: this folder only ever runs against a throwaway vault.",
+                  "pm.collectionVariables.set('vaultPassword2', 'newman ' + Date.now() + ' ' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/vault/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: locked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('vault LOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('LOCKED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reads answer 423 while locked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked, no detail', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "    pm.expect(body).to.not.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analytics answer 423 while locked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/analytics/months"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked, no detail', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "    pm.expect(body).to.not.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Password change answers 423 while locked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"currentPassword\":\"{{vaultPassword2}}\",\"newPassword\":\"another long password\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked, no detail', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "    pm.expect(body).to.not.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock with the old password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/unlock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"{{vaultPassword}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 wrong-password', () => {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:wrong-password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/unlock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"{{vaultPassword2}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reads work again",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/accounts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock before recovery",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/vault/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover with a key that isn't this vault's",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/recover",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"recoveryKey\":\"0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000-0000\",\"newPassword\":\"a new long enough password\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 wrong-recovery-key', () => {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:wrong-recovery-key');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recover with the recovery key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/recover",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"recoveryKey\":\"{{vaultRecoveryKey}}\",\"newPassword\":\"{{vaultPassword3}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh random password per run: this folder only ever runs against a throwaway vault.",
+                  "pm.collectionVariables.set('vaultPassword3', 'newman ' + Date.now() + ' ' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: unlocked after recovery",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock after recovery",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/vault/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock with the password set by recovery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/unlock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"{{vaultPassword3}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: unlocked at the end",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -9060,6 +9733,22 @@
     },
     {
       "key": "chatBefore_recurring",
+      "value": ""
+    },
+    {
+      "key": "vaultPassword",
+      "value": ""
+    },
+    {
+      "key": "vaultPassword2",
+      "value": ""
+    },
+    {
+      "key": "vaultPassword3",
+      "value": ""
+    },
+    {
+      "key": "vaultRecoveryKey",
       "value": ""
     }
   ]

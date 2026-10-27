@@ -1,12 +1,14 @@
 package com.finalysis.categorize;
 
 import com.finalysis.ai.AiProperties;
+import com.finalysis.vault.VaultLocking;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +35,7 @@ class BackgroundAiCategorization implements DisposableBean {
                 thread.setDaemon(true);
                 return thread;
             }, new ThreadPoolExecutor.DiscardPolicy());
+    private volatile Thread running;
 
     BackgroundAiCategorization(AiProperties ai, AiCategorizationProperties properties, AiCategorizer categorizer,
                                MerchantIndexRefresh searchIndex) {
@@ -48,6 +51,7 @@ class BackgroundAiCategorization implements DisposableBean {
             return;
         }
         executor.execute(() -> {
+            running = Thread.currentThread();
             try {
                 if (categorizer.run(false).status() != AiCategorizer.Status.OFF) {
                     searchIndex.refresh(); // chat's search index (docs/plans/phase-6.md §4.2)
@@ -55,8 +59,21 @@ class BackgroundAiCategorization implements DisposableBean {
             } catch (RuntimeException e) {
                 log.error("AI categorization in the background failed ({}); the next run catches up",
                         e.getClass().getName());
+            } finally {
+                running = null;
+                Thread.interrupted(); // a lock's interrupt must not reach the next run
             }
         });
+    }
+
+    /** A lock is starting (docs/plans/phase-8.md §4.6): drop the waiting run and interrupt the one in progress. */
+    @EventListener(VaultLocking.class)
+    void onLocking() {
+        executor.getQueue().clear();
+        Thread current = running;
+        if (current != null) {
+            current.interrupt();
+        }
     }
 
     @Override
