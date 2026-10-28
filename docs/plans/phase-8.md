@@ -633,8 +633,8 @@ As built; the README's Security section carries the same list for the owner.
   candidate).
 - **The phone trusts a local CA** the owner installed; the README says how to remove it. A compromised phone that is
   logged in sees what the owner sees.
-- **Phone access is tested in Java and the browser, not yet on a real phone:** the owner's Android test (step 6) comes
-  before the tag; UI-08 stays Planned until then.
+- **Phone access is tested on Android only:** the owner's test on a real Android phone passed (step 6); iPhone setup
+  is documented but not tested on a device.
 
 ---
 
@@ -1005,10 +1005,16 @@ throwaway vault, 310 requests, 816 assertions, 0 failures; no generated Spring S
   passed when run again.
 
 
-### Step 6 notes: the phone test (deferred)
+### Step 6 notes: the phone test
 
 - The owner deferred the phone test to the end of the phase, on Android. UI-08 stays Planned until the results; any
   fixes from it, and the tag `phase-8-done`, come after.
+- **Passed (2026-10-28):** the owner's test on a real Android phone passed, with no fixes needed. UI-08 → Done
+  (requirements v1.80); tag `phase-8-done` on the commit that records it.
+- **Close-out runs:** backend 3,447 tests, 0 failures, 0 errors, 0 skipped (Maven summary); frontend 312 tests
+  (30 files), all passed. One earlier frontend run, made while the backend suite ran at the same time, timed out once
+  in `VaultGate.test.tsx`, "setup: two sentences, the password twice, then the key once; the app opens only after the
+  last group" (5 s limit). The same test passed in the run above, made alone. Recorded per CLAUDE.md; the report was kept.
 
 ### Step 7 notes: close-out
 

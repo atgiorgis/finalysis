@@ -1,6 +1,6 @@
 # Finalysis Roadmap
 
-**Version:** 4 · **Date:** 2026-10-27 · **Requirements:** `docs/requirements.md` v1.79
+**Version:** 5 · **Date:** 2026-10-28 · **Requirements:** `docs/requirements.md` v1.80
 
 This file supersedes "Finalysis Roadmap V4", which was kept outside the repo. Requirement ids and phase numbers are
 unchanged; the requirements file stays the source of truth for each requirement's wording, phase and status.
@@ -20,7 +20,7 @@ the number, decides the order. These layers are not the three ingestion layers i
 
 | Layer | Phases | Status |
 |---|---|---|
-| 1. Your books | 1–6, 7, 7b, 8–13, 15 | Phases 1–7 and 7b done |
+| 1. Your books | 1–6, 7, 7b, 8–13, 15 | Phases 1–8 and 7b done |
 | 2. Your plan | Goals (phase to be assigned), 14 | Future |
 | 3. Your education | None assigned | Future |
 | 4. Your accountant | None (ids keep their old numbers) | Out of scope (listed, not built) |
@@ -34,7 +34,7 @@ monthly totals and trends, raise alerts, and answer questions about your own dat
 statement line. This layer is the shippable product. The AI categorizes, extracts and explains; SQL and Java do the
 math (GR-01).
 
-**Status: Phases 1–7 done (with 7b); the rest future.**
+**Status: Phases 1–8 done (with 7b); the rest future.**
 
 | Phase | Scope | Requirement ids | Status |
 |---|---|---|---|
@@ -47,7 +47,7 @@ math (GR-01).
 | 6 | Chatbot backend: read-only tools, grounding, citations, memory | CHT-01–CHT-06, ANA-05, SEC-03 | Done |
 | 7 | Chat UI, dashboard, upload page, polish (`docs/plans/phase-7.md`) | UI-01, UI-02 (step 7d), UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | Done (UI-08 Planned: phone access is Phase 8) |
 | 7b | Goals tab shell | GOAL-06 (the tab only) | Done (GOAL-06 Planned for Layer 2) |
-| 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Built; closing (SEC-04, SEC-06, SEC-07, SEC-12 Done; UI-08 Planned until the owner's Android phone test; tag after it) |
+| 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Done (tag `phase-8-done`) |
 | 9 | Eval suites and benchmarks; candidates from Phase 8: field-level encryption, the chat backlog (h-u10, h-x06, the holdout guard per model), document Q&A, recovery key rotation, lock before sleep, kept statement copies listed and downloadable (`docs/plans/phase-8.md` §13) | QA-03, QA-04, AI-07; candidates SEC-05, CHT-07 | Future |
 | 10 | Local AI: the `local` profile (Ollama) and model tiers | AI-03, AI-02, AI-04, AI-05, UI-06 | Future |
 | 11 | Portfolio polish: README, setup script, demo mode, ADRs | QA-05–QA-07 | Future |
