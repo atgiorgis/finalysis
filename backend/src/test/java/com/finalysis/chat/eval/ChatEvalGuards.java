@@ -101,10 +101,15 @@ final class ChatEvalGuards {
         if (property == null || property.isBlank()) {
             throw new EvalRefusedException("Choose the chat model: -Deval.model=<Bedrock model or inference-profile id>");
         }
+        if (prices.awaitingPrices(property)) {
+            throw new EvalRefusedException("-Deval.model=" + property + " is listed in " + ChatEvalPrices.RESOURCE
+                    + ", but its prices aren't entered yet. Fill in inputPerMillionUsd and outputPerMillionUsd (on-demand, "
+                    + "us-east-1, from the Bedrock pricing page) before running it.");
+        }
         if (prices.chat(property).isEmpty()) {
             throw new EvalRefusedException("-Deval.model=" + property + " has no price in " + ChatEvalPrices.RESOURCE
                     + ". Add {\"inputPerMillionUsd\": ..., \"outputPerMillionUsd\": ...} under its exact id (from the "
-                    + "Bedrock pricing page) before running it. Priced: " + prices.models().keySet());
+                    + "Bedrock pricing page) before running it. Priced: " + prices.priced());
         }
         return property;
     }
@@ -159,6 +164,17 @@ final class ChatEvalGuards {
     }
 
     /**
+     * {@code -Deval.maxTurnCost} for the model under evaluation: {@value ChatEvalTurnCost#SIZED} sizes it from the
+     * model's price ({@link ChatEvalTurnCost}, Phase 9 step 9a); anything else as {@link #maxTurnCost(String)}.
+     */
+    static BigDecimal maxTurnCost(String value, ChatEvalPrices prices, String model) {
+        if (value != null && value.strip().equals(ChatEvalTurnCost.SIZED)) {
+            return ChatEvalTurnCost.sized(prices, model);
+        }
+        return maxTurnCost(value);
+    }
+
+    /**
      * {@code -Deval.maxTurnCost}: empty for the app's own setting, else dollars by the setting's own rules (at least 0,
      * at most 6 decimals; 0 turns the limit off). The context's startup check then refuses a model whose largest round
      * passes it, as it would in the app.
@@ -171,7 +187,7 @@ final class ChatEvalGuards {
         try {
             dollars = new BigDecimal(value.strip());
         } catch (NumberFormatException e) {
-            throw new EvalRefusedException("-D" + MAX_TURN_COST_PROPERTY + " must be dollars, such as 0.10: " + value);
+            throw new EvalRefusedException("-D" + MAX_TURN_COST_PROPERTY + " must be dollars, such as 0.10, or " + ChatEvalTurnCost.SIZED + ": " + value);
         }
         if (dollars.signum() < 0 || dollars.scale() > 6) {
             throw new EvalRefusedException("-D" + MAX_TURN_COST_PROPERTY

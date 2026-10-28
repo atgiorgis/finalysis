@@ -516,6 +516,81 @@ Steps no script or app does for the owner; `create.sh` prints the AWS ones and t
 Each step: `caffeinate -i ./mvnw clean verify` and `npm test` (and `test:layout` where the UI changes), Maven's summary
 counts, commit, push `v1`, stop for review.
 
+### Step 9a notes: small open models on Bedrock (code)
+
+Done in code: "Phase 9 step 9a: four open models priced for the dev runs, maxTurnCost sized per model". Backend
+3,456 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,447 at `phase-8-done` plus 6 in `ChatEvalTurnCostTest`
+and 3 in `ChatEvalGuardsTest`); frontend 312 tests (30 files), all passed; no UI change, so no layout run. No live
+call. The four dev runs are the owner's, and run 7 in `docs/eval/README.md` is written from their results.
+
+**The models' ids**, from AWS's Bedrock model cards (Models at a glance, read 2026-10-28). All four are served
+on-demand **in-region** in us-east-1, with **no US inference profile** (no `us.` id), Converse supported:
+
+| Model | Bedrock id | Note from the card |
+|---|---|---|
+| Ministral 3 8B | `mistral.ministral-3-8b-instruct` | Active |
+| Ministral 3 14B | `mistral.ministral-3-14b-instruct` | the card's title is "Ministral 14B 3.0"; Active |
+| Gemma 3 12B | `google.gemma-3-12b-it` | **Legacy**, end of life 2027-03-30 |
+| gpt-oss-20b | `openai.gpt-oss-20b-1:0` | Active; **reasoning on by default** (see below) |
+
+**Price file** (`backend/src/test/resources/eval/model-prices.json`): the four ids with `inputPerMillionUsd` and
+`outputPerMillionUsd` **null** until the owner enters them (on-demand, us-east-1, from the Bedrock pricing page), and
+no cache prices. A run, or the smoke test, refuses a model whose prices are null with "its prices aren't entered yet";
+an entry with only one of the two prices, or cache prices without them, fails to load. The `aws` profile's prices are
+**not** changed (unlike §2.2's draft): the app's main model stays Sonnet 4.6, and the eval gives the app the file's
+price for the model under evaluation, as it always has. `ChatSettingsTest` skips entries without prices when it
+compares the two files.
+
+**IAM**: add one statement to the `finalysis-dev` policy, nothing else (no `bedrock:*`, no streaming):
+
+```json
+{
+  "Sid": "Phase9aOpenModels",
+  "Effect": "Allow",
+  "Action": "bedrock:InvokeModel",
+  "Resource": [
+    "arn:aws:bedrock:us-east-1::foundation-model/mistral.ministral-3-8b-instruct",
+    "arn:aws:bedrock:us-east-1::foundation-model/mistral.ministral-3-14b-instruct",
+    "arn:aws:bedrock:us-east-1::foundation-model/google.gemma-3-12b-it",
+    "arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-oss-20b-1:0"
+  ]
+}
+```
+
+Converse uses `bedrock:InvokeModel`. In-region models need no inference-profile ARN and no other region. If a first
+call fails with an access or Marketplace subscription error, open the model once in the console's Model catalog (as in
+Phase 4) rather than widening the policy, and record it here; a model the account can't get is skipped.
+
+**Turn cost limit per model: `-Deval.maxTurnCost=sized`** (`ChatEvalTurnCost`). It takes the app's worst-case round
+(12,000 input tokens at the input price, or the cache-write price for a caching model, plus the 1,500-token output
+cap), multiplies it by Sonnet 4.6's ratio (0.15 / 0.0675) and rounds up to the cent. Every model gets the same number
+of worst-case rounds per turn as Sonnet has at 0.15. For an uncached model:
+
+  limit = ceil_cent((12,000 × input + 1,500 × output) / 1,000,000 × 0.15 / 0.0675)
+
+Checks: Sonnet 4.6 sizes to 0.15 and Haiku 4.5 to 0.05, the app's two documented settings (`ChatEvalTurnCostTest`,
+which also pins the constants to `application.yml`). The run prints "Turn cost limit sized from the price of <id>: $…",
+and the report's header records the value as set by `-Deval.maxTurnCost`. The four values can't be computed until the
+prices are in, so `sized` computes them at run time from the file. Very cheap models round up to $0.01 at least.
+
+**Report**: no header change. The existing line "Prompt caching: off (the price file lists no cache prices for this
+model)" already marks an uncached run, so §2.2's extra "Model family" line would only repeat it.
+
+**The owner's runs**, from `backend/`, per model, after the prices are entered and the IAM statement is added:
+
+```sh
+./mvnw test -Pai-smoke -Dtest=LiveChatSmokeTest -Deval.model=<id>
+caffeinate -i ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=<id> -Deval.maxTurnCost=sized
+```
+
+The smoke test first. If it fails on tool use, the model is skipped and the reason recorded. The dev run's run budget
+stays `-Deval.max-cost` 5.00 by default.
+
+**Caveat for gpt-oss-20b:** its card says reasoning is on by default. Reasoning tokens count as output, so they count
+against the 1,500-token output cap per call and against the cost. The smoke test checks that reasoning content goes
+back to the model unchanged. If answers come back cut and ungrounded, that is recorded as the model's result; nothing
+is tuned for it (the brief: same harness, same limits).
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

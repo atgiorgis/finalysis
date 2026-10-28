@@ -146,6 +146,52 @@ class ChatEvalGuardsTest {
                 .as("an embedding price is not a chat price").isInstanceOf(EvalRefusedException.class);
     }
 
+    /** Phase 9 step 9a: a model listed with null prices waits for the owner, and says so. */
+    @Test
+    void aModelWhosePricesArentEnteredIsRefusedAsSuch() {
+        ChatEvalPrices prices = new ChatEvalPrices("test", null, Map.of(
+                "priced-chat-model", new ChatEvalPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00"), null,
+                        null),
+                "awaiting-model", new ChatEvalPrices.Price(null, null, null, null)));
+
+        assertThat(prices.awaitingPrices("awaiting-model")).isTrue();
+        assertThat(prices.awaitingPrices("priced-chat-model")).isFalse();
+        assertThat(prices.chat("awaiting-model")).isEmpty();
+        assertThat(prices.priced()).containsExactly("priced-chat-model");
+        assertThatThrownBy(() -> ChatEvalGuards.model("awaiting-model", prices))
+                .isInstanceOf(EvalRefusedException.class)
+                .hasMessageContaining("prices aren't entered yet")
+                .hasMessageContaining("inputPerMillionUsd and outputPerMillionUsd");
+        assertThatThrownBy(() -> ChatEvalGuards.model("unlisted", prices)).isInstanceOf(EvalRefusedException.class)
+                .hasMessageContaining("Priced: [priced-chat-model]");
+    }
+
+    @Test
+    void aPriceIsInputAndOutputTogetherOrNeither() {
+        assertThatThrownBy(() -> new ChatEvalPrices.Price(new BigDecimal("1.00"), null, null, null))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("or neither");
+        assertThatThrownBy(() -> new ChatEvalPrices.Price(null, new BigDecimal("5.00"), null, null))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new ChatEvalPrices.Price(null, null, new BigDecimal("0.10"), new BigDecimal("1.25")))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("no cache prices");
+    }
+
+    @Test
+    void theTurnCostIsDollarsOrSized() {
+        ChatEvalPrices prices = new ChatEvalPrices("test", null, Map.of(
+                ChatEvalTurnCost.REFERENCE_MODEL, new ChatEvalPrices.Price(new BigDecimal("3.00"),
+                        new BigDecimal("15.00"), new BigDecimal("0.30"), new BigDecimal("3.75")),
+                "priced-chat-model", new ChatEvalPrices.Price(new BigDecimal("1.00"), new BigDecimal("5.00"), null,
+                        null)));
+
+        assertThat(ChatEvalGuards.maxTurnCost(" sized ", prices, "priced-chat-model"))
+                .isEqualByComparingTo(ChatEvalTurnCost.sized(prices, "priced-chat-model"));
+        assertThat(ChatEvalGuards.maxTurnCost("0.10", prices, "priced-chat-model")).isEqualByComparingTo("0.10");
+        assertThat(ChatEvalGuards.maxTurnCost(null, prices, "priced-chat-model")).isNull();
+        assertThatThrownBy(() -> ChatEvalGuards.maxTurnCost("lots", prices, "priced-chat-model"))
+                .isInstanceOf(EvalRefusedException.class).hasMessageContaining("or sized");
+    }
+
     @Test
     void thePriceFileListsTheMainModelOfTheAwsProfile() {
         ChatEvalPrices prices = ChatEvalPrices.load();

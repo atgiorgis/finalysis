@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -23,10 +24,32 @@ record ChatEvalPrices(String source, String note, Map<String, Price> models) {
     static final String RESOURCE = "eval/model-prices.json";
 
     /**
-     * US dollars per million tokens; the cache prices (step 8c) are null for a model chat doesn't cache for.
+     * US dollars per million tokens; the cache prices (step 8c) are null for a model chat doesn't cache for. Input and
+     * output are both null for a model listed before the owner entered its prices (Phase 9 step 9a), never one alone.
      */
     record Price(BigDecimal inputPerMillionUsd, BigDecimal outputPerMillionUsd, BigDecimal cacheReadPerMillionUsd,
                  BigDecimal cacheWritePerMillionUsd) {
+
+        Price {
+            if ((inputPerMillionUsd == null) != (outputPerMillionUsd == null)) {
+                throw new IllegalStateException("A price in " + RESOURCE + " has both inputPerMillionUsd and "
+                        + "outputPerMillionUsd, or neither (not entered yet)");
+            }
+            if (inputPerMillionUsd == null && (cacheReadPerMillionUsd != null || cacheWritePerMillionUsd != null)) {
+                throw new IllegalStateException("A price in " + RESOURCE + " without input and output prices has "
+                        + "no cache prices either");
+            }
+        }
+
+        /** Whether the owner has entered the input and output prices. */
+        boolean entered() {
+            return inputPerMillionUsd != null;
+        }
+
+        /** Both cache prices are listed, so chat asks the model to cache (the same rule as the app's). */
+        boolean cachePriced() {
+            return cacheReadPerMillionUsd != null && cacheWritePerMillionUsd != null;
+        }
     }
 
     ChatEvalPrices {
@@ -53,14 +76,30 @@ record ChatEvalPrices(String source, String note, Map<String, Price> models) {
         String key = "finalysis.ai.prices[" + model + "].";
         registry.add(key + "input-per-million", price::inputPerMillionUsd);
         registry.add(key + "output-per-million", price::outputPerMillionUsd);
-        if (price.cacheReadPerMillionUsd() != null && price.cacheWritePerMillionUsd() != null) {
+        if (price.cachePriced()) {
             registry.add(key + "cache-read-per-million", price::cacheReadPerMillionUsd);
             registry.add(key + "cache-write-per-million", price::cacheWritePerMillionUsd);
         }
     }
 
-    /** A chat model's price; a model with no output price (an embedding model) is not one. */
+    /**
+     * A chat model's price; a model with no output price (an embedding model) is not one, nor is a model whose prices
+     * aren't entered yet ({@link #awaitingPrices}).
+     */
     Optional<Price> chat(String modelId) {
-        return Optional.ofNullable(models.get(modelId)).filter(p -> p.outputPerMillionUsd().signum() > 0);
+        return Optional.ofNullable(models.get(modelId)).filter(Price::entered)
+                .filter(p -> p.outputPerMillionUsd().signum() > 0);
+    }
+
+    /** The models with entered prices, sorted: what a refusal lists as priced. */
+    List<String> priced() {
+        return models.entrySet().stream().filter(e -> e.getValue().entered()).map(Map.Entry::getKey).sorted()
+                .toList();
+    }
+
+    /** Whether the file lists the model but its prices are still null, waiting for the owner (step 9a). */
+    boolean awaitingPrices(String modelId) {
+        Price price = models.get(modelId);
+        return price != null && !price.entered();
     }
 }

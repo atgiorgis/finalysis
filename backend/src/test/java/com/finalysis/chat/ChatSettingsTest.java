@@ -276,13 +276,15 @@ class ChatSettingsTest {
             file = JsonMapper.builder().build().readTree(in);
         }
         Map<String, AiPrices.Price> expected = new HashMap<>();
-        file.get("models").properties().forEach(e -> expected.put(e.getKey(), new AiPrices.Price(
-                new BigDecimal(e.getValue().get("inputPerMillionUsd").stringValue()),
-                new BigDecimal(e.getValue().get("outputPerMillionUsd").stringValue()),
-                e.getValue().has("cacheReadPerMillionUsd")
-                        ? new BigDecimal(e.getValue().get("cacheReadPerMillionUsd").stringValue()) : null,
-                e.getValue().has("cacheWritePerMillionUsd")
-                        ? new BigDecimal(e.getValue().get("cacheWritePerMillionUsd").stringValue()) : null)));
+        // A model whose prices the owner hasn't entered yet (null, Phase 9 step 9a) isn't in the aws profile either.
+        file.get("models").properties().stream().filter(e -> !e.getValue().get("inputPerMillionUsd").isNull())
+                .forEach(e -> expected.put(e.getKey(), new AiPrices.Price(
+                        new BigDecimal(e.getValue().get("inputPerMillionUsd").stringValue()),
+                        new BigDecimal(e.getValue().get("outputPerMillionUsd").stringValue()),
+                        e.getValue().has("cacheReadPerMillionUsd")
+                                ? new BigDecimal(e.getValue().get("cacheReadPerMillionUsd").stringValue()) : null,
+                        e.getValue().has("cacheWritePerMillionUsd")
+                                ? new BigDecimal(e.getValue().get("cacheWritePerMillionUsd").stringValue()) : null)));
 
         assertThat(prices.prices()).isNotEmpty();
         prices.prices().forEach((model, price) -> {

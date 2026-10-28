@@ -35,6 +35,7 @@ import org.springframework.test.context.TestPropertySource;
  * <pre>
  * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=&lt;id&gt;
  * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=&lt;id&gt; -Deval.maxTurnCost=0.10
+ * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=dev -Deval.model=&lt;id&gt; -Deval.maxTurnCost=sized
  * cd backend &amp;&amp; ./mvnw test -Pchat-eval -Deval.set=holdout -Deval.holdout.confirm=true -Deval.model=&lt;id&gt;
  * </pre>
  *
@@ -43,7 +44,8 @@ import org.springframework.test.context.TestPropertySource;
  * holdout results, clean tree). The app's own limits apply to every turn, with the model's price from the price file;
  * only the daily cap is replaced by the run budget {@code -Deval.max-cost} (dollars), since a run is about 70
  * conversations on one pinned day. {@code -Deval.maxTurnCost} (dollars, step 8d) sets the turn cost limit for this run
- * only, recorded in the report's header; the context's startup check refuses a model whose largest round passes the
+ * only, recorded in the report's header; {@code sized} (Phase 9 step 9a) computes it from the model's price so it allows
+ * as many worst-case rounds as the app's limit allows Sonnet 4.6 ({@link ChatEvalTurnCost}); the context's startup check refuses a model whose largest round passes the
  * limit before anything is seeded or sent. Only synthetic data is sent, and only what the chat guard allows.
  */
 @Tag(NoCloudAiGuard.CHAT_EVAL_TAG)
@@ -91,7 +93,11 @@ class ChatLiveEvalIT {
         prices = ChatEvalPrices.load();
         model = ChatEvalGuards.model(System.getProperty("eval.model", ""), prices);
         maxCost = new BigDecimal(System.getProperty("eval.max-cost", "5.00"));
-        maxTurnCost = ChatEvalGuards.maxTurnCost(System.getProperty(ChatEvalGuards.MAX_TURN_COST_PROPERTY));
+        String turnCost = System.getProperty(ChatEvalGuards.MAX_TURN_COST_PROPERTY);
+        maxTurnCost = ChatEvalGuards.maxTurnCost(turnCost, prices, model);
+        if (turnCost != null && turnCost.strip().equals(ChatEvalTurnCost.SIZED)) {
+            System.out.println("Turn cost limit sized from the price of " + model + ": $" + maxTurnCost.toPlainString());
+        }
         if (set.equals(ChatEvalGuards.HOLDOUT)) {
             git = ChatEvalGuards.checkHoldout(setFile(set), Boolean.getBoolean(ChatEvalGuards.CONFIRM_PROPERTY),
                     RESULTS, () -> GitState.read(REPOSITORY));
