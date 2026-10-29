@@ -36,6 +36,16 @@ Results of the opt-in chat evaluation (`docs/plans/phase-6.md` §13, step 8 note
 The chat holdout is evaluated once: a holdout run refuses to start while any `chat-holdout-*` file exists here (the
 categorization holdout's `holdout-*` files don't count), and it needs `-Deval.holdout.confirm=true` and a clean tree.
 
+**Known issues**
+
+- **Unicode spaces and dashes (fixed in Phase 9 step 9a-2).** Runs before that commit penalized models that write
+  Unicode spaces and dashes (`May 2026` with a narrow no-break space, `53.5 %`, `2026‑06‑13` with non-breaking
+  hyphens, `$3 638.53`): the figure extractor read only ASCII, so a month's year became a bare-year retry, a percent a
+  bare number, a thin-space thousands mark two figures. In the other runs only en dashes between months or ranges
+  (`March–October 2026`, `2–3 times`) and one thin space (Ministral 3 8B, d-l05, grounded either way) appear, which
+  change no outcome; the two gpt-oss dev runs (`chat-dev-ac0f1e0bc0ca-20261028T162423Z`, `-20261029T124740Z`) are rerun on the
+  fixed commit.
+
 ### Run 1: the baseline before the step 8b fixes
 
 The first dev run and the first sweep, committed in step 8c as the baseline for the comparison write-up. They ran on

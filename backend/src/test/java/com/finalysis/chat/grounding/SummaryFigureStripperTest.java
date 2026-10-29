@@ -27,6 +27,18 @@ class SummaryFigureStripperTest {
         assertThat(SummaryFigureStripper.figureFree(SummaryFigureStripper.strip(text))).isTrue();
     }
 
+    /** Step 9a-2: the stripper reads through the same extractor, so Unicode spaces and dashes are read as ASCII. */
+    @ParameterizedTest(name = "{0} → {1}")
+    @CsvSource(delimiter = '|', value = {
+            "You spent\u202f$302.17 on utilities in May\u202f2026.|You spent\u202f[amount] on utilities in May\u202f2026.",
+            "It was 53.5\u202f% of income.|It was [percent] of income.",
+            "A total of $3\u202f638.53 in June.|A total of [amount] in June.",
+            "On 2026\u201106\u201113 on CARD\u20111.|On 2026\u201106\u201113 on CARD\u20111."})
+    void unicodeFormsAreStrippedLikeTheirAsciiForms(String text, String stripped) {
+        assertThat(SummaryFigureStripper.strip(text)).isEqualTo(stripped);
+        assertThat(SummaryFigureStripper.figureFree(SummaryFigureStripper.strip(text))).isTrue();
+    }
+
     @Test
     void nothingLeftIsEmpty() {
         assertThat(SummaryFigureStripper.strip(null)).isEmpty();

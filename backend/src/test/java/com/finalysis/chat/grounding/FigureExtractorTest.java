@@ -176,4 +176,71 @@ class FigureExtractorTest {
     void numbersOutsideACountingListStayFigures(String answer, String expected) {
         assertThat(written(answer.replace("\\n", "\n"))).containsExactly(expected.split(","));
     }
+
+    // ------------------------------------------------------------------ Unicode spaces and dashes (step 9a-2)
+
+    /** The gpt-oss dev runs: a narrow no-break space or a non-breaking hyphen hid a month's year, a date, an alias. */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            "In May\u202f2026 it posted.", "In May\u00a02026 it posted.", "In May\u20092026 it posted.",
+            "In May\u30002026 it posted.", "In May\u200b2026 it posted.", "In August,\u202f2026 it posted.",
+            "On 2026\u201106\u201113 it posted.", "In 2026\u201110 it posted.", "On 2026\u201008\u201022 it posted.",
+            "From 2026\u201303 to 2026\u201310.", "On June\u202f13\u202f2026 it posted.", "On Aug\u00a022,\u00a02026.",
+            "On 22\u202fAugust it posted.", "In 2026\u202fAugust it posted.", "In Q3\u202f2026 it rose.",
+            "In the second\u00a0quarter of\u00a02026.", "On CARD\u20111 and CARD\u20132.", "See [\u202fc1] and [\u200bc2]."})
+    void unicodeSpacesAndDashesAreReadLikeTheirAsciiForms(String text) {
+        assertThat(FigureExtractor.extract(text)).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "May 2026 was 53.5\u202f% of it|PERCENT|EXACT|53.5|53.5\u202f%",
+            "spending was 23.5\u00a0% lower|PERCENT|EXACT|23.5|23.5\u00a0%",
+            "about\u20093.3\u2009% more|PERCENT|EXACT|3.3|3.3\u2009%",
+            "a 384.3\u202fpercent rise|PERCENT|EXACT|384.3|384.3\u202fpercent",
+            "a change of (\u201146\u202f%|PERCENT|WHOLE|46|\u201146\u202f%",
+            "a total of\u202f$3\u202f638.53 in June|MONEY|EXACT|3638.53|$3\u202f638.53",
+            "a balance of $1\u2009234\u2009567.89|MONEY|EXACT|1234567.89|$1\u2009234\u2009567.89",
+            "a total of 1\u00a0204 transactions|COUNT|EXACT|1204|1\u00a0204",
+            "You spent\u202f$302.17 on utilities|MONEY|EXACT|302.17|$302.17"})
+    void aUnicodeFormIsOneFigure(String text, Kind kind, Form form, String magnitude, String asWritten) {
+        Figure figure = FigureExtractor.extract(text).getFirst();
+
+        assertThat(figure.kind()).isEqualTo(kind);
+        assertThat(figure.form()).isEqualTo(form);
+        assertThat(figure.magnitude()).isEqualByComparingTo(new BigDecimal(magnitude));
+        assertThat(figure.asWritten()).isEqualTo(asWritten);
+        assertThat(text.substring(figure.start(), figure.end()).strip()).isEqualTo(asWritten);
+    }
+
+    /** A space between a number and % was already allowed; it stays allowed, and only one. */
+    @Test
+    void anAsciiSpaceBeforeThePercentSign() {
+        assertThat(FigureExtractor.extract("It was 53.5 % of it.")).singleElement()
+                .satisfies(f -> assertThat(f.kind()).isEqualTo(Kind.PERCENT));
+    }
+
+    /** Only Unicode spaces group digits: ASCII text reads exactly as before, and a year beside a day is no group. */
+    @Test
+    void onlyAUnicodeSpaceBetweenDigitGroupsIsAThousandsMark() {
+        assertThat(written("a total of $3 638.53 in June")).containsExactly("$3", "638.53");
+        assertThat(written("In 2025\u202f300 rows came in.")).containsExactly("2025", "300");
+        assertThat(written("On June\u202f13\u202f2026 at $12.00.")).containsExactly("$12.00");
+        assertThat(written("Items 12\u202f3456 here")).containsExactly("12", "3456");
+    }
+
+    /** The dashes become hyphens; the minus sign U+2212 was already a sign and stays one. */
+    @Test
+    void aNonBreakingHyphenBeforeANumberIsASign() {
+        assertThat(written("a refund of \u2011$45.00 came in")).containsExactly("\u2011$45.00");
+        assertThat(written("a refund of \u2212$45.00 came in")).containsExactly("\u2212$45.00");
+    }
+
+    @Test
+    void aLabelWithAUnicodeSpaceIsMaskedWhereItAppears() {
+        assertThat(FigureExtractor.extract("You went to STORE\u00a024 3 times.", List.of("STORE\u00a024")))
+                .extracting(Figure::asWritten).containsExactly("3");
+        assertThat(FigureExtractor.extract("You went to STORE\u202f24 3 times.", List.of("STORE 24")))
+                .extracting(Figure::asWritten).containsExactly("3");
+    }
 }

@@ -591,6 +591,68 @@ against the 1,500-token output cap per call and against the cost. The smoke test
 back to the model unchanged. If answers come back cut and ungrounded, that is recorded as the model's result; nothing
 is tuned for it (the brief: same harness, same limits).
 
+### Step 9a-2 notes: Unicode spaces and dashes in the figure extractor (code)
+
+A fix found in the owner's runs, before 9b-1 (whose plan is unchanged). Done in code: "Phase 9 step 9a-2: the figure
+extractor reads Unicode spaces and dashes as ASCII". Backend 3,502 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,456 at step 9a plus 46 in the four grounding test classes and `SummaryFigureStripperTest`); frontend 312 tests (30 files), all passed; no UI change, so no layout run. One earlier frontend run, made while the backend suite ran at the same time, timed out once in `VaultGate.test.tsx` ("setup: two sentences, the password twice, then the key once; the app opens only after the last group"), as in Phase 8 step 7; run alone, it passed. No live call.
+
+**Evidence.** In the uncommitted reports `chat-dev-ac0f1e0bc0ca-20261029T124740Z` (gpt-oss-120b) and
+`-20261028T162423Z` (gpt-oss-20b), every retried answer has a Unicode space or dash: 39 of 39 on 120b, 20 of 20 on
+20b. 30 of 120b's 39 retries and 13 of 20b's 20 list a bare "2026", from answers like "You spent $302.17 on utilities in
+May 2026" (d-l02), written with U+202F narrow no-break spaces. Read at the character level, the models write:
+
+- **U+202F** (narrow no-break space) between words, before `%` and between digit groups: 39 of 39 rejected answers on
+  120b, 18 of 20 on 20b;
+- **U+2011** (non-breaking hyphen) in ISO dates (`2026‑06‑13`), months (`2026‑10`), aliases (`CARD‑1`) and as a sign
+  (`(‑46 %`): 11 on 120b, 10 on 20b;
+- less often U+00A0, U+2013 and U+200B (a zero-width space inside a marker, `[c1]` with U+200B after the `[`).
+
+**Cause.** Java's `\s` and the extractor's `-` match only ASCII. So `May 2026` with U+202F didn't mask the year,
+`53.5 %` lost its `%` and was read as a bare 53.5 (d-l05, d-c05), `2026‑06‑13` was read as 2026, 06 and 13, and
+`$3 638.53` was read as `$3` and `638.53` (20b, d-m02 turn 2). The hypothesis held; nothing else was found.
+
+**Fix** (`FigureExtractor.asciiForms`). Before any rule runs, the extractor reads a copy of the answer made ASCII one
+character for one, so a figure's place and its text as written still refer to the answer itself:
+
+- a no-break, figure, thin or narrow no-break space between digit groups (`3 638.53`, 1–3 digits then groups of
+  exactly 3) becomes a comma;
+- any other Unicode space (`Character.isSpaceChar`), and U+200B, U+2060 and U+FEFF, becomes a space; U+2028 and U+2029
+  become a line break;
+- U+2010, U+2011, U+2012, U+2013, U+FE63 and U+FF0D become `-`. The minus sign U+2212 was already a sign and stays as
+  it is; the em dash is left alone (it is punctuation).
+
+ASCII text is not changed, so every existing case reads exactly as before. In particular, an ASCII space is never a
+thousands mark: `$3 638.53` written with an ASCII space is still `$3` and `638.53`. `SummaryFigureStripper` reads
+through the same extractor and needed no change. Labels are read the same way, so a label written with a no-break space
+masks where the answer has an ASCII one. The `%` rule already allowed one space before `%`, so the Unicode space
+before `%` needed only the normalization.
+
+**Offline replay** (no model call). All 143 retried answers of the six ac0f1e0 dev runs were run through the fixed
+extractor: of the 43 gpt-oss retries that listed "2026", 42 no longer extract it. The one left is 20b's d-x08 ("your
+spending for 2026"), a bare year in ASCII too (§15). 53.5, 49.8, 30.8 and 23.5 are read as percents, `$3 638.53` as
+one amount, and the dates and aliases are masked. The other models' answers have only en dashes between months or in
+ranges (`March–October 2026`, `2–3 times`, `$79–$80`), where a sign changes no magnitude, and one thin space (Ministral
+3 8B's d-l05, grounded either way).
+
+**Tests.** `FigureExtractorTest`: each Unicode form masked like its ASCII form (month-year, ISO date and month, day and
+month, quarter, alias, marker), each Unicode figure as one figure (percent with U+202F, U+00A0 and U+2009, the word
+percent, a sign written as U+2011, thin-space and no-break-space thousands), an ASCII space never a thousands mark, a
+year beside a day never a group, U+2011 and U+2212 as signs, labels with a no-break space. `AnswerGroundingTest`: the
+worked example in its gpt-oss form grounds; the canary 999.99 fails in eight Unicode forms (U+202F, U+00A0, a
+thin-space `$1 000`, a percent, the word percent, a U+2011 sign, after a Unicode month-year, inside the hostile merchant
+name). `SummaryFigureStripperTest`: Unicode forms are stripped like their ASCII forms. `GroundingPropertiesTest`
+(jqwik): an answer built from grounded, ungrounded and non-figure pieces grounds exactly like its ASCII twin when its
+spaces are replaced by Unicode spaces, and when its hyphens are replaced by Unicode dashes (same status, same figures:
+kind, form, magnitude, place and number of matches). Every earlier case of the four classes is unchanged and green.
+
+**The check.** The eval's bare-year retry counters stay. On the owner's reruns of gpt-oss-20b and gpt-oss-120b they
+should drop to near zero; the two earlier reports stay uncommitted as the before.
+
+**Not in this step**, found on the way, for the owner to decide: gpt-oss writes some citation markers in lenticular
+brackets (`【c1】`, 10 rejected answers on 120b, 3 on 20b), and one with a zero-width space inside (`[c1]` with U+200B after the `[`).
+`CitationMarkers` doesn't parse either form, so those citations are not linked; the extractor masks the bracketed form
+but reads the 2 of `【c2】` as a count. A fix belongs in `CitationMarkers`, not the extractor.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)
