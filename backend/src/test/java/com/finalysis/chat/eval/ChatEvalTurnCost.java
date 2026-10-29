@@ -12,8 +12,8 @@ import java.math.RoundingMode;
  * <p>A round's worst case is the app's ({@link AiPrices.Price#worstCase}): the largest input one call may send
  * ({@code max-input-tokens-per-call}) and the whole output cap ({@code max-output-tokens}), the input at the
  * cache-write price when the model caches. The limit is that worst case times the reference ratio (the app's
- * {@code max-turn-cost} over the reference model's worst case: 0.15 / 0.0675 for Sonnet 4.6), rounded up to the cent.
- * Sonnet 4.6 sizes to 0.15 and Haiku 4.5 to 0.05, the two settings the app documents. Test code only; the app's limits
+ * {@code max-turn-cost} over the reference model's worst case, read from the same file: 0.15 / 0.07425 for Sonnet
+ * 4.6 at step 9a-4's prices), rounded up to the cent. Sonnet 4.6 sizes to 0.15 and Haiku 4.5 to 0.05, the two settings the app documents. Test code only; the app's limits
  * are unchanged.
  */
 final class ChatEvalTurnCost {

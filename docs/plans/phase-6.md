@@ -135,6 +135,8 @@ Haiku 4.5 foundation model in every region the profile routes to, and Titan V2.
 - **No streaming permission.** Phase 6 doesn't stream (§10.3), so `bedrock:InvokeModelWithResponseStream` stays
   out. Model access for a new Anthropic model is opened once in the console, as in Phase 4.
 - Keep the $5/month budget alarm; the daily chat cap (§8) is the app's own guard under it.
+- Since Phase 9 step 9a-4 the policy is the customer-managed `finalysis-dev-policy`, not inline (`docs/plans/phase-9.md`,
+  step 9a-4 notes).
 
 ---
 

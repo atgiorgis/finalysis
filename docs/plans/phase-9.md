@@ -337,7 +337,8 @@ key; the key's name pattern never appears in the template; the scripts never pas
 `aws:ResourceTag/finalysis:role = selfhost`. **`ec2:DescribeInstances` can't be scoped to a resource or tag** (EC2
 doesn't support resource-level permissions for Describe calls), so it is `Resource: "*"`; it is read-only. The app finds
 the instance by the tag filter. No `RunInstances`, no `TerminateInstances`: creating and destroying stay the scripts',
-run by the owner with their own admin credentials.
+run by the owner with their own admin credentials. These statements go into the customer-managed policy
+`finalysis-dev-policy` attached to `finalysis-dev`, not an inline policy (step 9a-4 notes).
 
 ### 5.5 Settings → Corgi → Self-hosted
 
@@ -464,6 +465,18 @@ The chat backlog (h-u10, h-x06, the holdout guard per model); model size choices
 UI-06); `num_ctx`, KV cache, keep-alive (AI-04, AI-05); field-level encryption (SEC-05); document Q&A (CHT-07);
 recovery key rotation; lock before sleep; kept statement copies listed and downloadable; spot instances for Self-hosted.
 
+Found in run 7 (step 9a-4 notes, `docs/eval/README.md` run 7):
+
+- **A turn that fails after an unknown tool** (CHT-01). The app answers an unknown tool with a `NOT_A_TOOL` error result,
+  but the next Bedrock call carries the invented name back in its `toolUse` block and fails, so the turn ends
+  `ai-unavailable` instead of letting the model correct itself (gpt-oss-20b: 2 turns, 4 in its first run). Candidates:
+  keep the invented name out of what is sent back, and record the exception class in the eval report.
+- **Reasoning text shown as the answer** (a Cloud-path correctness issue for reasoning models). gpt-oss on Bedrock puts its
+  reasoning inside the Converse text block, before the answer and with no separator; nothing removes it, and the shown
+  answer includes it (20b d-x06, 120b d-x07). Grounding still checks every figure in it.
+- **An invented `account` parameter on `get_account_totals`** (Ministral 3 14B 8 times, both gpt-oss models once): the
+  tool's schema or description invites it.
+
 ---
 
 ## 12. The owner's manual setup steps
@@ -475,8 +488,8 @@ Steps no script or app does for the owner; `create.sh` prints the AWS ones and t
   accounts start at 0 and approval can take days); **turn on Receive Billing Alerts** (Billing → Billing preferences;
   billing metrics live in `us-east-1`, so the alarm is there whatever the instance's region); confirm the SNS e-mail
   subscription; a Tailscale account with this Mac in the tailnet, a one-off pre-approved auth key, and an ACL limiting
-  port 11434 to the owner's devices; the IAM additions `create.sh` prints, applied to `finalysis-dev`.
-- **Cloud:** unchanged (Phase 4 §11.2, Phase 6 §2.4), plus 9a's IAM additions.
+  port 11434 to the owner's devices; the IAM additions `create.sh` prints, added to `finalysis-dev-policy`.
+- **Cloud:** unchanged (Phase 4 §11.2, Phase 6 §2.4), plus 9a's IAM additions, all in `finalysis-dev-policy`.
 - **Tests:** `cfn-lint` installed for `SelfHostTemplateTest` (skipped and reported as skipped without it).
 
 ## 13. Terms
@@ -696,6 +709,53 @@ the property fails.
 
 **The check.** On the owner's reruns, no retry should list a figure from a marker, and the linked-citation counts of
 the gpt-oss runs should rise.
+
+### Step 9a-4 notes: run 7, the pick, prices and IAM (docs)
+
+Done in docs and the price files: "Phase 9 step 9a-4: run 7 write-up, Ministral 3 14B picked, Anthropic prices
+corrected". Backend 3,518 tests, 0 failures, 0 errors, 0 skipped (Maven summary; unchanged from 9a-3, no test added: the
+price tests read the files); frontend 312 tests (30 files), all passed; no UI change, so no layout run. No live call; the eight dev reports are the
+owner's runs.
+
+**Run 7** is written up in `docs/eval/README.md`: the six models and run 6's Sonnet 4.6 in one table, scored on the 58
+non-IDENTITY questions with IDENTITY apart, with each model's Bedrock price and the hardware class it needs on
+Self-hosted or Local. **The pick is Ministral 3 14B, 49/58**, for both Self-hosted and Local: above the 45/58 floor with
+the best tool choice of the open models (67/68). gpt-oss-20b scored 46 and gpt-oss-120b 45; the 120b doesn't justify
+its hardware tier (~65 GB, a g6.12xlarge, against a 24 GB GPU for the 14B). Ministral 3 8B scored 39, the two Gemma 3
+models 8. The §2.3 caveat stands: Bedrock serves full precision, Ollama a quantized build; 9c's rerun on the instance
+measures the gap.
+
+- **Model ids**, confirmed by the owner with `aws bedrock list-foundation-models` (§2.1): all six are `ON_DEMAND`, with
+  no inference profile, so every call uses the in-region foundation-model id.
+- **Run 7b**: Gemma 3 27B (`google.gemma-3-27b-it`) and gpt-oss-120b (`openai.gpt-oss-120b-1:0`) were added on
+  2026-10-28 as a ladder, one size up from the Gemma 3 12B and gpt-oss-20b; the owner ran them on 2026-10-29. The
+  `Phase9aOpenModels` IAM statement was extended to six ARNs, the four above plus
+  `arn:aws:bedrock:us-east-1::foundation-model/google.gemma-3-27b-it` and
+  `arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-oss-120b-1:0`.
+- **IAM moved to a managed policy.** The owner moved `finalysis-dev`'s permissions from an inline policy to the
+  customer-managed policy `finalysis-dev-policy`, since an inline policy is limited to 2,048 characters. 9c's EC2
+  statements (§5.4) go there too. Phase 4 §11.2 and Phase 6 §2.4 point here.
+- **The gpt-oss reruns.** The first gpt-oss runs (`…20261028T162423Z`, 40/58; `…20261029T124740Z`, 43/58) are superseded by
+  the reruns on `ad1c9e8` after 9a-2 and 9a-3 (46 and 45). Bare-year retries fell from 13 to 1 on 20b and from 30 to 0
+  on 120b, and first-try grounding rose from 41/62 to 61/66 and from 28/68 to 66/68. The superseded files are kept.
+- **Per-model findings**, in the README: Gemma 3 has no tool use through Converse (the tool definitions never reach the
+  model, which writes its calls as text); gpt-oss-20b's turns fail after an unknown tool; both gpt-oss models show
+  reasoning in answers, inside the Converse text block (Spring AI 2.0.1 keeps `reasoningContent` blocks apart, and
+  `com.finalysis.ai.bedrock` doesn't touch them); Ministral 3 8B leaks `[/THINK]` and tool-call text; Ministral 3 14B
+  invents an `account` parameter. The three that touch the app are Phase 10 candidates (§11); none is fixed here.
+- **9c's template**: the `ChatModel` parameter's default stays a placeholder for the owner's Ollama tag of Ministral
+  3 14B (§5.1); the tag is the owner's to choose, as 9b-1's `finalysis.ai.ollama.models.chat` is.
+
+**Prices.** Sonnet 4.6 and Haiku 4.5 had been entered at Bedrock's Global prices; the `us.` inference-profile ids are
+billed at the Geo/In-region ones, about 10% higher. Both files now have Sonnet 4.6 at $3.30 / $16.50 (cache read $0.33,
+write $4.125) and Haiku 4.5 at $1.10 / $5.50 (cache read $0.11, write $1.375): `model-prices.json` and the `aws`
+profile's `finalysis.ai.prices`, which `ChatSettingsTest.theAwsProfilesPricesEqualTheEvaluationsPriceFile` keeps equal.
+(§2.2 and `application-aws.yml` called that check `ChatPricesTest`; the comment now names the right class.) Startup still
+passes from the shipped files: Sonnet's largest round is $0.07425 against `max-turn-cost` 0.15, Haiku's $0.02475 against
+0.05 (`ChatSettingsTest`). `-Deval.maxTurnCost=sized` divides by Sonnet's worst round from the same file, so Sonnet still
+sizes to 0.15 and Haiku to 0.05 (`ChatEvalTurnCostTest`); every open model stays at the $0.01 floor. The price file's
+note now records which prices were entered when, and the README's known issues say that Cloud costs in earlier runs are
+about 10% low and aren't recomputed.
 
 ---
 

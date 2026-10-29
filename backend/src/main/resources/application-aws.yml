@@ -41,22 +41,22 @@ finalysis:
       # Chat (Phase 6 step 8f): Claude Sonnet 4.6 by default, with finalysis.chat.max-turn-cost 0.15 (application.yml).
       # Budget option: Claude Haiku 4.5 (us.anthropic.claude-haiku-4-5-20251001-v1:0) with max-turn-cost 0.05, about a
       # third of the cost per turn; dev run 4 scored Sonnet 57/58 and Haiku 53/58. Startup refuses a main model whose
-      # largest round passes max-turn-cost (Sonnet needs at least 0.0675), so change both together.
+      # largest round passes max-turn-cost (Sonnet needs at least 0.07425), so change both together.
       main: us.anthropic.claude-sonnet-4-6
       embedding: amazon.titan-embed-text-v2:0
       vision: ""                                          # Phase 8, local only
     # Dollars per million tokens, for chat's cost limits (docs/plans/phase-6.md §8). The same values as the evaluation's
-    # price file (src/test/resources/eval/model-prices.json; ChatPricesTest checks they agree). Check the AWS Bedrock
+    # price file (src/test/resources/eval/model-prices.json; ChatSettingsTest checks they agree). Check the AWS Bedrock
     # pricing page before relying on an estimate. A main model without a price stops startup while a cost limit is on.
     # Cache prices (step 8c): a cached-prefix read and a 5-minute cache write; without them chat doesn't cache.
     prices:
       "[us.anthropic.claude-sonnet-4-6]":
-        input-per-million: 3.00
-        output-per-million: 15.00
-        cache-read-per-million: 0.30
-        cache-write-per-million: 3.75
+        input-per-million: 3.30
+        output-per-million: 16.50
+        cache-read-per-million: 0.33
+        cache-write-per-million: 4.125
       "[us.anthropic.claude-haiku-4-5-20251001-v1:0]":
-        input-per-million: 1.00
-        output-per-million: 5.00
-        cache-read-per-million: 0.10
-        cache-write-per-million: 1.25
+        input-per-million: 1.10
+        output-per-million: 5.50
+        cache-read-per-million: 0.11
+        cache-write-per-million: 1.375

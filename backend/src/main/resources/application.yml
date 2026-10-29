@@ -158,7 +158,7 @@ finalysis:
     max-output-tokens: 1500           # per call; an answer cut here is treated as ungrounded
     max-turn-time: 45s                # no round starts after it (each call keeps Bedrock's own 30s timeout)
     max-turn-cost: 0.15               # dollars, estimated from finalysis.ai.prices; 0 turns it off. For the default
-                                      # chat model, Sonnet 4.6 (its largest round is $0.0675); 0.05 with the budget
+                                      # chat model, Sonnet 4.6 (its largest round is $0.07425); 0.05 with the budget
                                       # option, Haiku 4.5 as finalysis.ai.roles.main (application-aws.yml)
     max-daily-cost: 1.00              # dollars per local day over every turn and summary (the usage ledger); 0 turns it off
     retention-days: 90                # a conversation idle this long is deleted, at startup and nightly (1-3650)

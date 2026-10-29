@@ -1,15 +1,17 @@
 {
   "source": "docs/plans/phase-4.md §4.5 and §11.1, docs/plans/phase-6.md §2.1 (on-demand, us-east-1, Anthropic list prices). Check the AWS Bedrock pricing page before relying on an estimate. Keyed by the exact Bedrock id: the chat evaluation (-Deval.model) and the chat smoke tests refuse a chat model not listed here, and give the app this price for its cost limits; a model not listed gets no estimate.",
-  "note": "Haiku 5.5, Sonnet 5.5 and Sonnet 4.6: list prices as of 2026-10-22, entered by the owner, who is checking them against the AWS Bedrock pricing page. Haiku 5.5 and Sonnet 5.5 are listed but not yet available to this AWS account (access request pending). Cache prices (step 8c), per million tokens of the cached prefix: a read is 0.1x the input price and a write 1.25x (5-minute TTL), for all Claude models; chat asks a model to cache only when both are listed. Titan has none and is never cached. Phase 9 step 9a: the four small open models (Ministral 3 8B and 14B, Gemma 3 12B, gpt-oss-20b), on-demand in us-east-1 under their in-region model ids (none has a US inference profile); their prices are null until the owner enters them from the Bedrock pricing page, and a run refuses a model whose prices are null. They have no cache prices, so chat never asks them to cache.",
+  "note": "Anthropic prices are the Geo/In-region ones from the Bedrock pricing page, the table that applies to us. inference-profile ids: Sonnet 4.6 and Haiku 4.5 corrected on 2026-10-29 (Phase 9 step 9a-4; the Global prices, about 10% lower, had been entered). Haiku 5.5 and Sonnet 5.5: list prices as of 2026-10-22, entered by the owner; listed but not yet available to this AWS account (access request pending). Cache prices (step 8c), per million tokens of the cached prefix: a read is 0.1x the input price and a write 1.25x (5-minute TTL), for all Claude models; chat asks a model to cache only when both are listed. Titan has none and is never cached. Phase 9 step 9a: the four small open models (Ministral 3 8B and 14B, Gemma 3 12B, gpt-oss-20b) plus Gemma 3 27B and gpt-oss-120b (run 7b), on-demand in us-east-1 under their in-region model ids (none has a US inference profile), entered by the owner on 2026-10-28/29 from the Bedrock pricing page (US East, on-demand, standard tier). They have no cache prices, so chat never asks them to cache.",
   "models": {
-    "us.anthropic.claude-haiku-4-5-20251001-v1:0": { "inputPerMillionUsd": "1.00", "outputPerMillionUsd": "5.00", "cacheReadPerMillionUsd": "0.10", "cacheWritePerMillionUsd": "1.25" },
-    "us.anthropic.claude-sonnet-4-6": { "inputPerMillionUsd": "3.00", "outputPerMillionUsd": "15.00", "cacheReadPerMillionUsd": "0.30", "cacheWritePerMillionUsd": "3.75" },
+    "us.anthropic.claude-haiku-4-5-20251001-v1:0": { "inputPerMillionUsd": "1.10", "outputPerMillionUsd": "5.50", "cacheReadPerMillionUsd": "0.11", "cacheWritePerMillionUsd": "1.375" },
+    "us.anthropic.claude-sonnet-4-6": { "inputPerMillionUsd": "3.30", "outputPerMillionUsd": "16.50", "cacheReadPerMillionUsd": "0.33", "cacheWritePerMillionUsd": "4.125" },
     "us.anthropic.claude-haiku-5-5":  { "inputPerMillionUsd": "0.11", "outputPerMillionUsd": "0.55", "cacheReadPerMillionUsd": "0.011", "cacheWritePerMillionUsd": "0.1375" },
     "us.anthropic.claude-sonnet-5-5": { "inputPerMillionUsd": "2.20", "outputPerMillionUsd": "11.00", "cacheReadPerMillionUsd": "0.22", "cacheWritePerMillionUsd": "2.75" },
-    "mistral.ministral-3-8b-instruct": { "inputPerMillionUsd": null, "outputPerMillionUsd": null },
-    "mistral.ministral-3-14b-instruct": { "inputPerMillionUsd": null, "outputPerMillionUsd": null },
-    "google.gemma-3-12b-it": { "inputPerMillionUsd": null, "outputPerMillionUsd": null },
-    "openai.gpt-oss-20b-1:0": { "inputPerMillionUsd": null, "outputPerMillionUsd": null },
-    "amazon.titan-embed-text-v2:0": { "inputPerMillionUsd": "0.02", "outputPerMillionUsd": "0" }
+    "mistral.ministral-3-8b-instruct":  { "inputPerMillionUsd": "0.15", "outputPerMillionUsd": "0.15" },
+    "mistral.ministral-3-14b-instruct": { "inputPerMillionUsd": "0.20", "outputPerMillionUsd": "0.20" },
+    "google.gemma-3-12b-it":            { "inputPerMillionUsd": "0.09", "outputPerMillionUsd": "0.29" },
+    "openai.gpt-oss-20b-1:0":           { "inputPerMillionUsd": "0.07", "outputPerMillionUsd": "0.30" },
+    "amazon.titan-embed-text-v2:0": { "inputPerMillionUsd": "0.02", "outputPerMillionUsd": "0" },
+    "google.gemma-3-27b-it":   { "inputPerMillionUsd": "0.23", "outputPerMillionUsd": "0.38" },
+    "openai.gpt-oss-120b-1:0": { "inputPerMillionUsd": "0.15", "outputPerMillionUsd": "0.60" }
   }
 }

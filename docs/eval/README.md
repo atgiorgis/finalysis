@@ -44,7 +44,11 @@ categorization holdout's `holdout-*` files don't count), and it needs `-Deval.ho
   bare number, a thin-space thousands mark two figures. In the other runs only en dashes between months or ranges
   (`March–October 2026`, `2–3 times`) and one thin space (Ministral 3 8B, d-l05, grounded either way) appear, which
   change no outcome; the two gpt-oss dev runs (`chat-dev-ac0f1e0bc0ca-20261028T162423Z`, `-20261029T124740Z`) are rerun on the
-  fixed commit.
+  fixed commit. **Both are superseded** by the reruns on `ad1c9e8` (after 9a-3's citation-marker fix) in run 7; their
+  files are kept as the before.
+- **Cloud costs before Phase 9 step 9a-4 are about 10% low.** Sonnet 4.6's and Haiku 4.5's prices had been entered from
+  Bedrock's Global table; the `us.` ids are billed at the Geo/In-region prices, about 10% higher. Earlier runs' costs
+  (runs 1 to 6, the holdout) aren't recomputed.
 
 ### Run 1: the baseline before the step 8b fixes
 
@@ -194,3 +198,79 @@ The IDENTITY questions apart: **2 of 2**.
 
 **The holdout was measured on `chat-9` and is not rerun**: it is evaluated once, and its files here close it. `chat-10`
 keeps every `chat-9` line word for word (`SystemPromptRulesTest`) and adds only the identity paragraph.
+
+### Run 7: the model ladder (Phase 9 step 9a)
+
+Six open models on Bedrock, one dev run each, by the owner (`docs/plans/phase-9.md` §2, step 9a to 9a-4 notes): dev set
+version 6, prompt `chat-10`, the same harness and limits as run 6 except the turn cost limit, sized per model
+(`-Deval.maxTurnCost=sized`; every model came out at the $0.01 floor and no turn reached it). No open model has cache
+prices, so every call ran uncached. The four 9a models ran on 2026-10-28 on `ac0f1e0`; Gemma 3 27B and gpt-oss-120b were
+added on 2026-10-28 as run 7b, a ladder up from the 12B and 20b, and ran on 2026-10-29; the two gpt-oss models were rerun on `ad1c9e8`, after the
+figure extractor (9a-2) and citation markers (9a-3) learned to read Unicode spaces, dashes and brackets. Every run's tree
+was dirty only by the uncommitted price file.
+
+| Model | Report |
+|---|---|
+| Ministral 3 14B | [chat-dev-ac0f1e0bc0ca-20261028T161943Z.md](chat-dev-ac0f1e0bc0ca-20261028T161943Z.md) |
+| gpt-oss-20b | [chat-dev-ad1c9e8d6041-20261029T135909Z.md](chat-dev-ad1c9e8d6041-20261029T135909Z.md) (superseded: [`…20261028T162423Z`](chat-dev-ac0f1e0bc0ca-20261028T162423Z.md), 40/58) |
+| gpt-oss-120b | [chat-dev-ad1c9e8d6041-20261029T140420Z.md](chat-dev-ad1c9e8d6041-20261029T140420Z.md) (superseded: [`…20261029T124740Z`](chat-dev-ac0f1e0bc0ca-20261029T124740Z.md), 43/58) |
+| Ministral 3 8B | [chat-dev-ac0f1e0bc0ca-20261028T161658Z.md](chat-dev-ac0f1e0bc0ca-20261028T161658Z.md) |
+| Gemma 3 27B | [chat-dev-ac0f1e0bc0ca-20261029T124257Z.md](chat-dev-ac0f1e0bc0ca-20261029T124257Z.md) |
+| Gemma 3 12B | [chat-dev-ac0f1e0bc0ca-20261028T162234Z.md](chat-dev-ac0f1e0bc0ca-20261028T162234Z.md) |
+
+Scored on the 58 non-IDENTITY questions, IDENTITY apart, ranked by score, then tool choice, invalid arguments (fewer is
+better) and first-try grounding (§2.3). Turns, tool choice, first-try grounding and fallbacks count all 68 turns. Cost is
+the run's estimate from the price file at the time; latency is the median turn. Price is Bedrock's per million tokens,
+input / output. Hardware is the path's class for Self-hosted or Local (Ollama, quantized), not measured here.
+
+| Model | Questions (58) | IDENTITY | Turns | Tool choice | Invalid arguments | First-try grounded | Fallbacks shown | Cost | Median turn | Price in / out | Self-host hardware |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| Sonnet 4.6 (run 6) | 57 | 2 / 2 | 67 / 68 | 68 / 68 | 0 | 67 / 68 | 0 | $0.75 ¹ | 2.7 s | $3.30 / $16.50 | n/a (Cloud only) |
+| **Ministral 3 14B** | **49** | 1 / 2 | 58 / 68 | 67 / 68 | 15 | 52 / 68 | 8 | $0.26 | 1.5 s | $0.20 / $0.20 | 24 GB GPU (g6.xlarge) |
+| gpt-oss-20b | 46 | 2 / 2 | 55 / 68 | 62 / 68 | 3 | 61 / 66 ² | 2 | $0.06 | 2.5 s | $0.07 / $0.30 | 16 GB |
+| gpt-oss-120b | 45 | 2 / 2 | 55 / 68 | 64 / 68 | 3 | 66 / 68 | 0 | $0.13 | 2.2 s | $0.15 / $0.60 | ~65 GB (g6.12xlarge) |
+| Ministral 3 8B | 39 | 2 / 2 | 48 / 68 | 59 / 68 | 26 | 53 / 68 | 10 | $0.21 | 1.2 s | $0.15 / $0.15 | 8 GB |
+| Gemma 3 27B | 8 | 2 / 2 | 11 / 68 | 14 / 68 | 0 | 43 / 68 | 25 | $0.03 | 1.6 s | $0.23 / $0.38 | n/a |
+| Gemma 3 12B | 8 | 2 / 2 | 11 / 68 | 14 / 68 | 0 | 31 / 68 | 30 | $0.01 | 0.8 s | $0.09 / $0.29 | n/a |
+
+¹ Cached (run 6 had prompt caching on) and at the earlier Global price, about 10% low (known issues above); the open
+models ran uncached. ² 66 turns answered: two ended in an error (below).
+
+**The pick: Ministral 3 14B, 49/58**, for both Self-hosted and Local. It clears the 45/58 floor with the highest score
+and the best tool choice of the open models. gpt-oss-120b reaches the floor at 45/58 but doesn't justify its hardware
+tier (~65 GB, a g6.12xlarge, against a 24 GB GPU), and gpt-oss-20b scored above it. **Caveat:** Bedrock serves these
+models at full precision; Ollama serves a quantized build (usually Q4). 9c's rerun on the instance measures the gap; the
+pick isn't revisited unless the owner asks.
+
+Per model:
+
+- **Gemma 3 12B and 27B: no tool use through Converse.** 0 tool calls in either run, about 1.4K input tokens per call
+  (the system prompt, the context block and the question) where Ministral 3 14B's median is about 7.8K: the tool
+  definitions never reached the model. The app sends them on every chat round (`ChatModelClient`), Spring AI puts them
+  in the request's `toolConfig`, and Bedrock accepted every request (no turn failed); the model wrote its tool calls as
+  text instead, in a `tool_code` block (`get_category_totals(category="Dining", from="2026-06", to="2026-06")`) or as
+  JSON: 39 turns on the 27B, 2 on the 12B. The 8 correct are refusals and injections that need no tool.
+- **gpt-oss-20b: two turns failed after an unknown tool.** d-s07 and d-m02 turn 3 (four in the superseded run: d-s05,
+  d-s08, d-m01 turn 2, d-m04 turn 2) each called a tool that doesn't exist (`NOT_A_TOOL`), ran no tool, and ended
+  `ai-unavailable`. The app answers an unknown tool with an error result the model can correct (CHT-01); the turn failed
+  on the next model call, which carries the invented name back to Bedrock in the conversation's `toolUse` block. The
+  report keeps neither the invented name (it prints `(unknown)`) nor the exception, so Bedrock's reason is unconfirmed;
+  the likely one is a tool name it refuses in a `toolUse` block. Phase 10 candidate (`phase-9.md` §11).
+- **gpt-oss-20b and 120b: reasoning shown in answers.** 20b's d-x06 ("Now we have spending: CARD-1: -976.53 … Let's
+  draft answer.I don't have a card named …") and 120b's first answer to d-x07 ("… Now craft answer.In the most recent
+  complete month …") show the model's reasoning before the answer, with no separator. `com.finalysis.ai.bedrock` doesn't
+  touch reasoning, and Spring AI 2.0.1 keeps Converse `reasoningContent` blocks apart from the text (they go to the
+  message's reasoning contents); the app joins separate text blocks with a line break. So the reasoning arrived inside the
+  text block itself, and nothing removes it. Not fixed here: a Phase 10 candidate, and a Cloud-path correctness issue for
+  reasoning models.
+- **Ministral 3 8B:** `[/THINK]` and raw tool-call text leaked into answers (d-l04's rejected first answer, "…3,498
+  total.[/THINK]get_category_totals{…}", and d-m04 turn 3 as shown); d-l04's shown answer starts with garbled
+  multilingual text.
+- **Ministral 3 14B:** `get_account_totals` called with an invented `account` parameter 8 times (once each on both
+  gpt-oss models; the 8B instead passed invalid account values to tools that have one, 12 times); the `TOKENS` limit
+  reached 6 times; d-n02 ("What is Corgi?") answered "You are Corgi, the assistant inside Finalysis." and missed the
+  "only your own data" clause. The invented parameter is a Phase 10 candidate: the tool's schema or description invites
+  it.
+- **gpt-oss-120b:** search 4/8 (d-s01 to d-s04 answered with category totals instead of searching for the merchant) and
+  CANT_ANSWER 4/7: $0.00 for March 2025, which the data doesn't cover (d-x03), an invented Horizon total of $3,818.50
+  (d-x06), and the house question answered with figures (d-x07). 20b scored above it.

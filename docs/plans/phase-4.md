@@ -738,7 +738,8 @@ New runnable folder **"8. Categorization"** (AI off; newman never calls Bedrock)
      profile routes to);
    - `arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0`.
 
-   Nothing else: no `bedrock:*`, no S3, no agents.
+   Nothing else: no `bedrock:*`, no S3, no agents. Since Phase 9 step 9a-4 these statements live in the customer-managed
+   policy `finalysis-dev-policy`, not inline (`docs/plans/phase-9.md`, step 9a-4 notes).
 5. **Model invocation logging stays off** (Bedrock → Settings). Otherwise AWS would store every
    prompt in CloudWatch or S3. It's off by default; check it.
 6. **Budget:** AWS Budgets, a $5/month cost budget with email alerts at 50% and 100%.
