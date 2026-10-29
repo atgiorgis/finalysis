@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * The live accuracy evaluation (CAT-05; docs/plans/phase-4.md §10, step 9a notes): the dev or the holdout set through
@@ -44,6 +45,7 @@ import org.springframework.test.context.ActiveProfiles;
 @EnabledIfSystemProperty(named = NoCloudAiGuard.EVAL_PROPERTY, matches = "true")
 @IntegrationTest
 @ActiveProfiles("aws")
+@TestPropertySource(properties = "finalysis.ai.default-path=CLOUD") // a fresh test vault on Cloud (AI-03)
 @Import({EvalSeeder.class, EvalRunner.class})
 class CategorizationLiveEvalIT {
 

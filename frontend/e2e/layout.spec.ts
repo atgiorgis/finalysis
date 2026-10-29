@@ -12,7 +12,7 @@ const MIN_TARGET = 44
 const GROCERIES = fixtures.detailsCategory.category?.id
 const CLOUD = {
   ...fixtures.statusOff,
-  ai: { mode: 'CLOUD', provider: 'bedrock', models: { main: 'm', categorization: 'c', embedding: 'e' } },
+  ai: { path: 'CLOUD', provider: 'bedrock', models: { main: 'm', categorization: 'c', embedding: 'e' } },
 }
 
 /** Every screen, with the state that makes it widest: open panels, a sheet, long text. */
@@ -319,12 +319,12 @@ test('import: the delete question fits', async ({ page }, info) => {
 
 const CLOUD_STATUS = {
   ...fixtures.statusOff,
-  ai: { mode: 'CLOUD', provider: 'bedrock', models: { main: 'test-main-model', categorization: 'c', embedding: 'e' } },
+  ai: { path: 'CLOUD', provider: 'bedrock', models: { main: 'test-main-model', categorization: 'c', embedding: 'e' } },
 }
 
 for (const [where, status, label] of [
   ['cloud', CLOUD_STATUS, 'Cloud · Bedrock'],
-  ['local', { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, mode: 'LOCAL', provider: 'ollama' } }, 'Local · Ollama'],
+  ['local', { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, path: 'LOCAL', provider: 'ollama' } }, 'Local · Ollama'],
 ] as const) {
   test(`chat: Corgi’s header with the ${where} badge fits, and the input line under it`, async ({ page }, info) => {
     await mockApi(page, { '/api/status': status, '/api/chat/usage': { ...usageFixture, spentToday: '0.214300' } })

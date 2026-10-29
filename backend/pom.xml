@@ -139,6 +139,12 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-bedrock</artifactId>
         </dependency>
+        <!-- Ollama for the Self-hosted and Local paths (docs/plans/phase-9.md §3.2): the model module only, not its
+             starter, so nothing is auto-configured; com.finalysis.ai.ollama builds its clients for a path's base URL. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-ollama</artifactId>
+        </dependency>
         <!-- Lets the AWS CLI profile in application-aws.yml be an IAM Identity Center (SSO) profile. -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

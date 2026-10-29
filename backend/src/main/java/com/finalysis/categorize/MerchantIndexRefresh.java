@@ -1,5 +1,6 @@
 package com.finalysis.categorize;
 
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.ChatSearchProperties;
 import com.finalysis.ai.SearchDocuments;
 import com.finalysis.ai.outbound.OutboundPayloadGuard;
@@ -47,6 +48,7 @@ public class MerchantIndexRefresh {
             ORDER BY t.merchant, count(*) DESC, max(t.txn_date) DESC, c.name""";
 
     private final MerchantEmbeddingStage stage;
+    private final ActiveProviders providers;
     private final SearchEmbeddingRepository index;
     private final OutboundPayloadGuard guard;
     private final CategorizationPromptBuilder outbound;
@@ -56,11 +58,12 @@ public class MerchantIndexRefresh {
     private final TransactionTemplate readOnly;
     private final ReentrantLock running = new ReentrantLock();
 
-    public MerchantIndexRefresh(MerchantEmbeddingStage stage, SearchEmbeddingRepository index,
+    public MerchantIndexRefresh(MerchantEmbeddingStage stage, ActiveProviders providers, SearchEmbeddingRepository index,
                                 OutboundPayloadGuard guard, CategorizationPromptBuilder outbound,
                                 RedactionContextQuery redaction, ChatSearchProperties properties, JdbcTemplate jdbc,
                                 PlatformTransactionManager transactions) {
         this.stage = stage;
+        this.providers = providers;
         this.index = index;
         this.guard = guard;
         this.outbound = outbound;
@@ -87,9 +90,16 @@ public class MerchantIndexRefresh {
 
     /** {@link #refresh()}, with the merchants embedded counted apart from the categories. */
     public Refresh refreshCounted() {
-        if (!stage.enabled()) {
-            return new Refresh(EmbeddingRunResult.off(), 0);
+        // One path for the whole refresh (phase-9.md §3.1); its embedding model is the one indexed.
+        try (ActiveProviders.Lease lease = providers.lease()) {
+            if (!stage.enabled()) {
+                return new Refresh(EmbeddingRunResult.off(), 0);
+            }
+            return refreshOnPath();
         }
+    }
+
+    private Refresh refreshOnPath() {
         running.lock();
         try {
             Map<String, String> categories = readOnly.execute(status -> categoryDocuments());

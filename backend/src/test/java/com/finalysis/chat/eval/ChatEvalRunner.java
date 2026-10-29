@@ -88,9 +88,18 @@ class ChatEvalRunner {
         }
     }
 
-    /** @param maxTurnCostOverridden whether {@code -Deval.maxTurnCost} set the context's turn cost limit */
+    /** A Bedrock run. */
     Run run(ChatEvalSet set, String model, ChatEvalPrices prices, BigDecimal maxCost, boolean maxTurnCostOverridden)
             throws Exception {
+        return run(set, model, prices, maxCost, maxTurnCostOverridden, ChatEvalTarget.BEDROCK);
+    }
+
+    /**
+     * @param maxTurnCostOverridden whether {@code -Deval.maxTurnCost} set the context's turn cost limit
+     * @param target                where the questions go; the context's path must already be its path
+     */
+    Run run(ChatEvalSet set, String model, ChatEvalPrices prices, BigDecimal maxCost, boolean maxTurnCostOverridden,
+            ChatEvalTarget target) throws Exception {
         long start = System.nanoTime();
         List<QuestionResult> results = new ArrayList<>();
         List<IndexBuild> index = new ArrayList<>();
@@ -136,7 +145,7 @@ class ChatEvalRunner {
         return new Run(set.name(), set.sha256(), set.version(), model, client.promptCaching().name(),
                 ChatPrompt.VERSION, limits.maxTurnCost().toPlainString(), maxTurnCostOverridden,
                 ChatEvalSet.sha256(resource("chat/system-prompt.txt")), prices.source(), today, settings(environment),
-                index, results, ledger, stopped, (System.nanoTime() - start) / 1_000_000);
+                index, results, ledger, stopped, (System.nanoTime() - start) / 1_000_000, target);
     }
 
     private QuestionResult ask(ChatEvalSet set, Question question, ChatEvalSeeder.Seeded seeded) {

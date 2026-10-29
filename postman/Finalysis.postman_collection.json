@@ -183,6 +183,40 @@
           ]
         },
         {
+          "name": "Corgi off for this run",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"OFF\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh vault selects Local (docs/plans/phase-9.md §3.1). The run sets OFF first, so its AI-off checks don't",
+                  "// depend on whether Ollama runs on this machine.",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ai = pm.response.json();",
+                  "pm.test('the path is OFF', () => pm.expect(ai.path).to.eql('OFF'));",
+                  "pm.test('Cloud is not a choice without the aws profile', () => pm.expect(ai.available).to.not.include('CLOUD'));",
+                  "pm.test('Corgi is not reachable while off', () => pm.expect(ai.reachable).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Actuator health",
           "request": {
             "method": "GET",
@@ -7721,8 +7755,38 @@
     },
     {
       "name": "11. Live AI (aws profile)",
-      "description": "**Needs the `aws` profile and makes live Bedrock calls (they cost money).** Not part of the newman run: the README's command leaves this folder out, and in the Collection Runner untick it. Send by hand, after starting the backend with `SPRING_PROFILES_ACTIVE=aws`. Nothing is asserted; the console logs the mode and counts only, never merchants, descriptions or amounts.",
+      "description": "**Needs the `aws` profile and makes live Bedrock calls (they cost money).** Not part of the newman run: the README's command leaves this folder out, and in the Collection Runner untick it. Send by hand, after starting the backend with `SPRING_PROFILES_ACTIVE=aws`; the first request switches Corgi to Cloud. Nothing is asserted; the console logs the path and counts only, never merchants, descriptions or amounts.",
       "item": [
+        {
+          "name": "Switch Corgi to Cloud",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"CLOUD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Cloud is a path the user chooses (docs/plans/phase-9.md §3.1); the aws profile only makes it available.",
+                  "const ai = pm.response.json();",
+                  "console.log('Switch:', pm.response.code, ai.path || '', ai.reachable === undefined ? '' : 'reachable ' + ai.reachable);"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "Status: cloud AI on",
           "request": {
@@ -7737,9 +7801,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "const ai = pm.response.json().ai;",
-                  "console.log('AI mode:', ai.mode, ai.provider || '', ai.models ? JSON.stringify(ai.models) : '');",
-                  "if (ai.mode === 'OFF') {",
-                  "    console.log('AI is off: start the backend with SPRING_PROFILES_ACTIVE=aws to use this folder.');",
+                  "console.log('AI path:', ai.path, ai.provider || '', ai.models ? JSON.stringify(ai.models) : '');",
+                  "if (ai.path !== 'CLOUD') {",
+                  "    console.log('Cloud is not the path: start the backend with SPRING_PROFILES_ACTIVE=aws and send \"Switch Corgi to Cloud\" first.');",
                   "}"
                 ]
               }
@@ -8052,7 +8116,7 @@
                       "    pm.expect(body.title).to.eql('AI is off');",
                       "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
                       "});",
-                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                      "pm.test('the detail says where to turn Corgi on', () => pm.expect(body.detail).to.eql('Corgi is off. Choose where it runs in Settings.'));"
                     ]
                   }
                 }
@@ -8162,7 +8226,7 @@
                       "    pm.expect(body.title).to.eql('AI is off');",
                       "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
                       "});",
-                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                      "pm.test('the detail says where to turn Corgi on', () => pm.expect(body.detail).to.eql('Corgi is off. Choose where it runs in Settings.'));"
                     ]
                   }
                 }
@@ -8253,7 +8317,7 @@
                       "    pm.expect(body.title).to.eql('AI is off');",
                       "    pm.expect(body.type).to.eql('urn:finalysis:problem:ai-off');",
                       "});",
-                      "pm.test('the detail says how to turn AI on', () => pm.expect(body.detail).to.eql('AI is off. Start the backend with the aws profile to use chat.'));"
+                      "pm.test('the detail says where to turn Corgi on', () => pm.expect(body.detail).to.eql('Corgi is off. Choose where it runs in Settings.'));"
                     ]
                   }
                 }

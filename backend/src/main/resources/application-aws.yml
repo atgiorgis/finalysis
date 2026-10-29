@@ -1,7 +1,8 @@
 # Cloud AI through Amazon Bedrock (AI-03, docs/plans/phase-4.md §7, §11). Enabled only explicitly:
 #   SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
 # Credentials come from the named AWS CLI profile below (files under ~/.aws, outside the repo). No keys here,
-# in .env or anywhere in the repo. The UI shows a banner while this profile is active.
+# in .env or anywhere in the repo. This profile makes Cloud a path the user can choose in Settings; the UI shows a
+# banner while Cloud is the selected path.
 spring:
   ai:
     model:
@@ -34,7 +35,8 @@ spring:
 
 finalysis:
   ai:
-    mode: CLOUD
+    # Cloud can be chosen in Settings (docs/plans/phase-9.md §3.1); the vault's setting decides whether it is used.
+    cloud-available: true
     provider: bedrock
     roles:
       categorization: us.anthropic.claude-haiku-4-5-20251001-v1:0

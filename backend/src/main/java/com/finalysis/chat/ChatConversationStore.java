@@ -1,5 +1,6 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.AiPath;
 import com.finalysis.chat.citation.Citation;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -62,7 +63,7 @@ public class ChatConversationStore {
     public record NewTurn(long conversationId, String question, String outboundQuestion, String answer,
                           AnswerSource source, String groundingStatus, boolean retried, int figuresChecked,
                           int ungrounded, LimitHit limitHit, List<Citation> citations, Map<String, Long> aliasMap,
-                          String model,
+                          String model, AiPath path,
                           String promptVersion, int rounds, int toolCalls, Integer inputTokens, Integer outputTokens,
                           Integer cacheReadTokens, Integer cacheWriteTokens,
                           int callsWithoutUsage, BigDecimal estimatedCost, long millis, String error,
@@ -76,7 +77,8 @@ public class ChatConversationStore {
     /** A stored turn as read back; {@code citations} is the stored JSON array. */
     public record StoredTurn(int seq, String question, String outboundQuestion, String answer, AnswerSource source,
                              String groundingStatus, boolean retried, int figuresChecked, int ungrounded,
-                             LimitHit limitHit, String citations, String model, int rounds, int toolCalls,
+                             LimitHit limitHit, String citations, String model, AiPath path, int rounds,
+                             int toolCalls,
                              Integer inputTokens, Integer outputTokens, Integer cacheReadTokens,
                              Integer cacheWriteTokens, int callsWithoutUsage,
                              BigDecimal estimatedCost, long millis, OffsetDateTime createdAt) {
@@ -91,7 +93,7 @@ public class ChatConversationStore {
      * @param cacheWriteTokens cached-prefix tokens written, summed; null when no call reported usage
      * @param cost             estimated cost, each kind of token at its own price; null when the model has no price
      */
-    public record Usage(UsageKind kind, String model, int calls, Integer inputTokens, Integer outputTokens,
+    public record Usage(UsageKind kind, String model, AiPath path, int calls, Integer inputTokens, Integer outputTokens,
                         Integer cacheReadTokens, Integer cacheWriteTokens, int callsWithoutUsage, BigDecimal cost,
                         OffsetDateTime at) {
     }
@@ -173,7 +175,7 @@ public class ChatConversationStore {
                         SELECT seq, question, outbound_question, answer, answer_source, grounding_status, retried,
                                figures_checked, ungrounded, limit_hit, citations::text AS citations, model, rounds,
                                tool_calls, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-                               calls_without_usage, estimated_cost, millis, created_at
+                               calls_without_usage, estimated_cost, millis, created_at, path
                         FROM chat_turn WHERE conversation_id = :id ORDER BY seq""")
                 .param("id", conversationId)
                 .query((rs, n) -> new StoredTurn(rs.getInt("seq"), rs.getString("question"),
@@ -181,7 +183,8 @@ public class ChatConversationStore {
                         AnswerSource.valueOf(rs.getString("answer_source")), rs.getString("grounding_status"),
                         rs.getBoolean("retried"), rs.getInt("figures_checked"), rs.getInt("ungrounded"),
                         rs.getString("limit_hit") == null ? null : LimitHit.valueOf(rs.getString("limit_hit")),
-                        rs.getString("citations"), rs.getString("model"), rs.getInt("rounds"),
+                        rs.getString("citations"), rs.getString("model"), AiPath.valueOf(rs.getString("path")),
+                        rs.getInt("rounds"),
                         rs.getInt("tool_calls"), rs.getObject("input_tokens", Integer.class),
                         rs.getObject("output_tokens", Integer.class), rs.getObject("cache_read_tokens", Integer.class),
                         rs.getObject("cache_write_tokens", Integer.class), rs.getInt("calls_without_usage"),
@@ -213,11 +216,11 @@ public class ChatConversationStore {
                             grounding_status, retried, figures_checked, ungrounded, limit_hit, citations, alias_map,
                             model, prompt_version, rounds, tool_calls, input_tokens, output_tokens,
                             cache_read_tokens, cache_write_tokens, calls_without_usage, estimated_cost, millis, error,
-                            created_at)
+                            created_at, path)
                         VALUES (:conversation, :seq, :question, :outbound, :answer, :source, :grounding, :retried,
                             :figures, :ungrounded, :limit, CAST(:citations AS jsonb), CAST(:aliases AS jsonb), :model,
                             :prompt, :rounds, :toolCalls, :input, :output, :cacheRead, :cacheWrite, :withoutUsage,
-                            :cost, :millis, :error, :createdAt)
+                            :cost, :millis, :error, :createdAt, :path)
                         RETURNING id""")
                 .param("conversation", turn.conversationId()).param("seq", seq)
                 .param("question", turn.question()).param("outbound", turn.outboundQuestion())
@@ -231,7 +234,8 @@ public class ChatConversationStore {
                 .param("rounds", turn.rounds()).param("toolCalls", turn.toolCalls())
                 .param("input", turn.inputTokens()).param("output", turn.outputTokens())
                 .param("cacheRead", turn.cacheReadTokens()).param("cacheWrite", turn.cacheWriteTokens())
-                .param("withoutUsage", turn.callsWithoutUsage()).param("cost", turn.estimatedCost())
+                .param("withoutUsage", turn.callsWithoutUsage())
+                .param("cost", storedCost(turn.path(), turn.estimatedCost())).param("path", turn.path().name())
                 .param("millis", (int) Math.min(Integer.MAX_VALUE, turn.millis())).param("error", turn.error())
                 .param("createdAt", turn.createdAt())
                 .query(Long.class).single();
@@ -247,7 +251,8 @@ public class ChatConversationStore {
                     .param("millis", (int) Math.min(Integer.MAX_VALUE, call.millis()))
                     .update();
         }
-        recordUsage(new Usage(UsageKind.TURN, turn.model(), turn.rounds(), turn.inputTokens(), turn.outputTokens(),
+        recordUsage(new Usage(UsageKind.TURN, turn.model(), turn.path(), turn.rounds(), turn.inputTokens(),
+                turn.outputTokens(),
                 turn.cacheReadTokens(), turn.cacheWriteTokens(), turn.callsWithoutUsage(), turn.estimatedCost(),
                 turn.createdAt()));
         String title = turn.question().strip();
@@ -274,13 +279,29 @@ public class ChatConversationStore {
     }
 
     /**
-     * Estimated cost of every turn, conversation summary and monthly summary since a time: the daily cap's spend (§8),
-     * from the ledger, so deleting a conversation never lowers it. Unpriced calls count 0.
+     * Estimated cost of every Cloud turn, conversation summary and monthly summary since a time: the daily cap's spend
+     * (§8) and the month's, from the ledger, so deleting a conversation never lowers it. Unpriced calls count 0. Only
+     * Cloud has a token cost: Local's rows are 0 and Self-hosted's NULL (its cost is running time, phase-9.md §4.2),
+     * and neither counts here.
      */
     @Transactional(readOnly = true)
     public BigDecimal costSince(OffsetDateTime from) {
-        return jdbc.sql("SELECT coalesce(sum(estimated_cost), 0) FROM chat_usage WHERE created_at >= :from")
+        return jdbc.sql("""
+                        SELECT coalesce(sum(estimated_cost), 0) FROM chat_usage
+                        WHERE created_at >= :from AND path = 'CLOUD'""")
                 .param("from", from).query(BigDecimal.class).single();
+    }
+
+    /**
+     * The cost a row stores (docs/plans/phase-9.md §4.2): the token estimate on Cloud, 0 on Local (nothing is paid
+     * per token), NULL on Self-hosted (its cost is the instance's running time, step 9c).
+     */
+    public static BigDecimal storedCost(AiPath path, BigDecimal estimate) {
+        return switch (path) {
+            case LOCAL -> BigDecimal.ZERO;
+            case SELF_HOSTED -> null;
+            case CLOUD, OFF -> estimate;
+        };
     }
 
     /**
@@ -297,14 +318,16 @@ public class ChatConversationStore {
     @Transactional
     public void recordUsage(Usage usage) {
         jdbc.sql("""
-                        INSERT INTO chat_usage (kind, model, calls, input_tokens, output_tokens, cache_read_tokens,
-                            cache_write_tokens, calls_without_usage, estimated_cost, created_at)
-                        VALUES (:kind, :model, :calls, :input, :output, :cacheRead, :cacheWrite, :withoutUsage, :cost,
-                            :at)""")
-                .param("kind", usage.kind().name()).param("model", usage.model()).param("calls", usage.calls())
+                        INSERT INTO chat_usage (kind, model, path, calls, input_tokens, output_tokens,
+                            cache_read_tokens, cache_write_tokens, calls_without_usage, estimated_cost, created_at)
+                        VALUES (:kind, :model, :path, :calls, :input, :output, :cacheRead, :cacheWrite, :withoutUsage,
+                            :cost, :at)""")
+                .param("kind", usage.kind().name()).param("model", usage.model()).param("path", usage.path().name())
+                .param("calls", usage.calls())
                 .param("input", usage.inputTokens()).param("output", usage.outputTokens())
                 .param("cacheRead", usage.cacheReadTokens()).param("cacheWrite", usage.cacheWriteTokens())
-                .param("withoutUsage", usage.callsWithoutUsage()).param("cost", usage.cost()).param("at", usage.at())
+                .param("withoutUsage", usage.callsWithoutUsage()).param("cost", storedCost(usage.path(), usage.cost()))
+                .param("at", usage.at())
                 .update();
     }
 

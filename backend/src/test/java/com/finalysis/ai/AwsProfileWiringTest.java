@@ -30,6 +30,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
@@ -43,6 +44,7 @@ import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 @IntegrationTest
 @AutoConfigureMockMvc
 @ActiveProfiles("aws")
+@TestPropertySource(properties = "finalysis.ai.default-path=CLOUD") // the test vault's path (NoCloudAiGuard sets OFF)
 @ExtendWith(OutputCaptureExtension.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class AwsProfileWiringTest {
@@ -66,10 +68,12 @@ class AwsProfileWiringTest {
     }
 
     @Test
-    void theProfileCreatesBothModelsAndCloudMode() {
+    void theProfileCreatesBothModelsAndMakesCloudAvailable() {
         assertThat(context.getBeansOfType(ChatModel.class)).hasSize(1);
         assertThat(context.getBeansOfType(EmbeddingModel.class)).hasSize(1);
-        assertThat(properties.mode()).isEqualTo(AiMode.CLOUD);
+        assertThat(properties.cloudAvailable()).isTrue();
+        assertThat(context.getBean(AiProviders.class).available())
+                .containsExactly(AiPath.CLOUD, AiPath.SELF_HOSTED, AiPath.LOCAL);
         assertThat(properties.provider()).isEqualTo("bedrock");
         assertThat(properties.roles().categorization()).isEqualTo("us.anthropic.claude-haiku-4-5-20251001-v1:0");
         assertThat(properties.roles().embedding()).isEqualTo("amazon.titan-embed-text-v2:0");
@@ -107,12 +111,14 @@ class AwsProfileWiringTest {
     void statusCarriesTheBannerDataAndNothingAboutTheAccount() throws Exception {
         String body = mockMvc.perform(get("/api/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ai.mode").value("CLOUD"))
+                .andExpect(jsonPath("$.ai.path").value("CLOUD"))
+                .andExpect(jsonPath("$.ai.available.length()").value(3))
+                .andExpect(jsonPath("$.ai.reachable").value(true))
                 .andExpect(jsonPath("$.ai.provider").value("bedrock"))
                 .andExpect(jsonPath("$.ai.models.categorization").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
                 .andExpect(jsonPath("$.ai.models.embedding").value("amazon.titan-embed-text-v2:0"))
                 .andExpect(jsonPath("$.ai.models.main").value("us.anthropic.claude-sonnet-4-6"))
-                .andExpect(jsonPath("$.ai.length()").value(3))
+                .andExpect(jsonPath("$.ai.length()").value(5))
                 .andExpect(jsonPath("$.ai.models.length()").value(3))
                 .andReturn().getResponse().getContentAsString();
 

@@ -1,6 +1,8 @@
 package com.finalysis.categorize;
 
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.AiPathChanged;
+import com.finalysis.ai.AiPath;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.vault.VaultLocking;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -25,7 +27,7 @@ class BackgroundAiCategorization implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(BackgroundAiCategorization.class);
 
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final AiCategorizationProperties properties;
     private final AiCategorizer categorizer;
     private final MerchantIndexRefresh searchIndex;
@@ -37,9 +39,9 @@ class BackgroundAiCategorization implements DisposableBean {
             }, new ThreadPoolExecutor.DiscardPolicy());
     private volatile Thread running;
 
-    BackgroundAiCategorization(AiProperties ai, AiCategorizationProperties properties, AiCategorizer categorizer,
-                               MerchantIndexRefresh searchIndex) {
-        this.ai = ai;
+    BackgroundAiCategorization(ActiveProviders providers, AiCategorizationProperties properties,
+                               AiCategorizer categorizer, MerchantIndexRefresh searchIndex) {
+        this.providers = providers;
         this.properties = properties;
         this.categorizer = categorizer;
         this.searchIndex = searchIndex;
@@ -47,7 +49,8 @@ class BackgroundAiCategorization implements DisposableBean {
 
     /** Asks for a run soon; returns at once. */
     void request() {
-        if (!ai.enabled() || !properties.runAfterImport()) {
+        AiPath path = providers.path();
+        if (path == null || path == AiPath.OFF || !properties.runAfterImport()) {
             return;
         }
         executor.execute(() -> {
@@ -62,6 +65,29 @@ class BackgroundAiCategorization implements DisposableBean {
             } finally {
                 running = null;
                 Thread.interrupted(); // a lock's interrupt must not reach the next run
+            }
+        });
+    }
+
+    /**
+     * A switch to a path with another embedding model (phase-9.md §4.1): the chat search index is filled for it in the
+     * background, capped per run as always. The other model's vectors are kept, so switching back costs nothing.
+     */
+    @EventListener
+    void onPathChanged(AiPathChanged changed) {
+        if (!changed.embeddingModelChanged() || changed.embeddingModel() == null) {
+            return;
+        }
+        executor.execute(() -> {
+            running = Thread.currentThread();
+            try {
+                searchIndex.refresh();
+            } catch (RuntimeException e) {
+                log.error("The search index refresh after a path switch failed ({}); the next run catches up",
+                        e.getClass().getName());
+            } finally {
+                running = null;
+                Thread.interrupted();
             }
         });
     }

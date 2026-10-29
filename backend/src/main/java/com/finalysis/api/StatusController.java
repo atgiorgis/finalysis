@@ -1,6 +1,6 @@
 package com.finalysis.api;
 
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.AiProviders;
 import com.finalysis.ai.AiStatus;
 import com.finalysis.vault.VaultService;
 import com.finalysis.vault.VaultStatus;
@@ -15,21 +15,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class StatusController {
 
     /**
-     * @param ai    the AI mode, for the UI's cloud banner (docs/plans/phase-4.md §7)
+     * @param ai    the AI path, for the UI's badge and banner (docs/plans/phase-9.md §3.3)
      * @param vault the vault's state (docs/plans/phase-8.md §5.2); answered while locked, never a path
      */
     public record StatusResponse(String app, String status, Instant timestamp, AiStatus ai, VaultStatus vault) {}
 
-    private final AiStatus ai;
+    private final AiProviders ai;
     private final VaultService vault;
 
-    public StatusController(AiProperties aiProperties, VaultService vault) {
-        this.ai = AiStatus.of(aiProperties);
+    public StatusController(AiProviders ai, VaultService vault) {
+        this.ai = ai;
         this.vault = vault;
     }
 
     @GetMapping("/status")
     public StatusResponse status() {
-        return new StatusResponse("finalysis", "ok", Instant.now(), ai, vault.status());
+        return new StatusResponse("finalysis", "ok", Instant.now(), AiStatus.of(ai), vault.status());
     }
 }

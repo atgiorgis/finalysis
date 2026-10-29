@@ -239,13 +239,10 @@ class MerchantEmbeddingRepositoryTest {
                 .containsExactly("ABOVE", "AT");
     }
 
+    /** V25: an exact scan of the model's rows; no vector index takes part (phase-9.md §4.1). */
     @Test
-    void theNearestQueryCanUseTheHnswIndex() {
+    void theNearestQueryIsAnExactScanOfOneModel() {
         embeddings.upsert("EXACT", MODEL, HASH, unit(0));
-        // On a table this small the planner prefers a scan and a sort, so rule both out for this transaction.
-        // This proves the query and the index use the same operator class, not that the index wins at scale.
-        jdbc.sql("SET LOCAL enable_seqscan = off").update();
-        jdbc.sql("SET LOCAL enable_sort = off").update();
 
         for (String sql : List.of(MerchantEmbeddingRepository.NEAREST_SQL,
                 MerchantEmbeddingRepository.NEAREST_LABELED_SQL)) {
@@ -260,14 +257,14 @@ class MerchantEmbeddingRepositoryTest {
                     .query(String.class)
                     .list();
 
-            assertThat(String.join("\n", plan)).contains("ix_merchant_embedding_hnsw");
+            assertThat(String.join("\n", plan)).doesNotContain("hnsw").contains("model");
         }
     }
 
     // ------------------------------------------------------------------ arguments
 
     @ParameterizedTest
-    @ValueSource(ints = {0, 1, DIMENSIONS - 1, DIMENSIONS + 1})
+    @ValueSource(ints = {0, MerchantEmbeddingRepository.MAX_DIMENSIONS + 1})
     void wrongDimensionsThrow(int dimensions) {
         float[] vector = new float[dimensions];
 

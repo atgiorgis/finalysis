@@ -16,7 +16,7 @@ const BANNER =
 
 const cloud = (provider: string) => ({
   ...fixtures.statusOff,
-  ai: { mode: 'CLOUD', provider, models: { main: 'chat-model', categorization: 'cat-model', embedding: 'emb-model' } },
+  ai: { path: 'CLOUD', provider, models: { main: 'chat-model', categorization: 'cat-model', embedding: 'emb-model' } },
 })
 
 test('the root opens the Overview inside the shell', async () => {

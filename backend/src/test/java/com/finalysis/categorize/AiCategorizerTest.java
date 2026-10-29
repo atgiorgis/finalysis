@@ -7,10 +7,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.finalysis.ai.AiPath;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.account.AccountRepository;
 import com.finalysis.account.AccountType;
-import com.finalysis.ai.AiMode;
-import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
 import com.finalysis.categorize.AiCategorizer.Status;
@@ -43,7 +43,6 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -86,8 +85,7 @@ class AiCategorizerTest {
     private final Map<String, Long> txnByLabel = new LinkedHashMap<>();
 
     // To build categorizers with other settings (the cap) or with AI off.
-    private final AiProperties ai;
-    private final ObjectProvider<ChatModel> chatModels;
+    private final ActiveProviders providers;
     private final CategorizationModelClient client;
     private final CategorizationPromptBuilder promptBuilder;
     private final MerchantEmbeddingStage embeddingStage;
@@ -99,7 +97,7 @@ class AiCategorizerTest {
     AiCategorizerTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeChatModel model,
                       FakeEmbeddingModel embeddingModel, AiCategorizationProperties settings, AiCategorizer categorizer,
                       CategorizationService categorization, MockMvc mockMvc, AccountRepository accounts,
-                      AiProperties ai, ObjectProvider<ChatModel> chatModels, CategorizationModelClient client,
+                      ActiveProviders providers, CategorizationModelClient client,
                       CategorizationPromptBuilder promptBuilder, MerchantEmbeddingStage embeddingStage,
                       SimilarMerchantProperties examples, RedactionContextQuery redactionContext,
                       CategorizationLock lock, PlatformTransactionManager transactions) {
@@ -112,8 +110,7 @@ class AiCategorizerTest {
         this.categorization = categorization;
         this.mockMvc = mockMvc;
         this.imports = new ImportTestSupport(mockMvc, accounts, jdbc);
-        this.ai = ai;
-        this.chatModels = chatModels;
+        this.providers = providers;
         this.client = client;
         this.promptBuilder = promptBuilder;
         this.embeddingStage = embeddingStage;
@@ -240,8 +237,8 @@ class AiCategorizerTest {
         return sent;
     }
 
-    private AiCategorizer categorizer(AiProperties ai, AiCategorizationProperties properties) {
-        return new AiCategorizer(ai, properties, chatModels, client, promptBuilder, embeddingStage, examples,
+    private AiCategorizer categorizer(ActiveProviders providers, AiCategorizationProperties properties) {
+        return new AiCategorizer(providers, properties, client, promptBuilder, embeddingStage, examples,
                 redactionContext, lock, jdbc, transactions);
     }
 
@@ -341,7 +338,7 @@ class AiCategorizerTest {
         insertAll();
         model.answering(sensible(SURE), 100, 20);
 
-        AiRunResult result = categorizer(ai, new AiCategorizationProperties(4, 500, new BigDecimal("0.70"), false))
+        AiRunResult result = categorizer(providers, new AiCategorizationProperties(4, 500, new BigDecimal("0.70"), false))
                 .run(false);
 
         assertThat(model.prompts()).extracting(prompt -> ModelAnswers.items(prompt).size())
@@ -697,7 +694,7 @@ class AiCategorizerTest {
     void theCapStopsTheRunCleanlyAndTheNextRunContinues(CapturedOutput output) {
         insertAll();
         model.answering(sensible(SURE), 100, 20);
-        AiCategorizer capped = categorizer(ai, new AiCategorizationProperties(2, 3, new BigDecimal("0.70"), false));
+        AiCategorizer capped = categorizer(providers, new AiCategorizationProperties(2, 3, new BigDecimal("0.70"), false));
 
         AiRunResult first = capped.run(false);
 
@@ -765,7 +762,7 @@ class AiCategorizerTest {
     @Test
     void withAiOffNothingIsReadOrSent() {
         insert("tearoom");
-        AiProperties off = new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null), true);
+        ActiveProviders off = ActiveProviders.fixed(AiPath.OFF, null);
 
         AiRunResult result = categorizer(off, new AiCategorizationProperties(25, 500, new BigDecimal("0.70"), true))
                 .run(false);

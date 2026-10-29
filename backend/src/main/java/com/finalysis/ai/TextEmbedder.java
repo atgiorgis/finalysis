@@ -10,13 +10,13 @@ package com.finalysis.ai;
  */
 public interface TextEmbedder {
 
-    /** Whether an embedding model is configured: AI is on and a model bean exists. */
+    /** Whether an embedding model can be called: the active path is usable. */
     boolean enabled();
 
-    /** The model id stored with every vector; only vectors of the same id are compared. */
+    /** The active path's model id, stored with every vector; only vectors of the same id are compared. Null when off. */
     String modelId();
 
-    /** The configured length of every vector. */
+    /** The active model's vector length; 0 when off. */
     int dimensions();
 
     /**

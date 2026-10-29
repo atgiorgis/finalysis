@@ -55,7 +55,8 @@ class ChatAiOffApiTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.type").value("urn:finalysis:problem:ai-off"))
                 .andExpect(jsonPath("$.title").value("AI is off"))
-                .andExpect(jsonPath("$.detail").value("AI is off. Start the backend with the aws profile to use chat."));
+                .andExpect(jsonPath("$.detail").value("Corgi is off. Choose where it runs in Settings."))
+                .andExpect(jsonPath("$.reason").doesNotExist()); // the path is OFF: nothing more to say
 
         mvc.perform(get("/api/chat/conversations/{id}", id))
                 .andExpect(status().isOk())

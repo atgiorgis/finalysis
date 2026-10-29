@@ -12,7 +12,7 @@ export function providerName(ai: AiStatus): string {
  * Categorization sends merchant names and amounts; chat sends the question and the figures its tools return.
  */
 export default function CloudAiBanner({ ai }: { ai: AiStatus }) {
-  if (ai.mode !== 'CLOUD') {
+  if (ai.path !== 'CLOUD') {
     return null
   }
   return (

@@ -1,5 +1,6 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.AiPath;
 import com.finalysis.ai.AiPrices;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -80,8 +81,9 @@ public final class UsageTally {
         return inputTokens == null ? null : tokens;
     }
 
-    public ChatConversationStore.Usage toUsage(UsageKind kind, String model, OffsetDateTime at) {
-        return new ChatConversationStore.Usage(kind, model, calls, inputTokens, outputTokens,
+    /** The ledger row; {@code path} decides the cost stored ({@link ChatConversationStore#storedCost}). */
+    public ChatConversationStore.Usage toUsage(UsageKind kind, String model, AiPath path, OffsetDateTime at) {
+        return new ChatConversationStore.Usage(kind, model, path, calls, inputTokens, outputTokens,
                 cacheTokens(cacheReadTokens), cacheTokens(cacheWriteTokens), callsWithoutUsage, cost, at);
     }
 }

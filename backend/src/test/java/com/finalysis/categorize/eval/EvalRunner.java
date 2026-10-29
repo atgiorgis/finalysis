@@ -1,6 +1,7 @@
 package com.finalysis.categorize.eval;
 
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.AiPath;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.TextEmbedder;
 import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.ai.outbound.RedactionContextQuery;
@@ -34,8 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -147,7 +146,8 @@ public class EvalRunner {
 
     /** Settings read from the environment as configured; nothing that names credentials or a profile. */
     static final List<String> ENVIRONMENT_SETTINGS = List.of(
-            "finalysis.ai.mode", "finalysis.ai.provider", "finalysis.ai.roles.categorization",
+            "finalysis.ai.cloud-available", "finalysis.ai.default-path", "finalysis.ai.provider",
+            "finalysis.ai.roles.categorization",
             "finalysis.ai.roles.embedding", "finalysis.ai.native-structured-output",
             "finalysis.ai.embedding.dimensions",
             "spring.ai.model.chat", "spring.ai.model.embedding", "spring.ai.bedrock.aws.region",
@@ -155,10 +155,9 @@ public class EvalRunner {
             "spring.ai.bedrock.converse.chat.options.temperature", "spring.ai.bedrock.converse.chat.options.max-tokens",
             "spring.ai.bedrock.titan.embedding.model", "spring.ai.bedrock.titan.embedding.input-type");
 
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final AiCategorizationProperties categorization;
     private final SimilarMerchantProperties examples;
-    private final ObjectProvider<ChatModel> chatModels;
     private final CategorizationModelClient client;
     private final CategorizationPromptBuilder promptBuilder;
     private final TextEmbedder embedder;
@@ -171,16 +170,15 @@ public class EvalRunner {
     private final EvalSeeder seeder;
     private final Environment environment;
 
-    public EvalRunner(AiProperties ai, AiCategorizationProperties categorization, SimilarMerchantProperties examples,
-                      ObjectProvider<ChatModel> chatModels, CategorizationModelClient client,
+    public EvalRunner(ActiveProviders providers, AiCategorizationProperties categorization,
+                      SimilarMerchantProperties examples, CategorizationModelClient client,
                       CategorizationPromptBuilder promptBuilder, TextEmbedder embedder,
                       MerchantEmbeddingRepository embeddings, RedactionContextQuery redactionContext,
                       CategorizationLock lock, CategorizationService rules, JdbcTemplate jdbc,
                       PlatformTransactionManager transactions, EvalSeeder seeder, Environment environment) {
-        this.ai = ai;
+        this.providers = providers;
         this.categorization = categorization;
         this.examples = examples;
-        this.chatModels = chatModels;
         this.client = client;
         this.promptBuilder = promptBuilder;
         this.embedder = embedder;
@@ -195,7 +193,7 @@ public class EvalRunner {
     }
 
     public EvalResult run(EvalSet set, EvalInputs inputs, EvalPrices prices) {
-        if (!ai.enabled() || chatModels.getIfAvailable() == null || !embedder.enabled()) {
+        if (providers.path() != AiPath.CLOUD || !providers.usable() || !embedder.enabled()) {
             throw new IllegalStateException("The evaluation needs AI on, with a chat and an embedding model");
         }
         if (categorization.runAfterImport()) {
@@ -221,8 +219,8 @@ public class EvalRunner {
                     categorization.maxItemsPerRun(), inputs.minConfidence(), false);
             SimilarMerchantProperties exampleSettings = exampleSettings(variant, inputs);
             TextEmbedder variantEmbedder = variant == Variant.B ? new DisabledEmbedder(embedder) : embedder;
-            AiCategorizer categorizer = new AiCategorizer(ai, settings, chatModels, client, promptBuilder,
-                    new MerchantEmbeddingStage(ai, variantEmbedder, embeddings, promptBuilder, exampleSettings, jdbc),
+            AiCategorizer categorizer = new AiCategorizer(providers, settings, client, promptBuilder,
+                    new MerchantEmbeddingStage(variantEmbedder, embeddings, promptBuilder, exampleSettings, jdbc),
                     exampleSettings, redactionContext, lock, jdbc, transactions);
 
             EvalRecorder recorder = new EvalRecorder();
@@ -303,7 +301,7 @@ public class EvalRunner {
                 result.callsWithoutUsage(), result.embeddings().calls(), result.embeddings().inputTokens(),
                 result.embeddings().callsWithoutUsage(), result.itemsSelected(), result.itemsSent(),
                 result.itemsWithExamples(), result.itemsDirect(),
-                prices.cost(ai.roles().categorization(), result.inputTokens(), result.outputTokens(),
+                prices.cost(providers.categorization().modelId(), result.inputTokens(), result.outputTokens(),
                         embedder.modelId(), result.embeddings().inputTokens()),
                 withoutUsage > 0);
     }
@@ -359,7 +357,7 @@ public class EvalRunner {
         settings.put("finalysis.ai.examples.max-examples-per-batch", String.valueOf(examples.maxExamplesPerBatch()));
         settings.put("finalysis.ai.examples.direct-min-similarity (configured)",
                 String.valueOf(examples.directMinSimilarity()));
-        settings.put("models.categorization", ai.roles().categorization());
+        settings.put("models.categorization", providers.categorization().modelId());
         settings.put("models.embedding", embedder.modelId());
         settings.put("prompt.version", CategorizationPromptBuilder.PROMPT_VERSION);
         settings.put("prompt.system-sha256", EvalSet.sha256(promptBuilder.build(List.of(), List.of(),

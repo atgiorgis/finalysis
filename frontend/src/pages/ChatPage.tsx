@@ -79,13 +79,13 @@ function fromTurn(question: string, t: ChatTurn): TurnEntry {
 /** "3 turns · $0.03": the count and the backend's sum; no cost shown when no turn had a price. */
 export function conversationLine(c: ConversationItem, ai: AiStatus | null | undefined): string {
   const turns = c.turns === 1 ? '1 turn' : `${c.turns} turns`
-  const cost = c.totalCost === null && ai?.mode !== 'LOCAL' ? null : costText(c.totalCost, ai)
+  const cost = c.totalCost === null && ai?.path !== 'LOCAL' ? null : costText(c.totalCost, ai)
   return cost ? `${turns} · ${cost}` : turns
 }
 
 /** Today's budget, as `GET /api/chat/usage` gives it. */
 export function budgetLine(usage: ChatDailyUsage, ai: AiStatus | null | undefined): string {
-  if (ai?.mode === 'LOCAL') {
+  if (ai?.path === 'LOCAL') {
     return costText(usage.spentToday, ai)
   }
   return usage.maxDailyCost
@@ -168,7 +168,7 @@ export default function ChatPage() {
   const { status } = useShellData()
   const { version } = useDataVersion()
   const id = idParam && /^\d{1,18}$/.test(idParam) ? idParam : null
-  const aiOff = status?.ai.mode === 'OFF'
+  const aiOff = status?.ai.path === 'OFF'
 
   const [list, setList] = useState<ConversationItem[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -309,10 +309,10 @@ export default function ChatPage() {
             <div className="chat-conversation-head">
               <div className="chat-conversation-title">
                 <h2>{conversation.title ?? 'New conversation'}</h2>
-                {(conversation.totalCost !== null || status?.ai.mode === 'LOCAL') && (
+                {(conversation.totalCost !== null || status?.ai.path === 'LOCAL') && (
                   <p className="muted">
                     This conversation: {costText(conversation.totalCost, status?.ai)}
-                    {status?.ai.mode !== 'LOCAL' && ' estimated'}
+                    {status?.ai.path !== 'LOCAL' && ' estimated'}
                   </p>
                 )}
               </div>

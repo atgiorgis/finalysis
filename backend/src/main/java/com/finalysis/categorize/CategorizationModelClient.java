@@ -1,7 +1,8 @@
 package com.finalysis.categorize;
 
+import com.finalysis.ai.CategorizationProvider;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.AiCallLog;
-import com.finalysis.ai.AiProperties;
 import com.finalysis.categorize.CategorizationPromptBuilder.CategorizationPrompt;
 import org.springframework.ai.chat.client.AdvisorParams;
 import org.springframework.ai.chat.client.ChatClient;
@@ -14,7 +15,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,7 +28,8 @@ import org.springframework.stereotype.Component;
  * {@link AiCallLog} line, whatever happens. The answer is returned as the model gave it; checking it against the
  * request (§4.4) is the caller's job.
  *
- * <p>Depends only on Spring AI's {@link ChatModel}; which provider is behind it is configuration.
+ * <p>Depends only on Spring AI's {@link ChatModel}: the active path's ({@link ActiveProviders}), Bedrock on Cloud and
+ * Ollama on Self-hosted and Local, where the native structured output is Ollama's JSON-schema {@code format}.
  */
 @Component
 public class CategorizationModelClient {
@@ -37,12 +38,10 @@ public class CategorizationModelClient {
     static final double TEMPERATURE = 0.0;
     static final int MAX_OUTPUT_TOKENS = 2000;
 
-    private final ObjectProvider<ChatModel> chatModel;
-    private final AiProperties properties;
+    private final ActiveProviders providers;
 
-    public CategorizationModelClient(ObjectProvider<ChatModel> chatModel, AiProperties properties) {
-        this.chatModel = chatModel;
-        this.properties = properties;
+    public CategorizationModelClient(ActiveProviders providers) {
+        this.providers = providers;
     }
 
     /**
@@ -69,14 +68,15 @@ public class CategorizationModelClient {
      *                               logged with the exception's class name first
      */
     public Result categorize(CategorizationPrompt prompt) {
-        ChatModel model = chatModel.getIfAvailable();
-        if (!properties.enabled() || model == null) {
+        CategorizationProvider provider = providers.categorization();
+        if (!providers.usable() || provider == null) {
             throw new IllegalStateException("AI is off");
         }
+        ChatModel model = provider.model();
         if (prompt.isEmpty()) {
             throw new IllegalStateException("Nothing to send");
         }
-        String modelId = properties.roles().categorization();
+        String modelId = provider.modelId();
         int items = prompt.request().items().size();
         long start = System.nanoTime();
         LenientConverter converter = new LenientConverter();
@@ -86,7 +86,7 @@ public class CategorizationModelClient {
             ChatClient.ChatClientRequestSpec request = ChatClient.create(model).prompt()
                     .messages(new SystemMessage(prompt.system()), new UserMessage(prompt.user()))
                     .options(ChatOptions.builder().model(modelId).temperature(TEMPERATURE).maxTokens(MAX_OUTPUT_TOKENS));
-            if (properties.nativeStructuredOutput()) {
+            if (provider.nativeStructuredOutput()) {
                 request = request.advisors(AdvisorParams.ENABLE_NATIVE_STRUCTURED_OUTPUT);
             }
             answer = request.call().responseEntity(converter);

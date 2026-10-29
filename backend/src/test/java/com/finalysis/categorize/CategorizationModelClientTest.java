@@ -3,7 +3,9 @@ package com.finalysis.categorize;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.finalysis.ai.AiMode;
+import com.finalysis.ai.ProviderSet;
+import com.finalysis.ai.AiPath;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.outbound.OutboundPayloadGuard;
 import com.finalysis.ai.outbound.RedactionContext;
@@ -24,8 +26,6 @@ import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.StructuredOutputChatOptions;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -140,7 +140,8 @@ class CategorizationModelClientTest {
     @Test
     void noCallWhenAiIsOffOrThereIsNothingToSend() {
         FakeChatModel model = new FakeChatModel().answering(ANSWER, 1, 1);
-        AiProperties off = new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null), true);
+        AiProperties off = new AiProperties(false, AiPath.OFF, null, new AiProperties.Roles(null, null, null, null),
+                true);
         CategorizationPrompt empty = new CategorizationPromptBuilder(
                 new Redactor(MerchantCleaningRules.loadDefault()), new OutboundPayloadGuard())
                 .build(List.of("Dining"), List.of(), RedactionContext.EMPTY);
@@ -151,17 +152,14 @@ class CategorizationModelClientTest {
         assertThat(model.prompts()).isEmpty();
     }
 
+    /** Cloud over this model when Cloud is available, else OFF; without a model, providers that couldn't be built. */
     private static CategorizationModelClient client(ChatModel model, AiProperties properties) {
-        StaticListableBeanFactory beans = new StaticListableBeanFactory();
-        if (model != null) {
-            beans.addBean("chatModel", model);
-        }
-        ObjectProvider<ChatModel> provider = beans.getBeanProvider(ChatModel.class);
-        return new CategorizationModelClient(provider, properties);
+        return new CategorizationModelClient(ActiveProviders.fixed(properties.cloudAvailable() ? AiPath.CLOUD : AiPath.OFF,
+                model == null ? null : ProviderSet.cloud(properties, 1024, model, null, null)));
     }
 
     private static AiProperties cloud(boolean nativeStructuredOutput) {
-        return new AiProperties(AiMode.CLOUD, "test",
+        return new AiProperties(true, AiPath.CLOUD, "test",
                 new AiProperties.Roles("main-model", MODEL, "embedding-model", ""), nativeStructuredOutput);
     }
 }

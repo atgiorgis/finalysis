@@ -1,6 +1,5 @@
 package com.finalysis.chat;
 
-import com.finalysis.ai.AiPrices;
 import com.finalysis.chat.grounding.AnswerText;
 import com.finalysis.chat.grounding.SummaryFigureStripper;
 import com.finalysis.chat.outbound.ChatPayloadGuard;
@@ -68,18 +67,16 @@ public class ConversationMemory {
     private final ChatPayloadGuard guard;
     private final ToolResultWriter writer;
     private final ChatProperties limits;
-    private final AiPrices prices;
     private final Clock clock;
     private final String prompt;
 
     public ConversationMemory(ChatConversationStore store, ChatModelClient client, ChatPayloadGuard guard,
-                              ToolResultWriter writer, ChatProperties limits, AiPrices prices, Clock clock) {
+                              ToolResultWriter writer, ChatProperties limits, Clock clock) {
         this.store = store;
         this.client = client;
         this.guard = guard;
         this.writer = writer;
         this.limits = limits;
-        this.prices = prices;
         this.clock = clock;
         try (InputStream in = ConversationMemory.class.getClassLoader().getResourceAsStream(RESOURCE)) {
             if (in == null) {
@@ -220,7 +217,7 @@ public class ConversationMemory {
         List<Message> messages = List.of(new SystemMessage(prompt),
                 new UserMessage("<history>" + writer.history(history) + "</history>"));
 
-        UsageTally usage = new UsageTally(prices.of(client.modelId()));
+        UsageTally usage = new UsageTally(client.price());
         int estimate = TokenEstimate.of(messages, 0);
         LimitHit limit = limit(spent, estimate, usage);
         if (limit != null) {
@@ -234,7 +231,7 @@ public class ConversationMemory {
             return logged(conversationId, folded.size(), Fold.FAILED, null);
         }
         usage.add(reply, estimate, SUMMARY_OUTPUT_TOKENS);
-        store.recordUsage(usage.toUsage(UsageKind.CONVERSATION_SUMMARY, client.modelId(), now()));
+        store.recordUsage(usage.toUsage(UsageKind.CONVERSATION_SUMMARY, client.modelId(), client.path(), now()));
 
         String summary = cut(SummaryFigureStripper.strip(AnswerText.plain(reply.text()).text()),
                 ChatPayloadGuard.MAX_HISTORY);

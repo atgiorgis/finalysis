@@ -39,8 +39,9 @@ spring:
     # Devtools (active under spring-boot:run) would otherwise turn on stack traces and messages in
     # error responses and log every resolved exception's message.
     add-properties: false
-  # AI is off unless a profile turns it on (AI-03, docs/plans/phase-4.md §7): the model starters create no
-  # ChatModel or EmbeddingModel and make no cloud calls. Only application-aws.yml enables them.
+  # Cloud AI is off unless the aws profile turns it on (AI-03, docs/plans/phase-4.md §7): the model starters create no
+  # ChatModel or EmbeddingModel and make no cloud calls. Only application-aws.yml enables them. The Ollama paths build
+  # their own clients (com.finalysis.ai.ollama), never through Spring's auto-configuration.
   ai:
     model:
       chat: none
@@ -119,8 +120,21 @@ finalysis:
     image-size: 50g           # the image's maximum size, set at creation; it grows as needed
     idle-lock-minutes: 15     # until the setting is changed in the app (app_setting vault.idle-lock-minutes)
   ai:
-    # OFF here; CLOUD only from application-aws.yml, LOCAL later from application-local.yml.
-    mode: OFF
+    # Where Corgi runs is the user's setting, in the vault (docs/plans/phase-9.md §3.1): Cloud, Self-hosted, Local or
+    # OFF, switched in Settings without a restart. A fresh vault selects Local (finalysis.ai.default-path, LOCAL in code;
+    # not set here). Cloud can be chosen only with the aws profile (finalysis.ai.cloud-available, application-aws.yml).
+    # Ollama on the Self-hosted and Local paths (§3.2): Local at 127.0.0.1, Self-hosted at the server's Tailscale name,
+    # both on port 11434 (finalysis.ai.ollama.port exists for tests only; startup refuses another port outside them).
+    ollama:
+      models:
+        # The owner sets the Ollama tag of 9a's pick, Ministral 3 14B (docs/eval/README.md run 7). Until then the
+        # placeholder finalysis-unset-chat-model is reported as "not pulled" and Corgi stays off on these paths.
+        # chat: <tag>
+        embedding: nomic-embed-text   # 768 dimensions
+      embedding-dimensions: 768
+      self-hosted-read-timeout: 60s   # one call; a GPU instance over Tailscale
+      local-read-timeout: 300s        # one call; a CPU laptop. max-turn-time (45s) still bounds a chat turn
+      probe-timeout: 3s               # /api/version and /api/tags, at unlock, on a switch and before each AI run
     # The AI stage (docs/plans/phase-4.md §4.5, step 7 notes); used only while a profile turns AI on.
     categorization:
       batch-size: 25          # items (merchant + direction) per call
@@ -165,8 +179,12 @@ finalysis:
     # Meaning-based merchant search (docs/plans/phase-6.md §4). The index is filled by categorization's embedding path
     # after each AI run and on POST /api/chat/search-index/refresh; chat only reads it.
     search:
-      min-similarity: 0.40          # cosine similarity a merchant needs to be a candidate by meaning; provisional:
-                                    # step 8 tunes it on the dev set only, never on the holdout
+      min-similarity: 0.40          # cosine similarity a merchant needs to be a candidate by meaning, for an embedding
+                                    # model without its own floor below
+      # One floor per embedding model (docs/plans/phase-9.md §4.1): similarities aren't comparable across models.
+      min-similarity-by-model:
+        "[amazon.titan-embed-text-v2:0]": 0.40   # Titan V2, Cloud: set from the Phase 6 dev sweep
+        "[nomic-embed-text]": 0.40               # Ollama paths: provisional until the owner's dev sweep on Ollama
       max-embeddings-per-run: 500   # cost guard: embedding calls per index refresh; the rest wait for the next one
   # Read-only analytics (docs/plans/phase-5.md §3.3); a bad value fails startup.
   analytics:

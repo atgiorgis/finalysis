@@ -11,8 +11,8 @@ export function refuseUnlessPlain(status) {
         'a vault may hold real statements, and fixtures are committed.',
     )
   }
-  if (status?.ai?.mode !== 'OFF') {
-    throw new Error(`AI must be off while capturing fixtures (mode ${status?.ai?.mode})`)
+  if (status?.ai?.path !== 'OFF') {
+    throw new Error(`AI must be off while capturing fixtures (path ${status?.ai?.path})`)
   }
   return status
 }

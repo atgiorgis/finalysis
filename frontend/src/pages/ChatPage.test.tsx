@@ -24,7 +24,7 @@ afterEach(() => {
 const MINUS = '−'
 const CLOUD = {
   ...fixtures.statusOff,
-  ai: { mode: 'CLOUD', provider: 'bedrock', models: { main: 'test-main-model', categorization: 'c', embedding: 'e' } },
+  ai: { path: 'CLOUD', provider: 'bedrock', models: { main: 'test-main-model', categorization: 'c', embedding: 'e' } },
 }
 const LIST = '/api/chat/conversations?page=0&size=50'
 
@@ -272,7 +272,7 @@ test('the header: Corgi’s avatar, name and promise, and a cloud badge from the
 test('the header badge says local with a local provider, from config, and is absent with AI off', async () => {
   renderApp('/chat', {
     ...ROUTES,
-    '/api/status': { ...CLOUD, ai: { ...CLOUD.ai, mode: 'LOCAL', provider: 'ollama' } },
+    '/api/status': { ...CLOUD, ai: { ...CLOUD.ai, path: 'LOCAL', provider: 'ollama' } },
   })
   const badge = await vi.waitFor(() => {
     const found = document.querySelector('.path-badge')
@@ -369,7 +369,7 @@ test('the left column shows today’s budget from the usage read', async () => {
 })
 
 test('with a local model, every cost line says $0.00 · local', async () => {
-  const local = { ...CLOUD, ai: { ...CLOUD.ai, mode: 'LOCAL', provider: 'ollama' } }
+  const local = { ...CLOUD, ai: { ...CLOUD.ai, path: 'LOCAL', provider: 'ollama' } }
   renderApp('/chat/7', { ...ROUTES, '/api/status': local })
 
   await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })

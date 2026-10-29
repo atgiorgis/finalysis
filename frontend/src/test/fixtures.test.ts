@@ -4,7 +4,7 @@ import { fetchFrom, fixtures } from './fixtures'
 import { vi } from 'vitest'
 
 test('the fixtures are the sample data with AI off', () => {
-  expect(fixtures.statusOff.ai).toEqual({ mode: 'OFF' })
+  expect(fixtures.statusOff.ai).toEqual({ path: 'OFF', available: ['SELF_HOSTED', 'LOCAL'], reachable: false })
   expect(fixtures.accounts.length).toBeGreaterThan(0)
   expect(fixtures.months.months.length).toBeGreaterThan(0)
   expect(fixtures.coverage.latestMonth).toMatch(/^\d{4}-\d{2}$/)

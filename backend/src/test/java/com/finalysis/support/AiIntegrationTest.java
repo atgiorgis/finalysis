@@ -12,7 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 
 /**
  * {@link IntegrationTest} with AI on, a {@link FakeChatModel} as the only chat model and a {@link FakeEmbeddingModel}
- * as the only embedding model (docs/plans/phase-4.md §10): mode CLOUD (so the data-minimization path is the one under
+ * as the only embedding model (docs/plans/phase-4.md §10): path CLOUD (so the data-minimization path is the one under
  * test), no {@code aws} profile, so no Bedrock client exists and {@link NoCloudAiGuard} stays in force. Test classes
  * share the context and its fakes: reset them ({@link FakeChatModel#reset()}, {@link FakeEmbeddingModel#reset()})
  * before each test, and delete the embeddings a test made.
@@ -23,7 +23,8 @@ import org.springframework.test.context.TestPropertySource;
 @IntegrationTest
 @Import(AiIntegrationTest.FakeModels.class)
 @TestPropertySource(properties = {
-        "finalysis.ai.mode=CLOUD",
+        "finalysis.ai.cloud-available=true",
+        "finalysis.ai.default-path=CLOUD",
         "finalysis.ai.provider=test",
         "finalysis.ai.roles.categorization=" + AiIntegrationTest.CATEGORIZATION_MODEL,
         "finalysis.ai.roles.embedding=" + AiIntegrationTest.EMBEDDING_MODEL,

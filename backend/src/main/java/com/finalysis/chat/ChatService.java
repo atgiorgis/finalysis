@@ -1,5 +1,8 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.AiProviders;
+import com.finalysis.ai.ActiveProviders;
+import com.finalysis.ai.AiPath;
 import com.finalysis.api.InvalidField;
 import com.finalysis.api.InvalidRequestException;
 import com.finalysis.api.NotFoundException;
@@ -63,6 +66,7 @@ public class ChatService {
     };
 
     private final ChatModelClient client;
+    private final AiProviders providers;
     private final ChatConversationStore store;
     private final OutboundTurnFactory turns;
     private final QuestionRedactor redactor;
@@ -78,11 +82,13 @@ public class ChatService {
     private final Set<Long> running = ConcurrentHashMap.newKeySet();
     private final Semaphore overall = new Semaphore(MAX_CONCURRENT, true);
 
-    public ChatService(ChatModelClient client, ChatConversationStore store, OutboundTurnFactory turns,
+    public ChatService(ChatModelClient client, AiProviders providers, ChatConversationStore store,
+                       OutboundTurnFactory turns,
                        QuestionRedactor redactor, ContextBlockFactory context, ChatPayloadGuard guard, ChatPrompt prompt,
                        TurnLoop loop, ConversationMemory memory, CitationResolver citations, ChatProperties limits,
                        Clock clock, JsonMapper json) {
         this.client = client;
+        this.providers = providers;
         this.store = store;
         this.turns = turns;
         this.redactor = redactor;
@@ -130,8 +136,8 @@ public class ChatService {
                 t.groundingStatus() == null ? null : new ChatTurnResponse.Grounding(
                         GroundingStatus.valueOf(t.groundingStatus()), t.figuresChecked(), t.retried(), t.ungrounded()),
                 refreshed(t.citations()), t.limitHit(),
-                new ChatTurnResponse.Usage(t.model(), t.rounds(), t.inputTokens(), t.outputTokens(),
-                        t.cacheReadTokens(), t.cacheWriteTokens(), t.callsWithoutUsage(), money(t.estimatedCost())),
+                ChatTurnResponse.Usage.of(t.model(), t.path(), t.rounds(), t.inputTokens(), t.outputTokens(),
+                        t.cacheReadTokens(), t.cacheWriteTokens(), t.callsWithoutUsage(), t.estimatedCost()),
                 t.createdAt())).toList();
         return new ConversationResponses.Detail(conversation.id(), conversation.title(),
                 money(conversation.totalCost()), conversation.createdAt(),
@@ -147,8 +153,8 @@ public class ChatService {
     // ------------------------------------------------------------------ a turn
 
     public ChatTurnResponse ask(long conversationId, String question) {
-        if (!client.enabled()) {
-            throw ChatProblem.aiOff();
+        if (providers.state().providers() == null) { // OFF, locked, or a path that can't be built: refused at once
+            throw ChatProblem.aiOff(reason());
         }
         if (!store.exists(conversationId)) {
             throw new NotFoundException("Conversation", conversationId);
@@ -160,7 +166,12 @@ public class ChatService {
             if (!acquire()) {
                 throw ChatProblem.busy();
             }
-            try {
+            // The turn holds the path from here to the end (phase-9.md §3.1): a switch waits for it. Taking the lease
+            // checks an Ollama path's reachability first.
+            try (ActiveProviders.Lease lease = providers.lease()) {
+                if (!client.enabled()) {
+                    throw ChatProblem.aiOff(providers.usable() ? null : reason());
+                }
                 return answer(conversationId, question);
             } finally {
                 overall.release();
@@ -180,8 +191,9 @@ public class ChatService {
     }
 
     private ChatTurnResponse answer(long conversationId, String question) {
+        AiPath path = client.path(); // held by the turn's lease: the turn runs, and is stored, on this path
         ZonedDateTime now = ZonedDateTime.now(clock);
-        if (limits.maxDailyCost().signum() > 0) {
+        if (client.path() == AiPath.CLOUD && limits.maxDailyCost().signum() > 0) { // the cap is Cloud's (§4.2)
             ZonedDateTime midnight = now.toLocalDate().atStartOfDay(now.getZone());
             if (store.costSince(midnight.toOffsetDateTime()).compareTo(limits.maxDailyCost()) >= 0) {
                 throw ChatProblem.budget(midnight.plusDays(1).toOffsetDateTime());
@@ -222,7 +234,7 @@ public class ChatService {
         int seq = store.saveTurn(new ChatConversationStore.NewTurn(conversationId, question, outbound.text(),
                 cited == null ? null : cited.text(), result.source(), status == null ? null : status.name(),
                 result.retried(), figures, ungrounded, result.limit(), shown, turn.aliases().asMap(), client.modelId(),
-                ChatPrompt.VERSION,
+                path, ChatPrompt.VERSION,
                 result.rounds(), result.toolCalls(), result.inputTokens(), result.outputTokens(),
                 cacheTokens(result, result.cacheReadTokens()), cacheTokens(result, result.cacheWriteTokens()),
                 result.callsWithoutUsage(), result.cost(), millis,
@@ -246,10 +258,9 @@ public class ChatService {
                 result.evidence().results().stream().map(r -> new ChatTurnResponse.ToolUse(
                         r.outcome().tool() == null ? null : r.outcome().tool().wire(), r.outcome().status(),
                         r.outcome().rows(), r.outcome().millis())).toList(),
-                new ChatTurnResponse.Usage(client.modelId(), result.rounds(), result.inputTokens(),
+                ChatTurnResponse.Usage.of(client.modelId(), path, result.rounds(), result.inputTokens(),
                         result.outputTokens(), cacheTokens(result, result.cacheReadTokens()),
-                        cacheTokens(result, result.cacheWriteTokens()), result.callsWithoutUsage(),
-                        money(result.cost())),
+                        cacheTokens(result, result.cacheWriteTokens()), result.callsWithoutUsage(), result.cost()),
                 result.limit(),
                 new ChatTurnResponse.Redactions(outbound.aliasesUsed(), outbound.identifiersRemoved(),
                         turn.withheldMerchants(), turn.refusedMerchants()));
@@ -274,6 +285,11 @@ public class ChatService {
     /** A turn's cached-prefix tokens; null when no call reported usage, as its input tokens (step 8c). */
     private static Integer cacheTokens(TurnLoop.Result result, int tokens) {
         return result.inputTokens() == null ? null : tokens;
+    }
+
+    /** Why Corgi can't answer now, as the status block says it; null when there is nothing to add (OFF). */
+    private String reason() {
+        return providers.state().reason();
     }
 
     private static String money(BigDecimal cost) {

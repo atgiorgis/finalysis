@@ -47,17 +47,15 @@ public class TurnLoop {
     private final ToolExecutor executor;
     private final AnswerGrounding grounding;
     private final ChatProperties limits;
-    private final AiPrices prices;
     private final Clock clock;
     private final ToolRegistry registry;
 
     public TurnLoop(ChatModelClient client, ToolExecutor executor, AnswerGrounding grounding, ChatProperties limits,
-                    AiPrices prices, Clock clock, ToolRegistry registry) {
+                    Clock clock, ToolRegistry registry) {
         this.client = client;
         this.executor = executor;
         this.grounding = grounding;
         this.limits = limits;
-        this.prices = prices;
         this.clock = clock;
         this.registry = registry;
     }
@@ -94,7 +92,7 @@ public class TurnLoop {
         final int definitionChars;
         final List<Message> messages;
         final List<TurnEvidence.Result> results = new ArrayList<>();
-        final Optional<AiPrices.Price> price = prices.of(client.modelId());
+        final Optional<AiPrices.Price> price = client.price(); // Cloud only (phase-9.md §4.2)
         final long started = clock.millis();
         int rounds;
         int toolCalls;

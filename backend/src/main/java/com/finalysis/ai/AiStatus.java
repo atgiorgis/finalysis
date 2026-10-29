@@ -1,27 +1,44 @@
 package com.finalysis.ai;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The {@code ai} block of {@code GET /api/status}: what the UI needs for the cloud banner (docs/plans/phase-4.md
- * §7). Never a region, account or credential. {@code {"mode": "OFF"}} when AI is off.
+ * The {@code ai} block of {@code GET /api/status} (docs/plans/phase-9.md §3.3): what the UI needs for the badge, the
+ * banner and Settings → Corgi. Never a region, account, instance id, URL or credential: Self-hosted's server is its
+ * Tailscale name only.
  *
- * @param provider the provider's short name, e.g. {@code bedrock}; null when off
- * @param models   the model id per role in use; null when off
+ * @param path      the selected path; null while the vault is locked
+ * @param available the paths that can be chosen besides OFF (Cloud only with the {@code aws} profile)
+ * @param reachable whether Corgi can run now; false for OFF and while locked
+ * @param reason    why not ({@code "Ollama unreachable"}, {@code "model <tag> not pulled"}, ...); null when reachable
+ *                  or OFF
+ * @param provider  {@code bedrock} or {@code ollama}; null for OFF or a path that can't be built
+ * @param server    Self-hosted only: the server's Tailscale name
+ * @param models    the model id per role on the path; null with {@code provider}
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record AiStatus(AiMode mode, String provider, Map<String, String> models) {
+public record AiStatus(AiPath path, List<AiPath> available, boolean reachable, String reason, String provider,
+                       String server, Map<String, String> models) {
 
-    public static AiStatus of(AiProperties properties) {
-        if (!properties.enabled()) {
-            return new AiStatus(AiMode.OFF, null, null);
+    public static AiStatus of(AiProviders providers) {
+        return of(providers.state(), providers.available());
+    }
+
+    static AiStatus of(AiProviders.State state, List<AiPath> available) {
+        ProviderSet set = state.providers();
+        Map<String, String> models = null;
+        if (set != null) {
+            models = new TreeMap<>();
+            models.put("categorization", set.categorization().modelId());
+            models.put("embedding", set.embedding().modelId());
+            models.put("main", set.chat().modelId());
         }
-        Map<String, String> models = new TreeMap<>();
-        models.put("categorization", properties.roles().categorization());
-        models.put("embedding", properties.roles().embedding());
-        models.put("main", properties.roles().main());
-        return new AiStatus(properties.mode(), properties.provider(), models);
+        AiPath path = state.path();
+        String server = path == AiPath.SELF_HOSTED ? state.selection().selfhostName() : null;
+        return new AiStatus(path, available, state.usable(), state.reason(), set == null ? null : set.provider(),
+                server, models);
     }
 }

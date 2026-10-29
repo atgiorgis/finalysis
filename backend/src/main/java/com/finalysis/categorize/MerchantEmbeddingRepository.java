@@ -13,16 +13,16 @@ import org.springframework.stereotype.Component;
  * One embedding per merchant and embedding model (DAT-06, V17), for finding similar merchants during categorization
  * (CAT-03, docs/plans/phase-4.md §6).
  *
- * <p>Plain JDBC, not JPA: pgvector's {@code vector} type isn't mapped by JPA in this project, and
- * similarity search is a native {@code <=>} operator query whose {@code ORDER BY ... LIMIT} shape
- * must stay intact for the HNSW index to be usable. Vectors are bound with pgvector-java's
+ * <p>Plain JDBC, not JPA: pgvector's {@code vector} type isn't mapped by JPA in this project, and similarity search is
+ * a native {@code <=>} operator query. Since V25 (docs/plans/phase-9.md §4.1) the column takes a vector of any length,
+ * Titan V2's 1024 and nomic-embed-text's 768 alike, with its length in {@code dimensions}, and the search is an exact
+ * scan of one model's rows: a household's few thousand merchants take milliseconds. Vectors are bound with pgvector-java's
  * {@link PGvector}, a typed {@code PGobject}, so queries need no casts and no hand-written vector
  * literal formatting or parsing.
  *
  * <p>{@code merchant} is the key: pass the exact cleaned value stored in {@code txn.merchant}. This repository does no
  * case or whitespace normalization, so "ACME" and "Acme " are different merchants; callers must be consistent.
- * {@code model} is on every row and every query: vectors of two models are never compared, even when both have
- * 1024 dimensions.
+ * {@code model} is on every row and every query: vectors of two models are never compared, even of the same length.
  *
  * <p>{@code @Component}, not {@code @Repository}: the latter's exception translation would turn the
  * validation {@link IllegalArgumentException}s into {@code InvalidDataAccessApiUsageException}, and
@@ -31,13 +31,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class MerchantEmbeddingRepository {
 
-    /** Matches {@code vector(1024)} in V17. */
+    /** Titan V2's length, Cloud's embedding model (and the test fakes'); since V25 any length is stored. */
     public static final int DIMENSIONS = 1024;
+    /** pgvector's largest vector. */
+    static final int MAX_DIMENSIONS = 16_000;
     public static final int MAX_LIMIT = 50;
 
-    // <=> is cosine distance, matching the vector_cosine_ops class of ix_merchant_embedding_hnsw. The index serves
-    // the inner ORDER BY <distance expression> ... LIMIT; the model and self filters apply to what it returns, and
-    // labels are looked up for those candidates only. A label is the category of the merchant's newest txn in the
+    // <=> is cosine distance. Since V25 there is no index: an exact scan of the model's rows (only same-model vectors,
+    // so only same-length ones, are ever compared), nearest first; labels are looked up for those candidates only. A label is the category of the merchant's newest txn in the
     // item's direction whose category came from the user or a rule: never from the AI, so the model never learns
     // from its own answers. A txn marked not a transfer gives no label: its description is often generic, so its
     // category says nothing about similar merchants (step 9d notes).
@@ -93,7 +94,7 @@ public class MerchantEmbeddingRepository {
                 """)
                 .param("merchant", merchant)
                 .param("model", model)
-                .param("dimensions", DIMENSIONS)
+                .param("dimensions", vector.toArray().length)
                 .param("inputSha256", inputSha256)
                 .param("embedding", vector)
                 .update();
@@ -153,8 +154,8 @@ public class MerchantEmbeddingRepository {
     }
 
     private static PGvector toVector(float[] embedding) {
-        if (embedding == null || embedding.length != DIMENSIONS) {
-            throw new IllegalArgumentException("embedding must have " + DIMENSIONS + " dimensions, had "
+        if (embedding == null || embedding.length < 1 || embedding.length > MAX_DIMENSIONS) {
+            throw new IllegalArgumentException("embedding must have 1 to " + MAX_DIMENSIONS + " dimensions, had "
                     + (embedding == null ? "none" : embedding.length));
         }
         // pgvector rejects NaN and infinity; fail here with a clear message instead of a SQL error.

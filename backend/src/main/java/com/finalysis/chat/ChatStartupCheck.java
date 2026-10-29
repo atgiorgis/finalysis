@@ -1,5 +1,8 @@
 package com.finalysis.chat;
 
+import org.springframework.beans.factory.ObjectProvider;
+import com.finalysis.ai.PromptCache;
+import com.finalysis.ai.ChatRoleProperties;
 import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
 import java.math.BigDecimal;
@@ -16,6 +19,9 @@ import org.springframework.stereotype.Component;
  * own check ({@link TurnLoop#roundWorstCase}, {@link TurnLoop#roundFits}); otherwise every turn would stop before its
  * first call, so startup fails instead, naming the model, both amounts and the setting. This runs in the app, the
  * chat evaluation and the smoke tests alike, since each starts this context before any model call.
+ *
+ * <p>Phase 9 (docs/plans/phase-9.md §4.2): prices and cost limits apply on Cloud only, so this checks Cloud's main
+ * model whenever Cloud is available, whichever path the vault selects later; the Ollama paths have no cost limit.
  */
 @Component
 class ChatStartupCheck implements SmartInitializingSingleton {
@@ -23,23 +29,29 @@ class ChatStartupCheck implements SmartInitializingSingleton {
     private final AiProperties ai;
     private final AiPrices prices;
     private final ChatProperties limits;
-    private final ChatModelClient client;
+    private final ChatRoleProperties role;
+    private final ObjectProvider<PromptCache> promptCache;
 
-    ChatStartupCheck(AiProperties ai, AiPrices prices, ChatProperties limits, ChatModelClient client) {
+    ChatStartupCheck(AiProperties ai, AiPrices prices, ChatProperties limits, ChatRoleProperties role,
+                     ObjectProvider<PromptCache> promptCache) {
         this.ai = ai;
         this.prices = prices;
         this.limits = limits;
-        this.client = client;
+        this.role = role;
+        this.promptCache = promptCache;
     }
 
     @Override
     public void afterSingletonsInstantiated() {
-        verify(ai, prices, limits, client.promptCaching() == ChatModelClient.PromptCaching.ON);
+        // Cloud's rounds are priced as caching when chat would ask Cloud's provider to cache (ChatModelClient)
+        boolean caching = ai.cloudAvailable() && role.promptCache() && promptCache.getIfAvailable() != null
+                && prices.of(ai.roles().main()).filter(AiPrices.Price::cachePriced).isPresent();
+        verify(ai, prices, limits, caching);
     }
 
     /** @param caching whether the loop prices its rounds as asking to cache (input at the cache-write price) */
     static void verify(AiProperties ai, AiPrices prices, ChatProperties limits, boolean caching) {
-        if (!ai.enabled()) {
+        if (!ai.cloudAvailable()) {
             return;
         }
         String model = ai.roles().main();

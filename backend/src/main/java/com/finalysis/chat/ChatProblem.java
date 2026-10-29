@@ -25,10 +25,20 @@ public class ChatProblem extends ErrorResponseException {
         return problem;
     }
 
-    /** 503: no AI profile. Nothing is stored and no call is made. */
-    public static ChatProblem aiOff() {
-        return new ChatProblem(HttpStatus.SERVICE_UNAVAILABLE, "ai-off", "AI is off",
-                "AI is off. Start the backend with the aws profile to use chat.", null);
+    /**
+     * 503: Corgi can't run (docs/plans/phase-9.md §3.1): the path is OFF, or the selected one isn't available or
+     * reachable. Nothing is stored and no call is made.
+     *
+     * @param reason the status block's reason ({@code "Ollama unreachable"}, {@code "model <tag> not pulled"}); null
+     *               when the path is OFF
+     */
+    public static ChatProblem aiOff(String reason) {
+        ChatProblem problem = new ChatProblem(HttpStatus.SERVICE_UNAVAILABLE, "ai-off", "AI is off",
+                "Corgi is off. Choose where it runs in Settings.", null);
+        if (reason != null) {
+            problem.getBody().setProperty("reason", reason);
+        }
+        return problem;
     }
 
     /** 429: the day's estimated cost reached the cap; resets at local midnight. */

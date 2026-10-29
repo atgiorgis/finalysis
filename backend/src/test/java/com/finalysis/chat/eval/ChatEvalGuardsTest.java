@@ -222,4 +222,13 @@ class ChatEvalGuardsTest {
                     .hasMessageContaining("-Deval.maxTurnCost");
         }
     }
+
+    /** Phase 9 step 9b-1: the holdout is evaluated whole, so -Deval.questions is refused for it. */
+    @Test
+    void aSubsetOfTheHoldoutIsRefused() {
+        assertThatThrownBy(() -> ChatEvalGuards.requireWholeSet(ChatEvalGuards.HOLDOUT, "-Deval.questions"))
+                .isInstanceOf(ChatEvalGuards.EvalRefusedException.class)
+                .hasMessageContaining("evaluated whole");
+        ChatEvalGuards.requireWholeSet("dev", "-Deval.questions");
+    }
 }

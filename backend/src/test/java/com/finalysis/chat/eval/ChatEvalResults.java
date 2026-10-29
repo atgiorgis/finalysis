@@ -103,17 +103,28 @@ final class ChatEvalResults {
      * @param maxTurnCost     the turn cost limit the run used, in dollars as written ({@code 0} is off; step 8d)
      * @param maxTurnCostOverridden whether {@code -Deval.maxTurnCost} set it for this run
      */
+    /** @param target where the questions went (Phase 9 step 9b-1): Bedrock, or an Ollama host on its path */
     record Run(String set, String setSha256, int setVersion, String model, String promptCaching, String promptVersion,
                String maxTurnCost, boolean maxTurnCostOverridden,
                String systemPromptSha256, String pricesSource, Map<String, String> todayByDataset,
                Map<String, String> settings, List<IndexBuild> index, List<QuestionResult> questions,
-               BigDecimal ledgerCost, String stopped, long wallMillis) {
+               BigDecimal ledgerCost, String stopped, long wallMillis, ChatEvalTarget target) {
 
         Run {
             todayByDataset = Map.copyOf(todayByDataset);
             settings = Map.copyOf(settings);
             index = List.copyOf(index);
             questions = List.copyOf(questions);
+        }
+
+        /** A Bedrock run, as every run before Phase 9 was. */
+        Run(String set, String setSha256, int setVersion, String model, String promptCaching, String promptVersion,
+            String maxTurnCost, boolean maxTurnCostOverridden, String systemPromptSha256, String pricesSource,
+            Map<String, String> todayByDataset, Map<String, String> settings, List<IndexBuild> index,
+            List<QuestionResult> questions, BigDecimal ledgerCost, String stopped, long wallMillis) {
+            this(set, setSha256, setVersion, model, promptCaching, promptVersion, maxTurnCost, maxTurnCostOverridden,
+                    systemPromptSha256, pricesSource, todayByDataset, settings, index, questions, ledgerCost, stopped,
+                    wallMillis, ChatEvalTarget.BEDROCK);
         }
     }
 }

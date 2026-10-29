@@ -7,12 +7,12 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingOptions;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link TextEmbedder} over Spring AI's {@link EmbeddingModel}: one text per call (Titan has no batch call), with the
- * {@code embedding} role's model id in the options. Depends on no provider class.
+ * {@link TextEmbedder} over the active path's {@link EmbeddingProvider} (docs/plans/phase-9.md §4.1): one text per call
+ * (Titan has no batch call), with the provider's model id in the options and its vector length checked. Depends on no
+ * provider class.
  *
  * <p>Usage: Spring AI's Titan model reports the input tokens as prompt tokens and fills in 0 when Bedrock gave none;
  * a call that sent a text never used no tokens, so a missing usage, {@link EmptyUsage} or 0 input tokens all mean
@@ -23,42 +23,41 @@ class SpringAiTextEmbedder implements TextEmbedder {
 
     static final String ROLE = "embedding";
 
-    private final ObjectProvider<EmbeddingModel> embeddingModel;
-    private final AiProperties ai;
-    private final EmbeddingProperties properties;
+    private final ActiveProviders providers;
 
-    SpringAiTextEmbedder(ObjectProvider<EmbeddingModel> embeddingModel, AiProperties ai,
-                         EmbeddingProperties properties) {
-        this.embeddingModel = embeddingModel;
-        this.ai = ai;
-        this.properties = properties;
+    SpringAiTextEmbedder(ActiveProviders providers) {
+        this.providers = providers;
     }
 
     @Override
     public boolean enabled() {
-        return ai.enabled() && embeddingModel.getIfAvailable() != null;
+        return providers.usable() && providers.embedding() != null;
     }
 
     @Override
     public String modelId() {
-        return ai.roles().embedding();
+        EmbeddingProvider embedding = providers.embedding();
+        return embedding == null ? null : embedding.modelId();
     }
 
     @Override
     public int dimensions() {
-        return properties.dimensions();
+        EmbeddingProvider embedding = providers.embedding();
+        return embedding == null ? 0 : embedding.dimensions();
     }
 
     @Override
     public Embedding embed(String text) {
-        EmbeddingModel model = embeddingModel.getIfAvailable();
-        if (!ai.enabled() || model == null) {
+        EmbeddingProvider provider = providers.embedding();
+        if (!providers.usable() || provider == null) {
             throw new IllegalStateException("AI is off");
         }
+        EmbeddingModel model = provider.model();
+        int dimensions = provider.dimensions();
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("Nothing to embed");
         }
-        String modelId = modelId();
+        String modelId = provider.modelId();
         long start = System.nanoTime();
         EmbeddingResponse response;
         try {
@@ -72,7 +71,7 @@ class SpringAiTextEmbedder implements TextEmbedder {
         Integer input = reported(usage) ? usage.getPromptTokens() : null;
         float[] vector = response == null || response.getResults().size() != 1 || response.getResult() == null
                 ? null : response.getResult().getOutput();
-        String problem = problem(vector);
+        String problem = problem(vector, dimensions);
         if (problem != null) {
             InvalidEmbeddingException invalid = new InvalidEmbeddingException(problem);
             AiCallLog.recordEmbedding(ROLE, modelId, 1, input, millis, AiCallLog.Outcome.INVALID_OUTPUT, invalid);
@@ -91,13 +90,12 @@ class SpringAiTextEmbedder implements TextEmbedder {
         return input != null && input > 0;
     }
 
-    private String problem(float[] vector) {
+    private static String problem(float[] vector, int dimensions) {
         if (vector == null) {
             return "The embedding model returned no single vector";
         }
-        if (vector.length != properties.dimensions()) {
-            return "The embedding model returned " + vector.length + " dimensions, expected "
-                    + properties.dimensions();
+        if (vector.length != dimensions) {
+            return "The embedding model returned " + vector.length + " dimensions, expected " + dimensions;
         }
         for (float value : vector) {
             if (!Float.isFinite(value)) {

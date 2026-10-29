@@ -1,6 +1,7 @@
 package com.finalysis.chat.summary;
 
-import com.finalysis.ai.AiPrices;
+import com.finalysis.ai.ActiveProviders;
+import com.finalysis.ai.AiPath;
 import com.finalysis.api.InvalidField;
 import com.finalysis.api.InvalidRequestException;
 import com.finalysis.chat.ChatConversationStore;
@@ -94,16 +95,17 @@ public class MonthlySummaryService {
     private final AnswerGrounding grounding;
     private final CitationResolver citations;
     private final ChatModelClient client;
+    private final ActiveProviders providers;
     private final ChatConversationStore store;
     private final ChatProperties limits;
-    private final AiPrices prices;
     private final Clock clock;
     private final String prompt;
 
     public MonthlySummaryService(MonthlyRecordsReader reader, OutboundTurnFactory turns, OutboundProjector projector,
                                  ChatOutbound outbound, ToolResultWriter writer, AnswerGrounding grounding,
-                                 CitationResolver citations, ChatModelClient client, ChatConversationStore store,
-                                 ChatProperties limits, AiPrices prices, Clock clock) {
+                                 CitationResolver citations, ChatModelClient client, ActiveProviders providers,
+                                 ChatConversationStore store,
+                                 ChatProperties limits, Clock clock) {
         this.reader = reader;
         this.turns = turns;
         this.projector = projector;
@@ -112,9 +114,9 @@ public class MonthlySummaryService {
         this.grounding = grounding;
         this.citations = citations;
         this.client = client;
+        this.providers = providers;
         this.store = store;
         this.limits = limits;
-        this.prices = prices;
         this.clock = clock;
         try (InputStream in = MonthlySummaryService.class.getClassLoader().getResourceAsStream(RESOURCE)) {
             if (in == null) {
@@ -136,6 +138,13 @@ public class MonthlySummaryService {
      * @throws InvalidRequestException for a month that isn't {@code yyyy-MM}
      */
     public MonthlySummaryResponse summarize(Optional<String> month) {
+        // The summary holds the path for its call (phase-9.md §3.1); off or unreachable, it is the template.
+        try (ActiveProviders.Lease lease = providers.lease()) {
+            return summarizeOnPath(month);
+        }
+    }
+
+    private MonthlySummaryResponse summarizeOnPath(Optional<String> month) {
         long started = clock.millis();
         Optional<YearMonth> asked = month.map(MonthlySummaryService::parse);
         Optional<YearMonth> resolved = asked.isPresent() ? asked : reader.defaultMonth();
@@ -150,14 +159,14 @@ public class MonthlySummaryService {
         }
 
         ZonedDateTime now = ZonedDateTime.now(clock);
-        if (limits.maxDailyCost().signum() > 0) {
+        if (client.path() == AiPath.CLOUD && limits.maxDailyCost().signum() > 0) { // the cap is Cloud's (§4.2)
             ZonedDateTime midnight = now.toLocalDate().atStartOfDay(now.getZone());
             if (store.costSince(midnight.toOffsetDateTime()).compareTo(limits.maxDailyCost()) >= 0) {
                 throw ChatProblem.budget(midnight.plusDays(1).toOffsetDateTime());
             }
         }
 
-        UsageTally usage = new UsageTally(prices.of(client.modelId()));
+        UsageTally usage = new UsageTally(client.price());
         List<Message> messages = new ArrayList<>(List.of(new SystemMessage(prompt),
                 new UserMessage("<records>" + sent.json() + "</records>")));
         boolean retried = false;
@@ -280,21 +289,18 @@ public class MonthlySummaryService {
                 new ChatTurnResponse.Grounding(check.status(), check.figuresChecked(), retried,
                         check.ungrounded().size()),
                 cited.citations(), sent.records().notes(),
-                usage == null || usage.calls() == 0 ? null : new ChatTurnResponse.Usage(client.modelId(),
-                        usage.calls(), usage.inputTokens(), usage.outputTokens(),
+                usage == null || usage.calls() == 0 ? null : ChatTurnResponse.Usage.of(client.modelId(),
+                        client.path(), usage.calls(), usage.inputTokens(), usage.outputTokens(),
                         usage.inputTokens() == null ? null : usage.cacheReadTokens(),
                         usage.inputTokens() == null ? null : usage.cacheWriteTokens(), usage.callsWithoutUsage(),
-                        money(usage.cost())));
+                        usage.cost()));
     }
 
     private void record(UsageTally usage) {
         if (usage != null && usage.calls() > 0) {
-            store.recordUsage(usage.toUsage(UsageKind.MONTHLY_SUMMARY, client.modelId(),
+            store.recordUsage(usage.toUsage(UsageKind.MONTHLY_SUMMARY, client.modelId(), client.path(),
                     OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS)));
         }
     }
 
-    private static String money(BigDecimal cost) {
-        return cost == null ? null : cost.setScale(6, RoundingMode.HALF_EVEN).toPlainString();
-    }
 }

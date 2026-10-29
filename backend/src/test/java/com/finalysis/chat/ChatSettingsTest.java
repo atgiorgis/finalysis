@@ -3,7 +3,7 @@ package com.finalysis.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.finalysis.ai.AiMode;
+import com.finalysis.ai.AiPath;
 import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
 import java.io.InputStream;
@@ -74,7 +74,7 @@ class ChatSettingsTest {
                 .costLimited()).isFalse();
     }
 
-    private static final AiProperties CLOUD = new AiProperties(AiMode.CLOUD, "test",
+    private static final AiProperties CLOUD = new AiProperties(true, AiPath.CLOUD, "test",
             new AiProperties.Roles("main-model", "categorization-model", "embedding-model", ""), true);
 
     @Test
@@ -89,8 +89,8 @@ class ChatSettingsTest {
                 Duration.ofSeconds(45), BigDecimal.ZERO, BigDecimal.ZERO, 90), false);
         ChatStartupCheck.verify(CLOUD, new AiPrices(Map.of("main-model",
                 new AiPrices.Price(BigDecimal.ONE, new BigDecimal("5")))), ChatLimits.defaults(), true);
-        ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null),
-                true), none, ChatLimits.defaults(), false);
+        ChatStartupCheck.verify(new AiProperties(false, AiPath.OFF, null, new AiProperties.Roles(null, null, null,
+                null), true), none, ChatLimits.defaults(), false);
     }
 
     private static final AiPrices.Price SONNET_4_6 = new AiPrices.Price(new BigDecimal("3.00"),
@@ -126,9 +126,9 @@ class ChatSettingsTest {
         ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0.0675"), true);
         assertThatThrownBy(() -> ChatStartupCheck.verify(CLOUD, mainAt(SONNET_4_6), withTurnCost("0.067499"), true))
                 .isInstanceOf(IllegalStateException.class);
-        // AI off: nothing to check
-        ChatStartupCheck.verify(new AiProperties(AiMode.OFF, null, new AiProperties.Roles("main-model", null, null,
-                null), true), mainAt(SONNET_4_6), at005, true);
+        // Cloud not available: no cost limit to check
+        ChatStartupCheck.verify(new AiProperties(false, AiPath.LOCAL, null, new AiProperties.Roles("main-model", null,
+                null, null), true), mainAt(SONNET_4_6), at005, true);
     }
 
     // ------------------------------------------------------------------ the configurations as shipped (step 8f)

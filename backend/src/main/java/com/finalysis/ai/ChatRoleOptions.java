@@ -12,23 +12,26 @@ import org.springframework.stereotype.Component;
  * output cap, the tool definitions, and a temperature only when {@code finalysis.ai.chat.temperature} is set.
  *
  * <p>Built on the model's own options ({@code ChatModel.getOptions().mutate()}), as {@code ChatClient} does: a provider
- * may require its own options type (Bedrock Converse casts to {@code BedrockChatOptions}). The base's temperature (the
+ * may require its own options type (Bedrock Converse casts to {@code BedrockChatOptions}, Ollama to
+ * {@code OllamaChatOptions}). The base's temperature (the
  * {@code aws} profile sets 0.0 for categorization) is replaced by the configured one, or cleared, so a model that
  * refuses sampling options gets none ({@link ChatRoleProperties}). Depends on no provider class.
  */
 @Component
 public class ChatRoleOptions {
 
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final ChatRoleProperties properties;
 
-    public ChatRoleOptions(AiProperties ai, ChatRoleProperties properties) {
-        this.ai = ai;
+    public ChatRoleOptions(ActiveProviders providers, ChatRoleProperties properties) {
+        this.providers = providers;
         this.properties = properties;
     }
 
+    /** The active path's chat model; null when AI is off. */
     public String modelId() {
-        return ai.roles().main();
+        ChatProvider chat = providers.chat();
+        return chat == null ? null : chat.modelId();
     }
 
     /**

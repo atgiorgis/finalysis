@@ -410,7 +410,7 @@ class ConversationMemoryTest {
         assertThat(jdbc.queryForObject("SELECT sum(estimated_cost) FROM chat_usage", BigDecimal.class))
                 .isEqualByComparingTo(spent);
         assertThat(jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE table_name = "
-                + "'chat_usage'", String.class)).containsExactlyInAnyOrder("id", "kind", "model", "calls",
+                + "'chat_usage'", String.class)).containsExactlyInAnyOrder("id", "kind", "model", "path", "calls",
                 "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "calls_without_usage",
                 "estimated_cost", "created_at");
     }

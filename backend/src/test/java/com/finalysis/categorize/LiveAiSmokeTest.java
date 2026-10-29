@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Opt-in live smoke test: one synthetic merchant through the real path to the cloud model and back. Never part of
@@ -33,6 +34,7 @@ import org.springframework.test.context.ActiveProfiles;
 @EnabledIfSystemProperty(named = NoCloudAiGuard.LIVE_PROPERTY, matches = "true")
 @IntegrationTest
 @ActiveProfiles("aws")
+@TestPropertySource(properties = "finalysis.ai.default-path=CLOUD") // a fresh test vault on Cloud (AI-03)
 class LiveAiSmokeTest {
 
     static final String DESCRIPTION = "TST* BRAMBLEWICK NOODLE HOUSE 0193 ARLINGTON VA";

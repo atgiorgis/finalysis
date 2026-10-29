@@ -362,22 +362,29 @@ class SchemaMigrationTest {
                 VALUES ('\bcafe\b', 'REGEX', (SELECT id FROM category WHERE name = 'Dining'), 'USER')""");
     }
 
+    /** V25 (phase-9.md §4.1): no HNSW index, which needs one length; an index on the model serves the exact scan. */
     @Test
-    void merchantEmbeddingHasHnswCosineIndex() {
-        String definition = jdbc.queryForObject(
-                "SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_merchant_embedding_hnsw'", String.class);
+    void embeddingsHaveAModelIndexAndNoVectorIndex() {
+        List<String> definitions = jdbc.queryForList("""
+                SELECT indexdef FROM pg_indexes WHERE tablename IN ('merchant_embedding', 'search_embedding')""",
+                String.class);
 
-        assertThat(definition).contains("hnsw").contains("vector_cosine_ops");
+        assertThat(definitions).noneMatch(d -> d.contains("hnsw") || d.contains("ivfflat"));
+        assertThat(definitions).anyMatch(d -> d.contains("ix_merchant_embedding_model") && d.contains("(model)"));
+        assertThat(definitions).anyMatch(d -> d.contains("ix_search_embedding_kind_model") && d.contains("(kind, model)"));
     }
 
+    /** V25: both tables take a vector of any length (Titan V2's 1024, nomic-embed-text's 768). */
     @Test
-    void embeddingHas1024Dimensions() {
-        String type = jdbc.queryForObject("""
-                SELECT format_type(atttypid, atttypmod) FROM pg_attribute
-                WHERE attrelid = 'merchant_embedding'::regclass AND attname = 'embedding'
-                """, String.class);
+    void embeddingsTakeAnyDimension() {
+        for (String table : List.of("merchant_embedding", "search_embedding")) {
+            String type = jdbc.queryForObject("""
+                    SELECT format_type(atttypid, atttypmod) FROM pg_attribute
+                    WHERE attrelid = ?::regclass AND attname = 'embedding'
+                    """, String.class, table);
 
-        assertThat(type).isEqualTo("vector(1024)");
+            assertThat(type).as(table).isEqualTo("vector");
+        }
     }
 
     // Behavioral checks: a constraint can exist and still be written wrong.

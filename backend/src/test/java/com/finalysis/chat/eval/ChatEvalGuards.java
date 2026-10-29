@@ -97,6 +97,13 @@ final class ChatEvalGuards {
     }
 
     /** The chat model to evaluate: given explicitly, and priced, so the run's cost limits and report hold. */
+    /** The holdout is evaluated whole, once: a subset run of it is refused (Phase 9 step 9b-1, {@code -Deval.questions}). */
+    static void requireWholeSet(String set, String option) {
+        if (HOLDOUT.equals(set)) {
+            throw new EvalRefusedException(option + " can't be used with the holdout, which is evaluated whole");
+        }
+    }
+
     static String model(String property, ChatEvalPrices prices) {
         if (property == null || property.isBlank()) {
             throw new EvalRefusedException("Choose the chat model: -Deval.model=<Bedrock model or inference-profile id>");

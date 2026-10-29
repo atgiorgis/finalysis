@@ -13,15 +13,15 @@ import org.springframework.transaction.annotation.Transactional;
  * categorization's {@code MerchantIndexRefresh}, which chat may not reach (SEC-03).
  *
  * <p>Only vectors of the query's own embedding model are compared ({@code model} on every query), even when two models
- * share a dimension count. The vector is bound as pgvector's text form and cast, so the tools need no driver type; the
- * inner {@code ORDER BY <=> LIMIT} keeps the HNSW index usable, as in categorization's nearest-neighbour query.
+ * share a dimension count. The vector is bound as pgvector's text form and cast, so the tools need no driver type.
+ * Since V25 the search is an exact scan of the model's rows (docs/plans/phase-9.md §4.1).
  */
 @Component
 public class MerchantSearchQuery {
 
     /**
-     * Neighbours asked of the index before the similarity floor. pgvector's HNSW scan returns at most
-     * {@code hnsw.ef_search} rows (40 by default), so asking for more gains nothing.
+     * Neighbours taken before the similarity floor: 40, what pgvector's HNSW scan returned until V25 dropped the index
+     * for an exact scan, so a search finds as many candidates as before.
      */
     static final int POOL = 40;
 

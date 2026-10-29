@@ -24,5 +24,5 @@ test('a backend that doesn’t say its storage is refused too', () => {
 })
 
 test('cloud AI is still refused on the plain database', () => {
-  expect(() => refuseUnlessPlain({ ...fixtures.statusOff, ai: { mode: 'CLOUD' } })).toThrow(/AI must be off/)
+  expect(() => refuseUnlessPlain({ ...fixtures.statusOff, ai: { path: 'CLOUD' } })).toThrow(/AI must be off/)
 })

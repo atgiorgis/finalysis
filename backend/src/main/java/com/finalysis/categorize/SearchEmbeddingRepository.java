@@ -26,8 +26,9 @@ public class SearchEmbeddingRepository {
         if (subject == null || subject.isBlank() || model == null || model.isBlank() || inputSha256 == null) {
             throw new IllegalArgumentException("subject, model and inputSha256 are required");
         }
-        if (embedding == null || embedding.length != MerchantEmbeddingRepository.DIMENSIONS) {
-            throw new IllegalArgumentException("embedding must have " + MerchantEmbeddingRepository.DIMENSIONS
+        if (embedding == null || embedding.length < 1
+                || embedding.length > MerchantEmbeddingRepository.MAX_DIMENSIONS) {
+            throw new IllegalArgumentException("embedding must have 1 to " + MerchantEmbeddingRepository.MAX_DIMENSIONS
                     + " dimensions");
         }
         for (float value : embedding) {
@@ -45,7 +46,7 @@ public class SearchEmbeddingRepository {
                 .param("kind", kind.name())
                 .param("subject", subject)
                 .param("model", model)
-                .param("dimensions", MerchantEmbeddingRepository.DIMENSIONS)
+                .param("dimensions", embedding.length)
                 .param("inputSha256", inputSha256)
                 .param("embedding", new PGvector(embedding))
                 .update();

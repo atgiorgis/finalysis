@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { reads, type AiStatus, type ChatDailyUsage } from '../api'
+import { reads, type AiPath, type AiStatus, type ChatDailyUsage } from '../api'
 import { AI_NAME, costText } from '../corgi'
 import { formatCount, formatDate, formatMoney, formatMonth } from '../format'
 import { providerName } from '../shell/CloudAiBanner'
@@ -18,9 +18,10 @@ const ROLE_LABELS: Record<string, string> = {
 /** Chat first, as the brief lists them. */
 const ROLE_ORDER = ['main', 'categorization', 'embedding']
 
-const MODE_TEXT: Record<AiStatus['mode'], string> = {
+const MODE_TEXT: Record<AiPath, string> = {
   OFF: 'Off. Categorization uses rules only, and chat is unavailable.',
   CLOUD: 'Cloud',
+  SELF_HOSTED: 'Self-hosted',
   LOCAL: 'Local',
 }
 
@@ -36,7 +37,7 @@ function AiSection({ ai }: { ai: AiStatus }) {
       <p className="muted">{AI_NAME} is the name Finalysis gives its AI. The models behind it are listed below.</p>
       <dl className="facts">
         <dt>Mode</dt>
-        <dd>{ai.mode === 'CLOUD' ? `Cloud (${providerName(ai)})` : MODE_TEXT[ai.mode]}</dd>
+        <dd>{ai.path === 'CLOUD' ? `Cloud (${providerName(ai)})` : MODE_TEXT[ai.path ?? 'OFF']}</dd>
         {roles.map(([role, model]) => (
           <div key={role} className="facts-row">
             <dt>{ROLE_LABELS[role] ?? role}</dt>
@@ -55,7 +56,7 @@ function cap(value: string | null): string {
 }
 
 function UsageSection({ usage, error, ai }: { usage: ChatDailyUsage | null; error: string | null; ai: AiStatus | null }) {
-  const local = ai?.mode === 'LOCAL'
+  const local = ai?.path === 'LOCAL'
   return (
     <section className="card" aria-labelledby="settings-usage">
       <h2 id="settings-usage">Chat costs</h2>

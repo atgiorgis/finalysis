@@ -164,4 +164,44 @@ class ChatEvalReportTest {
         String md = ChatEvalReport.of(GIT, STARTED, set, run).markdown();
         assertThat(md).contains("This set has no user-written questions.").contains("**Stopped early:** run budget");
     }
+
+    // ------------------------------------------------------------------ Ollama runs (Phase 9 step 9b-1)
+
+    private static Run ollamaRun(ChatEvalTarget target) {
+        return new Run("dev", "abc", 1, "ministral-3:14b", "OFF_NO_CACHE_PRICES", "chat-10", "0.15", false, "def", "p",
+                Map.of(), Map.of(), List.of(), List.of(), BigDecimal.ZERO, null, 0, target);
+    }
+
+    @Test
+    void anOllamaRunRecordsItsPathHostTagAndVersionAndNoCostLimit() {
+        ChatEvalTarget target = ChatEvalTarget.parse("ollama", "http://finalysis-selfhost:11434").withOllamaVersion("0.12.6");
+
+        ChatEvalReport report = ChatEvalReport.of(GIT, STARTED, set(), ollamaRun(target));
+
+        assertThat(report.markdown())
+                .contains("- Path: Self-hosted (Ollama 0.12.6), host `finalysis-selfhost`; model tag `ministral-3:14b`")
+                .contains("- Prices: none: Ollama has no token cost")
+                .contains("- Turn cost limit: off (Ollama: no token cost; the run budget doesn't apply)")
+                .doesNotContain("http://").doesNotContain("11434").doesNotContain("Subset run");
+        assertThat(report.consoleSummary()).contains("Path: Self-hosted").contains("Turn cost limit: off");
+        assertThat(report.fileStem()).startsWith("chat-dev-0123456789ab-");
+    }
+
+    @Test
+    void aBedrockRunSaysItsPath() {
+        assertThat(report().markdown()).contains("- Path: Cloud (Amazon Bedrock)");
+    }
+
+    @Test
+    void aSubsetRunIsMarkedInItsFileNameAndHeader() {
+        ChatEvalTarget target = ChatEvalTarget.parse("ollama", "http://127.0.0.1:11434").withOllamaVersion("0.12.6")
+                .withSubset(List.of("d-l01", "d-c01"));
+
+        ChatEvalReport report = ChatEvalReport.of(GIT, STARTED, set(), ollamaRun(target));
+
+        assertThat(report.fileStem()).startsWith("chat-dev-subset-0123456789ab-");
+        assertThat(report.markdown()).contains("- Path: Local (Ollama 0.12.6), host `127.0.0.1`")
+                .contains("- **Subset run (-Deval.questions): d-l01, d-c01; not comparable as a score**");
+        assertThat(report.consoleSummary()).contains("Subset run (-Deval.questions): d-l01, d-c01");
+    }
 }

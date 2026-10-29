@@ -1,9 +1,18 @@
-export type AiMode = 'OFF' | 'CLOUD' | 'LOCAL'
+/** Where Corgi runs (docs/plans/phase-9.md §3.1): the user's choice, switched in Settings without a restart. */
+export type AiPath = 'OFF' | 'CLOUD' | 'SELF_HOSTED' | 'LOCAL'
 
-/** Where models run; `provider` and `models` are present only when AI is on. */
+/**
+ * The `ai` block of `GET /api/status` (docs/plans/phase-9.md §3.3). `path` is absent while the vault is locked;
+ * `reachable` says whether Corgi can run now and `reason` why not; `server` is Self-hosted's Tailscale name only.
+ * `provider` and `models` are present when the path's providers are built.
+ */
 export interface AiStatus {
-  mode: AiMode
+  path?: AiPath
+  available?: AiPath[]
+  reachable?: boolean
+  reason?: string
   provider?: string
+  server?: string
   models?: Record<string, string>
 }
 

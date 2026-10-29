@@ -5,6 +5,7 @@ import static com.finalysis.support.ScriptedChatModel.text;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.finalysis.ai.AiPath;
 import com.finalysis.account.AccountRepository;
 import com.finalysis.analytics.AnalyticsFixture;
 import com.finalysis.chat.citation.Citation;
@@ -160,8 +161,8 @@ class ChatServiceTest {
             assertThat(tool.rows()).isPositive();
         });
         // usage: 1000 + 1200 in, 50 + 80 out, at $1 and $5 per million
-        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", 2, 2200, 130, 0, 0,
-                0, "0.002850"));
+        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", AiPath.CLOUD, 2, 2200, 130,
+                0, 0, 0, "0.002850", null));
         assertThat(response.limitHit()).isNull();
         // March 2026 failed reconciliation on the checking account: a data note, local ids only
         assertThat(response.dataNotes()).isNotEmpty();
@@ -522,8 +523,8 @@ class ChatServiceTest {
         ChatTurnResponse response = ask("How much did I spend in March?");
 
         // 400 + 50×5 + 5600×1.25 = 7650, then 600 + 80×5 + 5600×0.10 = 1560: $0.009210
-        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", 2, 1000, 130, 5600, 5600,
-                0, "0.009210"));
+        assertThat(response.usage()).isEqualTo(new ChatTurnResponse.Usage("test-main-model", AiPath.CLOUD, 2, 1000, 130,
+                5600, 5600, 0, "0.009210", null));
         assertThat(storedTurn()).containsEntry("input_tokens", 1000).containsEntry("cache_read_tokens", 5600)
                 .containsEntry("cache_write_tokens", 5600)
                 .containsEntry("estimated_cost", new java.math.BigDecimal("0.009210"));

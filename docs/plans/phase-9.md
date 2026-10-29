@@ -456,6 +456,10 @@ The only code in 9d is what the notes need (none expected; `-Deval.questions` is
 - **The first boot takes a while** (Ollama, Tailscale, model downloads); `create.sh` waits up to 30 minutes. The
   Deep Learning AMI follows AWS's update cadence; a stack created later may get a newer image than the one tested.
 - **The laptop is slow**: 9d records it; no tuning.
+- **The categorization examples' floor is global** (`finalysis.ai.examples.min-similarity` 0.65, tuned on Titan V2).
+  Only chat's search floor is per embedding model since 9b-1; nomic-embed-text's similarities may sit higher or lower,
+  so on the Ollama paths the similar-merchant examples may be too many or too few until the owner's sweep on nomic
+  sets a floor for it (decided at 9b-1: left global until then).
 
 ---
 
@@ -494,10 +498,14 @@ Steps no script or app does for the owner; `create.sh` prints the AWS ones and t
 
 ## 13. Terms
 
-- **Tier:** where Corgi runs: Cloud, Self-hosted or Local. Used for nothing else, in the UI, docs, code and comments.
-- **Size class:** a model's size on Self-hosted or Local (AI-02's "standard" and "deep", UI-06's notice, QA-05's
-  hardware guide, the roadmap's Phase 10). Renamed in 9b-1's commit (requirements, roadmap) and 9b-2's (any UI text).
-- **Path:** retired (§4.5).
+Amended at 9b-1 (§16, "Decided at 9b-1"); this replaces the terms approved on 2026-10-28.
+
+- **Path:** where Corgi runs: Cloud, Self-hosted or Local (or OFF). In code `AiPath`, the setting `ai.path`, the status
+  block's `path`, `PUT /api/settings/ai`.
+- **Tier:** a model's size, as AI-02, UI-06 and QA-05 and the roadmap's Phase 10 already use it ("standard tier",
+  "deep tier", "hardware tiers"). Nothing is renamed for it.
+- **Size class:** dropped. The body of this plan (§3, §4, §15) still says "tier" for a path where it was written before
+  the amendment; read it as "path".
 
 ---
 
@@ -757,6 +765,114 @@ sizes to 0.15 and Haiku to 0.05 (`ChatEvalTurnCostTest`); every open model stays
 note now records which prices were entered when, and the README's known issues say that Cloud costs in earlier runs are
 about 10% low and aren't recomputed.
 
+### Step 9b-1 notes: paths, providers, embeddings of any length, cost by path (backend)
+
+Done in code: "Phase 9 step 9b-1: Corgi's path chosen in Settings without a restart, Ollama behind the providers".
+Backend 3,624 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,518 at 9a-4, plus 106 new and changed
+with the code); frontend 313 tests (30 files), all passed (one new, the Self-hosted badge); the UI is 9b-2's, so no layout run. No live call; every Ollama test runs against a stub
+server on loopback.
+
+**The path** (§3.1). `AiPath` (`OFF`, `CLOUD`, `SELF_HOSTED`, `LOCAL`) replaces `AiMode`. `AiProperties` fixes what
+startup decides: `cloud-available` (true only from `application-aws.yml`, or a test's fake model) and `default-path`
+(Local, not set in the shipped files). `AiPathSettings` keeps `ai.path`, `ai.selfhost.name` and `ai.selfhost.region` in
+`app_setting`: read at `VaultUnlocked`, dropped at `VaultLocking`. The name must be a host name (letters, digits, inner
+hyphens, dots; never a URL), the region an AWS region id; the region is stored and read by nothing yet. Both are kept
+across switches, so Self-hosted again needs no name. `AiProviders` holds the path and its three providers behind a
+read-write lock: a categorization run, an index refresh, a chat turn and a monthly summary each hold a lease for their
+whole length, and a switch takes the write side, waiting up to 60 s (then 409 `ai-busy`, "AI work still running"). The
+outermost lease of a run checks an Ollama path's reachability first; so do unlock and a switch. Nothing polls.
+Reachability is `GET /api/version` then `GET /api/tags` with a 3 s timeout; the reasons are "Ollama unreachable",
+"model <tag> not pulled", "Cloud isn't available: it needs the aws profile" and "No server name". A path that can't run
+is still stored and selected; Corgi is off with the reason.
+
+**Providers** (§3.2). `ChatProvider`, `CategorizationProvider` and `EmbeddingProvider`, built together as a
+`ProviderSet`. Cloud's wrap the models Spring configures (Bedrock's under the `aws` profile, a test's fakes otherwise);
+Bedrock's own code (the client's retries, `BedrockPromptCache`) stays in `ai.bedrock`. `ChatModelClient`,
+`CategorizationModelClient` and `SpringAiTextEmbedder` read the active providers (`ActiveProviders`), so chat,
+categorization and search changed only in where they get their model. The Ollama clients are built in `ai.ollama`
+(`OllamaProviderFactory`) for the path's base URL: Local `http://127.0.0.1:11434`, Self-hosted `http://<name>:11434`;
+one model for chat and categorization (`finalysis.ai.ollama.models.chat`, the placeholder `finalysis-unset-chat-model`
+until the owner sets 9a's pick, reported as "not pulled"), `nomic-embed-text` (768) for embeddings; read timeouts 60 s
+Self-hosted and 300 s Local; no retries; no model pulls; no prompt cache. `com.finalysis.ai` reaches them through its
+own `OllamaClients` interface.
+
+Found on the way:
+
+- **Spring AI 2.0.1 has no `internalToolExecutionEnabled`**: `ChatModel.call` never runs a tool on any provider, so
+  there is nothing to switch off. `OllamaProvidersTest` proves a tool call comes back unexecuted, as
+  `BedrockToolCallsTest` does for Bedrock; chat's callbacks still refuse to run.
+- **`OllamaChatModel` retries by default** (Spring AI's template, many attempts with backoff): with a 300 s read timeout
+  that is a hung turn, so the factory gives it a template with no retries. That template wraps whatever a request
+  throws, so the test suite's host guard is checked when a client is built and probed, not only per request.
+- **Categorization requests to Ollama carry an empty `tools` array** (Spring AI adds it); the test pins it empty.
+
+**The status block** (§3.3): `{path, available, reachable, reason, provider, server, models}`; `path` absent while
+locked (reason "Vault locked"); `server` on Self-hosted only, the name and nothing else; never a region, URL, port,
+account or instance id. **`PUT /api/settings/ai`** takes `{path, selfhostName, selfhostRegion}` and answers the block;
+423 while locked comes from the vault's gate (`VaultGateTest` now names it). **The chat `ai-off` problem** says "Corgi is
+off. Choose where it runs in Settings." and carries the reason when there is one; the old text named the `aws` profile,
+which no longer turns AI on (`ChatAiOffApiTest` and Postman's three checks follow). A categorization run on a path
+that can't run is still `OFF` and carries no reason of its own (its result type is unchanged); the status block says
+why.
+
+**Startup checks** (`AiStartupCheck`): `cloud-available` without a Cloud chat and embedding model fails; a Cloud model
+without `cloud-available` fails (Bedrock only explicitly); `finalysis.ai.ollama.port` other than 11434 fails unless a
+test's `OllamaHostGuard` exists. Chat's price check (`ChatStartupCheck`) checks Cloud's main model whenever Cloud is
+available, whatever the vault selects later.
+
+**V25** (§4.1): both `embedding` columns are `vector` with no length; the existing `dimensions` column (V17, V23) is
+the "dims" column, and its check becomes `dimensions BETWEEN 1 AND 16000 AND vector_dims(embedding) = dimensions`;
+the HNSW indexes are dropped for indexes on the model (`ix_merchant_embedding_model`, `ix_search_embedding_kind_model`).
+The repositories store each vector's own length. The 40-neighbour pool stays, so a search finds as many candidates as
+before. Chat's search floor is per embedding model (`min-similarity-by-model`: Titan V2 0.40, nomic 0.40 provisional);
+the categorization examples' floor stays global (§10). A switch to a path with another embedding model publishes
+`AiPathChanged`, and categorization refreshes the search index for it in the background; other models' rows are kept.
+
+**V26** (§4.2): `path` on `chat_turn` and `chat_usage` (the daily cap and the month sum the ledger, not the turns, so
+both tables carry it), `NOT NULL DEFAULT 'CLOUD'`: rows before V26 are Cloud's, and the app always writes the path.
+Stored cost: the token estimate on Cloud, 0 on Local, NULL on Self-hosted; check constraints hold the rule. Prices,
+and with them every estimate and the per-turn cap, apply on Cloud only (`ChatModelClient.price()`); the daily cap and
+"this month" sum Cloud rows in SQL. A turn's usage carries `path` and, on Self-hosted, a `costNote` ("Self-hosted cost
+is the server's running time; it isn't computed yet (step 9c)") with the cost fields null.
+
+**The eval** (§4.3): `-Deval.provider=ollama|bedrock` (default bedrock), `-Deval.baseUrl` reduced to its host (plain
+`http`, port 11434 or none; user info, a query, a fragment, a path or another port refused before the run), loopback
+→ Local, any other host → Self-hosted by that name; `-Deval.model` is then the Ollama tag; the run switches the context
+to that path and refuses to start unless the server answers with the model pulled. On Ollama the turn cost limit is off
+(`-Deval.maxTurnCost` is refused there) and the report says so. `-Deval.questions=<ids>` runs a subset, marked in the
+file name (`chat-<set>-subset-…`) and header; never with the holdout. The header gains the path, the host, the model tag
+and Ollama's version; a Bedrock run says "Path: Cloud (Amazon Bedrock)". The live tests and evals on the `aws` profile
+set `default-path=CLOUD`.
+
+**Tests.** `NoCloudAiGuard` now also registers an `OllamaHostGuard` that fails the test on any Ollama client or request
+whose host isn't a stub on loopback (an `AssertionError`, so no catch turns it into "unreachable"), and sets
+`default-path=OFF` at the lowest precedence. `OllamaStub` (JDK `HttpServer`, random loopback port) serves `/api/version`,
+`/api/tags`, `/api/embed` and scripted `/api/chat` answers and records every body. New: `AiPathTest` (startup rules),
+`AiStatusTest` (the block, nothing about the server but its name), `AiPathSettingsTest`, `AiDefaultPathTest` (the shipped
+default is Local; the guard's override is what makes tests OFF; a test's own path wins), `AiProvidersTest` (reasons,
+version, events, validation), `AiPathSwitchTest` (the endpoint, refusals, unreachable and not-pulled paths, the lease's
+check, the 60 s wait and 409, unlock and lock, the index refresh for a new model), `OllamaProvidersTest` (tool call,
+malformed tool call, timeout, 500, 404, no cache, embeddings, the probe, the guard), `OllamaCategorizationTest`
+(the JSON-schema `format`, a valid and an invalid answer, the body field by field), `OllamaTurnPayloadTest` (a whole turn
+on the injection fixture on Local, every body field by field like `ChatTurnPayloadTest`), `EmbeddingDimensionsTest`,
+`MerchantSearchTimingTest` (5,000 vectors of one model beside 5,000 of another, median under 50 ms), `ChatCostByPathTest`,
+`ChatEvalTargetTest`, and Ollama runs in `ChatEvalReportTest`. Existing suites changed with the code: `mode` → `path`,
+the providers instead of bean lookups, the V25 schema (`SchemaMigrationTest`, `MerchantEmbeddingRepositoryTest`,
+`EmbeddingStageTest`), the ledger's `path` column (`ConversationMemoryTest`), the `ai-off` text. ArchUnit: Ollama classes
+only in `ai.ollama`, Bedrock's only in `ai.bedrock`, neither uses the other's, nothing outside a provider package depends
+on it, and no feature depends on either.
+
+**Frontend** (only what keeps `npm test` green): `AiStatus.path` (and the new optional fields), `pathBadge` and
+`costText` on `path`, Self-hosted labelled "Self-hosted" in cloud's tone until 9b-2. **Postman**: folder 1 sets
+`{"path": "OFF"}` after "Get status"; folder 11 (by hand, `aws`) gains "Switch Corgi to Cloud" and logs the path; the
+three `ai-off` detail checks follow the new text.
+
+**For the owner, until 9b-2 and 9e:** a fresh vault now selects Local. Without Ollama, Corgi is off with "Ollama
+unreachable" (with Ollama but before `finalysis.ai.ollama.models.chat` is set, "model finalysis-unset-chat-model not
+pulled"); import, analytics and rules work as before. To keep Cloud with the `aws` profile, switch once:
+`PUT /api/settings/ai {"path": "CLOUD"}` (Settings → Corgi comes in 9b-2). Unlock checks an Ollama path, so a server
+that doesn't answer adds up to two 3 s timeouts to it.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)
@@ -792,3 +908,25 @@ On §14's questions:
 
 Also: **9b splits into 9b-1 (backend) and 9b-2 (UI)**, each its own commit and review. 9d's five questions are
 approved. **9a doesn't start until the owner confirms the `phase-8-done` tag.**
+
+### Decided at 9b-1 (2026-10-29)
+
+These override §4.5, §13 and decision 1 above; the rest of the body is left as written.
+
+- **"Path" is back** and names where Corgi runs: Cloud, Self-hosted, Local (and OFF). **"Tier" keeps its original
+  meaning** from AI-02, UI-06 and QA-05: a model's size. **"Size class" is dropped**: nothing is renamed in the
+  requirements or the roadmap for it, and §4.5's rename of "path" to "tier" is cancelled (`pathBadge`, `.path-badge` and
+  the Phase 7 names stay). §13 is brought in line.
+- **Naming:** `AiPath` (`OFF`, `CLOUD`, `SELF_HOSTED`, `LOCAL`) replaces `AiMode`; the setting is `ai.path`; the status
+  block's field is `path` (it replaces `mode`); the endpoint is `PUT /api/settings/ai`.
+- **The stub port:** `finalysis.ai.ollama.port` (default 11434, documented as for tests only); the hosts stay fixed.
+  Startup refuses another port unless a test's Ollama host guard is present.
+- **A switch waits 60 s** for running AI work, then answers 409 `ai-busy` with the reason in the body.
+- **Postman:** folder 1 (Setup) sets `{"path": "OFF"}` first, so a run doesn't depend on Ollama on the machine.
+- **The categorization examples' floor stays global**; recorded in §10 for the nomic sweep.
+- **`finalysis.ai.cloud-available`:** startup refuses it without a Cloud chat model (the `aws` profile or a test fake),
+  so the property alone can't advertise a path that doesn't work.
+- **Tests of the default:** one unit test proves the shipped default is Local (a fresh vault, no setting, no guard),
+  one that the suite's guard override is what makes tests see OFF.
+- **Self-hosted's region** is validated as an AWS region id (letters, digits, hyphens) and stored only; nothing uses it
+  until 9c.

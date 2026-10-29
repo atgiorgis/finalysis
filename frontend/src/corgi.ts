@@ -16,21 +16,24 @@ const PROVIDER_LABELS: Record<string, string> = {
   ollama: 'Ollama',
 }
 
-/** Where Corgi runs, from `GET /api/status`: local in the income colour, cloud in s3 ink; none when AI is off. */
+/**
+ * Where Corgi runs, from `GET /api/status`: local in the income colour, cloud in s3 ink; none when AI is off or the
+ * vault is locked. Self-hosted shares cloud's tone until its own colour comes with Settings → Corgi (step 9b-2).
+ */
 export function pathBadge(ai: AiStatus): { label: string; tone: 'local' | 'cloud' } | null {
-  if (ai.mode === 'OFF') {
+  if (!ai.path || ai.path === 'OFF') {
     return null
   }
   const provider = ai.provider ? (PROVIDER_LABELS[ai.provider] ?? ai.provider) : null
-  const where = ai.mode === 'LOCAL' ? 'Local' : 'Cloud'
-  return { label: provider ? `${where} · ${provider}` : where, tone: ai.mode === 'LOCAL' ? 'local' : 'cloud' }
+  const where = ai.path === 'LOCAL' ? 'Local' : ai.path === 'SELF_HOSTED' ? 'Self-hosted' : 'Cloud'
+  return { label: provider ? `${where} · ${provider}` : where, tone: ai.path === 'LOCAL' ? 'local' : 'cloud' }
 }
 
-/** What a local model costs, on every cost line while the mode is local. */
+/** What a local model costs, on every cost line while the path is Local. */
 export const LOCAL_COST = '$0.00 · local'
 
 /**
- * A cost as shown: `$0.00 · local` while the mode is local, otherwise the backend's estimate through `format`
+ * A cost as shown: `$0.00 · local` while the path is Local, otherwise the backend's estimate through `format`
  * (`formatCost` to the cent by default).
  */
 export function costText(
@@ -38,5 +41,5 @@ export function costText(
   ai: AiStatus | null | undefined,
   format: (value: string | null | undefined) => string = formatCost,
 ): string {
-  return ai?.mode === 'LOCAL' ? LOCAL_COST : format(value)
+  return ai?.path === 'LOCAL' ? LOCAL_COST : format(value)
 }

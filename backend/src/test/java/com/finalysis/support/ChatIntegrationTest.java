@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * {@link IntegrationTest} for the chat loop (docs/plans/phase-6.md §14): AI on (mode CLOUD) with a
+ * {@link IntegrationTest} for the chat loop (docs/plans/phase-6.md §14): AI on (path CLOUD) with a
  * {@link ScriptedChatModel} as the only chat model, a {@link FakeEmbeddingModel}, and a {@link MutableClock} as the
  * {@code Clock}, starting at the sample data's "today". No {@code aws} profile, so no Bedrock client exists and
  * {@link NoCloudAiGuard} stays in force. The main model is priced like Haiku 4.5, cache prices included, so the cost
@@ -26,7 +26,8 @@ import org.springframework.test.context.TestPropertySource;
 @IntegrationTest
 @Import(ChatIntegrationTest.Beans.class)
 @TestPropertySource(properties = {
-        "finalysis.ai.mode=CLOUD",
+        "finalysis.ai.cloud-available=true",
+        "finalysis.ai.default-path=CLOUD",
         "finalysis.ai.provider=test",
         "finalysis.ai.roles.categorization=test-categorization-model",
         "finalysis.ai.roles.embedding=test-embedding-model",

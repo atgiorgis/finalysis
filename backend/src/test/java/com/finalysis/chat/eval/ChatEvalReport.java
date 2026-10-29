@@ -69,7 +69,8 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
     /** {@code chat-<set>-<first 12 of the commit>-<yyyyMMddTHHmmssZ>}: what both files are named. */
     String fileStem() {
         String commit12 = commit.length() > 12 ? commit.substring(0, 12) : commit;
-        return PREFIX + run.set() + "-" + commit12 + "-" + STAMP.format(Instant.parse(startedAt));
+        String subset = run.target().isSubset() ? "-subset" : "";
+        return PREFIX + run.set() + subset + "-" + commit12 + "-" + STAMP.format(Instant.parse(startedAt));
     }
 
     /** Writes the JSON and Markdown files; refuses to overwrite. Returns their paths, JSON first. */
@@ -87,8 +88,33 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
 
     String consoleSummary() {
         return "Chat eval: " + run.set() + ", model " + run.model() + " (commit " + commit + (dirty ? ", dirty" : "")
-                + ")\nPrompt caching: " + caching() + "\nTurn cost limit: $" + run.maxTurnCost()
-                + (run.maxTurnCostOverridden() ? " (-Deval.maxTurnCost)" : "") + "\n\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
+                + ")\n" + pathLine() + "\nPrompt caching: " + caching() + "\nTurn cost limit: " + turnCostLimit()
+                + "\n" + (run.target().isSubset() ? subsetLine() + "\n" : "") + "\n" + summaryTable() + (run.stopped() == null ? "" : "\nStopped early: " + run.stopped() + "\n");
+    }
+
+    /** Where the run went (Phase 9 step 9b-1): the path, and on Ollama the host only, the model tag and the version. */
+    String pathLine() {
+        ChatEvalTarget target = run.target();
+        if (!target.ollama()) {
+            return "Path: Cloud (Amazon Bedrock)";
+        }
+        return "Path: " + (target.path() == com.finalysis.ai.AiPath.LOCAL ? "Local" : "Self-hosted") + " (Ollama "
+                + (target.ollamaVersion() == null ? "version unknown" : target.ollamaVersion()) + "), host `"
+                + target.host() + "`; model tag `" + run.model() + "`";
+    }
+
+    /** On Ollama the limit is off: there is no token cost, and the run budget doesn't apply either. */
+    String turnCostLimit() {
+        if (run.target().ollama()) {
+            return "off (Ollama: no token cost; the run budget doesn't apply)";
+        }
+        return "$" + run.maxTurnCost() + (run.maxTurnCostOverridden()
+                ? " (-Deval.maxTurnCost, this run only; the app's setting is unchanged)" : " (the app's setting)");
+    }
+
+    String subsetLine() {
+        return "Subset run (-Deval.questions): " + String.join(", ", run.target().subset())
+                + "; not comparable as a score";
     }
 
     String markdown() {
@@ -102,13 +128,16 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 .append(" s\n");
         md.append("- Chat model: `").append(run.model()).append("`; prompt `").append(run.promptVersion())
                 .append("` (system prompt SHA-256 `").append(run.systemPromptSha256()).append("`)\n");
+        md.append("- ").append(pathLine()).append("\n");
+        if (run.target().isSubset()) {
+            md.append("- **").append(subsetLine()).append("**\n");
+        }
         md.append("- Today by dataset: ").append(run.todayByDataset().entrySet().stream()
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "))).append("\n");
-        md.append("- Prices: ").append(run.pricesSource()).append("\n");
+        md.append("- Prices: ").append(run.target().ollama() ? "none: Ollama has no token cost"
+                : run.pricesSource()).append("\n");
         md.append("- Prompt caching: ").append(caching()).append("\n");
-        md.append("- Turn cost limit: $").append(run.maxTurnCost()).append(run.maxTurnCostOverridden()
-                ? " (-Deval.maxTurnCost, this run only; the app's setting is unchanged)" : " (the app's setting)")
-                .append("\n");
+        md.append("- Turn cost limit: ").append(turnCostLimit()).append("\n");
         if (run.stopped() != null) {
             md.append("- **Stopped early:** ").append(run.stopped()).append("\n");
         }

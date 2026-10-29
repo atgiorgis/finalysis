@@ -1,8 +1,10 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.AiCallLog;
+import com.finalysis.ai.AiPath;
 import com.finalysis.ai.AiPrices;
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.ChatProvider;
 import com.finalysis.ai.ChatRoleOptions;
 import com.finalysis.ai.ChatRoleProperties;
 import com.finalysis.ai.PromptCache;
@@ -10,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -25,7 +28,6 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,6 +51,10 @@ import org.springframework.stereotype.Component;
  * provider can place cache points ({@link #promptCaching}). If the provider refuses the cache points for a model, the
  * call is sent once more without them, and that model runs uncached until the app restarts. The summaries'
  * calls ({@link #complete}) are never cached: their prompts differ every time.
+ *
+ * <p><b>Paths</b> (docs/plans/phase-9.md §3.2, §4.2). The model, its id and the prompt cache are the active path's
+ * ({@link ActiveProviders}). Prices, and with them every cost estimate and cost limit, apply on Cloud only
+ * ({@link #price()}); the Ollama paths have no cache.
  */
 @Component
 public class ChatModelClient {
@@ -62,26 +68,21 @@ public class ChatModelClient {
 
     private static final Logger log = LoggerFactory.getLogger(ChatModelClient.class);
 
-    private final ObjectProvider<ChatModel> chatModel;
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final ChatRoleOptions options;
     private final ChatToolCallbacks tools;
     private final ChatRoleProperties role;
     private final AiPrices prices;
-    private final ObjectProvider<PromptCache> promptCache;
     /** Models whose provider refused cache points since the app started. */
     private final Set<String> refusedCaching = ConcurrentHashMap.newKeySet();
 
-    public ChatModelClient(ObjectProvider<ChatModel> chatModel, AiProperties ai, ChatRoleOptions options,
-                           ChatToolCallbacks tools, ChatRoleProperties role, AiPrices prices,
-                           ObjectProvider<PromptCache> promptCache) {
-        this.chatModel = chatModel;
-        this.ai = ai;
+    public ChatModelClient(ActiveProviders providers, ChatRoleOptions options, ChatToolCallbacks tools,
+                           ChatRoleProperties role, AiPrices prices) {
+        this.providers = providers;
         this.options = options;
         this.tools = tools;
         this.role = role;
         this.prices = prices;
-        this.promptCache = promptCache;
     }
 
     /** Whether chat's rounds cache their fixed prefix, and why not (step 8c). */
@@ -101,10 +102,10 @@ public class ChatModelClient {
         if (!role.promptCache()) {
             return PromptCaching.OFF_SETTING;
         }
-        if (prices.of(modelId()).filter(AiPrices.Price::cachePriced).isEmpty()) {
+        if (price().filter(AiPrices.Price::cachePriced).isEmpty()) {
             return PromptCaching.OFF_NO_CACHE_PRICES;
         }
-        if (promptCache.getIfAvailable() == null) {
+        if (cache().isEmpty()) {
             return PromptCaching.OFF_PROVIDER;
         }
         return refusedCaching.contains(modelId()) ? PromptCaching.OFF_REFUSED : PromptCaching.ON;
@@ -137,11 +138,26 @@ public class ChatModelClient {
     }
 
     public boolean enabled() {
-        return ai.enabled() && chatModel.getIfAvailable() != null;
+        return providers.usable() && providers.chat() != null;
     }
 
     public String modelId() {
         return options.modelId();
+    }
+
+    /** The active path: chat's costs and limits depend on it (§4.2). Null while the vault is locked. */
+    public AiPath path() {
+        return providers.path();
+    }
+
+    /** The main model's price: Cloud only. Off Cloud there is no token cost, so no estimate and no cost limit. */
+    public Optional<AiPrices.Price> price() {
+        return providers.path() == AiPath.CLOUD ? prices.of(modelId()) : Optional.empty();
+    }
+
+    private Optional<PromptCache> cache() {
+        ChatProvider chat = providers.chat();
+        return chat == null ? Optional.empty() : chat.promptCache();
     }
 
     /**
@@ -172,17 +188,18 @@ public class ChatModelClient {
 
     private Reply send(List<Message> messages, int maxOutputTokens, List<ToolCallback> callbacks, String role,
                        int toolResults, boolean cache) {
-        ChatModel model = chatModel.getIfAvailable();
-        if (!ai.enabled() || model == null) {
+        ChatProvider chat = providers.chat();
+        if (!providers.usable() || chat == null) {
             throw new IllegalStateException("AI is off");
         }
-        String modelId = modelId();
+        ChatModel model = chat.model();
+        String modelId = chat.modelId();
         ChatOptions callOptions = options.options(model, maxOutputTokens, callbacks);
         boolean cached = false;
         if (cache) {
             int system = (int) messages.stream().filter(m -> m.getMessageType() == MessageType.SYSTEM).count();
             try {
-                callOptions = promptCache.getObject().withCachePoints(callOptions, system,
+                callOptions = chat.promptCache().orElseThrow().withCachePoints(callOptions, system,
                         Math.min(CACHED_SYSTEM_MESSAGES, system));
                 cached = true;
             } catch (IllegalArgumentException e) {
@@ -196,7 +213,7 @@ public class ChatModelClient {
             response = model.call(new Prompt(messages, callOptions));
         } catch (RuntimeException e) {
             AiCallLog.record(role, modelId, toolResults, null, null, millisSince(start), AiCallLog.Outcome.ERROR, e);
-            if (cached && promptCache.getObject().refusedCaching(e)) {
+            if (cached && chat.promptCache().orElseThrow().refusedCaching(e)) {
                 refusedCaching.add(modelId);
                 log.warn("prompt cache refused by the provider for model={}; its chat calls go uncached", modelId);
                 return send(messages, maxOutputTokens, callbacks, role, toolResults, false);

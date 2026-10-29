@@ -1,5 +1,8 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.AiPath;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import com.finalysis.chat.citation.Citation;
 import com.finalysis.chat.grounding.GroundingStatus;
 import com.finalysis.chat.tool.DataNote;
@@ -35,14 +38,30 @@ public record ChatTurnResponse(long conversationId, int turn, String answer, Ans
     }
 
     /**
+     * @param path             where the turn ran (docs/plans/phase-9.md §4.2)
      * @param inputTokens      reported input tokens outside a cached prefix, summed; null when no call reported usage
      * @param cacheReadTokens  the fixed prefix's tokens read from the provider's cache (step 8c); null as inputTokens
      * @param cacheWriteTokens the fixed prefix's tokens written to the cache; null as inputTokens
-     * @param estimatedCost    dollars, six decimals, each kind of token at its own price; null when the model has no
-     *                         price
+     * @param estimatedCost    dollars, six decimals, each kind of token at its own price, on Cloud; {@code 0.000000} on
+     *                         Local; null on Self-hosted, and when a Cloud model has no price
+     * @param costNote         why the cost is null on Self-hosted ({@value #SELF_HOSTED_COST}); null otherwise
      */
-    public record Usage(String model, int rounds, Integer inputTokens, Integer outputTokens, Integer cacheReadTokens,
-                        Integer cacheWriteTokens, int callsWithoutUsage, String estimatedCost) {
+    public record Usage(String model, AiPath path, int rounds, Integer inputTokens, Integer outputTokens,
+                        Integer cacheReadTokens, Integer cacheWriteTokens, int callsWithoutUsage, String estimatedCost,
+                        String costNote) {
+
+        public static final String SELF_HOSTED_COST =
+                "Self-hosted cost is the server's running time; it isn't computed yet (step 9c)";
+
+        /** The usage of a turn or summary on this path, its cost as stored ({@link ChatConversationStore#storedCost}). */
+        public static Usage of(String model, AiPath path, int rounds, Integer inputTokens, Integer outputTokens,
+                               Integer cacheReadTokens, Integer cacheWriteTokens, int callsWithoutUsage,
+                               BigDecimal estimate) {
+            BigDecimal cost = path == null ? estimate : ChatConversationStore.storedCost(path, estimate);
+            return new Usage(model, path, rounds, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
+                    callsWithoutUsage, cost == null ? null : cost.setScale(6, RoundingMode.HALF_EVEN).toPlainString(),
+                    path == AiPath.SELF_HOSTED ? SELF_HOSTED_COST : null);
+        }
     }
 
     /**

@@ -91,7 +91,7 @@ class VaultGateTest {
             }
         }
         assertThat(checked).hasSizeGreaterThan(40).contains("GET /api/accounts", "POST /api/vault/password",
-                "POST /api/vault/activity");
+                "POST /api/vault/activity", "PUT /api/settings/ai");
         // Every allowlisted endpoint that is a controller mapping was found (health is actuator's).
         assertThat(allowedSeen).containsExactlyInAnyOrder("GET /api/status", "POST /api/vault/setup",
                 "POST /api/vault/unlock", "POST /api/vault/recover", "POST /api/vault/lock");
@@ -111,6 +111,18 @@ class VaultGateTest {
         assertThat(mvc.perform(post("/api/vault/setup").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"password\":\"another long password\"}")).andReturn().getResponse().getStatus())
                 .isEqualTo(409);
+    }
+
+    /** Phase 9: the path is a vault setting, so while locked the status has no path and says why (§3.3). */
+    @Test
+    void theStatusHasNoAiPathWhileLocked() throws Exception {
+        mvc.perform(get("/api/status"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.ai.path")
+                        .doesNotExist())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.ai.reachable")
+                        .value(false))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.ai.reason")
+                        .value("Vault locked"));
     }
 
     @Test

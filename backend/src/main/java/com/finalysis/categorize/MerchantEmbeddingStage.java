@@ -1,6 +1,5 @@
 package com.finalysis.categorize;
 
-import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.TextEmbedder.Embedding;
 import com.finalysis.ai.TextEmbedder;
 import com.finalysis.ai.outbound.RedactionContext;
@@ -48,8 +47,8 @@ public class MerchantEmbeddingStage {
     private static final Logger log = LoggerFactory.getLogger(MerchantEmbeddingStage.class);
 
     /**
-     * Neighbours the index is asked for before the label and similarity filters. pgvector's HNSW scan returns at most
-     * {@code hnsw.ef_search} rows (40 by default), so asking for more gains nothing.
+     * Neighbours taken before the label and similarity filters: 40, what pgvector's HNSW scan returned until V25
+     * dropped the index for an exact scan (phase-9.md §4.1), so a search finds as many candidates as before.
      */
     static final int POOL = 40;
 
@@ -59,14 +58,11 @@ public class MerchantEmbeddingStage {
     private final SimilarMerchantProperties properties;
     private final JdbcTemplate jdbc;
 
-    public MerchantEmbeddingStage(AiProperties ai, TextEmbedder embedder, MerchantEmbeddingRepository embeddings,
+    public MerchantEmbeddingStage(TextEmbedder embedder, MerchantEmbeddingRepository embeddings,
                                   CategorizationPromptBuilder outbound, SimilarMerchantProperties properties,
                                   JdbcTemplate jdbc) {
-        if (ai.enabled() && embedder.dimensions() != MerchantEmbeddingRepository.DIMENSIONS) {
-            throw new IllegalStateException("finalysis.ai.embedding.dimensions is " + embedder.dimensions()
-                    + " but merchant_embedding stores vector(" + MerchantEmbeddingRepository.DIMENSIONS
-                    + "); configure an embedding model with " + MerchantEmbeddingRepository.DIMENSIONS + " dimensions");
-        }
+        // Since V25 the tables take a vector of any length, checked against its own dimensions column; the embedder
+        // checks each vector against its model's length (phase-9.md §4.1).
         this.embedder = embedder;
         this.embeddings = embeddings;
         this.outbound = outbound;

@@ -1,6 +1,6 @@
 package com.finalysis.categorize;
 
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.outbound.RedactionContext;
 import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AnswerValidator.Accepted;
@@ -22,8 +22,6 @@ import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -90,9 +88,8 @@ public class AiCategorizer {
               AND NOT transfer_excluded
               AND (category_source IS NULL OR (? AND category_source = 'AI'))""";
 
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final AiCategorizationProperties properties;
-    private final ObjectProvider<ChatModel> chatModel;
     private final CategorizationModelClient client;
     private final CategorizationPromptBuilder promptBuilder;
     private final MerchantEmbeddingStage embeddingStage;
@@ -104,14 +101,13 @@ public class AiCategorizer {
     private final TransactionTemplate readWrite;
     private final ReentrantLock running = new ReentrantLock();
 
-    public AiCategorizer(AiProperties ai, AiCategorizationProperties properties, ObjectProvider<ChatModel> chatModel,
+    public AiCategorizer(ActiveProviders providers, AiCategorizationProperties properties,
                          CategorizationModelClient client, CategorizationPromptBuilder promptBuilder,
                          MerchantEmbeddingStage embeddingStage, SimilarMerchantProperties examples,
                          RedactionContextQuery redactionContext, CategorizationLock lock, JdbcTemplate jdbc,
                          PlatformTransactionManager transactions) {
-        this.ai = ai;
+        this.providers = providers;
         this.properties = properties;
-        this.chatModel = chatModel;
         this.client = client;
         this.promptBuilder = promptBuilder;
         this.embeddingStage = embeddingStage;
@@ -232,9 +228,17 @@ public class AiCategorizer {
      * evaluation; docs/plans/phase-4.md, step 9a notes).
      */
     public AiRunResult run(boolean force, AiRunObserver observer) {
-        if (!ai.enabled() || chatModel.getIfAvailable() == null) {
-            return AiRunResult.off();
+        // The run holds the path from start to end (phase-9.md §3.1): a switch waits for it, and taking the lease
+        // checks an Ollama path's reachability first. Off or unreachable, the run is OFF and rules stand.
+        try (ActiveProviders.Lease lease = providers.lease()) {
+            if (!providers.usable()) {
+                return AiRunResult.off();
+            }
+            return runOnPath(force, observer);
         }
+    }
+
+    private AiRunResult runOnPath(boolean force, AiRunObserver observer) {
         running.lock();
         try {
             AiRunResult result = categorize(force, observer);
@@ -428,7 +432,7 @@ public class AiCategorizer {
 
     private void write(CategorizationPrompt prompt, List<Group> batch, Validation answer, Map<String, Long> categoryIds,
                        boolean force, Tally tally, AiRunObserver observer) {
-        String model = ai.roles().categorization();
+        String model = providers.categorization().modelId(); // the run's path, held by its lease
         List<Object[]> apply = new ArrayList<>();
         List<Object[]> review = new ArrayList<>();
         for (Map.Entry<String, Integer> sent : prompt.candidateByKey().entrySet()) {

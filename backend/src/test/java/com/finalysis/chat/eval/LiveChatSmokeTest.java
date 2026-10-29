@@ -17,6 +17,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -35,6 +36,7 @@ import org.springframework.test.context.DynamicPropertySource;
 @IntegrationTest
 @AutoConfigureMockMvc
 @ActiveProfiles("aws")
+@TestPropertySource(properties = "finalysis.ai.default-path=CLOUD") // a fresh test vault on Cloud (AI-03)
 @Import({ChatEvalBeans.class, ChatEvalClock.class})
 class LiveChatSmokeTest {
 

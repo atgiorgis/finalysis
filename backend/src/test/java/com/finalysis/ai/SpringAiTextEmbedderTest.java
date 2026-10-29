@@ -16,8 +16,6 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -29,21 +27,19 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 @ExtendWith(OutputCaptureExtension.class)
 class SpringAiTextEmbedderTest {
 
-    private static final AiProperties CLOUD = new AiProperties(AiMode.CLOUD, "test",
+    private static final AiProperties CLOUD = new AiProperties(true, AiPath.CLOUD, "test",
             new AiProperties.Roles("main-model", "chat-model", "embedding-model", null), true);
 
     private final FakeEmbeddingModel model = new FakeEmbeddingModel();
 
-    private static ObjectProvider<EmbeddingModel> provider(EmbeddingModel model) {
-        StaticListableBeanFactory beans = new StaticListableBeanFactory();
-        if (model != null) {
-            beans.addBean("embeddingModel", model);
-        }
-        return beans.getBeanProvider(EmbeddingModel.class);
+    /** The Cloud path over this model; without one, a path whose providers couldn't be built. */
+    private static ActiveProviders provider(EmbeddingModel model) {
+        return ActiveProviders.fixed(AiPath.CLOUD,
+                model == null ? null : ProviderSet.cloud(CLOUD, 1024, null, model, null));
     }
 
     private SpringAiTextEmbedder embedder(EmbeddingModel model) {
-        return new SpringAiTextEmbedder(provider(model), CLOUD, new EmbeddingProperties(1024));
+        return new SpringAiTextEmbedder(provider(model));
     }
 
     @Test
@@ -138,9 +134,8 @@ class SpringAiTextEmbedderTest {
 
     @Test
     void offOrWithoutAModelNothingIsSent() {
-        SpringAiTextEmbedder off = new SpringAiTextEmbedder(provider(model),
-                new AiProperties(AiMode.OFF, null, new AiProperties.Roles(null, null, null, null), true),
-                new EmbeddingProperties(1024));
+        SpringAiTextEmbedder off = new SpringAiTextEmbedder(ActiveProviders.fixed(AiPath.OFF,
+                ProviderSet.cloud(CLOUD, 1024, null, model, null)));
         SpringAiTextEmbedder noModel = embedder(null);
 
         assertThat(off.enabled()).isFalse();

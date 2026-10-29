@@ -63,7 +63,8 @@ public class SearchTextOutbound {
                 log.warn("chat search embedding failed ({}); searching by name only", e.getClass().getSimpleName());
             }
         }
-        return Optional.of(new SearchText(text, words, vector, embedder.modelId(), properties.minSimilarity(),
+        String model = embedder.modelId();
+        return Optional.of(new SearchText(text, words, vector, model, properties.minSimilarity(model),
                 merchants, turn.categories(), genericWords.useful(words)));
     }
 }

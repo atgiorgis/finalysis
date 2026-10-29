@@ -27,7 +27,7 @@ test('with cloud AI: the provider, and each of Corgi’s roles with its model id
     '/api/status': {
       ...fixtures.statusOff,
       ai: {
-        mode: 'CLOUD',
+        path: 'CLOUD',
         provider: 'bedrock',
         models: { categorization: 'cat-model', embedding: 'emb-model', main: 'chat-model' },
       },
@@ -69,7 +69,7 @@ test('with a local model, the cost lines say $0.00 · local', async () => {
   renderApp('/settings', {
     '/api/status': {
       ...fixtures.statusOff,
-      ai: { mode: 'LOCAL', provider: 'ollama', models: { categorization: 'qwen', embedding: 'nomic', main: 'qwen' } },
+      ai: { path: 'LOCAL', provider: 'ollama', models: { categorization: 'qwen', embedding: 'nomic', main: 'qwen' } },
     },
     '/api/chat/usage': { ...usageFixture, spentThisMonth: '0.000000', questionsThisMonth: 1 },
   })

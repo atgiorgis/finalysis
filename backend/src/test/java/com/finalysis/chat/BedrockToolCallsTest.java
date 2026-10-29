@@ -3,7 +3,9 @@ package com.finalysis.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
-import com.finalysis.ai.AiMode;
+import com.finalysis.ai.ProviderSet;
+import com.finalysis.ai.AiPath;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
 import com.finalysis.ai.ChatRoleOptions;
@@ -24,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.ai.bedrock.converse.BedrockChatOptions;
 import org.springframework.ai.bedrock.converse.BedrockProxyChatModel;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -152,15 +153,13 @@ class BedrockToolCallsTest {
 
     /** The client over this model; {@code cache} null is a provider without cache points. */
     static ChatModelClient client(ChatModel model, Double temperature, AiPrices prices, PromptCache cache) {
-        AiProperties ai = new AiProperties(AiMode.CLOUD, "bedrock",
+        AiProperties ai = new AiProperties(true, AiPath.CLOUD, "bedrock",
                 new AiProperties.Roles("test-main-model", "test-categorization-model", "test-embedding-model", ""),
                 true);
+        ActiveProviders cloud = ActiveProviders.fixed(AiPath.CLOUD, ProviderSet.cloud(ai, 1024, model, null, cache));
         ChatRoleProperties role = new ChatRoleProperties(temperature, true);
-        return new ChatModelClient(new StaticListableBeanFactory(Map.of("chatModel", model))
-                .getBeanProvider(ChatModel.class), ai, new ChatRoleOptions(ai, role),
-                new ChatToolCallbacks(ToolRegistryTestSupport.registry()), role, prices,
-                new StaticListableBeanFactory(cache == null ? Map.of() : Map.of("promptCache", cache))
-                        .getBeanProvider(PromptCache.class));
+        return new ChatModelClient(cloud, new ChatRoleOptions(cloud, role),
+                new ChatToolCallbacks(ToolRegistryTestSupport.registry()), role, prices);
     }
 
     private static List<Message> question() {

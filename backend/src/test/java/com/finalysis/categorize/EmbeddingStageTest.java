@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.TextEmbedder;
 import com.finalysis.ai.outbound.RedactionContextQuery;
 import com.finalysis.categorize.AiCategorizer.AiRunResult;
@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -76,11 +75,10 @@ class EmbeddingStageTest {
     private final Map<String, Long> txnByLabel = new LinkedHashMap<>();
 
     // To build stages and categorizers with other settings.
-    private final AiProperties ai;
+    private final ActiveProviders providers;
     private final AiCategorizationProperties categorizationSettings;
     private final SimilarMerchantProperties contextExamples;
     private final TextEmbedder embedder;
-    private final ObjectProvider<ChatModel> chatModels;
     private final CategorizationModelClient client;
     private final CategorizationPromptBuilder promptBuilder;
     private final RedactionContextQuery redactionContext;
@@ -89,10 +87,10 @@ class EmbeddingStageTest {
 
     EmbeddingStageTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeChatModel chat,
                        FakeEmbeddingModel embeddingModel, AiCategorizer categorizer,
-                       MerchantEmbeddingRepository embeddings, MockMvc mockMvc, AiProperties ai,
+                       MerchantEmbeddingRepository embeddings, MockMvc mockMvc, ActiveProviders providers,
                        AiCategorizationProperties categorizationSettings, SimilarMerchantProperties contextExamples,
                        TextEmbedder embedder,
-                       ObjectProvider<ChatModel> chatModels, CategorizationModelClient client,
+                       CategorizationModelClient client,
                        CategorizationPromptBuilder promptBuilder, RedactionContextQuery redactionContext,
                        CategorizationLock lock, PlatformTransactionManager transactions) {
         this.jdbc = jdbc;
@@ -102,11 +100,10 @@ class EmbeddingStageTest {
         this.categorizer = categorizer;
         this.embeddings = embeddings;
         this.mockMvc = mockMvc;
-        this.ai = ai;
+        this.providers = providers;
         this.categorizationSettings = categorizationSettings;
         this.contextExamples = contextExamples;
         this.embedder = embedder;
-        this.chatModels = chatModels;
         this.client = client;
         this.promptBuilder = promptBuilder;
         this.redactionContext = redactionContext;
@@ -184,11 +181,11 @@ class EmbeddingStageTest {
     }
 
     private MerchantEmbeddingStage stage(TextEmbedder embedder, SimilarMerchantProperties examples) {
-        return new MerchantEmbeddingStage(ai, embedder, embeddings, promptBuilder, examples, jdbc);
+        return new MerchantEmbeddingStage(embedder, embeddings, promptBuilder, examples, jdbc);
     }
 
     private AiCategorizer categorizer(TextEmbedder embedder, SimilarMerchantProperties examples) {
-        return new AiCategorizer(ai, categorizationSettings, chatModels, client, promptBuilder,
+        return new AiCategorizer(providers, categorizationSettings, client, promptBuilder,
                 stage(embedder, examples), examples, redactionContext, lock, jdbc, transactions);
     }
 
@@ -504,8 +501,9 @@ class EmbeddingStageTest {
         assertThat(output).contains("outcome=INVALID_OUTPUT error=InvalidEmbeddingException");
     }
 
+    /** Since V25 a model of any length is stored (nomic-embed-text's 768 on the Ollama paths; phase-9.md §4.1). */
     @Test
-    void aModelOfTheWrongDimensionsFailsStartup() {
+    void aModelOfAnotherLengthIsAccepted() {
         TextEmbedder wrong = new TextEmbedder() {
             @Override
             public boolean enabled() {
@@ -528,10 +526,7 @@ class EmbeddingStageTest {
             }
         };
 
-        assertThatThrownBy(() -> stage(wrong, examples(5, 0.65, 500, false)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("finalysis.ai.embedding.dimensions is 768")
-                .hasMessageContaining("vector(1024)");
+        assertThat(stage(wrong, examples(5, 0.65, 500, false)).enabled()).isTrue();
     }
 
     // ------------------------------------------------------------------ the examples block

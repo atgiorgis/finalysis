@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.ChatSearchProperties;
 import com.finalysis.ai.SearchDocuments;
 import com.finalysis.ai.outbound.OutboundPayloadGuard;
@@ -44,6 +45,7 @@ class MerchantIndexRefreshTest {
     private final FakeEmbeddingModel embeddingModel;
     private final MerchantIndexRefresh refresh;
     private final MerchantEmbeddingStage stage;
+    private final ActiveProviders providers;
     private final SearchEmbeddingRepository index;
     private final CategorizationPromptBuilder outbound;
     private final RedactionContextQuery redaction;
@@ -51,6 +53,7 @@ class MerchantIndexRefreshTest {
     private final MockMvc mockMvc;
 
     MerchantIndexRefreshTest(JdbcTemplate jdbc, MerchantCleaner cleaner, FakeEmbeddingModel embeddingModel,
+                             ActiveProviders providers,
                              MerchantIndexRefresh refresh, MerchantEmbeddingStage stage, SearchEmbeddingRepository index,
                              CategorizationPromptBuilder outbound, RedactionContextQuery redaction,
                              PlatformTransactionManager transactions, MockMvc mockMvc) {
@@ -59,6 +62,7 @@ class MerchantIndexRefreshTest {
         this.embeddingModel = embeddingModel;
         this.refresh = refresh;
         this.stage = stage;
+        this.providers = providers;
         this.index = index;
         this.outbound = outbound;
         this.redaction = redaction;
@@ -180,7 +184,7 @@ class MerchantIndexRefreshTest {
 
     @Test
     void theCapLeavesTheRestForTheNextRefresh() {
-        MerchantIndexRefresh capped = new MerchantIndexRefresh(stage, index, new OutboundPayloadGuard(), outbound,
+        MerchantIndexRefresh capped = new MerchantIndexRefresh(stage, providers, index, new OutboundPayloadGuard(), outbound,
                 redaction, new ChatSearchProperties(0.40, 2), jdbc, transactions);
 
         EmbeddingRunResult first = capped.refresh();

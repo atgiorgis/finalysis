@@ -46,6 +46,7 @@ import org.springframework.test.context.TestPropertySource;
 @ActiveProfiles("aws")
 @Import({ChatEvalBeans.class, ChatEvalClock.class, ChatSearchSweepIT.SweepBeans.class})
 @TestPropertySource(properties = {
+        "finalysis.ai.default-path=CLOUD",
         "finalysis.chat.search.min-similarity=0.30",
         "finalysis.ai.categorization.run-after-import=false"})
 class ChatSearchSweepIT {

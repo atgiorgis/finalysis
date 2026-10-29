@@ -33,13 +33,20 @@ class StatusControllerTest {
                 .andExpect(jsonPath("$.status").value("ok"));
     }
 
-    /** AI-03: without a profile there is no model, and the status says OFF and nothing else. */
+    /**
+     * AI-03: without a profile there is no Cloud model and Cloud isn't a choice; the test vault's path is OFF (the
+     * suite's guard), so the block is the path, the choices and {@code reachable} only.
+     */
     @Test
     void aiIsOffWithoutAProfile() throws Exception {
         mockMvc.perform(get("/api/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ai.mode").value("OFF"))
-                .andExpect(jsonPath("$.ai.length()").value(1));
+                .andExpect(jsonPath("$.ai.path").value("OFF"))
+                .andExpect(jsonPath("$.ai.available.length()").value(2))
+                .andExpect(jsonPath("$.ai.available[0]").value("SELF_HOSTED"))
+                .andExpect(jsonPath("$.ai.available[1]").value("LOCAL"))
+                .andExpect(jsonPath("$.ai.reachable").value(false))
+                .andExpect(jsonPath("$.ai.length()").value(3));
         assertThat(context.getBeanNamesForType(ChatModel.class)).isEmpty();
         assertThat(context.getBeanNamesForType(EmbeddingModel.class)).isEmpty();
     }

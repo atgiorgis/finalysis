@@ -55,6 +55,10 @@ import org.junit.jupiter.api.Test;
 class PackageDependencyTest {
 
     static final String BEDROCK_CONFIG = "com.finalysis.ai.bedrock..";
+    static final String OLLAMA_CLIENTS = "com.finalysis.ai.ollama..";
+    static final String[] BEDROCK_CLASSES = {"org.springframework.ai.bedrock..", "org.springframework.ai.model.bedrock..",
+            "software.amazon.."};
+    static final String[] OLLAMA_CLASSES = {"org.springframework.ai.ollama..", "org.springframework.ai.model.ollama.."};
     static final String OUTBOUND = "com.finalysis.ai.outbound..";
 
     static final ArchRule INGESTION_KNOWS_NO_TRANSFERS_OR_REVIEW = noClasses()
@@ -135,23 +139,44 @@ class PackageDependencyTest {
                     + "read-only, bounded query services");
 
     /**
-     * AI-03 and the local profile to come: code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only, so
-     * a provider is configuration (the pom and {@code application-<profile>.yml}), never code (phase-4.md §7). The one
-     * exception is {@code com.finalysis.ai.bedrock}, the profile-only configuration that sets the Bedrock client's
-     * retry strategy (step 7), which nothing may depend on.
+     * AI-03 (phase-4.md §7, phase-9.md §3.2): code uses Spring AI's {@code ChatModel} and {@code EmbeddingModel} only,
+     * through the path's providers. Two packages are the exceptions, each touching only its own provider's classes:
+     * {@code com.finalysis.ai.bedrock}, the profile-only configuration of the Bedrock client (step 7), and
+     * {@code com.finalysis.ai.ollama}, which builds the Ollama clients for the Self-hosted and Local paths.
      */
     static final ArchRule NO_PROVIDER_IN_CODE = noClasses()
             .that().resideInAPackage("com.finalysis..")
-            .and().resideOutsideOfPackage(BEDROCK_CONFIG)
-            .should().dependOnClassesThat().resideInAnyPackage("org.springframework.ai.bedrock..",
-                    "org.springframework.ai.model.bedrock..", "org.springframework.ai.ollama..",
-                    "org.springframework.ai.model.ollama..", "software.amazon..")
-            .because("a model provider is chosen by profile; code depends only on Spring AI's interfaces");
+            .and().resideOutsideOfPackages(BEDROCK_CONFIG, OLLAMA_CLIENTS)
+            .should().dependOnClassesThat().resideInAnyPackage(BEDROCK_CLASSES)
+            .orShould().dependOnClassesThat().resideInAnyPackage(OLLAMA_CLASSES)
+            .because("code depends only on Spring AI's interfaces; providers live in their own packages");
+
+    static final ArchRule BEDROCK_PACKAGE_USES_NO_OLLAMA = noClasses()
+            .that().resideInAPackage(BEDROCK_CONFIG)
+            .should().dependOnClassesThat().resideInAnyPackage(OLLAMA_CLASSES)
+            .because("each provider package touches only its own provider's classes");
+
+    static final ArchRule OLLAMA_PACKAGE_USES_NO_BEDROCK = noClasses()
+            .that().resideInAPackage(OLLAMA_CLIENTS)
+            .should().dependOnClassesThat().resideInAnyPackage(BEDROCK_CLASSES)
+            .because("each provider package touches only its own provider's classes");
 
     static final ArchRule NOTHING_DEPENDS_ON_PROVIDER_CONFIG = noClasses()
             .that().resideOutsideOfPackage(BEDROCK_CONFIG)
             .should().dependOnClassesThat().resideInAPackage(BEDROCK_CONFIG)
             .because("the provider's client configuration is picked up by profile, never called");
+
+    /** {@code com.finalysis.ai} reaches the Ollama clients through its own {@code OllamaClients} interface. */
+    static final ArchRule NOTHING_DEPENDS_ON_THE_OLLAMA_PACKAGE = noClasses()
+            .that().resideOutsideOfPackage(OLLAMA_CLIENTS)
+            .should().dependOnClassesThat().resideInAPackage(OLLAMA_CLIENTS)
+            .because("the Ollama clients are built behind com.finalysis.ai's OllamaClients interface");
+
+    /** Phase 9: no feature depends on a provider package, only on {@code com.finalysis.ai}'s interfaces. */
+    static final ArchRule NO_FEATURE_DEPENDS_ON_A_PROVIDER_PACKAGE = noClasses()
+            .that().resideOutsideOfPackage("com.finalysis.ai..")
+            .should().dependOnClassesThat().resideInAnyPackage(BEDROCK_CONFIG, OLLAMA_CLIENTS)
+            .because("features read the active path's providers, never a provider's package");
 
     /**
      * The vault (docs/plans/phase-8.md §5.5) holds the database's lifecycle and depends on no feature; features depend
@@ -233,7 +258,11 @@ class PackageDependencyTest {
     @Test
     void noCodeDependsOnAModelProvider() {
         NO_PROVIDER_IN_CODE.check(app);
+        BEDROCK_PACKAGE_USES_NO_OLLAMA.check(app);
+        OLLAMA_PACKAGE_USES_NO_BEDROCK.check(app);
         NOTHING_DEPENDS_ON_PROVIDER_CONFIG.check(app);
+        NOTHING_DEPENDS_ON_THE_OLLAMA_PACKAGE.check(app);
+        NO_FEATURE_DEPENDS_ON_A_PROVIDER_PACKAGE.check(app);
     }
 
     @Test
@@ -307,7 +336,9 @@ class PackageDependencyTest {
         JavaClasses bedrock = new ClassFileImporter().importClasses(UsesBedrock.class);
         JavaClasses sdk = new ClassFileImporter().importClasses(UsesAwsSdk.class);
         JavaClasses springAi = new ClassFileImporter().importClasses(UsesSpringAiInterfaces.class);
+        JavaClasses ollama = new ClassFileImporter().importClasses(UsesOllama.class);
 
+        assertThat(NO_PROVIDER_IN_CODE.evaluate(ollama).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(bedrock).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(sdk).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(springAi).hasViolation()).isFalse();
@@ -341,6 +372,11 @@ class PackageDependencyTest {
     @SuppressWarnings("unused")
     static class UsesBedrock {
         private org.springframework.ai.bedrock.converse.BedrockChatOptions options;
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesOllama {
+        private org.springframework.ai.ollama.api.OllamaChatOptions options;
     }
 
     @SuppressWarnings("unused")

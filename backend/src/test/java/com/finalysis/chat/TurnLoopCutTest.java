@@ -5,7 +5,6 @@ import static com.finalysis.support.ScriptedChatModel.text;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.finalysis.account.AccountRepository;
-import com.finalysis.ai.AiPrices;
 import com.finalysis.analytics.AnalyticsFixture;
 import com.finalysis.chat.grounding.AnswerGrounding;
 import com.finalysis.chat.outbound.ChatPayloadGuard;
@@ -51,7 +50,6 @@ class TurnLoopCutTest {
     private final ChatModelClient client;
     private final ToolExecutor executor;
     private final AnswerGrounding grounding;
-    private final AiPrices prices;
     private final MutableClock clock;
     private final ToolRegistry registry;
     private final OutboundTurnFactory turns;
@@ -61,7 +59,7 @@ class TurnLoopCutTest {
     private final ScriptedChatModel model;
 
     TurnLoopCutTest(MockMvc mockMvc, AccountRepository accounts, JdbcTemplate jdbc, JsonMapper json,
-                    ChatModelClient client, ToolExecutor executor, AnswerGrounding grounding, AiPrices prices,
+                    ChatModelClient client, ToolExecutor executor, AnswerGrounding grounding,
                     MutableClock clock, ToolRegistry registry, OutboundTurnFactory turns, ContextBlockFactory context,
                     ChatPayloadGuard guard, ChatPrompt prompt, ScriptedChatModel model) {
         this.support = new ImportTestSupport(mockMvc, accounts, jdbc);
@@ -69,7 +67,6 @@ class TurnLoopCutTest {
         this.client = client;
         this.executor = executor;
         this.grounding = grounding;
-        this.prices = prices;
         this.clock = clock;
         this.registry = registry;
         this.turns = turns;
@@ -109,8 +106,7 @@ class TurnLoopCutTest {
 
     private TurnLoop loop(int maxInputTokensPerCall) {
         return new TurnLoop(client, executor, grounding, new ChatProperties(List.of(), 5, 8, maxInputTokensPerCall,
-                100_000, 1_500, Duration.ofSeconds(45), new BigDecimal("0.05"), new BigDecimal("1.00"), 90), prices,
-                clock,
+                100_000, 1_500, Duration.ofSeconds(45), new BigDecimal("0.05"), new BigDecimal("1.00"), 90), clock,
                 registry);
     }
 
