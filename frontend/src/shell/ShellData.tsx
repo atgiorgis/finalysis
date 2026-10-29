@@ -53,9 +53,14 @@ export interface DataChange {
  * again (docs/plans/phase-7.md §2.4). Pages put `version` in their reads' dependencies. A write that adds an account or
  * a statement, or removes one, asks for `{ shell: true }`.
  */
-const VersionContext = createContext<{ version: number; dataChanged: (change?: DataChange) => void }>({
+const VersionContext = createContext<{
+  version: number
+  dataChanged: (change?: DataChange) => void
+  statusChanged: () => Promise<void>
+}>({
   version: 0,
   dataChanged: () => {},
+  statusChanged: async () => {},
 })
 
 /** The first month any account has data, from coverage: the earliest `firstDay`. */
@@ -116,6 +121,12 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
           setShellVersion((v) => v + 1)
         }
       },
+      /** Reads `/api/status` again (a path switch, Phase 9): the badge and banner follow without a reload. */
+      statusChanged: async () => {
+        const status = await reads.status()
+        setData((current) => ({ ...current, status }))
+        setVersion((v) => v + 1)
+      },
     }),
     [version],
   )
@@ -128,7 +139,11 @@ export function ShellDataProvider({ children }: { children: ReactNode }) {
 }
 
 /** The data version and the call that bumps it after a write. */
-export function useDataVersion(): { version: number; dataChanged: (change?: DataChange) => void } {
+export function useDataVersion(): {
+  version: number
+  dataChanged: (change?: DataChange) => void
+  statusChanged: () => Promise<void>
+} {
   return useContext(VersionContext)
 }
 

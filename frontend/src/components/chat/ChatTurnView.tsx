@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import type { AiStatus, AnswerSource, Citation, ChatGrounding, ChatUsage, LimitHit } from '../../api'
 import { alertHref, drillHref, seriesHref } from '../../citationLinks'
 import { answerParts, stripEmphasis } from '../../chatText'
-import { AI_NAME, costText } from '../../corgi'
+import { AI_NAME, turnCostText } from '../../corgi'
 import { formatDate, formatMoney, formatMonth } from '../../format'
 import { CalculatorIcon } from '../../shell/icons'
 import { useShellData } from '../../shell/ShellData'
@@ -101,9 +101,12 @@ function CitationItem({ citation }: { citation: Citation }) {
   }
 }
 
-/** The turn's cost as the backend estimated it, exact; `$0.00 · local` with a local model. */
+/**
+ * The turn's cost on the path it ran on: the backend's estimate, exact, on Cloud; `$0.00 · local` on Local; on
+ * Self-hosted the backend's note as returned.
+ */
 function turnCost(usage: ChatUsage | null, ai: AiStatus | undefined): string {
-  return costText(usage?.estimatedCost, ai, (v) => (v ? `${formatMoney(v)} estimated` : 'no price'))
+  return turnCostText(usage, ai, (v) => (v ? `${formatMoney(v)} estimated` : 'no price'))
 }
 
 /**

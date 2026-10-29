@@ -82,6 +82,18 @@
   --selected-bg: color-mix(in srgb, var(--accent) 16%, var(--surface));
 
   /*
+   * Where Corgi runs (docs/plans/phase-9.md §3.5): amber for Cloud, blue for Self-hosted, green for Local. The dot and
+   * the card's edge use the fill; text uses the -ink shade, checked at 4.5:1 on surface and surface2 (theme.test.ts) and
+   * on the rendered badges and banners (test:layout).
+   */
+  --path-cloud: var(--s3);
+  --path-cloud-ink: var(--s3-ink);
+  --path-self-hosted: var(--s6);
+  --path-self-hosted-ink: var(--s6-ink);
+  --path-local: var(--income);
+  --path-local-ink: var(--income);
+
+  /*
    * Chart series. Slices go by rank in the month; Other and Uncategorized are the two greys, which differ in lightness
    * from each other. Every slice is also named in its legend row, so no meaning rests on colour alone.
    */

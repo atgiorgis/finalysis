@@ -118,7 +118,9 @@ class AwsProfileWiringTest {
                 .andExpect(jsonPath("$.ai.models.categorization").value("us.anthropic.claude-haiku-4-5-20251001-v1:0"))
                 .andExpect(jsonPath("$.ai.models.embedding").value("amazon.titan-embed-text-v2:0"))
                 .andExpect(jsonPath("$.ai.models.main").value("us.anthropic.claude-sonnet-4-6"))
-                .andExpect(jsonPath("$.ai.length()").value(5))
+                .andExpect(jsonPath("$.ai.length()").value(6))
+                .andExpect(jsonPath("$.ai.pathModels.CLOUD.main").value("us.anthropic.claude-sonnet-4-6"))
+                .andExpect(jsonPath("$.ai.pathModels.LOCAL.embedding").value("nomic-embed-text"))
                 .andExpect(jsonPath("$.ai.models.length()").value(3))
                 .andReturn().getResponse().getContentAsString();
 

@@ -196,7 +196,8 @@ test('a fallback is labelled; a limit is said plainly; a gone transaction has no
 })
 
 test.each([
-  [{ status: 503, type: 'ai-off', detail: 'AI is off.' }, 'Chat needs an AI model, and AI is off in this setup.'],
+  [{ status: 503, type: 'ai-off', detail: 'Corgi is off. Choose where it runs in Settings.', reason: 'Ollama unreachable' },
+    'Corgi is off. Choose where it runs in Settings. (Ollama unreachable)'],
   [{ status: 429, type: 'chat-budget', detail: 'x' }, 'Today’s chat budget ($1.00) is used up. It resets at midnight.'],
   [{ status: 429, type: 'chat-busy', detail: 'x' }, 'Chat is busy with other questions. Try again in a moment.'],
   [{ status: 409, type: 'turn-in-progress', detail: 'x' }, 'This conversation is still answering the last question.'],
@@ -213,11 +214,27 @@ test.each([
   expect(screen.getByRole('textbox', { name: 'Question' })).toHaveValue('Anything?')
 })
 
-test('with AI off: no question box, the reason, and conversations still readable', async () => {
+test('with Corgi off: no question box, where to turn it on, and conversations still readable', async () => {
   renderApp('/chat/7', { ...ROUTES, '/api/status': fixtures.statusOff })
 
   expect(await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })).toBeInTheDocument()
-  expect(screen.getByRole('note')).toHaveTextContent('Chat needs an AI model. AI is off in this setup')
+  expect(screen.getByRole('note')).toHaveTextContent(
+    'Corgi is off. Choose where it runs in Settings. Earlier conversations can still be read.',
+  )
+  expect(screen.queryByRole('textbox', { name: 'Question' })).not.toBeInTheDocument()
+})
+
+test('a path that can’t run: the header says Corgi is off and why, and there is no question box', async () => {
+  const off = { ...CLOUD, ai: { path: 'LOCAL', provider: 'ollama', reachable: false, reason: 'Ollama unreachable' } }
+  renderApp('/chat/7', { ...ROUTES, '/api/status': off })
+
+  expect(await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })).toBeInTheDocument()
+  const head = document.querySelector('.corgi-head') as HTMLElement
+  expect(within(head).getByText('Corgi is off')).toHaveClass('path-badge-off')
+  expect(within(head).getByRole('status')).toHaveTextContent(
+    'Corgi is off: Ollama unreachable. Install Ollama or choose a path in Settings.',
+  )
+  expect(screen.getByRole('note')).toHaveTextContent('Corgi is off: Ollama unreachable.')
   expect(screen.queryByRole('textbox', { name: 'Question' })).not.toBeInTheDocument()
 })
 
@@ -269,7 +286,7 @@ test('the header: Corgi’s avatar, name and promise, and a cloud badge from the
   expect(badge).toHaveClass('path-badge-cloud')
 })
 
-test('the header badge says local with a local provider, from config, and is absent with AI off', async () => {
+test('the header badge says Local on the Local path, and is absent with Corgi off', async () => {
   renderApp('/chat', {
     ...ROUTES,
     '/api/status': { ...CLOUD, ai: { ...CLOUD.ai, path: 'LOCAL', provider: 'ollama' } },
@@ -279,7 +296,7 @@ test('the header badge says local with a local provider, from config, and is abs
     expect(found).not.toBeNull()
     return found as HTMLElement
   })
-  expect(badge).toHaveTextContent('Local · Ollama')
+  expect(badge).toHaveTextContent(/^Local$/)
   expect(badge).toHaveClass('path-badge-local')
   cleanup()
 
@@ -366,6 +383,37 @@ test('the left column shows today’s budget from the usage read', async () => {
 
   const budget = await screen.findByRole('group', { name: 'Today’s chat budget' })
   expect(budget).toHaveTextContent('$0.21 of $1.00 today · resets at midnight')
+})
+
+test('a turn keeps the cost of the path it ran on: a Cloud turn’s estimate while Local is selected', async () => {
+  const local = { ...CLOUD, ai: { ...CLOUD.ai, path: 'LOCAL', provider: 'ollama' } }
+  const onCloud = {
+    ...conversation,
+    turns: conversation.turns.map((t, i) => (i === 0 && t.usage ? { ...t, usage: { ...t.usage, path: 'CLOUD' } } : t)),
+  }
+  renderApp('/chat/7', { ...ROUTES, '/api/status': local, '/api/chat/conversations/7': onCloud })
+
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+  await vi.waitFor(() =>
+    expect(reply(0).querySelector('.chat-meta')).toHaveTextContent('test-main-model · $0.012345 estimated'))
+})
+
+test('on Self-hosted: the turn shows the backend’s note, and the summaries say there is no token cost', async () => {
+  const note = 'Self-hosted cost is the server\u2019s running time; it isn\u2019t computed yet (step 9c)'
+  const selfHosted = { ...CLOUD, ai: { path: 'SELF_HOSTED', server: 'gpu1', provider: 'ollama', reachable: true } }
+  const turned = {
+    ...conversation,
+    turns: conversation.turns.map((t, i) =>
+      i === 0 && t.usage ? { ...t, usage: { ...t.usage, path: 'SELF_HOSTED', estimatedCost: null, costNote: note } } : t),
+  }
+  renderApp('/chat/7', { ...ROUTES, '/api/status': selfHosted, '/api/chat/conversations/7': turned })
+
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+  await vi.waitFor(() => expect(reply(0).querySelector('.chat-meta')).toHaveTextContent(`test-main-model · ${note}`))
+  expect(await screen.findByRole('group', { name: 'Today’s chat budget' })).toHaveTextContent(
+    'No token cost on Self-hosted.',
+  )
+  expect(document.querySelector('.path-badge')).toHaveTextContent('Self-hosted · gpu1')
 })
 
 test('with a local model, every cost line says $0.00 · local', async () => {

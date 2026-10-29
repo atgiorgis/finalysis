@@ -46,7 +46,9 @@ class StatusControllerTest {
                 .andExpect(jsonPath("$.ai.available[0]").value("SELF_HOSTED"))
                 .andExpect(jsonPath("$.ai.available[1]").value("LOCAL"))
                 .andExpect(jsonPath("$.ai.reachable").value(false))
-                .andExpect(jsonPath("$.ai.length()").value(3));
+                .andExpect(jsonPath("$.ai.pathModels.length()").value(2))
+                .andExpect(jsonPath("$.ai.pathModels.CLOUD").doesNotExist())
+                .andExpect(jsonPath("$.ai.length()").value(4));
         assertThat(context.getBeanNamesForType(ChatModel.class)).isEmpty();
         assertThat(context.getBeanNamesForType(EmbeddingModel.class)).isEmpty();
     }

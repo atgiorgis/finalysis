@@ -873,6 +873,58 @@ pulled"); import, analytics and rules work as before. To keep Cloud with the `aw
 `PUT /api/settings/ai {"path": "CLOUD"}` (Settings → Corgi comes in 9b-2). Unlock checks an Ollama path, so a server
 that doesn't answer adds up to two 3 s timeouts to it.
 
+### Step 9b-2 notes: Settings → Corgi, badges and banners per path (UI)
+
+Done in code: "Phase 9 step 9b-2: Settings → Corgi chooses the path; badge, banner and costs per path". Backend 3,625 tests, 0 failures, 0 errors, 0 skipped (Maven
+summary; 3,624 at 9b-1 plus `AiStatusTest`'s new case); frontend 335 tests (32 files), all passed; test:layout 153
+passed, 1 skipped (the phone-only menu check on desktop, as before). No live call.
+
+Decided at the 9b-2 plan (2026-10-29): a 423 relies on the app's global lock, as every write does; Self-hosted's summary
+lines say "No token cost on Self-hosted." and the server controls "Not available yet." (no step numbers in the UI); the
+cards show every path's models from a small backend addition.
+
+**Backend (the one change).** The status block's `ai` gains `pathModels`: each available path's configured model per
+role (Cloud's roles; on Self-hosted and Local Ollama's chat model for chat and categorization, and its embedding model).
+Configuration only: nothing is checked for a path that isn't selected, and no URL, region or credential is in it
+(`AiStatusTest`; `StatusControllerTest` and `AwsProfileWiringTest` count the block's fields). ArchUnit unchanged.
+
+**Settings → Corgi** (§3.4, `CorgiSettings`): three radio cards (Cloud, Self-hosted, Local) and Off as a plain radio
+below them. Each card shows its badge in its colour, its models per role, and the banner wording it would show; a path
+not in `available` is disabled with "Needs the aws profile.". Choosing a path asks once ("Switch Corgi to Local?"),
+sends `PUT /api/settings/ai`, then reads `/api/status` again (`statusChanged`, a status-only refresh in the shell), so
+the badge and the banner change without a reload. A 409 `ai-busy` shows its detail, a refused field its message; a 423
+locks the app. The Self-hosted card takes the Tailscale name and the AWS region, checked as the backend checks them
+(`validServerName`, `validRegion`), and has "Use this server" when it is selected; its Test, Start and Stop are
+disabled, "Not available yet.". The radios stay as the status says until a switch succeeds.
+
+**Badge and banner** (§3.5): `pathBadge` gives Cloud amber "Cloud · Bedrock", Self-hosted blue "Self-hosted · <name>",
+Local green "Local" (no longer "Local · Ollama"), and "Corgi is off" in muted ink, with a hollow dot, when the path
+can't run. `CorgiBanner` (was `CloudAiBanner`) shows SEC-01's three wordings, word for word, on every tab for every path
+but Off, its dot in the path's colour. Colours are tokens in both themes (`--path-cloud`, `--path-self-hosted`,
+`--path-local`, each with an `-ink` text shade): the fills are the palette's amber, blue and green; the inks join
+`theme.test.ts`'s 4.5:1 pairs, and test:layout measures the rendered badges, banners and off lines (a mutation to the
+blue fill as text, 3.61:1, fails it). The `path` names stay (`pathBadge`, `.path-badge`); a new guard,
+`pathNaming.test.ts`, fails on "tier" within a few words of Cloud, Self-hosted or Local anywhere under `src/`.
+
+**The off state**: when `reachable` is false, the chat header and the Settings card say "Corgi is off: <reason>. Install
+Ollama or choose a path in Settings."; chat has no question box then, and its 503 `ai-off` shows the backend's detail
+with the reason. Off itself is a choice, not a fault: chat says "Corgi is off. Choose where it runs in Settings.".
+
+**Costs** (§4.2): a turn's cost follows the path it ran on (its usage's `path`; the status's for turns stored before
+9b-1): the estimate on Cloud, "$0.00 · local" on Local, the backend's `costNote` as returned on Self-hosted. The summary
+lines (Settings → Chat costs, chat's budget and conversation lines) say "$0.00 · local" on Local and "No token cost on
+Self-hosted." on Self-hosted, and the caps show on Cloud only. The frontend computes nothing (`noArithmetic.test.ts`).
+
+**Unlock**: "Checking Corgi…" shows from the password's submit until the app opens. The wait is the unlock request
+itself (the backend checks an Ollama path while unlocking), not the status read after it.
+
+**CLAUDE.md**: the terminology line now says "path" is where Corgi runs and "tier" a model's size, and "three paths";
+nothing else changed there.
+
+**A frontend failure seen once**: in one full `npm test` run, "ask: the four choices; Keep sends the same file to the
+statement and says where it is" (the Import tab's after-import question, unchanged here) failed; it passed on the next
+full run and alone. Its `vitest.json` was overwritten by the passing run before it could be kept.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

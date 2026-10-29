@@ -135,27 +135,44 @@ test('the menu names the account count and the month shown', async () => {
   expect(menu).toHaveTextContent('Showing September 2026')
 })
 
-test('no banner while AI is off', async () => {
+const SELF_HOSTED_BANNER =
+  'Corgi runs on your own server (finalysis-selfhost): merchant names and amounts are sent to it for categorization, ' +
+  'and chat questions with the figures they need are sent for answers.'
+const LOCAL_BANNER = 'Corgi runs on this computer: nothing is sent anywhere.'
+
+const strip = () => document.querySelector('.corgi-banner')
+
+test('no banner while Corgi is off', async () => {
   renderApp('/overview')
 
   expect(await screen.findByRole('switch', { name: 'Dark theme' })).toBeInTheDocument()
   expect(await screen.findByText('Where it went')).toBeInTheDocument()
-  expect(screen.queryByText(/Cloud AI is on/)).not.toBeInTheDocument()
+  expect(strip()).toBeNull()
 })
 
-test('the banner shows the SEC-01 wording while cloud AI is on, on every tab', async () => {
-  for (const path of ['/overview', '/settings', '/chat']) {
-    renderApp(path, { '/api/status': cloud('bedrock') })
+// docs/plans/phase-9.md §3.5: on every tab, for every path but Off, in SEC-01's words and the path's colour.
+for (const [name, ai, wording, tone] of [
+  ['Cloud', cloud('bedrock').ai, BANNER, 'cloud'],
+  ['Self-hosted', { path: 'SELF_HOSTED', server: 'finalysis-selfhost', provider: 'ollama', reachable: true },
+    SELF_HOSTED_BANNER, 'self-hosted'],
+  ['Local', { path: 'LOCAL', provider: 'ollama', reachable: true }, LOCAL_BANNER, 'local'],
+] as const) {
+  test(`the ${name} banner shows SEC-01's wording on every tab`, async () => {
+    for (const path of ['/overview', '/settings', '/chat']) {
+      renderApp(path, { '/api/status': { ...fixtures.statusOff, ai } })
 
-    expect(await screen.findByText(/Cloud AI is on/)).toHaveTextContent(BANNER)
-    cleanup()
-  }
-})
+      expect(await screen.findByText(wording, { selector: '.corgi-banner' })).toHaveClass(`corgi-banner-${tone}`)
+      expect(strip()?.textContent).toBe(wording)
+      cleanup()
+    }
+  })
+}
 
 test('an unknown cloud provider is named as the backend reports it', async () => {
   renderApp('/overview', { '/api/status': cloud('othercloud') })
 
-  expect(await screen.findByText(/Cloud AI is on/)).toHaveTextContent('Cloud AI is on (othercloud)')
+  expect(await screen.findByText(/Cloud AI is on/, { selector: '.corgi-banner' }))
+    .toHaveTextContent('Cloud AI is on (othercloud)')
 })
 
 test('the picker opens on the latest complete month and lists every month with data, partial ones marked', async () => {

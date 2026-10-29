@@ -74,7 +74,13 @@ test('Settings names Corgi, with the model ids only as facts beside its roles', 
   renderApp('/settings', {
     '/api/status': {
       ...fixtures.statusOff,
-      ai: { path: 'CLOUD', provider: 'bedrock', models: { categorization: 'cat-model', embedding: 'emb', main: 'chat' } },
+      ai: {
+        path: 'CLOUD',
+        available: ['CLOUD', 'SELF_HOSTED', 'LOCAL'],
+        provider: 'bedrock',
+        models: { categorization: 'cat-model', embedding: 'emb', main: 'chat' },
+        pathModels: { CLOUD: { categorization: 'cat-model', embedding: 'emb', main: 'chat' } },
+      },
     },
   })
 

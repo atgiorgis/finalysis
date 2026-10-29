@@ -5,7 +5,19 @@
   "ai": {
     "path": "OFF",
     "available": ["SELF_HOSTED", "LOCAL"],
-    "reachable": false
+    "reachable": false,
+    "pathModels": {
+      "SELF_HOSTED": {
+        "categorization": "finalysis-unset-chat-model",
+        "embedding": "nomic-embed-text",
+        "main": "finalysis-unset-chat-model"
+      },
+      "LOCAL": {
+        "categorization": "finalysis-unset-chat-model",
+        "embedding": "nomic-embed-text",
+        "main": "finalysis-unset-chat-model"
+      }
+    }
   },
   "vault": {
     "state": "UNLOCKED",

@@ -4,7 +4,13 @@ import { fetchFrom, fixtures } from './fixtures'
 import { vi } from 'vitest'
 
 test('the fixtures are the sample data with AI off', () => {
-  expect(fixtures.statusOff.ai).toEqual({ path: 'OFF', available: ['SELF_HOSTED', 'LOCAL'], reachable: false })
+  const unset = { categorization: 'finalysis-unset-chat-model', embedding: 'nomic-embed-text', main: 'finalysis-unset-chat-model' }
+  expect(fixtures.statusOff.ai).toEqual({
+    path: 'OFF',
+    available: ['SELF_HOSTED', 'LOCAL'],
+    reachable: false,
+    pathModels: { SELF_HOSTED: unset, LOCAL: unset },
+  })
   expect(fixtures.accounts.length).toBeGreaterThan(0)
   expect(fixtures.months.months.length).toBeGreaterThan(0)
   expect(fixtures.coverage.latestMonth).toMatch(/^\d{4}-\d{2}$/)

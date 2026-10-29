@@ -4,7 +4,8 @@ export type AiPath = 'OFF' | 'CLOUD' | 'SELF_HOSTED' | 'LOCAL'
 /**
  * The `ai` block of `GET /api/status` (docs/plans/phase-9.md §3.3). `path` is absent while the vault is locked;
  * `reachable` says whether Corgi can run now and `reason` why not; `server` is Self-hosted's Tailscale name only.
- * `provider` and `models` are present when the path's providers are built.
+ * `provider` and `models` are present when the path's providers are built. `pathModels` lists every available path's
+ * configured models per role (configuration only, nothing checked), for Settings → Corgi's cards.
  */
 export interface AiStatus {
   path?: AiPath
@@ -14,6 +15,14 @@ export interface AiStatus {
   provider?: string
   server?: string
   models?: Record<string, string>
+  pathModels?: Partial<Record<AiPath, Record<string, string>>>
+}
+
+/** `PUT /api/settings/ai`: the path, and on Self-hosted the server's Tailscale name and AWS region. */
+export interface AiSettingsRequest {
+  path: AiPath
+  selfhostName?: string
+  selfhostRegion?: string
 }
 
 export type VaultState =
@@ -1014,8 +1023,12 @@ export interface ChatUsage {
   cacheReadTokens?: number | null
   cacheWriteTokens?: number | null
   callsWithoutUsage?: number
-  /** Dollars, six decimals; null when the model has no price. */
+  /** Dollars, six decimals; null when the model has no price, and on Self-hosted. */
   estimatedCost: string | null
+  /** Where the turn ran (Phase 9); absent on turns stored before paths. */
+  path?: AiPath | null
+  /** Why the cost is null on Self-hosted, as the backend says it. */
+  costNote?: string | null
 }
 
 export interface ChatGrounding {
@@ -1155,6 +1168,11 @@ export const vault = {
   saveSettings: (idleLockMinutes: number) => send<null>('PUT', '/api/vault/settings', { idleLockMinutes }),
   /** The "user is here" signal for the idle lock; failures are ignored (a 423 still reaches the listeners). */
   activity: () => send<null>('POST', '/api/vault/activity').catch(() => null),
+}
+
+/** Where Corgi runs (docs/plans/phase-9.md §3.1): switched without a restart; answers the status's `ai` block. */
+export const aiSettings = {
+  switchTo: (request: AiSettingsRequest) => send<AiStatus>('PUT', '/api/settings/ai', request) as Promise<AiStatus>,
 }
 
 export const chat = {

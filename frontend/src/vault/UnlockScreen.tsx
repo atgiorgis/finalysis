@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { vault } from '../api'
+import { AI_NAME } from '../corgi'
 import { newPasswordProblem, vaultErrorText } from './vaultText'
 import VaultScreen from './VaultScreen'
 
@@ -70,6 +71,12 @@ function PasswordForm({
         <button type="submit" className="button-primary" disabled={busy || !password}>
           {busy ? 'Unlocking…' : 'Unlock'}
         </button>
+        {/* Unlock checks the path Corgi runs on (Phase 9): with Ollama selected, it can take a few seconds more. */}
+        {busy && (
+          <p className="muted vault-checking" role="status">
+            Checking {AI_NAME}…
+          </p>
+        )}
       </form>
       <button type="button" className="link-button vault-switch" onClick={onForgot}>
         Forgot your password? Use your recovery key

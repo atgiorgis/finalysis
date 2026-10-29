@@ -179,6 +179,9 @@ const PAIRS: [string, string[]][] = [
   ['s3-ink', ['surface', 'surface2']],
   ['s5-ink', ['surface', 'surface2']],
   ['s6-ink', ['surface', 'surface2']],
+  ['path-cloud-ink', ['surface', 'surface2']],
+  ['path-self-hosted-ink', ['surface', 'surface2']],
+  ['path-local-ink', ['surface', 'surface2']],
   ['on-accent', ['accent']],
 ]
 

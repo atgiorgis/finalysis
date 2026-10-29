@@ -179,6 +179,31 @@ test('recovery: the key and a new password twice unlock the app', async () => {
   ])
 })
 
+test('unlock: "Checking Corgi…" shows from the submit until the app opens (unlock checks Corgi’s path)', async () => {
+  const user = userEvent.setup()
+  const backend = vaultBackend('LOCKED')
+  let answer: () => void = () => {}
+  renderApp('/overview', { '/api/status': backend.route }, () =>
+    new Promise<Response>((resolve) => {
+      answer = () => {
+        backend.set('UNLOCKED')
+        resolve(noContent())
+      }
+    }))
+
+  expect(await screen.findByRole('heading', { name: 'Finalysis is locked' })).toBeInTheDocument()
+  expect(screen.queryByText('Checking Corgi…')).not.toBeInTheDocument()
+  await user.type(screen.getByLabelText('Password'), 'the right password')
+  await user.click(screen.getByRole('button', { name: 'Unlock' }))
+
+  expect(await screen.findByText('Checking Corgi…')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Unlocking…' })).toBeDisabled()
+  answer()
+
+  expect(await screen.findByRole('banner')).toBeInTheDocument()
+  expect(screen.queryByText('Checking Corgi…')).not.toBeInTheDocument()
+})
+
 // ---- 423 anywhere, the Lock button, the poll ------------------------------------------------------------------------
 
 test('a 423 from any read switches to the unlock screen, drops the app, and unlock returns to the same page', async () => {

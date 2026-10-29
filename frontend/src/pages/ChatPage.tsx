@@ -15,7 +15,7 @@ import {
 } from '../api'
 import ChatTurnView, { PendingTurn, type TurnEntry } from '../components/chat/ChatTurnView'
 import CorgiAvatar from '../components/chat/CorgiAvatar'
-import { AI_NAME, CHAT_TAGLINE, costText, pathBadge } from '../corgi'
+import { AI_NAME, CHAT_TAGLINE, costText, isOff, offText, pathBadge } from '../corgi'
 import { formatCost, formatCount, formatDate, formatMoney } from '../format'
 import { useDataVersion, useShellData } from '../shell/ShellData'
 
@@ -30,8 +30,11 @@ async function problemText(e: unknown): Promise<string> {
     return e instanceof Error ? `The request failed: ${e.message}` : 'The request failed.'
   }
   switch (e.type) {
-    case `${PROBLEM}ai-off`:
-      return 'Chat needs an AI model, and AI is off in this setup.'
+    case `${PROBLEM}ai-off`: {
+      // As the backend says it, with the reason the selected path can't run (Phase 9)
+      const reason = typeof e.body.reason === 'string' ? ` (${e.body.reason})` : ''
+      return `${e.message}${reason}`
+    }
     case `${PROBLEM}chat-budget`: {
       const cap = await reads
         .chatUsage()
@@ -79,13 +82,13 @@ function fromTurn(question: string, t: ChatTurn): TurnEntry {
 /** "3 turns · $0.03": the count and the backend's sum; no cost shown when no turn had a price. */
 export function conversationLine(c: ConversationItem, ai: AiStatus | null | undefined): string {
   const turns = c.turns === 1 ? '1 turn' : `${c.turns} turns`
-  const cost = c.totalCost === null && ai?.path !== 'LOCAL' ? null : costText(c.totalCost, ai)
+  const cost = c.totalCost === null && ai?.path !== 'LOCAL' && ai?.path !== 'SELF_HOSTED' ? null : costText(c.totalCost, ai)
   return cost ? `${turns} · ${cost}` : turns
 }
 
 /** Today's budget, as `GET /api/chat/usage` gives it. */
 export function budgetLine(usage: ChatDailyUsage, ai: AiStatus | null | undefined): string {
-  if (ai?.path === 'LOCAL') {
+  if (ai?.path === 'LOCAL' || ai?.path === 'SELF_HOSTED') {
     return costText(usage.spentToday, ai)
   }
   return usage.maxDailyCost
@@ -140,6 +143,7 @@ function ConversationList({
 /** Corgi's header: the avatar, name and promise, and where it runs, from the status. */
 function CorgiHeader({ ai }: { ai: AiStatus | undefined }) {
   const badge = ai ? pathBadge(ai) : null
+  const off = offText(ai)
   return (
     <div className="corgi-head">
       <CorgiAvatar size="large" />
@@ -152,6 +156,11 @@ function CorgiHeader({ ai }: { ai: AiStatus | undefined }) {
           <span className="path-badge-dot" aria-hidden="true" />
           {badge.label}
         </span>
+      )}
+      {off && (
+        <p className="corgi-off corgi-head-off" role="status">
+          {off}
+        </p>
       )}
     </div>
   )
@@ -168,7 +177,7 @@ export default function ChatPage() {
   const { status } = useShellData()
   const { version } = useDataVersion()
   const id = idParam && /^\d{1,18}$/.test(idParam) ? idParam : null
-  const aiOff = status?.ai.path === 'OFF'
+  const aiOff = isOff(status?.ai)
 
   const [list, setList] = useState<ConversationItem[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -309,10 +318,10 @@ export default function ChatPage() {
             <div className="chat-conversation-head">
               <div className="chat-conversation-title">
                 <h2>{conversation.title ?? 'New conversation'}</h2>
-                {(conversation.totalCost !== null || status?.ai.path === 'LOCAL') && (
+                {(conversation.totalCost !== null || status?.ai.path === 'LOCAL' || status?.ai.path === 'SELF_HOSTED') && (
                   <p className="muted">
                     This conversation: {costText(conversation.totalCost, status?.ai)}
-                    {status?.ai.path !== 'LOCAL' && ' estimated'}
+                    {(status?.ai.path === 'CLOUD' || status?.ai.path === 'OFF') && ' estimated'}
                   </p>
                 )}
               </div>
@@ -347,8 +356,8 @@ export default function ChatPage() {
           </ol>
           {aiOff ? (
             <p className="card chat-ai-off" role="note">
-              Chat needs an AI model. AI is off in this setup (the backend runs without the <code>aws</code> profile).
-              Earlier conversations can still be read.
+              {offText(status?.ai) ?? `${AI_NAME} is off. Choose where it runs in Settings.`} Earlier conversations can
+              still be read.
             </p>
           ) : (
             <form className="chat-form" onSubmit={(e) => void ask(e)}>

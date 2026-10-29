@@ -101,6 +101,18 @@ public class AiProviders implements ActiveProviders {
         return List.copyOf(paths);
     }
 
+    /**
+     * Each available path's configured models per role, from configuration only (Settings → Corgi's cards): no
+     * reachability check, never a URL, region or credential.
+     */
+    public java.util.Map<AiPath, java.util.Map<String, String>> configuredModels() {
+        java.util.Map<String, String> cloud = ai.cloudAvailable()
+                ? AiStatus.roles(ai.roles().main(), ai.roles().categorization(), ai.roles().embedding()) : null;
+        java.util.Map<String, String> onOllama = AiStatus.roles(ollama.models().chat(), ollama.models().chat(),
+                ollama.models().embedding());
+        return AiStatus.pathModels(available(), cloud, onOllama);
+    }
+
     @Override
     public AiPath path() {
         return state.get().path();

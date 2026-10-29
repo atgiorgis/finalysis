@@ -69,9 +69,11 @@ async function smallTargets(page: Page): Promise<string[]> {
   return page.evaluate((min) => {
     const out: string[] = []
     for (const control of document.querySelectorAll<HTMLElement>('a[href], button, select, input, textarea, [role="button"]')) {
-      // A visually hidden input (the Import tab's file input) is reached through its label: measure the label.
+      // A visually hidden input (the Import tab's file input) is reached through its label: measure the label. So is a
+      // radio (Settings → Corgi's path cards): its label is the target, the whole row.
       const hiddenInput = control.tagName === 'INPUT' && control.getBoundingClientRect().width <= 1
-      const el = hiddenInput ? (control as HTMLInputElement).labels?.[0] ?? control : control
+      const radio = control.tagName === 'INPUT' && (control as HTMLInputElement).type === 'radio'
+      const el = hiddenInput || radio ? (control as HTMLInputElement).labels?.[0] ?? control : control
       const box = el.getBoundingClientRect()
       const style = getComputedStyle(el)
       if (box.width === 0 || box.height === 0 || style.visibility === 'hidden') {
@@ -324,12 +326,17 @@ const CLOUD_STATUS = {
 
 for (const [where, status, label] of [
   ['cloud', CLOUD_STATUS, 'Cloud · Bedrock'],
-  ['local', { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, path: 'LOCAL', provider: 'ollama' } }, 'Local · Ollama'],
+  ['local', { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, path: 'LOCAL', provider: 'ollama' } }, 'Local'],
+  [
+    'self-hosted',
+    { ...CLOUD_STATUS, ai: { ...CLOUD_STATUS.ai, path: 'SELF_HOSTED', provider: 'ollama', server: 'finalysis-selfhost' } },
+    'Self-hosted · finalysis-selfhost',
+  ],
 ] as const) {
   test(`chat: Corgi’s header with the ${where} badge fits, and the input line under it`, async ({ page }, info) => {
     await mockApi(page, { '/api/status': status, '/api/chat/usage': { ...usageFixture, spentToday: '0.214300' } })
     await page.goto('/chat/7')
-    await expect(page.getByText(label)).toBeVisible()
+    await expect(page.locator('.path-badge')).toHaveText(label)
     await expect(page.getByText('Reads your books. Never changes them.')).toBeVisible()
     await expect(page.getByText('Figures computed by Finalysis, not by the model · 3 checked')).toBeVisible()
     await expect(page.getByText('It can’t give financial advice.', { exact: false })).toBeVisible()
@@ -547,3 +554,121 @@ for (const theme of ['dark', 'light'] as const) {
     }
   })
 }
+
+// ---------------------------------------------------------------------------- Phase 9 step 9b-2: Corgi's paths
+
+const MODELS = { categorization: 'haiku-4.5', embedding: 'amazon.titan-embed-text-v2:0', main: 'us.anthropic.claude-sonnet-4-6' }
+const OLLAMA = { categorization: 'ministral-3:14b', embedding: 'nomic-embed-text', main: 'ministral-3:14b' }
+const AI = {
+  available: ['CLOUD', 'SELF_HOSTED', 'LOCAL'],
+  reachable: true,
+  pathModels: { CLOUD: MODELS, SELF_HOSTED: OLLAMA, LOCAL: OLLAMA },
+}
+const PATH_STATUS = {
+  cloud: { ...fixtures.statusOff, ai: { ...AI, path: 'CLOUD', provider: 'bedrock', models: MODELS } },
+  'self-hosted': {
+    ...fixtures.statusOff,
+    ai: { ...AI, path: 'SELF_HOSTED', provider: 'ollama', models: OLLAMA, server: 'finalysis-selfhost.tail1234.ts.net' },
+  },
+  local: { ...fixtures.statusOff, ai: { ...AI, path: 'LOCAL', provider: 'ollama', models: OLLAMA } },
+  off: {
+    ...fixtures.statusOff,
+    ai: { ...AI, path: 'LOCAL', provider: 'ollama', models: OLLAMA, reachable: false, reason: 'model ministral-3:14b not pulled' },
+  },
+} as const
+
+/** WCAG contrast of each element's text colour on the background behind it (its own, or the nearest set one's). */
+async function lowContrast(page: Page, selector: string, minimum: number): Promise<string[]> {
+  return page.evaluate(
+    ([sel, min]) => {
+      const canvas = document.createElement('canvas').getContext('2d')!
+      const rgb = (css: string): [number, number, number, number] => {
+        canvas.clearRect(0, 0, 1, 1)
+        canvas.fillStyle = '#000'
+        canvas.fillStyle = css
+        canvas.fillRect(0, 0, 1, 1)
+        const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data
+        return [r, g, b, a]
+      }
+      const lum = ([r, g, b]: number[]) => {
+        const [lr, lg, lb] = [r, g, b].map((v) => {
+          const s = v / 255
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+        })
+        return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
+      }
+      const background = (el: Element | null): string => {
+        for (let e = el; e; e = e.parentElement) {
+          const bg = getComputedStyle(e).backgroundColor
+          if (rgb(bg)[3] === 255) {
+            return bg
+          }
+        }
+        return getComputedStyle(document.body).backgroundColor
+      }
+      const out: string[] = []
+      for (const el of document.querySelectorAll(sel as string)) {
+        const fg = lum(rgb(getComputedStyle(el).color))
+        const bg = lum(rgb(background(el)))
+        const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05)
+        if (ratio < (min as number)) {
+          out.push(`${(el.textContent ?? '').trim().slice(0, 40)}: ${ratio.toFixed(2)}`)
+        }
+      }
+      return out
+    },
+    [selector, minimum] as const,
+  )
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  for (const [path, status] of Object.entries(PATH_STATUS)) {
+    test(`corgi: the ${path} banner and badge fit and read at 4.5:1 (${theme})`, async ({ page }, info) => {
+      await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+      await mockApi(page, { '/api/status': status })
+      await page.goto('/chat/7')
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expect(page.locator('.path-badge')).toBeVisible()
+      if (path !== 'off') {
+        await expect(page.locator(`.corgi-banner-${path}`)).toBeVisible()
+      } else {
+        await expect(page.locator('.corgi-head-off')).toBeVisible()
+      }
+
+      expect(await lowContrast(page, '.path-badge, .corgi-banner, .corgi-off', 4.5), 'text contrast').toEqual([])
+      await fitsAt375(page, info.project.name === 'phone')
+    })
+
+    test(`corgi: Settings → Corgi with ${path} selected fits, its cards inside the card (${theme})`, async ({ page }, info) => {
+      await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+      await mockApi(page, { '/api/status': status })
+      await page.goto('/settings')
+      const corgi = page.getByRole('region', { name: 'Corgi' })
+      await expect(corgi.getByRole('radio', { name: /^Self-hosted/ })).toBeVisible()
+      await expect(corgi.locator('.path-card')).toHaveCount(3)
+
+      expect(await lowContrast(page, '.path-card .path-badge, .path-card-reason, .corgi-off', 4.5), 'text contrast')
+        .toEqual([])
+      expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+      await fitsAt375(page, info.project.name === 'phone')
+    })
+  }
+
+  test(`corgi: Cloud unavailable and the switch question fit (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+    const local = PATH_STATUS.local
+    await mockApi(page, {
+      '/api/status': { ...local, ai: { ...local.ai, available: ['SELF_HOSTED', 'LOCAL'], pathModels: { SELF_HOSTED: OLLAMA, LOCAL: OLLAMA } } },
+    })
+    await page.goto('/settings')
+    await expect(page.getByText('Needs the aws profile.')).toBeVisible()
+    // The radio changes only once the switch is confirmed, so it is clicked, not checked
+    await page.getByRole('radio', { name: /^Off/ }).click()
+    await expect(page.getByRole('group', { name: 'Switch Corgi to Off?' })).toBeVisible()
+
+    expect(await lowContrast(page, '.path-card-reason', 4.5), 'text contrast').toEqual([])
+    expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+    await fitsAt375(page, info.project.name === 'phone')
+  })
+}
+
