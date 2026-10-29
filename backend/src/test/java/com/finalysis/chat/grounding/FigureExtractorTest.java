@@ -192,6 +192,15 @@ class FigureExtractorTest {
         assertThat(FigureExtractor.extract(text)).isEmpty();
     }
 
+    /** Step 9a-3: a marker in lenticular or full-width brackets, or with a zero-width space, is no figure. */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"See \u3010c2\u3011.", "See\u3010c2, a12\u3011.", "See \uff3bt3\uff3d.",
+            "See \uff3bt3\uff0c c4\uff3d.", "See [\u200bc2].", "See [c2\u200b].", "See [\u2060t13 ].",
+            "See \u3010\u200bc2\u3011."})
+    void aMarkerInAUnicodeFormIsNotAFigure(String text) {
+        assertThat(FigureExtractor.extract(text)).isEmpty();
+    }
+
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
             "May 2026 was 53.5\u202f% of it|PERCENT|EXACT|53.5|53.5\u202f%",

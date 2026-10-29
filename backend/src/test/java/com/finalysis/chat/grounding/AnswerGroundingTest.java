@@ -64,6 +64,36 @@ class AnswerGroundingTest {
                     .containsExactly("$1,183.67", "384.3\u202f%", "3", "$244.42", "$899.99");
         }
 
+        /**
+         * Step 9a-3: the example with gpt-oss's markers (lenticular brackets, a zero-width space inside a marker)
+         * grounds and cites exactly like its ASCII form, and a marker of a ref never issued ({@code 【c2】}, d-m01) is
+         * dropped, never read as a bare 2.
+         */
+        @Test
+        void theAnswerWithUnicodeMarkersCitesLikeItsAsciiForm() {
+            String ascii = "Yes: you spent $1,183.67 on Shopping in August 2026 [a1], 384.3% above your 3-month "
+                    + "average of $244.42 [c1]. Most of it was one $899.99 purchase [t1]. See [c2].";
+            String unicode = "Yes: you spent\u202f$1,183.67 on Shopping in August\u202f2026\u3010a1\u3011, 384.3% "
+                    + "above your 3\u2011month average of $244.42 [\u200bc1].\u202fMost of it was one $899.99 purchase"
+                    + "\u202f\uff3bt1\uff3d. See\u3010c2\u3011.";
+
+            AnswerCheck a = Evidence.shoppingSpike().check(ascii);
+            AnswerCheck u = Evidence.shoppingSpike().check(unicode);
+
+            assertThat(u.grounded()).isTrue();
+            assertThat(u.ungrounded()).isEmpty();
+            assertThat(u.dropped()).isEqualTo(1).isEqualTo(a.dropped());
+            assertThat(u.markers()).extracting(CitationMarkers.Marker::ref).containsExactly("a1", "c1", "t1");
+            assertThat(u.matches()).extracting(m -> m.figure().asWritten())
+                    .containsExactly("$1,183.67", "384.3%", "3", "$244.42", "$899.99");
+            assertThat(u.matches()).extracting(m -> m.cited().stream().map(GroundedSet.Value::ref).toList())
+                    .isEqualTo(a.matches().stream().map(m -> m.cited().stream().map(GroundedSet.Value::ref).toList())
+                            .toList());
+            assertThat(u.text()).isEqualTo("Yes: you spent\u202f$1,183.67 on Shopping in August\u202f2026[a1], 384.3% "
+                    + "above your 3\u2011month average of $244.42 [c1].\u202fMost of it was one $899.99 purchase"
+                    + "\u202f[t1]. See.");
+        }
+
         @Test
         void anAnswerWithoutFiguresIsNoFigures() {
             AnswerCheck check = Evidence.shoppingSpike().check("Yes, Shopping was unusually high in August [a1].");

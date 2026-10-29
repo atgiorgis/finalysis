@@ -12,6 +12,10 @@ import java.util.stream.Collectors;
  * The markers a model writes ({@code [t3]}, {@code [c1, a2]}) (docs/plans/phase-6.md §6). A marker must be a ref this
  * turn issued: anything else in marker form ({@code [t99]}, {@code [7]}) is removed from the text and counted, never
  * resolved. Kept markers are later renumbered {@code [1]}, {@code [2]}… in order of first appearance.
+ *
+ * <p>Markers are found on the text's {@link AsciiForms} copy (Phase 9 step 9a-3), so {@code 【c1】} (lenticular
+ * brackets), {@code ［c1］} (full-width) and {@code [c1]} with a zero-width space inside are the marker {@code c1}, like
+ * {@code [c1]}. A marker group is written back in its ASCII form; every other character is kept as written.
  */
 public final class CitationMarkers {
 
@@ -43,10 +47,11 @@ public final class CitationMarkers {
     }
 
     public static Parsed parse(String text, Predicate<String> issued) {
-        Matcher m = GROUP.matcher(text);
+        Matcher m = GROUP.matcher(AsciiForms.string(text));
         StringBuilder out = new StringBuilder();
         List<Marker> markers = new ArrayList<>();
         int dropped = 0;
+        int last = 0;
         while (m.find()) {
             List<String> kept = new ArrayList<>();
             Matcher token = TOKEN.matcher(m.group(1));
@@ -57,10 +62,10 @@ public final class CitationMarkers {
                     dropped++;
                 }
             }
-            String lead = m.group().startsWith("[") ? "" : m.group().substring(0, 1);
-            m.appendReplacement(out, "");
+            out.append(text, last, m.start());
+            last = m.end();
             if (!kept.isEmpty()) {
-                out.append(lead);
+                out.append(lead(text, m));
                 int start = out.length();
                 out.append('[').append(String.join(", ", kept)).append(']');
                 for (String ref : kept) {
@@ -68,16 +73,16 @@ public final class CitationMarkers {
                 }
             }
         }
-        m.appendTail(out);
+        out.append(text, last, text.length());
         return new Parsed(out.toString(), markers, dropped);
     }
 
     /** The text with every kept marker group renumbered; refs without a number are left out of their group. */
     public static String renumber(String text, Map<String, Integer> numbers) {
-        Matcher m = GROUP.matcher(text);
+        Matcher m = GROUP.matcher(AsciiForms.string(text));
         StringBuilder out = new StringBuilder();
+        int last = 0;
         while (m.find()) {
-            String lead = m.group().startsWith("[") ? "" : m.group().substring(0, 1);
             List<Integer> kept = new ArrayList<>();
             Matcher token = TOKEN.matcher(m.group(1));
             while (token.find()) {
@@ -86,11 +91,19 @@ public final class CitationMarkers {
                     kept.add(number);
                 }
             }
-            m.appendReplacement(out, kept.isEmpty() ? ""
-                    : Matcher.quoteReplacement(lead + kept.stream().map(String::valueOf)
-                            .collect(Collectors.joining(", ", "[", "]"))));
+            out.append(text, last, m.start());
+            last = m.end();
+            if (!kept.isEmpty()) {
+                out.append(lead(text, m)).append(kept.stream().map(String::valueOf)
+                        .collect(Collectors.joining(", ", "[", "]")));
+            }
         }
-        m.appendTail(out);
+        out.append(text, last, text.length());
         return out.toString();
+    }
+
+    /** The space or tab before a marker group, as written; empty when the group starts at its bracket. */
+    private static String lead(String text, Matcher m) {
+        return m.group().startsWith("[") ? "" : text.substring(m.start(), m.start() + 1);
     }
 }

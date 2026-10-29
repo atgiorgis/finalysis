@@ -651,7 +651,51 @@ should drop to near zero; the two earlier reports stay uncommitted as the before
 **Not in this step**, found on the way, for the owner to decide: gpt-oss writes some citation markers in lenticular
 brackets (`【c1】`, 10 rejected answers on 120b, 3 on 20b), and one with a zero-width space inside (`[c1]` with U+200B after the `[`).
 `CitationMarkers` doesn't parse either form, so those citations are not linked; the extractor masks the bracketed form
-but reads the 2 of `【c2】` as a count. A fix belongs in `CitationMarkers`, not the extractor.
+but reads the 2 of `【c2】` as a count. A fix belongs in `CitationMarkers`, not the extractor. (Done in step 9a-3.)
+
+### Step 9a-3 notes: Unicode citation markers (code)
+
+The owner's follow-up to 9a-2, before the gpt-oss reruns. Done in code: "Phase 9 step 9a-3: citation markers in
+lenticular, full-width and zero-width forms are markers". Backend 3,518 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,502 at 9a-2 plus 16: 5 in `CitationMarkersTest`, 8 in `FigureExtractorTest`, 1 each in `AnswerGroundingTest`, `GroundingPropertiesTest` and `CitationTest`); frontend 312 tests (30 files), all passed; no UI change, so no layout
+run. No live call.
+
+**Evidence.** gpt-oss writes markers as `【c1】` (U+3010, U+3011) and sometimes as `[c1]` with U+200B after the `[`.
+`CitationMarkers` matched only `[`, `]` and ASCII spaces, so the marker was neither kept nor dropped: its citation wasn't
+linked, and the shown text kept the raw form. The figure extractor masked `【c1】` after 9a-2 only because its own
+marker rule ran on the ASCII copy; a ref the turn never issued stayed in the text, and in 20b's run d-m01 turn 1 and
+d-x06 were retried for a bare 2 (`【c2】`).
+
+**Fix.** The one-for-one ASCII copy from 9a-2 moves out of `FigureExtractor` into `AsciiForms` (package-private, same
+rules), which gains: U+3010 and U+FF3B become `[`, U+3011 and U+FF3D become `]`, the full-width comma U+FF0C a comma,
+and U+200C and U+200D join the zero-width characters that become a space. Three readers use it:
+
+- `FigureExtractor`, unchanged in behaviour apart from the brackets (a marker in any of these forms is masked);
+- `CitationMarkers.parse` and `renumber` find marker groups on the copy and copy every other character from the text
+  as written. A kept group is written back as `[c1]` (then `[1]`), a dropped one is removed with the space before it,
+  exactly as for ASCII; a Unicode space before the group is kept as written;
+- `AnswerGrounding`'s sentence ends, which decide which markers sit in a figure's sentence. Java's `\s` doesn't match
+  U+202F, so `2026.<U+202F>[c1]` didn't end the sentence and a figure could be tied to a different marker than in its
+  ASCII twin; the property below fails without this.
+
+ASCII text is unchanged by construction (characters below U+0080 are never mapped), and every existing case is green
+unchanged. `SummaryFigureStripper`'s own shown-marker rule still reads ASCII: a model-written summary with `【c2】`
+keeps that text, but carries no figure (the extractor masks the marker; a bare `【7】` is a figure and is replaced), so
+nothing ungrounded passes. Left as is.
+
+**Tests.** `CitationMarkersTest`: lenticular, full-width and zero-width markers kept and placed like ASCII; never-issued
+refs in those forms dropped with their space; the text around a Unicode marker kept as written; Unicode brackets
+around non-marker text left alone; renumbering reads every form. `FigureExtractorTest`: a marker in eight Unicode forms
+is no figure. `AnswerGroundingTest`: the worked example with gpt-oss's markers grounds, keeps the same markers, cites
+the same values per figure as its ASCII form, and drops `【c2】` instead of reading a 2. `CitationTest` (fixture, real
+tool results): Unicode markers are renumbered `[1]`…`[3]` and their citations equal the ASCII answer's. 
+`GroundingPropertiesTest` (jqwik): an answer of marker, figure and sentence pieces, with its spaces, `[` and `]`
+replaced one for one by Unicode spaces (zero-width included) and lenticular or full-width brackets, has the same
+grounding status, figures, markers, dropped count, cited refs per figure and renumbered text (read in ASCII) as its
+ASCII twin. Mutation checks: with markers matched on the raw text, 6 tests fail; with sentence ends on the raw text,
+the property fails.
+
+**The check.** On the owner's reruns, no retry should list a figure from a marker, and the linked-citation counts of
+the gpt-oss runs should rise.
 
 ---
 

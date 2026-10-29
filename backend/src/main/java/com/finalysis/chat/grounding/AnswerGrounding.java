@@ -92,9 +92,10 @@ public class AnswerGrounding {
         return refs == 1 || exact ? withRef : List.of();
     }
 
+    /** Where sentences end, read on the {@link AsciiForms} copy: a Unicode space after a period ends it too (9a-3). */
     private static List<Integer> sentenceEnds(String text) {
         List<Integer> ends = new ArrayList<>();
-        Matcher m = SENTENCE_END.matcher(text);
+        Matcher m = SENTENCE_END.matcher(AsciiForms.string(text));
         while (m.find()) {
             ends.add(m.end());
         }

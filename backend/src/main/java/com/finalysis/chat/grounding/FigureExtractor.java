@@ -30,12 +30,10 @@ import java.util.regex.Pattern;
  * Backticked code is <em>not</em> skipped (a deliberate departure from §5.2's wording): an answer is plain text, and a
  * figure in backticks would otherwise be shown unchecked. Words ("twelve hundred") are not extracted (§15).
  *
- * <p>Unicode forms (Phase 9 step 9a-2): before any rule runs, a copy of the answer is made ASCII where it matters, one
- * character for one, so positions and {@link Figure#asWritten()} still refer to the answer itself. A no-break, figure,
- * thin or narrow no-break space between digit groups ({@code 3 638.53} with U+202F) becomes a comma; any other Unicode
- * space becomes a space ({@code May 2026}, {@code 53.5 %} with U+202F); a hyphen, non-breaking hyphen, figure dash or
- * en dash becomes {@code -} ({@code 2026-06-13}, {@code CARD-1} with U+2011). ASCII text is never changed, so it is
- * extracted exactly as before.
+ * <p>Unicode forms (Phase 9 steps 9a-2, 9a-3): every rule runs on the answer's {@link AsciiForms} copy, one character
+ * for one, so positions and {@link Figure#asWritten()} still refer to the answer itself ({@code May 2026} and
+ * {@code 53.5 %} with U+202F, {@code 2026-06-13} and {@code CARD-1} with U+2011, {@code 3 638.53} with a thin space,
+ * a marker {@code 【c1】}). ASCII text is never changed, so it is extracted exactly as before.
  */
 public final class FigureExtractor {
 
@@ -65,9 +63,6 @@ public final class FigureExtractor {
                     + "(?<close>\\))?"
                     + "(?<pct>\\s?%|\\s+percent\\b|\\s+per\\s+cent\\b)?"
                     + "(?<scale>\\s?(?:k|K|M|bn|B)\\b|\\s+(?:thousand|million|billion|grand)\\b)?");
-    /** Digit groups split by a Unicode space (a no-break, figure, thin or narrow no-break space): a thousands mark. */
-    private static final Pattern UNICODE_GROUPED = Pattern.compile(
-            "(?<![\\d.,])\\d{1,3}(?:[\\u00A0\\u2007\\u2009\\u202F]\\d{3})+(?!\\d)");
     private static final Pattern SAFE_LABEL = Pattern.compile("[^$%]*");
     private static final Pattern DECIMAL = Pattern.compile("\\d[.,]\\d");
 
@@ -84,7 +79,7 @@ public final class FigureExtractor {
      *               figures where the label appears whole
      */
     public static List<Figure> extract(String answer, Collection<String> labels) {
-        char[] masked = asciiForms(answer);
+        char[] masked = AsciiForms.of(answer);
         mask(masked, MARKER, null);
         mask(masked, ISO_DATE, null);
         mask(masked, SLASH_DATE, null);
@@ -97,7 +92,7 @@ public final class FigureExtractor {
         mask(masked, ALIAS, null);
         maskListNumbers(masked);
         for (String label : labels) {
-            maskLabel(masked, label == null ? null : new String(asciiForms(label)));
+            maskLabel(masked, label == null ? null : AsciiForms.string(label));
         }
 
         List<Figure> figures = new ArrayList<>();
@@ -145,38 +140,6 @@ public final class FigureExtractor {
             end = m.end("num"); // a closing parenthesis that isn't a negative amount's
         }
         return new Figure(kind, form, magnitude, answer.substring(start, end).strip(), start, end);
-    }
-
-    /**
-     * The text with Unicode spaces and dashes in their ASCII form, one character for one (see the class comment).
-     * Characters below U+0080 are kept as they are.
-     */
-    static char[] asciiForms(String text) {
-        char[] out = text.toCharArray();
-        Matcher grouped = UNICODE_GROUPED.matcher(text);
-        while (grouped.find()) {
-            for (int i = grouped.start(); i < grouped.end(); i++) {
-                if (!Character.isDigit(out[i])) {
-                    out[i] = ',';
-                }
-            }
-        }
-        for (int i = 0; i < out.length; i++) {
-            out[i] = asciiForm(out[i]);
-        }
-        return out;
-    }
-
-    private static char asciiForm(char c) {
-        if (c < 0x80) {
-            return c;
-        }
-        return switch (c) {
-            case '\u2010', '\u2011', '\u2012', '\u2013', '\ufe63', '\uff0d' -> '-';
-            case '\u2028', '\u2029' -> '\n';
-            case '\u200b', '\u2060', '\ufeff' -> ' ';
-            default -> Character.isSpaceChar(c) ? ' ' : c;
-        };
     }
 
     private static void mask(char[] text, Pattern pattern, String group) {

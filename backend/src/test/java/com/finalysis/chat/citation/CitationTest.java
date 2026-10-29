@@ -283,6 +283,36 @@ class CitationTest {
                 .isEqualTo(((RefRegistry.Txn) t.turn().refs().target("t2").orElseThrow()).txnId());
     }
 
+    /**
+     * Step 9a-3: markers as gpt-oss writes them (lenticular and full-width brackets, a zero-width space inside) are
+     * renumbered and linked exactly like their ASCII form; the text around them is kept as written.
+     */
+    @Test
+    void unicodeMarkersAreRenumberedAndLinkedLikeAscii() {
+        Turn t = run(List.of(new ToolCall("get_month_totals", "{\"from\": \"2026-03\", \"to\": \"2026-04\"}"),
+                new ToolCall("list_transactions", "{\"month\": \"2026-03\", \"limit\": 3}")));
+        GroundedSet set = GroundedSet.of(t.evidence(), guard);
+        GroundedSet.Value april = set.values().stream()
+                .filter(v -> v.field().equals("spending") && v.result() == 0).toList().getLast();
+        GroundedSet.Value march = set.values().stream()
+                .filter(v -> v.field().equals("income") && v.result() == 0).toList().getFirst();
+
+        CitedAnswer ascii = citations.cite(grounding.check("In April you spent $" + april.magnitude()
+                + ". See [t2] and [t1, t9]. In March you received $" + march.magnitude() + " [" + march.ref() + "].",
+                t.evidence()), t.turn().refs());
+        AnswerCheck check = grounding.check("In April you spent $" + april.magnitude()
+                + ". See 【t2】 and ［​t1， t9］. In March you received $"
+                + march.magnitude() + "【" + march.ref() + "】.", t.evidence());
+        CitedAnswer cited = citations.cite(check, t.turn().refs());
+
+        assertThat(check.ungrounded()).isEmpty();
+        assertThat(cited.text()).isEqualTo("In April you spent $" + april.magnitude() + ". See [1] and [2]. "
+                + "In March you received $" + march.magnitude() + "[3].");
+        assertThat(cited.dropped()).isEqualTo(1);
+        assertThat(cited.citations()).isEqualTo(ascii.citations());
+        assertThat(cited.citations()).extracting(Citation::marker).containsExactly(1, 2, 3, 4);
+    }
+
     @Test
     void seriesAndAlertsResolveToTheirRows() {
         Turn t = run(List.of(new ToolCall("get_recurring_charges", "{\"status\": \"ALL\", \"limit\": 25}"),

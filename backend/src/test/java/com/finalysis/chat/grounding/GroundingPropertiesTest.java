@@ -8,8 +8,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.Assume;
@@ -113,6 +115,61 @@ class GroundingPropertiesTest {
         String ascii = String.join(" ", pieces) + ".";
 
         assertGroundsAlike(ascii, twin(ascii, '-', dashes));
+    }
+
+    // ------------------------------------------------------------------ Unicode markers (step 9a-3)
+
+    /**
+     * Pieces with markers over {@link Evidence#shoppingSpike()} (issued: a1, c1, t1; c2 is never issued), sentence
+     * ends, grounded figures and the canary. A space inside a marker ({@code [ c1 ]}) becomes, in the twin, a Unicode
+     * or zero-width space inside it. Every piece that ends in digits ends in a decimal or a period, so no Unicode space
+     * between two pieces can read as a thousands mark.
+     */
+    private static final String[] CITED_PIECES = {"you spent", "$1,183.67", "$244.42", "384.3 %", "on Shopping",
+            "in August 2026.", "[a1]", "[c1]", "[ c1 ]", "[c1, a1]", "[t1].", "[c2]", "[ t1, c2 ]", "$899.99",
+            "on CARD-1.", "999.99", "It rose.", "a 3-month average"};
+
+    private static final Character[] OPEN_BRACKETS = {'[', '\u3010', '\uff3b'};
+    private static final Character[] CLOSE_BRACKETS = {']', '\u3011', '\uff3d'};
+
+    @Property
+    void anAnswerWithUnicodeMarkersCitesAndGroundsLikeItsAsciiTwin(@ForAll("citedAnswers") List<String> pieces,
+                                                                   @ForAll("spaces") List<Character> spaces,
+                                                                   @ForAll("opens") List<Character> opens,
+                                                                   @ForAll("closes") List<Character> closes) {
+        String ascii = String.join(" ", pieces) + ".";
+        String unicode = twin(twin(twin(ascii, ' ', spaces), '[', opens), ']', closes);
+
+        assertGroundsAlike(ascii, unicode);
+        AnswerCheck a = Evidence.shoppingSpike().check(ascii);
+        AnswerCheck u = Evidence.shoppingSpike().check(unicode);
+        assertThat(u.markers()).as(unicode).isEqualTo(a.markers());
+        assertThat(u.dropped()).as(unicode).isEqualTo(a.dropped());
+        assertThat(cited(u)).as(unicode).isEqualTo(cited(a));
+        Map<String, Integer> numbers = new HashMap<>();
+        a.markers().forEach(m -> numbers.putIfAbsent(m.ref(), numbers.size() + 1));
+        assertThat(AsciiForms.string(CitationMarkers.renumber(u.text(), numbers))).as(unicode)
+                .isEqualTo(CitationMarkers.renumber(a.text(), numbers));
+    }
+
+    @Provide
+    Arbitrary<List<String>> citedAnswers() {
+        return Arbitraries.of(CITED_PIECES).list().ofMinSize(1).ofMaxSize(12);
+    }
+
+    @Provide
+    Arbitrary<List<Character>> opens() {
+        return Arbitraries.of(OPEN_BRACKETS).list().ofMinSize(1).ofMaxSize(6);
+    }
+
+    @Provide
+    Arbitrary<List<Character>> closes() {
+        return Arbitraries.of(CLOSE_BRACKETS).list().ofMinSize(1).ofMaxSize(6);
+    }
+
+    /** Each figure's cited refs, in order. */
+    private static List<List<String>> cited(AnswerCheck check) {
+        return check.matches().stream().map(m -> m.cited().stream().map(GroundedSet.Value::ref).toList()).toList();
     }
 
     @Provide
