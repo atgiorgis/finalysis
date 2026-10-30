@@ -400,20 +400,26 @@ test('a turn keeps the cost of the path it ran on: a Cloud turn’s estimate whi
     expect(reply(0).querySelector('.chat-meta')).toHaveTextContent('test-main-model · $0.012345 estimated'))
 })
 
-test('on Self-hosted: the turn shows the backend’s note, and the summaries say there is no token cost', async () => {
-  const note = 'Self-hosted cost is the server\u2019s running time; it isn\u2019t computed yet (step 9c)'
+test('on Self-hosted: the turn shows the backend’s note, and the budget line the server’s running line', async () => {
+  const note = 'Self-hosted cost is the server\u2019s running time'
   const selfHosted = { ...CLOUD, ai: { path: 'SELF_HOSTED', server: 'gpu1', provider: 'ollama', reachable: true } }
   const turned = {
     ...conversation,
     turns: conversation.turns.map((t, i) =>
       i === 0 && t.usage ? { ...t, usage: { ...t.usage, path: 'SELF_HOSTED', estimatedCost: null, costNote: note } } : t),
   }
-  renderApp('/chat/7', { ...ROUTES, '/api/status': selfHosted, '/api/chat/conversations/7': turned })
+  renderApp('/chat/7', {
+    ...ROUTES,
+    '/api/status': selfHosted,
+    '/api/chat/conversations/7': turned,
+    '/api/chat/usage': { ...usageFixture, selfHosted: { state: 'RUNNING', minutesRunning: 42, hourlyRate: '1.006',
+      estimatedCost: '0.70', line: 'running 42 min · ~$0.70', reason: null } },
+  })
 
   await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
   await vi.waitFor(() => expect(reply(0).querySelector('.chat-meta')).toHaveTextContent(`test-main-model · ${note}`))
   expect(await screen.findByRole('group', { name: 'Today’s chat budget' })).toHaveTextContent(
-    'No token cost on Self-hosted.',
+    'No token cost on Self-hosted. Server running 42 min · ~$0.70',
   )
   expect(document.querySelector('.path-badge')).toHaveTextContent('Self-hosted · gpu1')
 })

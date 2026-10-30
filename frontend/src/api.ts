@@ -931,6 +931,47 @@ export interface ChatDailyUsage {
   month: YearMonth
   spentThisMonth: string
   questionsThisMonth: number
+  /** The Self-hosted server's running time and estimate now, whatever the path (step 9c); not in the sums above. */
+  selfHosted?: SelfHostUsage | null
+}
+
+export type SelfHostState = 'STOPPED' | 'STARTING' | 'RUNNING' | 'STOPPING'
+
+/** The Self-hosted server's figures, computed by the backend; shown as they are. */
+export interface SelfHostUsage {
+  state: SelfHostState | null
+  minutesRunning: number | null
+  hourlyRate: string | null
+  estimatedCost: string | null
+  /** "running 42 min · ~$0.70" while starting or running, "stopping after 42 min · ~$0.70"; null while stopped. */
+  line: string | null
+  /** Why the server can't be read (no aws profile, no region, no server); null when it can. */
+  reason: string | null
+}
+
+/** `GET /api/selfhost` (docs/plans/phase-9.md §5.5). Never an instance id, an address or a region. */
+export interface SelfHostStatus {
+  /** Whether Start and Stop can be used; `reason` says why not. */
+  controls: boolean
+  reason: string | null
+  state: SelfHostState | null
+  /** While STARTING: "instance starting", "waiting for Tailscale" or "loading the model". */
+  progress: string | null
+  instanceType: string | null
+  minutesRunning: number | null
+  hourlyRate: string | null
+  estimatedCost: string | null
+  line: string | null
+  storageNote: string | null
+  /** The model didn't load, or Ollama didn't answer after a start; null otherwise. */
+  note: string | null
+}
+
+/** `POST /api/selfhost/test`: Ollama's version on the Tailscale name, or the reason. */
+export interface SelfHostTest {
+  reachable: boolean
+  version: string | null
+  message: string
 }
 
 export const reads = {
@@ -1173,6 +1214,14 @@ export const vault = {
 /** Where Corgi runs (docs/plans/phase-9.md §3.1): switched without a restart; answers the status's `ai` block. */
 export const aiSettings = {
   switchTo: (request: AiSettingsRequest) => send<AiStatus>('PUT', '/api/settings/ai', request) as Promise<AiStatus>,
+}
+
+/** The Self-hosted server's controls (docs/plans/phase-9.md §5.5): Start and Stop answer 202 with the status. */
+export const selfHost = {
+  status: () => getJson<SelfHostStatus>('/api/selfhost'),
+  start: () => send<SelfHostStatus>('POST', '/api/selfhost/start') as Promise<SelfHostStatus>,
+  stop: () => send<SelfHostStatus>('POST', '/api/selfhost/stop') as Promise<SelfHostStatus>,
+  test: (name: string) => send<SelfHostTest>('POST', '/api/selfhost/test', { name }) as Promise<SelfHostTest>,
 }
 
 export const chat = {

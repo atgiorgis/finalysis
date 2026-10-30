@@ -15,7 +15,7 @@ import {
 } from '../api'
 import ChatTurnView, { PendingTurn, type TurnEntry } from '../components/chat/ChatTurnView'
 import CorgiAvatar from '../components/chat/CorgiAvatar'
-import { AI_NAME, CHAT_TAGLINE, costText, isOff, offText, pathBadge } from '../corgi'
+import { AI_NAME, CHAT_TAGLINE, SELF_HOSTED_COST, costText, isOff, offText, pathBadge, serverCostText } from '../corgi'
 import { formatCost, formatCount, formatDate, formatMoney } from '../format'
 import { useDataVersion, useShellData } from '../shell/ShellData'
 
@@ -88,7 +88,10 @@ export function conversationLine(c: ConversationItem, ai: AiStatus | null | unde
 
 /** Today's budget, as `GET /api/chat/usage` gives it. */
 export function budgetLine(usage: ChatDailyUsage, ai: AiStatus | null | undefined): string {
-  if (ai?.path === 'LOCAL' || ai?.path === 'SELF_HOSTED') {
+  if (ai?.path === 'SELF_HOSTED') {
+    return [SELF_HOSTED_COST, serverCostText(usage.selfHosted)].filter(Boolean).join(' ')
+  }
+  if (ai?.path === 'LOCAL') {
     return costText(usage.spentToday, ai)
   }
   return usage.maxDailyCost

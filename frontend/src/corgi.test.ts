@@ -8,6 +8,7 @@ import {
   offText,
   pathBadge,
   SELF_HOSTED_COST,
+  serverCostText,
   turnCostText,
   validRegion,
   validServerName,
@@ -73,10 +74,22 @@ test('a summary cost: the estimate on Cloud, $0.00 · local on Local, no token c
   expect(SELF_HOSTED_COST).toBe('No token cost on Self-hosted.')
 })
 
+test('the Self-hosted server’s cost is the backend’s line, “stopped”, or nothing when it can’t be read', () => {
+  const server = { minutesRunning: 42, hourlyRate: '1.006', estimatedCost: '0.70', reason: null }
+  expect(serverCostText({ ...server, state: 'RUNNING', line: 'running 42 min · ~$0.70' }))
+    .toBe('Server running 42 min · ~$0.70')
+  expect(serverCostText({ ...server, state: 'STOPPING', line: 'stopping after 42 min · ~$0.70' }))
+    .toBe('Server stopping after 42 min · ~$0.70')
+  expect(serverCostText({ ...server, state: 'STOPPED', line: null })).toBe('Server stopped')
+  expect(serverCostText({ state: null, minutesRunning: null, hourlyRate: null, estimatedCost: null, line: null,
+    reason: 'Start and Stop need the aws profile (Cloud credentials).' })).toBeNull()
+  expect(serverCostText(undefined)).toBeNull()
+})
+
 test('a turn’s cost is on the path it ran on, the status’s for turns stored before paths', () => {
   const format = (v: string | null | undefined) => (v ? `$${v} estimated` : 'no price')
   const usage = (more: Partial<ChatUsage>): ChatUsage => ({ model: 'm', rounds: 1, estimatedCost: '0.012000', ...more })
-  const note = 'Self-hosted cost is the server’s running time; it isn’t computed yet (step 9c)'
+  const note = 'running 42 min · ~$0.70'
 
   expect(turnCostText(usage({ path: 'CLOUD' }), { path: 'LOCAL' }, format)).toBe('$0.012000 estimated')
   expect(turnCostText(usage({ path: 'LOCAL', estimatedCost: '0.000000' }), { path: 'CLOUD' }, format)).toBe(LOCAL_COST)

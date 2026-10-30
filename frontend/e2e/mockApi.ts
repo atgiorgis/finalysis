@@ -1,6 +1,6 @@
 import type { Page, Route } from '@playwright/test'
 import { conversation, conversations } from '../src/test/chatFixtures'
-import { fixtures, usageFixture } from '../src/test/fixtures'
+import { fixtures, selfHostFixture, usageFixture } from '../src/test/fixtures'
 
 /**
  * Answers every `/api` request of the layout check from the unit tests' fixtures (sample data, AI off), so the check
@@ -23,6 +23,7 @@ const byPath: Record<string, unknown> = {
   '/api/categories': fixtures.categories,
   '/api/analytics/months': fixtures.months,
   '/api/chat/usage': usageFixture,
+  '/api/selfhost': selfHostFixture,
   '/api/dashboard': fixtures.dashboardCompleteMonth,
   '/api/analytics/transactions': fixtures.drillDownCategory,
   '/api/transactions': fixtures.transactionsPage,

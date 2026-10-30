@@ -1,4 +1,4 @@
-import type { AiPath, AiStatus, ChatUsage } from './api'
+import type { AiPath, AiStatus, ChatUsage, SelfHostUsage } from './api'
 import { formatCost } from './format'
 
 /**
@@ -113,6 +113,20 @@ export const LOCAL_COST = '$0.00 · local'
 
 /** Self-hosted's summary lines (the day's and the month's spend count Cloud only). */
 export const SELF_HOSTED_COST = 'No token cost on Self-hosted.'
+
+/**
+ * The Self-hosted server's cost as the backend computed it (docs/plans/phase-9.md §4.2): "Server running 42 min ·
+ * ~$0.70", "Server stopped", or null when it can't be read. Nothing is computed here.
+ */
+export function serverCostText(server: SelfHostUsage | null | undefined): string | null {
+  if (server?.line) {
+    return `Server ${server.line}`
+  }
+  if (server?.state === 'STOPPED') {
+    return 'Server stopped'
+  }
+  return null
+}
 
 /**
  * A summary cost as shown, for the selected path: `$0.00 · local` on Local, "No token cost on Self-hosted." on

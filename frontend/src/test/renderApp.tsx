@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { vi } from 'vitest'
 import AppRoutes from '../routes'
-import { fetchFrom, fixtures, usageFixture } from './fixtures'
+import { fetchFrom, fixtures, selfHostFixture, usageFixture } from './fixtures'
 
 export { usageFixture }
 
@@ -14,6 +14,7 @@ export const SHELL_ROUTES: Record<string, unknown> = {
   '/api/categories': fixtures.categories,
   '/api/analytics/months': fixtures.months,
   '/api/chat/usage': usageFixture,
+  '/api/selfhost': selfHostFixture,
   '/api/dashboard': fixtures.dashboardLatest,
   '/api/chat/conversations': fixtures.chatConversations,
 }

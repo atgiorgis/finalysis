@@ -13,6 +13,7 @@ import {
 } from '../../corgi'
 import { useDataVersion } from '../../shell/ShellData'
 import CorgiAvatar from '../chat/CorgiAvatar'
+import SelfHostControls from './SelfHostControls'
 
 /** Corgi's roles by what it does; the search embedding isn't Corgi talking, so it keeps its own name. */
 const ROLE_LABELS: Record<string, string> = {
@@ -218,14 +219,7 @@ export default function CorgiSettings({ ai }: { ai: AiStatus }) {
                       Use this server
                     </button>
                   )}
-                  <div className="path-card-later" role="group" aria-label="Server controls">
-                    {['Test', 'Start', 'Stop'].map((control) => (
-                      <button key={control} type="button" className="button-secondary" disabled title="Not available yet">
-                        {control}
-                      </button>
-                    ))}
-                    <span className="muted">Not available yet.</span>
-                  </div>
+                  <SelfHostControls name={name} />
                 </div>
               )}
             </div>

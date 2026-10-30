@@ -60,7 +60,46 @@ test('on Self-hosted, the cost lines say there is no token cost, and no cap show
   expect(facts(costs)).toEqual({
     'Spent today (Oct 23, 2026)': 'No token cost on Self-hosted.',
     'This month (October 2026)': 'No token cost on Self-hosted. · 3 questions',
+    'Self-hosted server': 'Start and Stop need the aws profile (Cloud credentials).',
   })
+})
+
+const RUNNING = {
+  state: 'RUNNING',
+  minutesRunning: 42,
+  hourlyRate: '1.006',
+  estimatedCost: '0.70',
+  line: 'running 42 min · ~$0.70',
+  reason: null,
+}
+
+test('on Self-hosted, Chat costs shows the server’s running line and rate as the backend gives them', async () => {
+  renderApp('/settings', {
+    '/api/status': {
+      ...fixtures.statusOff,
+      ai: { path: 'SELF_HOSTED', server: 'finalysis-selfhost', provider: 'ollama', reachable: true,
+        models: { categorization: 'm', embedding: 'nomic', main: 'm' } },
+    },
+    '/api/chat/usage': { ...usageFixture, selfHosted: RUNNING },
+  })
+
+  const costs = await screen.findByRole('region', { name: 'Chat costs' })
+  await within(costs).findByText(/running 42 min/)
+  expect(facts(costs)['Self-hosted server']).toBe('running 42 min · ~$0.70 · at $1.006 an hour, not in the sums above')
+})
+
+test('a Self-hosted server left running shows on another path too; a stopped one doesn’t', async () => {
+  renderApp('/settings', { '/api/chat/usage': { ...usageFixture, selfHosted: RUNNING } })
+  const costs = await screen.findByRole('region', { name: 'Chat costs' })
+  await within(costs).findByText(/running 42 min/)
+  expect(facts(costs)['Daily limit']).toBe('$1.00')
+  cleanup()
+
+  renderApp('/settings', { '/api/chat/usage': { ...usageFixture, selfHosted: { ...RUNNING, state: 'STOPPED', line: null,
+    minutesRunning: null, estimatedCost: null } } })
+  const again = await screen.findByRole('region', { name: 'Chat costs' })
+  await within(again).findByText('Daily limit')
+  expect(facts(again)).not.toHaveProperty('Self-hosted server')
 })
 
 test('a cap that is off says so', async () => {

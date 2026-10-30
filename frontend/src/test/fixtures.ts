@@ -196,6 +196,29 @@ export const usageFixture = {
   month: '2026-10',
   spentThisMonth: '0.000000',
   questionsThisMonth: 0,
+  selfHosted: {
+    state: null,
+    minutesRunning: null,
+    hourlyRate: null,
+    estimatedCost: null,
+    line: null,
+    reason: 'Start and Stop need the aws profile (Cloud credentials).',
+  },
+}
+
+/** `GET /api/selfhost` without the aws profile (the backend's own wording). */
+export const selfHostFixture = {
+  controls: false,
+  reason: 'Start and Stop need the aws profile (Cloud credentials).',
+  state: null,
+  progress: null,
+  instanceType: null,
+  minutesRunning: null,
+  hourlyRate: null,
+  estimatedCost: null,
+  line: null,
+  storageNote: null,
+  note: null,
 }
 
 /**

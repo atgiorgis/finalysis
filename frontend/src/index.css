@@ -1766,6 +1766,13 @@
   background: var(--selected-bg);
 }
 
+/* The selected card's tint takes muted text below 4.5:1 in the light theme (4.25); a step towards the text colour
+   keeps it secondary and readable (test:layout measures it). */
+.path-card-selected .muted,
+.path-card-selected .facts dt {
+  color: color-mix(in srgb, var(--text-muted) 75%, var(--text));
+}
+
 .path-card-unavailable {
   opacity: 0.75;
 }
@@ -1827,11 +1834,41 @@
   min-width: 0;
 }
 
-.path-card-later {
+/* Settings → Corgi → Self-hosted: Test, Start, Stop and the server's status (phase-9.md §5.5). */
+.selfhost-controls {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.selfhost-buttons {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+}
+
+.selfhost-buttons button {
+  min-height: var(--touch-target);
+}
+
+.selfhost-controls p {
+  margin: 0;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.selfhost-facts {
+  margin: 0;
+}
+
+.selfhost-facts dd {
+  overflow-wrap: anywhere;
+}
+
+.selfhost-note {
+  color: var(--warning);
+  font-weight: 700;
 }
 
 .path-off {

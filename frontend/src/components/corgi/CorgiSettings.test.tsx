@@ -220,16 +220,15 @@ test('Self-hosted needs a Tailscale name, never a web address, and a region like
     body: { path: 'SELF_HOSTED', selfhostName: 'finalysis-selfhost', selfhostRegion: 'us-east-1' } }])
 })
 
-test('the server controls are there but not available yet', async () => {
+test('the server controls are in the Self-hosted card, wired to the server (SelfHostControls.test.tsx)', async () => {
   renderApp('/settings', { '/api/status': backend(ai()).route })
   await corgi()
   const controls = within(card('Self-hosted')).getByRole('group', { name: 'Server controls' })
 
-  for (const name of ['Test', 'Start', 'Stop']) {
-    expect(within(controls).getByRole('button', { name })).toBeDisabled()
-  }
-  expect(controls).toHaveTextContent('Not available yet.')
-  expect(controls.textContent).not.toMatch(/9c|step/i)
+  expect(within(controls).getAllByRole('button').map((b) => b.textContent)).toEqual(['Test', 'Start', 'Stop'])
+  expect(await within(card('Self-hosted')).findByText('Start and Stop need the aws profile (Cloud credentials).'))
+    .toBeInTheDocument()
+  expect(card('Self-hosted').textContent).not.toMatch(/Not available yet|9c|step/i)
 })
 
 test('a path that can’t run says why, and how to get Corgi back', async () => {

@@ -673,6 +673,64 @@ for (const theme of ['dark', 'light'] as const) {
 }
 
 
+// ---------------------------------------------------------------------------- step 9c-3: the Self-hosted controls
+
+const SERVER = {
+  controls: true,
+  reason: null,
+  instanceType: 'g6.xlarge',
+  hourlyRate: '0.8048',
+  storageNote: 'While stopped, its 80 GB disk is still billed (gp3, per GB-month).',
+}
+const SERVER_STATES = {
+  starting: { ...SERVER, state: 'STARTING', progress: 'waiting for Tailscale', minutesRunning: 3, estimatedCost: '0.04',
+    line: 'running 3 min · ~$0.04', note: null },
+  running: { ...SERVER, state: 'RUNNING', progress: null, minutesRunning: 42, estimatedCost: '0.56',
+    line: 'running 42 min · ~$0.56',
+    note: 'The model didn’t load: Timed out: the server may be stopped or still starting.' },
+  'no aws profile': { controls: false, reason: 'Start and Stop need the aws profile (Cloud credentials).', state: null,
+    progress: null, instanceType: null, minutesRunning: null, hourlyRate: null, estimatedCost: null, line: null,
+    storageNote: null, note: null },
+} as const
+
+for (const theme of ['dark', 'light'] as const) {
+  for (const [name, server] of Object.entries(SERVER_STATES)) {
+    test(`corgi: the Self-hosted controls ${name} fit inside their card and read at 4.5:1 (${theme})`, async ({ page }, info) => {
+      await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+      await mockApi(page, {
+        '/api/status': PATH_STATUS['self-hosted'],
+        '/api/selfhost': server,
+        '/api/chat/usage': { ...usageFixture, selfHosted: { state: server.state, minutesRunning: server.minutesRunning,
+          hourlyRate: server.hourlyRate, estimatedCost: server.estimatedCost, line: server.line, reason: server.reason } },
+      })
+      await page.goto('/settings')
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const controls = page.getByRole('group', { name: 'Server controls' })
+      await expect(controls).toBeVisible()
+      for (const button of ['Test', 'Start', 'Stop']) {
+        await expect(controls.getByRole('button', { name: button })).toBeVisible()
+      }
+      if (server.state) {
+        await expect(page.getByLabel('Server status')).toBeVisible()
+        await expect(page.locator('.selfhost-facts').getByText(server.line!)).toBeVisible()
+        await expect(page.getByText(SERVER.storageNote)).toBeVisible()
+      } else {
+        await expect(page.locator('.selfhost-reason')).toBeVisible()
+      }
+      // each button meets the touch target and sits inside the card
+      for (const box of await controls.getByRole('button').evaluateAll((els) =>
+        els.map((el) => el.getBoundingClientRect().height))) {
+        expect(box, 'touch target').toBeGreaterThanOrEqual(44)
+      }
+
+      expect(await lowContrast(page, '.selfhost-controls p, .selfhost-facts dd, .selfhost-facts dt, .selfhost-facts .muted, .path-card-selected .muted', 4.5), 'text contrast')
+        .toEqual([])
+      expect(await outsideTheirCard(page), 'controls inside their card').toEqual([])
+      await fitsAt375(page, info.project.name === 'phone')
+    })
+  }
+}
+
 // ---------------------------------------------------------------------------- step 9b-3: Corgi's face
 
 for (const theme of ['dark', 'light'] as const) {

@@ -14,7 +14,8 @@ function cap(value: string | null): string {
 
 /**
  * The chat costs (docs/plans/phase-9.md §4.2): Cloud's estimates and caps as before; on Local `$0.00 · local`, on
- * Self-hosted "No token cost on Self-hosted.", and no caps on either (they apply on Cloud only).
+ * Self-hosted "No token cost on Self-hosted.", and no caps on either (they apply on Cloud only). The Self-hosted
+ * server's running line, as the backend computed it, on Self-hosted and whenever the server runs.
  */
 function UsageSection({ usage, error, ai }: { usage: ChatDailyUsage | null; error: string | null; ai: AiStatus | null }) {
   const cloud = !ai?.path || ai.path === 'CLOUD' || ai.path === 'OFF'
@@ -34,6 +35,18 @@ function UsageSection({ usage, error, ai }: { usage: ChatDailyUsage | null; erro
             {usage.questionsThisMonth === 1 ? '1 question' : `${formatCount(usage.questionsThisMonth)} questions`}
             {cloud && <span className="muted"> · estimated from list prices</span>}
           </dd>
+          {(ai?.path === 'SELF_HOSTED' || usage.selfHosted?.line) && (
+            <>
+              <dt>Self-hosted server</dt>
+              <dd>
+                {usage.selfHosted?.line ??
+                  (usage.selfHosted?.state === 'STOPPED' ? 'Stopped' : (usage.selfHosted?.reason ?? 'Not known'))}
+                {usage.selfHosted?.line && usage.selfHosted.hourlyRate && (
+                  <span className="muted"> · at ${usage.selfHosted.hourlyRate} an hour, not in the sums above</span>
+                )}
+              </dd>
+            </>
+          )}
           {cloud && (
             <>
               <dt>Daily limit</dt>

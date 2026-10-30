@@ -1103,19 +1103,7 @@ Tailscale name, never a web address, and a region like the backend takes it" (`C
 5 s). All passed on the next full run, made alone. That `vitest.json` was kept outside the repo, in the session's
 scratch folder. Like 7e's, the failures look like timeouts under load, not regressions.
 
-**For the owner after 9c-3** (§5.7; these need the server, so after 9c-2 and 9c-3 are in):
-
-1. The §12 / README "Before the first `create.sh`" steps, then `scripts/selfhost/create.sh --plan`; check the quota
-   code and the image line, then `scripts/selfhost/create.sh`; confirm the SNS e-mail; add the IAM statements.
-2. Settings → Corgi → Self-hosted: name `finalysis-selfhost`, the region; Test; Start.
-3. The dev set against the server for the comparison row:
-   `-Deval.provider=ollama -Deval.baseUrl=http://finalysis-selfhost:11434 -Deval.model=<the tag>`.
-4. The nomic search-floor sweep (`chat-sweep-dev`) on Self-hosted, to set `min-similarity-by-model` for
-   `nomic-embed-text` (0.40 provisional) and, if it differs a lot, to decide about the categorization examples' global
-   floor (§10).
-5. A categorization run on the sample data with timing: calls, items, ms per 25-merchant batch, from `AiCallLog`'s
-   lines.
-6. Stop from Settings when done (or let the watchdog do it); `destroy.sh` when the server isn't needed any more.
+**For the owner after 9c**: the list, with the IAM text, is in the 9c-3 notes.
 
 ### Step 9c-2 notes: EC2 Start, Stop and status, the running line (backend)
 
@@ -1196,6 +1184,92 @@ answer on the phone only after login. `ChatCostByPathTest`: the new note, and th
 - The path is stored in the shared test database (`app_setting`), so the new Spring tests that switch it delete the
   `ai.%` rows after each test, as `AiPathSwitchTest` does. The first full run without that cleanup failed 73 tests in
   11 classes (Cloud contexts started later read a stored OFF); all passed once it was added.
+
+### Step 9c-3 notes: Settings → Corgi → Self-hosted (UI)
+
+Done in code: "Phase 9 step 9c-3: Settings → Corgi → Self-hosted, the server's controls and running line". Backend
+3,733 tests, 0 failures, 0 errors, 1 skipped (Maven summary; unchanged, the skip is `CfnLintTest`); frontend 353 tests (34 files), all passed (342 at 9c-2 plus 11); test:layout 169 passed, 1 skipped (the
+phone-only menu check on desktop, as before). No backend change. No live call, no EC2 or Tailscale action.
+
+**The Self-hosted card** (`SelfHostControls`, in place of 9b-2's "Not available yet."):
+
+- **Test** sends the Tailscale name as typed (trimmed) to `POST /api/selfhost/test` and shows the backend's message:
+  "Reachable, Ollama 0.12.6", or the reason in the error colour. Disabled until the name is a valid Tailscale name.
+- **Start** (enabled only when the server is stopped and the backend allows it) and **Stop** (when starting or
+  running). Disabled ones carry the backend's reason as their title, and the reason shows under them ("Start and Stop
+  need the aws profile (Cloud credentials).", no server, two servers, AWS refused). A refused Start or Stop shows the
+  409's detail.
+- **Status**: "Server: Stopped / Starting: <progress>… / Running / Stopping", read from `GET /api/selfhost` on load and
+  every 5 s while starting or stopping (`POLL_MS`), and not otherwise. "This session: running 42 min · ~$0.56 ·
+  g6.xlarge at $0.8048 an hour", the backend's line and rate as they are. A start's `note` (the model didn't load,
+  Ollama didn't answer in 10 minutes) in the warning colour. The stopped-disk note with its size, under it.
+- When a start or stop settles, the app's status is read again (`statusChanged`), so the badge, the banner and the chat
+  box follow.
+
+**Costs**: Settings → Chat costs gains "Self-hosted server": the running line with "at $<rate> an hour, not in the sums
+above" on Self-hosted, "Stopped" when stopped, or the backend's reason; it also shows on any other path while a server
+runs (a stopped one doesn't). Chat's budget line on Self-hosted: "No token cost on Self-hosted. Server running 42 min ·
+~$0.70" (`serverCostText`: the backend's line, "Server stopped", or nothing). A live turn's meta shows the running line
+the backend put in its `costNote`; turns from history show "Self-hosted cost is the server's running time". The
+frontend computes nothing (`noArithmetic.test.ts` passes; the rate and line are strings).
+
+**Contrast**: in the light theme the selected path card's tint took muted text to 4.25:1. Muted text and fact labels
+inside the selected card are now a step towards the text colour (`color-mix`), which also lifts the card's existing
+muted lines ("Banner:", the name rule) that no check measured before.
+
+**Tests**: `SelfHostControls.test.tsx` (8): no aws profile (both off, the reason as title and text, Test still works),
+Test's name and its unreachable reason, stopped (Start on, the disk note), Start through each progress line on 5-second
+reads to running (the badge read again, then no more polling), Stop to stopped, a refused Start, a note, no server.
+`SettingsPage.test.tsx` +2 (the running line and rate on Self-hosted; a running server on another path, a stopped one
+not), the Self-hosted case gains its row; `corgi.test.ts` +1 (`serverCostText`); `ChatPage.test.tsx` (the budget line
+with the server's line, the new history note); `CorgiSettings.test.tsx` (the controls in the card, no "Not available
+yet"). Fixtures: `/api/selfhost` and the usage block without the aws profile, for the tests and the layout check.
+test:layout +12: the controls starting, running (with a note) and without the profile, at 375 and 1280 px in both
+themes: every text in them at 4.5:1, the buttons at the 44 px touch target, everything inside its card, no horizontal
+scroll.
+
+**For the owner after 9c** (§5.7; nothing here needs me):
+
+1. The setup in README "Self-hosted" → "Before the first `create.sh`" (§12): the AWS account, the G-instance quota (at
+   least 4 vCPUs), Receive Billing Alerts, a Tailscale account with this Mac in the tailnet, a one-off pre-approved
+   tagged auth key with the shortest expiry, the tailnet policy limiting 11434 to your devices.
+2. `scripts/selfhost/create.sh --plan`: check the quota line (`L-DB2E81BA`, "Running On-Demand G and VT instances") and
+   the image line (the SSM parameter and the AMI id it resolves to); then `scripts/selfhost/create.sh`. Confirm the SNS
+   e-mail.
+3. Add to the customer-managed policy `finalysis-dev-policy` (attached to `finalysis-dev`), with your region and account
+   (`create.sh` prints them filled in, and the instance id on its own line):
+
+   ```json
+   {
+     "Sid": "FinalysisSelfHostStartStop",
+     "Effect": "Allow",
+     "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+     "Resource": "arn:aws:ec2:<region>:<account>:instance/*",
+     "Condition": {"StringEquals": {"aws:ResourceTag/finalysis:role": "selfhost"}}
+   },
+   {
+     "Sid": "FinalysisSelfHostDescribe",
+     "Effect": "Allow",
+     "Action": "ec2:DescribeInstances",
+     "Resource": "*"
+   }
+   ```
+
+   No `RunInstances`, no `TerminateInstances`. `DescribeInstances` can't be limited to a resource or tag (read-only).
+4. Set `finalysis.ai.ollama.models.chat` to the model's Ollama tag (the one given to `create.sh`), run with the `aws`
+   profile, and in Settings → Corgi → Self-hosted: name `finalysis-selfhost`, your region, Use this server; Test; Start
+   if the watchdog has stopped it; watch the progress to Running.
+5. The dev set against the server for the comparison row:
+   `cd backend && ./mvnw test -Pchat-eval -Deval.set=dev -Deval.provider=ollama -Deval.baseUrl=http://finalysis-selfhost:11434 -Deval.model=<the tag>`.
+6. The nomic search-floor sweep (`chat-sweep-dev`) on Self-hosted, to set `min-similarity-by-model` for
+   `nomic-embed-text` (0.40 provisional), and to decide whether the categorization examples' global floor needs one
+   too (§10).
+7. A categorization run on the sample data with timing (calls, items, ms per 25-merchant batch, from `AiCallLog`'s
+   lines), e.g. `scripts/load-sample-data.sh --categorize` against a vault on the Self-hosted path.
+8. Stop from Settings when done (the watchdog stops it after 20 idle minutes anyway); `scripts/selfhost/destroy.sh` when
+   the server isn't needed any more, then remove the node from the tailnet.
+
+Send me the reports and the log lines; I write them into the 9c notes and, at 9e, `docs/eval/` (the comparison doc).
 
 ---
 
