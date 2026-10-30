@@ -959,6 +959,34 @@ unlock body and is in no argument of curl or plutil and not in the output (a mut
 fails the test); a wrong password stops before any write; categorization only on `--categorize`; only a port, never a
 host, can be chosen. README: "Loading the sample data", under local development.
 
+### Step 9b-3 notes: Corgi gets a face (UI side step)
+
+A side step after 9b-2; nothing else in the plan changes. Done in code: "Phase 9 step 9b-3: Corgi gets a face".
+Backend 3,634 tests, 0 failures, 0 errors, 0 skipped (Maven summary; unchanged); frontend 342 tests (33 files), all passed; test:layout 157 passed, 1 skipped (the phone-only menu check
+on desktop). No backend change. No live call.
+
+`CorgiAvatar` replaces the letter "C" avatar with an original drawing of my own, not based on any logo, mascot or
+character: a happy corgi front-on, tan and white, pointed ears with pink insides, a white blaze and muzzle, bright eyes
+with highlights, pink cheeks and an open grin with its tongue. It is one inline SVG of 24 elements, flat fills and no
+gradients, on a round background with a ring. It was checked by eye at 24, 40 and 128 px in both themes before it went
+in. The fur colours are fixed tokens beside the path tokens in `theme.css` (`--corgi-fur`, `-fur-shade`, `-white`,
+`-ear-inner`, `-ink`, `-tongue`, `-blush`); only `--corgi-bg` (surface2) and `--corgi-ring` (border) follow the theme.
+It takes a `size` in px: 40 in the chat header, 32 beside each answer and the "thinking" line, 24 beside the
+categorizer's attribution in the transaction sheet ("suggested by Corgi") and the Settings → Corgi heading. It is
+`role="img"` with `aria-label="Corgi"`, and the name stays beside it everywhere; the Settings section is labelled by
+the name's text alone, so its accessible name stays "Corgi". Each avatar has its own clip id, since several share a page.
+
+An image in `frontend/public/` named `corgi-avatar.png`, `.jpg` or `.svg` replaces the drawing, through the same
+component, as an `<img>` with alt text "Corgi", cropped to a circle; Vite looks for it when it starts
+(`__CORGI_AVATAR__`), so no page probes for a missing file. There is none, so the drawing shows; no image was added.
+
+**Tests.** `CorgiAvatar.test.tsx`: the drawing's label, size and element budget (at most 40, no gradient, image or
+text), colours only through the tokens, one clip per avatar, and the image path with its alt text. `corgiNaming.test.tsx`:
+every place that showed the "C" (the chat header, each answer) now shows the labelled drawing with the name beside it
+and no letter left, and the attribution and Settings show it too; `ChatPage.test.tsx`'s header, answer and "thinking"
+checks follow. test:layout: the face in the chat header (40 px) and on an answer (32 px), with the name after it on the
+same line, the page fitting at 375 and 1280 px in both themes, and the fur fixed while the background follows the theme.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

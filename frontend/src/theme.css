@@ -94,6 +94,20 @@
   --path-local-ink: var(--income);
 
   /*
+   * Corgi's face (CorgiAvatar.tsx): the fur and features are the same in both themes; only the round background and
+   * its ring follow the theme.
+   */
+  --corgi-fur: #d9822b;
+  --corgi-fur-shade: #b9661c;
+  --corgi-white: #fff7ec;
+  --corgi-ear-inner: #f3b8a5;
+  --corgi-ink: #2a1c12;
+  --corgi-tongue: #e86f78;
+  --corgi-blush: #f1a385;
+  --corgi-bg: var(--surface2);
+  --corgi-ring: var(--border);
+
+  /*
    * Chart series. Slices go by rank in the month; Other and Uncategorized are the two greys, which differ in lightness
    * from each other. Every slice is also named in its legend row, so no meaning rests on colour alone.
    */

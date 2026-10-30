@@ -1,10 +1,23 @@
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+/**
+ * Corgi's avatar image, if one has been placed in public/ (corgi-avatar.png, .jpg or .svg): CorgiAvatar shows it,
+ * cropped to a circle, instead of its own drawing. Checked when Vite starts, so no page probes for a missing file.
+ */
+const corgiAvatar = ['png', 'jpg', 'svg']
+  .map((ext) => `corgi-avatar.${ext}`)
+  .find((name) => existsSync(fileURLToPath(new URL(`./public/${name}`, import.meta.url))))
 
 // Requests to /api are forwarded to the Spring Boot backend during development (bound to 127.0.0.1, UI-08),
 // so the frontend can call relative URLs without any CORS setup.
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __CORGI_AVATAR__: JSON.stringify(corgiAvatar ? `/${corgiAvatar}` : null),
+  },
   server: {
     port: 5173,
     proxy: {

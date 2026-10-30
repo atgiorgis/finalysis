@@ -672,3 +672,46 @@ for (const theme of ['dark', 'light'] as const) {
   })
 }
 
+
+// ---------------------------------------------------------------------------- step 9b-3: Corgi's face
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`corgi: the face in the chat header and on an answer fits, beside the name (${theme})`, async ({ page }, info) => {
+    await page.addInitScript((t) => localStorage.setItem('finalysis.theme', t), theme)
+    await mockApi(page, { '/api/status': PATH_STATUS.cloud })
+    await page.goto('/chat/7')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await expect(page.getByText('You spent $477.94', { exact: false })).toBeVisible()
+
+    const head = page.locator('.corgi-head')
+    const headFace = head.getByRole('img', { name: 'Corgi' })
+    await expect(headFace).toBeVisible()
+    const answer = page.locator('.chat-answer-row').first()
+    const answerFace = answer.getByRole('img', { name: 'Corgi' })
+    await expect(answerFace).toBeVisible()
+    await expect(answer.locator('.chat-speaker')).toHaveText('Corgi')
+    await expect(head.locator('.corgi-name')).toHaveText('Corgi')
+
+    for (const [face, size, name] of [
+      [headFace, 40, head.locator('.corgi-name')],
+      [answerFace, 32, answer.locator('.chat-speaker')],
+    ] as const) {
+      const box = (await face.boundingBox())!
+      expect(Math.round(box.width), 'its size').toBe(size)
+      expect(Math.round(box.height)).toBe(size)
+      expect(box.x, 'on screen').toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+      const label = (await name.boundingBox())!
+      expect(label.x, 'the name is beside the face, after it').toBeGreaterThanOrEqual(box.x + box.width - 1)
+      expect(label.y, 'on the same line').toBeLessThan(box.y + box.height)
+    }
+    // the drawing's background follows the theme; the fur doesn't
+    const fills = await headFace.evaluate((svg) => ({
+      bg: getComputedStyle(svg.querySelector('.corgi-bg')!).fill,
+      fur: getComputedStyle(svg.querySelector('.corgi-fur')!).fill,
+    }))
+    expect(fills.fur).toBe('rgb(217, 130, 43)')
+    expect(fills.bg).toBe(theme === 'dark' ? 'rgb(27, 30, 42)' : 'rgb(240, 240, 247)')
+    await fitsAt375(page, info.project.name === 'phone')
+  })
+}

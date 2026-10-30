@@ -5,6 +5,7 @@ import { AI_NAME } from '../corgi'
 import { formatDate, formatMoney } from '../format'
 import { useDataVersion, useShellData } from './ShellData'
 import TxnActions from './TxnActions'
+import CorgiAvatar from '../components/chat/CorgiAvatar'
 
 const SOURCE_TEXT: Record<CategorySource, string> = {
   RULE: 'set by a rule',
@@ -41,6 +42,8 @@ function Facts({ txn }: { txn: Transaction }) {
   const category = txn.category
     ? `${txn.category.name}${txn.categorySource ? ` (${SOURCE_TEXT[txn.categorySource]})` : ''}`
     : 'Uncategorized'
+  // Corgi's face beside its name when it suggested the category; the name stays in the text.
+  const byCorgi = txn.category !== null && txn.categorySource === 'AI'
   return (
     <dl className="facts">
       <dt>Date</dt>
@@ -51,7 +54,14 @@ function Facts({ txn }: { txn: Transaction }) {
       <dt>Account</dt>
       <dd>{txn.accountName}</dd>
       <dt>Category</dt>
-      <dd>{category}</dd>
+      <dd>
+        {category}
+        {byCorgi && (
+          <span className="corgi-attribution">
+            <CorgiAvatar size={24} />
+          </span>
+        )}
+      </dd>
       {(txn.isTransfer || txn.transferExcluded) && (
         <div className="facts-row">
           <dt>Transfer</dt>

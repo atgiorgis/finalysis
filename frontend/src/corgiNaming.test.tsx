@@ -6,6 +6,7 @@ import type { CategorizationRun, Transaction } from './api'
 import { AI_NAME } from './corgi'
 import { fixtures } from './test/fixtures'
 import { renderApp } from './test/renderApp'
+import { conversation, conversations } from './test/chatFixtures'
 
 /**
  * Corgi is the categorizer's name everywhere the UI shows who set a category (Phase 7 step 7e): the transaction
@@ -111,3 +112,44 @@ test('the run summary and its tooltip name no AI', async () => {
   const summary = await within(section).findByRole('status', { name: /3 categorized/ })
   expect(shown(summary)).not.toMatch(NAMES_THE_CATEGORIZER_OTHERWISE)
 })
+
+// ---- Corgi's face (step 9b-3) ---------------------------------------------------------------------------------------
+
+/** The face where Corgi is named: an image labelled Corgi, drawn (no letter in it), with the name still beside it. */
+function expectFace(where: HTMLElement, name: string | RegExp) {
+  const face = within(where).getByRole('img', { name: AI_NAME })
+  expect(face.tagName.toLowerCase()).toBe('svg')
+  expect(face).toHaveClass('corgi-avatar')
+  expect(face.textContent).toBe('')
+  expect(where).toHaveTextContent(name)
+}
+
+test('every place that showed the "C" avatar shows Corgi’s face, labelled, with the name beside it', async () => {
+  renderApp('/chat/7', {
+    '/api/status': { ...fixtures.statusOff, ai: { path: 'CLOUD', provider: 'bedrock', reachable: true } },
+    '/api/chat/conversations?page=0&size=50': conversations,
+    '/api/chat/conversations/7': conversation,
+  })
+  await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
+
+  // the chat header
+  expectFace(document.querySelector('.corgi-head') as HTMLElement, AI_NAME)
+  // each answer's label
+  const answers = [...document.querySelectorAll('.chat-answer-row')] as HTMLElement[]
+  expect(answers.length).toBeGreaterThan(0)
+  answers.forEach((answer) => expectFace(answer, AI_NAME))
+  // no letter avatar is left anywhere
+  expect([...document.querySelectorAll('.corgi-avatar')].map((a) => a.textContent)).not.toContain('C')
+})
+
+test('the categorizer’s attribution and Settings → Corgi show the face beside the name', async () => {
+  renderApp(`/overview?txn=${aiCategorized.id}`, { [`/api/transactions/${aiCategorized.id}`]: aiCategorized })
+  const category = (await screen.findByText(/suggested by Corgi/)).closest('dd') as HTMLElement
+  expectFace(category, `${fixtures.transactionDetail.category?.name} (suggested by Corgi)`)
+  cleanup()
+
+  renderApp('/settings')
+  const heading = (await screen.findByRole('region', { name: AI_NAME })).querySelector('h2') as HTMLElement
+  expectFace(heading, AI_NAME)
+})
+

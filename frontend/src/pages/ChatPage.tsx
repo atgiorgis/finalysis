@@ -146,7 +146,7 @@ function CorgiHeader({ ai }: { ai: AiStatus | undefined }) {
   const off = offText(ai)
   return (
     <div className="corgi-head">
-      <CorgiAvatar size="large" />
+      <CorgiAvatar size={40} />
       <div className="corgi-head-text">
         <p className="corgi-name">{AI_NAME}</p>
         <p className="corgi-tagline muted">{CHAT_TAGLINE}</p>

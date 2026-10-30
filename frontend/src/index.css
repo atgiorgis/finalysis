@@ -1551,27 +1551,66 @@
 
 /* ---- Corgi (step 7e): avatar, chat header, path badge, answer rows, budget ---- */
 
+/* Corgi's face (CorgiAvatar.tsx): fixed fur colours; the round background and its ring follow the theme. */
 .corgi-avatar {
-  display: inline-flex;
+  display: inline-block;
   flex: none;
-  align-items: center;
-  justify-content: center;
+  vertical-align: middle;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 800;
 }
 
-.corgi-avatar-small {
-  width: 2rem;
-  height: 2rem;
-  font-size: 0.875rem;
+.corgi-avatar-image {
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--corgi-ring);
 }
 
-.corgi-avatar-large {
-  width: 2.75rem;
-  height: 2.75rem;
-  font-size: 1.125rem;
+.corgi-avatar .corgi-bg {
+  fill: var(--corgi-bg);
+}
+
+.corgi-avatar .corgi-ring {
+  fill: none;
+  stroke: var(--corgi-ring);
+  stroke-width: 2;
+}
+
+.corgi-avatar .corgi-fur {
+  fill: var(--corgi-fur);
+}
+
+.corgi-avatar .corgi-fur-shade {
+  fill: var(--corgi-fur-shade);
+}
+
+.corgi-avatar .corgi-white {
+  fill: var(--corgi-white);
+}
+
+.corgi-avatar .corgi-ear-inner {
+  fill: var(--corgi-ear-inner);
+}
+
+.corgi-avatar .corgi-ink {
+  fill: var(--corgi-ink);
+}
+
+.corgi-avatar .corgi-tongue {
+  fill: var(--corgi-tongue);
+}
+
+.corgi-avatar .corgi-blush {
+  fill: var(--corgi-blush);
+}
+
+.corgi-settings-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Beside an attribution ("suggested by Corgi"), a little space before the face. */
+.corgi-attribution {
+  margin-left: 0.35rem;
 }
 
 .corgi-head {

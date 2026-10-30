@@ -280,7 +280,9 @@ test('the header: Corgi’s avatar, name and promise, and a cloud badge from the
   const section = await screen.findByRole('region', { name: 'Conversation' })
   const head = section.querySelector('.corgi-head') as HTMLElement
   expect(head).toHaveTextContent('CorgiReads your books. Never changes them.')
-  expect(head.querySelector('.corgi-avatar')).toHaveTextContent('C')
+  // Corgi's face, labelled, beside the name it never replaces (step 9b-3)
+  expect(within(head).getByRole('img', { name: 'Corgi' })).toHaveAttribute('width', '40')
+  expect(head.querySelector('.corgi-avatar')?.textContent).toBe('')
   const badge = head.querySelector('.path-badge') as HTMLElement
   expect(badge).toHaveTextContent('Cloud · Bedrock')
   expect(badge).toHaveClass('path-badge-cloud')
@@ -319,7 +321,7 @@ test('each answer is labelled Corgi; the figures note is omitted when no figure 
 
   await screen.findByRole('heading', { level: 2, name: 'Groceries in September' })
   expect(reply(0).querySelector('.chat-speaker')).toHaveTextContent('Corgi')
-  expect(reply(0).querySelector('.corgi-avatar')).toHaveTextContent('C')
+  expect(within(reply(0)).getByRole('img', { name: 'Corgi' })).toHaveAttribute('width', '32')
   await ask(user, 'Who are you?')
   await screen.findByText('I can only read your own statements.')
   expect(reply(2).querySelector('.chat-speaker')).toHaveTextContent('Corgi')
@@ -340,7 +342,7 @@ test('while answering: the question, then “Corgi is thinking…” with the av
   const thinking = await screen.findByText('Corgi is thinking…')
   const pending = thinking.closest('li') as HTMLElement
   expect(pending).toHaveTextContent('Is that normal for me?')
-  expect(pending.querySelector('.corgi-avatar')).toBeInTheDocument()
+  expect(within(pending).getByRole('img', { name: 'Corgi' })).toHaveClass('corgi-avatar')
 
   answer(Response.json({ ...richTurn, turn: 3, answer: 'Yes.' }))
   expect(await screen.findByText('Yes.')).toBeInTheDocument()

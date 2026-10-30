@@ -12,6 +12,7 @@ import {
   validServerName,
 } from '../../corgi'
 import { useDataVersion } from '../../shell/ShellData'
+import CorgiAvatar from '../chat/CorgiAvatar'
 
 /** Corgi's roles by what it does; the search embedding isn't Corgi talking, so it keeps its own name. */
 const ROLE_LABELS: Record<string, string> = {
@@ -127,7 +128,10 @@ export default function CorgiSettings({ ai }: { ai: AiStatus }) {
 
   return (
     <section className="card corgi-settings" aria-labelledby="settings-ai">
-      <h2 id="settings-ai">{AI_NAME}</h2>
+      <h2 className="corgi-settings-title">
+        <CorgiAvatar size={24} />
+        <span id="settings-ai">{AI_NAME}</span>
+      </h2>
       <p className="muted">
         {AI_NAME} is the name Finalysis gives its AI. Choose where it runs; you can change it at any time.
       </p>
