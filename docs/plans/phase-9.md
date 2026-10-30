@@ -925,6 +925,40 @@ nothing else changed there.
 statement and says where it is" (the Import tab's after-import question, unchanged here) failed; it passed on the next
 full run and alone. Its `vitest.json` was overwritten by the passing run before it could be kept.
 
+### Side step (before 9c): the sample-data loader (script)
+
+Not part of the plan's steps; nothing else in the plan changes. Done in code: "Side step before 9c: the sample-data
+loader, scripts/load-sample-data.sh". Backend 3,634 tests, 0 failures, 0 errors, 0 skipped (Maven summary; 3,625 at 9b-2 plus the 9 of
+`SampleDataLoaderScriptTest`); frontend 335 tests (32 files), all passed; no UI change, so no layout run. No live call, and
+the script was never run against the owner's backend.
+
+`scripts/load-sample-data.sh` loads the synthetic sample data into a running dev backend through the API, the seed of
+QA-06 (demo mode). It talks to `http://127.0.0.1` only (port 8080, or `--port`). A locked vault is unlocked with the
+password from stdin: the request body is built by `printf` (a shell builtin) and read by curl from stdin, so the password
+is in no process's arguments, environment or output; an unlocked vault (or the plain dev database) is used as it is. It
+refuses any vault that already has an account, with no override, so a second run stops there. It creates the four
+accounts with the answer key's types and last fours (1001, 1002, 2001, 3001), named as Postman's setup names them, then
+imports every manifest row in order: on each account's first CSV, the preview's suggested mapping and sign are saved as
+they are (as the tests' `SampleDataImport` does); each file is sent with its manifest period, and the cards with their
+balances, which their CSVs don't print. The report says per file: imported, already imported, or the review queue with
+the reason; the manifest's `broken/` June file is listed as an expected review case, not a failure. `--categorize`
+(off by default; the help text says it sends merchant names and amounts to Bedrock on the Cloud path) runs
+`POST /api/categorization/run?ai=true` and prints the summary.
+
+**jq replaced by plutil** (decided with the owner, 2026-10-30): jq isn't on this Mac (macOS 14 ships none, and there is
+no Homebrew), so the script reads JSON with macOS's `plutil` (key paths, arrays and nulls), and needs curl and plutil
+only. It is written for macOS's bash 3.2 (no associative arrays).
+
+**Tests** (`SampleDataLoaderScriptTest`, in `./mvnw verify`, macOS only): the real script against a fake backend, the
+JDK's `HttpServer` on a random loopback port, with logging wrappers for curl and plutil first on the PATH. The calls in
+order (status, unlock, the account check, the four accounts, then per manifest row the preview and mapping on an
+account's first file, and the import with its period and balances); the accounts as the answer key expects; the
+suggested mapping saved once per account, right after its first preview; the refusal of a vault with accounts (nothing
+written); an unlocked vault read no password; the password, with a quote, a backslash and a tab, arrives intact in the
+unlock body and is in no argument of curl or plutil and not in the output (a mutation that passes it as an argument
+fails the test); a wrong password stops before any write; categorization only on `--categorize`; only a port, never a
+host, can be chosen. README: "Loading the sample data", under local development.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

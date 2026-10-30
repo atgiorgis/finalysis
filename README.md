@@ -211,6 +211,31 @@ if anything suggests a non-local target: a remote `DOCKER_HOST` or Docker contex
 `COMPOSE_FILE`, `COMPOSE_PROJECT_NAME` or `SPRING_DATASOURCE_URL` set, or a `POSTGRES_HOST` other
 than localhost.
 
+### Loading the sample data
+
+To try the app on known figures without importing every file by hand, load the synthetic sample data into a running
+dev backend:
+
+```sh
+scripts/load-sample-data.sh            # add --categorize to run categorization with Corgi afterwards
+```
+
+It works through the API, as the Import tab does: it creates the four sample accounts (Northfield Bank Checking and
+Savings, Apex Rewards Visa, Summit Cash Card), then imports every file of `sample-data/statements-manifest.csv` in
+order, saving each account's suggested CSV mapping and sign on its first file. Each file is reported as imported, already
+imported, or in the review queue with the reason; the broken June file of the Summit card is a deliberate review case,
+listed as expected.
+
+- It talks to `http://127.0.0.1` only, on port 8080 or `--port <port>`.
+- A locked vault is unlocked with the password read from stdin (typed, or piped in); it is never an argument, an
+  environment variable or a file, and never printed. An unlocked vault, or the plain dev database, is used as it is.
+- It refuses a vault that already has any account, so sample data never mixes with real statements. There is no
+  override; to load it again, start from an empty vault or reset the dev database.
+- `--categorize` is off by default: on the Cloud path it sends merchant names and amounts to Amazon Bedrock (paid
+  calls); on Self-hosted or Local it uses that server.
+- It needs `curl` and macOS's `plutil`, nothing to install. `SampleDataLoaderScriptTest` runs it against a fake backend
+  in `./mvnw verify`.
+
 ## The app
 
 Eight tabs behind the menu button, dark by default with a light switch, one responsive layout from 375 px up (UI-01,
