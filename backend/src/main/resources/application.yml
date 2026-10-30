@@ -135,6 +135,10 @@ finalysis:
       self-hosted-read-timeout: 60s   # one call; a GPU instance over Tailscale
       local-read-timeout: 300s        # one call; a CPU laptop. max-turn-time (45s) still bounds a chat turn
       probe-timeout: 3s               # /api/version and /api/tags, at unlock, on a switch and before each AI run
+      # options.num_ctx on every chat and categorization request (AI-05). Ollama's default (4096 on recent versions)
+      # would cut Corgi's 11-15K-token prompts. Must be at least finalysis.chat.max-input-tokens-per-call +
+      # max-output-tokens (12000 + 1500); startup refuses less (ChatStartupCheck).
+      num-ctx: 16384
     # The Self-hosted server (docs/plans/phase-9.md §4.2, §5.5). Its running time comes from EC2 (the aws profile's
     # credentials); its estimate is minutes × the hourly rate / 60, to the cent. Storage while stopped, data transfer
     # and AWS's billing increments aren't in it; the billing alarm is the backstop.

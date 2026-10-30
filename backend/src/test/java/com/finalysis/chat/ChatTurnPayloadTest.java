@@ -47,8 +47,9 @@ import tools.jackson.databind.json.JsonMapper;
 @ExtendWith(OutputCaptureExtension.class)
 // Step 8d: every tool's result whole in one round is now just over the default 12,000 estimated tokens, and the loop
 // would cut the oldest (get_month_totals) before it is sent; this test is about every payload going out checked.
+// Step 9c-4: the Ollama paths' context window must hold that budget plus the output cap, whatever the path.
 @TestPropertySource(properties = {"logging.level.com.finalysis=DEBUG",
-        "finalysis.chat.max-input-tokens-per-call=16000"})
+        "finalysis.chat.max-input-tokens-per-call=16000", "finalysis.ai.ollama.num-ctx=17500"})
 class ChatTurnPayloadTest {
 
     static final String QUESTION = "How much did I spend on my " + ChatInjectionFixture.NAME + " at "

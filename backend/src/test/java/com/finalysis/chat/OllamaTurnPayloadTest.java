@@ -44,13 +44,16 @@ import tools.jackson.databind.json.JsonMapper;
 @IntegrationTest
 @AutoConfigureMockMvc
 @Import(OllamaTurnPayloadTest.Clock.class)
-// every tool's result whole in one round is just over the default input cap (as in ChatTurnPayloadTest)
+// every tool's result whole in one round is just over the default input cap (as in ChatTurnPayloadTest); the context
+// window grows with it, since startup refuses one that can't hold the input budget and the output cap (16000 + 1500)
 @TestPropertySource(properties = {"finalysis.ai.default-path=LOCAL",
         "finalysis.ai.ollama.models.chat=" + OllamaTurnPayloadTest.MODEL,
-        "finalysis.chat.max-input-tokens-per-call=16000"})
+        "finalysis.chat.max-input-tokens-per-call=16000",
+        "finalysis.ai.ollama.num-ctx=" + OllamaTurnPayloadTest.NUM_CTX})
 class OllamaTurnPayloadTest {
 
     static final String MODEL = "test-ollama-chat";
+    static final int NUM_CTX = 17_500;
     static final OllamaStub STUB = OllamaStub.start(MODEL + ":latest", "nomic-embed-text:latest");
 
     @DynamicPropertySource
@@ -162,6 +165,8 @@ class OllamaTurnPayloadTest {
             assertThat(OllamaStub.fields(body)).isSubsetOf(BODY_FIELDS);
             assertThat(body.get("model").stringValue()).isEqualTo(MODEL);
             assertThat(body.get("stream").asBoolean()).isFalse();
+            assertThat(body.get("options").get("num_ctx").asInt()).as("every round asks for the configured window")
+                    .isEqualTo(NUM_CTX);
             body.get("messages").forEach(m -> assertThat(OllamaStub.fields(m)).isSubsetOf(MESSAGE_FIELDS));
         }
         String all = String.join("\n", bodies.stream().flatMap(b -> sent(b).stream()).toList());

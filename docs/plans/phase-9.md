@@ -22,8 +22,8 @@ and the roadmap's Phase 10 ("standard tier", "deep tier", "hardware tiers": mode
 class"** (§13, §16 decision 1), so "tier" means only where Corgi runs.
 
 Out of scope: field-level encryption (SEC-05), goals, the chat backlog (h-u10, h-x06, the holdout guard per model;
-Phase 10), Windows, model size choices beyond 9a's pick (AI-02), `num_ctx` and KV cache settings (AI-05's Phase 10 part),
-keeping models loaded (AI-04).
+Phase 10), Windows, model size choices beyond 9a's pick (AI-02), the KV cache setting (AI-05's Phase 10 part; `num_ctx`
+was set explicitly at 9c-4), keeping models loaded (AI-04).
 
 Working rules: one step per commit (small follow-ups are fine); before every commit `caffeinate -i ./mvnw clean
 verify` in `backend/` and `npm test` in `frontend/` (and `npm run test:layout` where the UI changes), Maven's summary
@@ -440,8 +440,11 @@ The only code in 9d is what the notes need (none expected; `-Deval.questions` is
 - **AI-07** (benchmark a US-origin alternative): Done by 9a (Gemma 3 12B and gpt-oss-20b).
 - **SEC-01**: the three banner wordings, and "redaction applies on every tier". UI-05 notes the banner on every tier.
 - **AI-01**: a note that each tier names its own model per role.
+- **AI-05**: a note for the `num_ctx` part (9c-4): `finalysis.ai.ollama.num-ctx` (16,384) on every Ollama chat and
+  categorization request and the Self-hosted warm-up; startup refuses one below `max-input-tokens-per-call` +
+  `max-output-tokens`. The KV cache and keep-alive stay Phase 10; AI-05 stays Planned.
 - Roadmap: Phase 9 as built; Phase 10 becomes the chat backlog plus what remains of local AI (AI-02, AI-04, AI-05's
-  `num_ctx`, UI-06), §16 decision 7.
+  KV cache, UI-06), §16 decision 7.
 
 ---
 
@@ -466,7 +469,7 @@ The only code in 9d is what the notes need (none expected; `-Deval.questions` is
 ## 11. Phase 10 candidates (recorded at 9e)
 
 The chat backlog (h-u10, h-x06, the holdout guard per model); model size choices on Local and Self-hosted (AI-02,
-UI-06); `num_ctx`, KV cache, keep-alive (AI-04, AI-05); field-level encryption (SEC-05); document Q&A (CHT-07);
+UI-06); KV cache, keep-alive (AI-04, AI-05; `num_ctx` done at 9c-4); field-level encryption (SEC-05); document Q&A (CHT-07);
 recovery key rotation; lock before sleep; kept statement copies listed and downloadable; spot instances for Self-hosted.
 
 Found in run 7 (step 9a-4 notes, `docs/eval/README.md` run 7):
@@ -1270,6 +1273,40 @@ scroll.
    the server isn't needed any more, then remove the node from the tailnet.
 
 Send me the reports and the log lines; I write them into the 9c notes and, at 9e, `docs/eval/` (the comparison doc).
+
+### Step 9c-4 notes: `num_ctx` on every Ollama request (backend, AI-05)
+
+Asked for before the owner's first Self-hosted run: Ollama's default context (4096 on recent versions) would cut
+Corgi's 11–15K-token prompts, tool definitions included, without an error. Done in code: "Phase 9 step 9c-4: num_ctx on
+every Ollama request". Backend 3,734 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,733 at 9c-3 plus
+`ChatSettingsTest`'s new test; the skip is `CfnLintTest`); frontend 353 tests (34 files), all passed. No frontend change. No live call, no EC2 or Tailscale action.
+
+- **The setting**: `finalysis.ai.ollama.num-ctx`, default 16384 (`OllamaProperties`, `application.yml`), one value for
+  both Ollama paths. Chat and categorization share one model there, so "per model role" is one setting until a role
+  gets its own model.
+- **Where it goes**: `OllamaProviderFactory` puts it in the chat model's default `OllamaChatOptions`. Each call's
+  options are built on those (chat, `ChatRoleOptions`) or merged with them (categorization, through `ChatClient`), so
+  every `/api/chat` request carries `options.num_ctx`, on Self-hosted and Local alike. Embeddings don't take it
+  (nomic-embed-text's input is one short text).
+- **The warm-up after Start** sends it too (`{"model": …, "options": {"num_ctx": …}}`). Ollama loads a model again
+  when a request's `num_ctx` differs from the loaded one, so a warm-up without it would have been undone by the first
+  chat request. Still no prompt and no user data. Not changed: the first-boot load in the template's user data (once,
+  at creation; the instance stops before any real use, and a stop unloads it).
+- **The startup check** (`ChatStartupCheck.verifyContext`): num-ctx must be at least
+  `finalysis.chat.max-input-tokens-per-call` + `finalysis.chat.max-output-tokens` (12,000 + 1,500 = 13,500), or startup
+  fails naming both settings, their values and the minimum. Checked whatever path the vault selects, since the path
+  changes without a restart. The two payload tests that raise the input budget to 16,000 (`ChatTurnPayloadTest`,
+  `OllamaTurnPayloadTest`) raise num-ctx to 17,500 with it.
+- **Margin**: 16,384 leaves 2,884 tokens over the budget. The budget is chat's own estimate (characters / 3), not the
+  model's tokenizer; if a Self-hosted run shows Ollama's `prompt_eval_count` near 16K on a full round, raise num-ctx or
+  lower the budget. Ollama's own report of truncation is in its server log only.
+- **Tests**: `OllamaProvidersTest` (a chat round's `options.num_ctx` 16384; the warm-up sends only the model and
+  `options.num_ctx`), `OllamaCategorizationTest` (`options.num_ctx` 16384), `OllamaTurnPayloadTest` (every round of a
+  whole Local turn carries the configured value, 17,500 there), `ChatSettingsTest` (8,192 and 13,499 fail naming both
+  limits, 13,500 passes, the shipped and default value is 16,384 and passes), `SelfHostControlTest` (the warm-up gets
+  the configured value).
+- **Left for Phase 10** (AI-05's rest, with AI-04): the KV cache type (`OLLAMA_KV_CACHE_TYPE`, a server setting) and
+  keep-alive. A 16K context costs more KV-cache memory than 4K; on the laptop (9d) that is part of what Phase 10 tunes.
 
 ---
 

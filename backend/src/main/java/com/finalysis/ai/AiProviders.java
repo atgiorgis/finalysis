@@ -278,7 +278,7 @@ public class AiProviders implements ActiveProviders {
                 if (base == null || clients == null) {
                     yield new State(selection, null, false, base == null ? NO_SERVER : UNREACHABLE, null);
                 }
-                ProviderSet set = clients.create(base, ollama.models(), ollama.embeddingDimensions(),
+                ProviderSet set = clients.create(base, ollama.models(), ollama.embeddingDimensions(), ollama.numCtx(),
                         ollama.readTimeout(selection.path()));
                 yield probe(new State(selection, set, false, null, null));
             }

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.finalysis.ai.AiPath;
 import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.OllamaProperties;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -152,6 +153,30 @@ class ChatSettingsTest {
         ChatStartupCheck.verify(binder.bind("finalysis.ai", AiProperties.class).get(),
                 binder.bind("finalysis.ai", AiPrices.class).get(),
                 binder.bindOrCreate("finalysis.chat", ChatProperties.class), caching);
+    }
+
+    /**
+     * Step 9c-4 (AI-05): the Ollama paths' context window holds one call's input budget plus its output cap
+     * (12,000 + 1,500); a smaller one fails startup, naming both limits. The shipped 16,384 passes.
+     */
+    @Test
+    void theOllamaContextWindowMustHoldTheInputBudgetAndTheOutputCap() throws Exception {
+        assertThatThrownBy(() -> ChatStartupCheck.verifyContext(8_192, ChatLimits.defaults()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("finalysis.ai.ollama.num-ctx 8192")
+                .hasMessageContaining("finalysis.chat.max-input-tokens-per-call 12000")
+                .hasMessageContaining("finalysis.chat.max-output-tokens 1500")
+                .hasMessageContaining("at least 13500");
+        assertThatThrownBy(() -> ChatStartupCheck.verifyContext(13_499, ChatLimits.defaults()))
+                .isInstanceOf(IllegalStateException.class);
+        ChatStartupCheck.verifyContext(13_500, ChatLimits.defaults());
+
+        Binder binder = shipped(Map.of());
+        OllamaProperties ollama = binder.bindOrCreate("finalysis.ai.ollama", OllamaProperties.class);
+        assertThat(ollama.numCtx()).isEqualTo(16_384);
+        assertThat(new Binder().bindOrCreate("finalysis.ai.ollama", OllamaProperties.class).numCtx())
+                .as("the default without the yml").isEqualTo(16_384);
+        ChatStartupCheck.verifyContext(ollama.numCtx(), binder.bindOrCreate("finalysis.chat", ChatProperties.class));
     }
 
     /** The default: chat on Sonnet 4.6 at $0.15 a turn, categorization still on Haiku 4.5; startup passes. */

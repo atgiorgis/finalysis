@@ -16,13 +16,18 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param selfHostedReadTimeout one call's read timeout on Self-hosted (a GPU instance over Tailscale)
  * @param localReadTimeout      one call's read timeout on Local (a CPU laptop may take minutes)
  * @param probeTimeout          the reachability check's connect and read timeout ({@code /api/version}, {@code /api/tags})
+ * @param numCtx                the context window asked for on every chat and categorization request
+ *                              ({@code options.num_ctx}, AI-05): Ollama's own default (4096 on recent versions) would
+ *                              cut Corgi's 11–15K-token prompts, tool definitions included. Chat's input budget and
+ *                              output cap must fit in it ({@code ChatStartupCheck})
  */
 @ConfigurationProperties("finalysis.ai.ollama")
 public record OllamaProperties(@DefaultValue("11434") int port, @DefaultValue Models models,
                                @DefaultValue("768") int embeddingDimensions,
                                @DefaultValue("60s") Duration selfHostedReadTimeout,
                                @DefaultValue("300s") Duration localReadTimeout,
-                               @DefaultValue("3s") Duration probeTimeout) {
+                               @DefaultValue("3s") Duration probeTimeout,
+                               @DefaultValue("16384") int numCtx) {
 
     public static final int DEFAULT_PORT = 11434;
 
@@ -38,6 +43,9 @@ public record OllamaProperties(@DefaultValue("11434") int port, @DefaultValue Mo
         }
         if (embeddingDimensions < 1) {
             throw new IllegalArgumentException("finalysis.ai.ollama.embedding-dimensions must be at least 1");
+        }
+        if (numCtx < 1) {
+            throw new IllegalArgumentException("finalysis.ai.ollama.num-ctx must be at least 1");
         }
         for (Duration timeout : new Duration[] {selfHostedReadTimeout, localReadTimeout, probeTimeout}) {
             if (timeout.isNegative() || timeout.isZero()) {

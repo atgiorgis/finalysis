@@ -9,8 +9,11 @@ import java.util.List;
  */
 public interface OllamaClients {
 
-    /** New clients for this base URL, with this read timeout per call. Nothing is sent. */
-    ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions,
+    /**
+     * New clients for this base URL, with this read timeout per call and this context window ({@code num_ctx}) on every
+     * chat and categorization request. Nothing is sent.
+     */
+    ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions, int numCtx,
                        java.time.Duration readTimeout);
 
     /**
@@ -30,13 +33,14 @@ public interface OllamaClients {
     String version(URI baseUrl, java.time.Duration timeout);
 
     /**
-     * Loads a model into memory without generating anything: {@code POST /api/generate} with the model's name and no
-     * prompt, so nothing but the tag is sent (§5.5's warm-up after Start). The server's watchdog counts it as a model
-     * request.
+     * Loads a model into memory without generating anything: {@code POST /api/generate} with the model's name, no
+     * prompt, and the context window chat will ask for ({@code options.num_ctx}), since Ollama reloads a model whose
+     * loaded context differs from a request's. Nothing but the tag and that number is sent (§5.5's warm-up after
+     * Start). The server's watchdog counts it as a model request.
      *
      * @throws RuntimeException when the model doesn't load in time or the server answers with an error
      */
-    void warmUp(URI baseUrl, String model, java.time.Duration timeout);
+    void warmUp(URI baseUrl, String model, int numCtx, java.time.Duration timeout);
 
     /**
      * @param version Ollama's version as it reports it

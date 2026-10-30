@@ -57,7 +57,7 @@ class SelfHostControlTest {
     private static final String MODEL = "ministral-3:14b";
     private static final OllamaProperties OLLAMA = new OllamaProperties(11434,
             new OllamaProperties.Models(MODEL, "nomic-embed-text"), 768, Duration.ofSeconds(60),
-            Duration.ofSeconds(300), Duration.ofSeconds(3));
+            Duration.ofSeconds(300), Duration.ofSeconds(3), 16_384);
     private static final SelfHostProperties PROPERTIES = new SelfHostProperties(
             Map.of("g6.xlarge", new BigDecimal("0.8048"), "g5.xlarge", new BigDecimal("1.006")),
             Duration.ofSeconds(300), Duration.ofSeconds(10));
@@ -301,7 +301,7 @@ class SelfHostControlTest {
 
         background.runAll();
 
-        assertThat(ollama.warmUps).containsExactly("http://finalysis-selfhost:11434 " + MODEL + " PT5M");
+        assertThat(ollama.warmUps).containsExactly("http://finalysis-selfhost:11434 " + MODEL + " 16384 PT5M");
         assertThat(rechecks.get()).as("Corgi's reachability is checked again").isPositive();
         SelfHostStatus running = control.status();
         assertThat(running).extracting(SelfHostStatus::state, SelfHostStatus::progress, SelfHostStatus::note,
@@ -533,7 +533,7 @@ class SelfHostControlTest {
         RuntimeException warmUpFailure;
 
         @Override
-        public ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions,
+        public ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions, int numCtx,
                                   Duration readTimeout) {
             throw new UnsupportedOperationException();
         }
@@ -553,8 +553,8 @@ class SelfHostControlTest {
         }
 
         @Override
-        public void warmUp(URI baseUrl, String model, Duration timeout) {
-            warmUps.add(baseUrl + " " + model + " " + timeout);
+        public void warmUp(URI baseUrl, String model, int numCtx, Duration timeout) {
+            warmUps.add(baseUrl + " " + model + " " + numCtx + " " + timeout);
             if (warmUpFailure != null) {
                 throw warmUpFailure;
             }

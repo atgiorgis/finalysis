@@ -55,7 +55,7 @@ class OllamaCategorizationTest {
         ProviderSet set = new OllamaProviderFactory(new StaticListableBeanFactory(Map.of("guard",
                 new NoCloudAiGuard.StubOnlyOllamaHosts())).getBeanProvider(OllamaHostGuard.class))
                 .create(stub.baseUrl(), new OllamaProperties.Models(MODEL, "nomic-embed-text"), 768,
-                        Duration.ofSeconds(5));
+                        16_384, Duration.ofSeconds(5));
         client = new CategorizationModelClient(ActiveProviders.fixed(AiPath.LOCAL, set));
     }
 
@@ -101,6 +101,8 @@ class OllamaCategorizationTest {
         assertThat(format.get("properties").has("answers")).isTrue();
         assertThat(body.get("options").get("temperature").asDouble()).isZero();
         assertThat(body.get("options").get("num_predict").asInt()).isEqualTo(2000);
+        assertThat(body.get("options").get("num_ctx").asInt()).as("the context window, never Ollama's default")
+                .isEqualTo(16_384);
         // only the redacted merchant text and the amounts of the items (the user message is the built one)
         assertThat(prompt.user()).contains("BRAMBLEWICK NOODLE HOUSE", "-18.40", "QUILLFEATHER MARKET", "-64.02");
     }

@@ -55,7 +55,8 @@ class OllamaProvidersTest {
     }
 
     private ProviderSet providers(URI base, Duration readTimeout) {
-        return factory().create(base, new OllamaProperties.Models(CHAT_MODEL, EMBEDDING_MODEL), 768, readTimeout);
+        return factory().create(base, new OllamaProperties.Models(CHAT_MODEL, EMBEDDING_MODEL), 768, 16_384,
+                readTimeout);
     }
 
     private ChatModelClient chat(ProviderSet set) {
@@ -107,6 +108,8 @@ class OllamaProvidersTest {
                 .containsExactlyInAnyOrderElementsOf(ToolRegistryTestSupport.registry().definitions().stream()
                         .map(d -> d.name()).toList());
         assertThat(body.get("options").get("num_predict").asInt()).isEqualTo(1500);
+        assertThat(body.get("options").get("num_ctx").asInt()).as("the context window, never Ollama's default")
+                .isEqualTo(16_384);
         assertThat(body.get("options").has("temperature")).as("no temperature unless configured").isFalse();
         assertThat(body.has("format")).as("chat asks for no structured output").isFalse();
     }
@@ -210,26 +213,32 @@ class OllamaProvidersTest {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("GET", "/api/version"));
     }
 
-    /** The warm-up after a Self-hosted start sends the model's name and nothing else: no prompt, no user data. */
+    /**
+     * The warm-up after a Self-hosted start sends the model's name and chat's context window, nothing else: no prompt,
+     * no user data. The same num_ctx as chat's requests, so the first of them doesn't load the model again.
+     */
     @Test
-    void theWarmUpSendsOnlyTheModelsName() {
-        factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofSeconds(1));
+    void theWarmUpSendsOnlyTheModelsNameAndTheContextWindow() {
+        factory().warmUp(stub.baseUrl(), CHAT_MODEL, 16_384, Duration.ofSeconds(1));
 
         List<OllamaStub.Request> requests = stub.requests();
         assertThat(requests).extracting(OllamaStub.Request::method, OllamaStub.Request::path)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("POST", "/api/generate"));
-        assertThat(OllamaStub.fields(requests.getFirst().json())).containsExactly("model");
-        assertThat(requests.getFirst().json().get("model").stringValue()).isEqualTo(CHAT_MODEL);
+        JsonNode body = requests.getFirst().json();
+        assertThat(OllamaStub.fields(body)).containsExactlyInAnyOrder("model", "options");
+        assertThat(body.get("model").stringValue()).isEqualTo(CHAT_MODEL);
+        assertThat(OllamaStub.fields(body.get("options"))).containsExactly("num_ctx");
+        assertThat(body.get("options").get("num_ctx").asInt()).isEqualTo(16_384);
     }
 
     @Test
     void aWarmUpThatFailsOrTimesOutThrows() {
         stub.generateReply(OllamaStub.status(404, "model not found"));
-        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofSeconds(1)))
+        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, 16_384, Duration.ofSeconds(1)))
                 .isInstanceOf(RuntimeException.class);
 
         stub.generateReply(OllamaStub.delayed(OllamaStub.raw("{\"done\":true}"), 2_000));
-        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofMillis(300)))
+        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, 16_384, Duration.ofMillis(300)))
                 .isInstanceOf(RuntimeException.class);
     }
 
@@ -256,7 +265,7 @@ class OllamaProvidersTest {
                 .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
         assertThatThrownBy(() -> factory().version(server, Duration.ofSeconds(1)))
                 .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
-        assertThatThrownBy(() -> factory().warmUp(server, CHAT_MODEL, Duration.ofSeconds(1)))
+        assertThatThrownBy(() -> factory().warmUp(server, CHAT_MODEL, 16_384, Duration.ofSeconds(1)))
                 .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
         assertThat(stub.requests()).isEmpty();
     }

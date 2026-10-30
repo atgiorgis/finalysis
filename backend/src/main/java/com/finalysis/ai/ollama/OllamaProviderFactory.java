@@ -43,6 +43,9 @@ import org.springframework.web.client.RestClient;
  *       provider (the option to turn it off is gone; {@code OllamaProvidersTest} and {@code BedrockToolCallsTest} prove
  *       it), and chat's callbacks refuse to run anyway. The chat loop runs the tools, as on Bedrock. Categorization's structured output is Ollama's JSON-schema {@code format}, through Spring AI's native
  *       structured output; the app validates every answer as before.</li>
+ *   <li>The context window ({@code num_ctx}, {@code finalysis.ai.ollama.num-ctx}) on every chat and categorization
+ *       request, in the model's default options, which each call's options are built on or merged with: Ollama's own
+ *       default would cut the prompt (AI-05).</li>
  *   <li>No retries (Spring AI's default template retries for minutes) and no model pulls: a failed call fails, and a
  *       missing model is reported by the reachability check, never downloaded by the app.</li>
  *   <li>The path's read timeout per call; the probe's short one for {@code /api/version} and {@code /api/tags}.</li>
@@ -67,7 +70,7 @@ public class OllamaProviderFactory implements OllamaClients {
     }
 
     @Override
-    public ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions,
+    public ProviderSet create(URI baseUrl, OllamaProperties.Models models, int embeddingDimensions, int numCtx,
                               Duration readTimeout) {
         check(baseUrl); // before any client exists: a request's own check is wrapped by Spring AI's retry handling
         OllamaApi api = OllamaApi.builder()
@@ -76,7 +79,7 @@ public class OllamaProviderFactory implements OllamaClients {
                 .build();
         OllamaChatModel chat = OllamaChatModel.builder()
                 .ollamaApi(api)
-                .options(OllamaChatOptions.builder().model(models.chat()).build())
+                .options(OllamaChatOptions.builder().model(models.chat()).numCtx(numCtx).build())
                 .modelManagementOptions(NO_PULLS)
                 .retryTemplate(new RetryTemplate(RetryPolicy.withMaxRetries(0)))
                 .build();
@@ -117,11 +120,13 @@ public class OllamaProviderFactory implements OllamaClients {
     }
 
     @Override
-    public void warmUp(URI baseUrl, String model, Duration timeout) {
+    public void warmUp(URI baseUrl, String model, int numCtx, Duration timeout) {
         check(baseUrl);
-        // Only the model's name: with no prompt, Ollama loads the model and generates nothing.
+        // The model's name and the context window: with no prompt, Ollama loads the model and generates nothing. The
+        // same num_ctx as chat's requests, or the first of them would load the model again.
         restClient(timeout, timeout).baseUrl(baseUrl.toString()).build()
-                .post().uri("/api/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("model", model))
+                .post().uri("/api/generate").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("model", model, "options", Map.of("num_ctx", numCtx)))
                 .retrieve().toBodilessEntity();
     }
 

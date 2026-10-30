@@ -5,6 +5,7 @@ import com.finalysis.ai.PromptCache;
 import com.finalysis.ai.ChatRoleProperties;
 import com.finalysis.ai.AiPrices;
 import com.finalysis.ai.AiProperties;
+import com.finalysis.ai.OllamaProperties;
 import java.math.BigDecimal;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>Phase 9 (docs/plans/phase-9.md §4.2): prices and cost limits apply on Cloud only, so this checks Cloud's main
  * model whenever Cloud is available, whichever path the vault selects later; the Ollama paths have no cost limit.
+ *
+ * <p>Step 9c-4 (AI-05): on the Ollama paths a call's input budget and output cap must fit in the context window asked
+ * for ({@code finalysis.ai.ollama.num-ctx}), or Ollama would cut the prompt; startup refuses a smaller one, naming
+ * both limits. Checked whatever path the vault selects, since the path changes without a restart.
  */
 @Component
 class ChatStartupCheck implements SmartInitializingSingleton {
@@ -31,10 +36,12 @@ class ChatStartupCheck implements SmartInitializingSingleton {
     private final ChatProperties limits;
     private final ChatRoleProperties role;
     private final ObjectProvider<PromptCache> promptCache;
+    private final OllamaProperties ollama;
 
     ChatStartupCheck(AiProperties ai, AiPrices prices, ChatProperties limits, ChatRoleProperties role,
-                     ObjectProvider<PromptCache> promptCache) {
+                     ObjectProvider<PromptCache> promptCache, OllamaProperties ollama) {
         this.ai = ai;
+        this.ollama = ollama;
         this.prices = prices;
         this.limits = limits;
         this.role = role;
@@ -47,6 +54,19 @@ class ChatStartupCheck implements SmartInitializingSingleton {
         boolean caching = ai.cloudAvailable() && role.promptCache() && promptCache.getIfAvailable() != null
                 && prices.of(ai.roles().main()).filter(AiPrices.Price::cachePriced).isPresent();
         verify(ai, prices, limits, caching);
+        verifyContext(ollama.numCtx(), limits);
+    }
+
+    /** The Ollama paths' context window holds one call's input budget plus its output cap. */
+    static void verifyContext(int numCtx, ChatProperties limits) {
+        int needed = limits.maxInputTokensPerCall() + limits.maxOutputTokens();
+        if (numCtx < needed) {
+            throw new IllegalStateException("finalysis.ai.ollama.num-ctx " + numCtx + " is smaller than "
+                    + "finalysis.chat.max-input-tokens-per-call " + limits.maxInputTokensPerCall()
+                    + " plus finalysis.chat.max-output-tokens " + limits.maxOutputTokens() + " (" + needed
+                    + "), so Ollama would cut the prompt; raise num-ctx to at least " + needed
+                    + ", or lower those limits");
+        }
     }
 
     /** @param caching whether the loop prices its rounds as asking to cache (input at the cache-write price) */

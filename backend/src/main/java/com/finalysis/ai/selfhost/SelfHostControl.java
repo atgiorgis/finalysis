@@ -223,7 +223,7 @@ public class SelfHostControl implements SelfHostMeter {
     private void warmUp(Start ours, URI base, String model) {
         String note = null;
         try {
-            ollama.warmUp(base, model, properties.warmUpTimeout());
+            ollama.warmUp(base, model, ollamaProperties.numCtx(), properties.warmUpTimeout());
         } catch (RuntimeException e) {
             log.warn("The Self-hosted model didn't load after a start ({})", e.getClass().getSimpleName());
             note = "The model didn't load: " + unreachable(e);
