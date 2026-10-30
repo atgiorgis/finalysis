@@ -9,7 +9,8 @@ backend/      Spring Boot 4 REST API (Java 21, Maven wrapper) — runs on :8080
 frontend/     React 19 + Vite app — runs on :5173, proxies /api to :8080
 sample-data/  Synthetic bank and card statements (see "Sample data")
 postman/      Postman collection and local environment for the API
-scripts/      Developer scripts (dev database reset; scripts/vault/ for the encrypted vault)
+scripts/      Developer scripts (dev database reset; scripts/vault/ for the encrypted vault; scripts/selfhost/)
+infra/        CloudFormation for the self-hosted server (see "Self-hosted")
 tools/        Sample data generator
 compose.yaml  Postgres 17 + pgvector
 ```
@@ -51,6 +52,10 @@ Backend tests always run against a throwaway Testcontainers Postgres and never t
 database. `DevDatabaseGuard` fails any test context whose datasource points at the compose database.
 All test contexts share one container, so `backend/src/test/resources/application.properties` keeps
 each context's connection pool at 3; Spring caches about ten contexts per run.
+
+`CfnLintTest` runs [cfn-lint](https://github.com/aws-cloudformation/cfn-lint) on the self-hosted server's templates
+and is reported as skipped when `cfn-lint` isn't on the PATH. To run it: `pip3 install --user cfn-lint`, then put
+`~/Library/Python/3.9/bin` (or the folder pip names) on the PATH.
 
 ### Postman
 
@@ -1612,6 +1617,93 @@ Java fallback was shown). The dev-to-holdout gap was zero. Details and every run
 - **Cost limits are estimates** from Anthropic's list prices, and conservative: every input token is priced as a cache
   write.
 - **Conversations are stored unencrypted** in Postgres until Phase 8, like the statements.
+
+## Self-hosted
+
+Corgi's **Self-hosted** path runs the same model as Local, through Ollama, on a GPU server in **your own AWS account**,
+reached **only through Tailscale**: the server has no inbound rule, no public port and no SSH. The app holds the
+server's Tailscale name and region only; never a key or an address. Design: [docs/plans/phase-9.md §5](docs/plans/phase-9.md).
+
+**It costs money while it runs**, by the hour (a g6.xlarge is about $0.80/hour on demand in us-east-1), and its disk
+costs a little while it is stopped. Three things keep that bounded: an **idle watchdog** on the server stops it after
+20 minutes without a model request; a **billing alarm** e-mails you when the account's month passes a threshold you
+choose (it lags by hours); and Settings shows the running time and an estimate.
+
+### What's in the repo
+
+| File | What |
+|---|---|
+| `infra/selfhost/finalysis-selfhost.yaml` | The server: a g6.xlarge (or g5.xlarge) from the AWS Deep Learning Base GPU AMI (Ubuntu 24.04), an encrypted gp3 disk, IMDSv2, a security group with no inbound rules, a role that can use Session Manager and read one SSM parameter. Its first boot installs Ollama and Tailscale, pulls the chat model and `nomic-embed-text`, binds Ollama to the Tailscale address only (and `ufw` allows port 11434 on `tailscale0` only), installs the watchdog, then signals the stack (30-minute limit). A shutdown stops the instance; it never terminates it. |
+| `infra/selfhost/finalysis-selfhost-billing.yaml` | The billing alarm: a CloudWatch alarm on `EstimatedCharges` and an SNS e-mail subscription, always in us-east-1 (billing metrics exist only there). |
+| `infra/selfhost/idle-watchdog.sh` | The watchdog, run every minute by a systemd timer: it counts only `POST /api/chat`, `/api/generate` and `/api/embed` in Ollama's log (status checks don't count) and powers off after 20 minutes without one, never in the first 20 minutes after boot. |
+| `scripts/selfhost/create.sh` | Checks the GPU quota, deploys the billing stack, stores the Tailscale key for the first boot, deploys the server, deletes the key, prints what to do next. `--plan` runs the read-only checks and prints every change without making it. |
+| `scripts/selfhost/destroy.sh` | Deletes the server stack (instance, disk, role), a leftover key parameter and the billing stack. `--plan` as above. |
+
+### Before the first `create.sh`
+
+No script does these for you:
+
+1. **An AWS account**, and admin credentials for the AWS CLI v2 on this Mac (your own, not the app's `finalysis-dev`).
+2. **A GPU quota**: Service Quotas → Amazon EC2 → "Running On-Demand G and VT instances" (`L-DB2E81BA`), at least
+   **4 vCPUs** in the region you'll use. New accounts start at 0 and approval can take days. `create.sh` checks it and
+   prints the request link if it's short.
+3. **Receive Billing Alerts**: Billing → Billing preferences → turn on "Receive CloudWatch billing alerts". Without it
+   the billing metric doesn't exist and the alarm never fires. Billing metrics live in us-east-1, so the alarm is there
+   whatever the server's region.
+4. **A Tailscale account** with this Mac in the tailnet (Tailscale's Mac app, signed in).
+5. **A Tailscale auth key**: one-off (not reusable), **pre-approved**, **tagged** (for example `tag:finalysis`), with
+   the **shortest expiry** Tailscale offers. `create.sh` reads it hidden from the keyboard; it is never a command-line
+   argument, never in the template, user data or logs, and is deleted from AWS as soon as the server has joined.
+6. **A tailnet policy** that owns the tag and lets only your devices reach it on port 11434, for example:
+   ```json
+   "tagOwners": {"tag:finalysis": ["autogroup:admin"]},
+   "acls": [{"action": "accept", "src": ["autogroup:member"], "dst": ["tag:finalysis:11434"]}]
+   ```
+7. The **Ollama tag** of the chat model you'll use (the same as `finalysis.ai.ollama.models.chat`).
+
+### Create
+
+```sh
+scripts/selfhost/create.sh --plan    # optional: the checks and the calls, nothing created
+scripts/selfhost/create.sh
+```
+
+It asks for the region, the instance type, the model tag, the alarm threshold and e-mail, then the key. The first boot
+takes a while (drivers check, Ollama, Tailscale, model downloads); the stack completes only when all of it worked.
+
+### After `create.sh`
+
+1. **Confirm the SNS subscription**: AWS e-mails a link; the alarm reaches no one until it is used.
+2. **Add the IAM statements** `create.sh` prints to the customer-managed policy `finalysis-dev-policy` (attached to
+   `finalysis-dev`). They allow Start and Stop only for instances tagged `finalysis:role=selfhost`, and
+   `DescribeInstances`, which EC2 can't limit to a resource or tag (read-only):
+   ```json
+   {
+     "Sid": "FinalysisSelfHostStartStop",
+     "Effect": "Allow",
+     "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+     "Resource": "arn:aws:ec2:<region>:<account>:instance/*",
+     "Condition": {"StringEquals": {"aws:ResourceTag/finalysis:role": "selfhost"}}
+   },
+   {
+     "Sid": "FinalysisSelfHostDescribe",
+     "Effect": "Allow",
+     "Action": "ec2:DescribeInstances",
+     "Resource": "*"
+   }
+   ```
+   No `RunInstances`, no `TerminateInstances`: creating and destroying stay the scripts', with your credentials.
+3. In Finalysis: Settings → Corgi → Self-hosted: Tailscale name `finalysis-selfhost`, and the region.
+
+### Destroy
+
+```sh
+scripts/selfhost/destroy.sh
+```
+
+It asks for the region and for `destroy` to confirm, then deletes everything it created. Then remove
+`finalysis-selfhost` from the tailnet (admin console → Machines) and, if no server will come back, the two statements
+from `finalysis-dev-policy`.
 
 ## Security
 

@@ -987,6 +987,136 @@ and no letter left, and the attribution and Settings show it too; `ChatPage.test
 checks follow. test:layout: the face in the chat header (40 px) and on an answer (32 px), with the name after it on the
 same line, the page fitting at 375 and 1280 px in both themes, and the fur fixed while the background follows the theme.
 
+### Step 9c-1 notes: the template, the watchdog and the scripts (infra)
+
+Done in code: "Phase 9 step 9c-1: the self-hosted server's template, idle watchdog and scripts". 9c is three commits,
+decided at the 9c plan (2026-10-30): 9c-1 infra and scripts, 9c-2 the backend (`com.finalysis.ai.selfhost`), 9c-3
+Settings → Corgi → Self-hosted. Backend 3,688 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,634 at 9b-3
+plus the 54 below; the skip is `CfnLintTest`, cfn-lint not being on this Mac's PATH); frontend 342 tests (33 files), all passed (unchanged); no UI change, so
+no layout run. Nothing was run against AWS or Tailscale: every script test uses a fake `aws`.
+
+Decided at the 9c plan (2026-10-30):
+
+- **Amendment to §5.1: the billing alarm is always its own small stack in us-east-1**
+  (`infra/selfhost/finalysis-selfhost-billing.yaml`, stack `finalysis-selfhost-billing`), whatever the server's region:
+  one definition, and `destroy.sh` treats every region the same. `BillingAlarmUsd` and `AlarmEmail` are that stack's
+  parameters, not the server's. A template rule refuses any region but us-east-1.
+- **Hourly rates** (for 9c-2): g6.xlarge 0.8048, g5.xlarge 1.006, us-east-1 on-demand Linux, marked "check the EC2
+  pricing page"; the owner confirms them before 9c-2's review.
+- **Disk size** for the stopped-storage note: the instance carries the tag `finalysis:root-volume-gb` from
+  `RootVolumeGb`, read through `DescribeInstances`; no `DescribeVolumes`.
+- **Turns from history** on Self-hosted keep the fixed note "Self-hosted cost is the server's running time"; only the
+  live turn shows the running line (9c-2). No migration.
+- **`ChatModel`** defaults to the backend's placeholder `finalysis-unset-chat-model`; `create.sh` asks for the tag and
+  refuses the placeholder, and the first boot refuses it too, so a stack can't complete without a model.
+- **IAM**: `instance/*` with the tag condition, as §5.4 says; the instance id is printed on its own line.
+- `--plan` prints the quota code and the image's SSM parameter (with the AMI id it resolves to), the two things the fake
+  `aws` can't verify, so the owner's first real run shows them before anything is created.
+
+**The template** (`infra/selfhost/finalysis-selfhost.yaml`), as §5.1 with these specifics:
+
+- The image is the **Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 24.04)**, from
+  `/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id` (checked against AWS's
+  DLAMI page on 2026-10-30; it lists G5 and G6 as supported). `create.sh` resolves the same parameter first, so a wrong
+  path stops before anything is created.
+- **Added: an `AvailabilityZone` parameter.** Not every zone offers G instances, and an instance without a subnet lands
+  in whichever zone EC2 picks; `create.sh` picks the first zone that offers the chosen type
+  (`describe-instance-type-offerings`), and the instance takes the default VPC's subnet there.
+- IMDSv2 through a launch template (`AWS::EC2::Instance` has no metadata options of its own). The security group has no
+  ingress and keeps the default all-outbound rule; it has no `VpcId`, so it is the default VPC's, and the instance
+  references it by `GroupId`.
+- The role: `AmazonSSMManagedInstanceCore` and `ssm:GetParameter` on the one key parameter. No KMS statement: the
+  AWS-managed `aws/ssm` key lets the account decrypt through SSM. `cfn-signal` needs no permission.
+- **User data**: a `!Sub` header that only sets four shell variables (model tag, key parameter name, stack, region;
+  both parameters have patterns that keep them inside single quotes), then a plain-text body that is never
+  substituted. Steps: the CloudFormation helper (in a venv, Ubuntu 24.04 refuses system pip), the `nvidia-smi` check,
+  the placeholder check, the AWS CLI if missing, Ollama, both pulls, Tailscale, the key (read once into
+  `/run/finalysis/tailscale-auth-key` with `umask 077`, `tailscale up --auth-key=file:…`, deleted; a failure deletes
+  it too), the bind unit and drop-in (and a check that Ollama answers on the Tailscale address and no longer on
+  127.0.0.1), `ufw`, the watchdog, then one load of the chat model, then the success signal. Any failure sends a failure
+  signal naming the step. Nothing runs with tracing on.
+- **The first boot loads the chat model once** (`POST /api/generate` with the model and no prompt) after the watchdog is
+  installed and before the signal. It proves the model loads, and it counts as a model request, so a first boot longer
+  than 20 minutes still leaves the owner 20 minutes before the watchdog can stop the server.
+
+**The watchdog** (`infra/selfhost/idle-watchdog.sh`): every minute, nothing before 20 minutes of uptime; then
+`journalctl --unit=ollama --since=@<now-1200> --output=short-unix`, filtered again on journald's timestamps, counting
+`[GIN]` lines with `POST` to `"/api/chat"`, `"/api/generate"` or `"/api/embed"`; none → `systemctl poweroff`. A journal
+that can't be read logs that and doesn't power off (the billing alarm is the backstop). The template carries the file
+byte for byte; a test compares them.
+
+**The scripts** (`scripts/selfhost/`), bash 3.2, the AWS CLI's `--query` instead of jq:
+
+- `create.sh` order: region → `sts get-caller-identity` → the server stack's state (an existing complete stack is left
+  as it is and no key is asked; a failed or busy one stops) → instance type and model tag → the quota (falls back to the
+  default quota when none is applied; below 4 vCPUs it stops with the request link) → the image parameter → the zone →
+  threshold and e-mail → the key (`read -rs`, checked against `^tskey-[A-Za-z0-9-]+$`, so it never needs JSON escaping)
+  → the billing stack → `put-parameter` with `--cli-input-json file:///dev/stdin`, the JSON written by `printf` (a
+  builtin) into the pipe → the server stack (`deploy` waits for the signal) → `delete-parameter` → the outputs. An
+  `EXIT` trap deletes the key parameter on any failure once it is stored.
+- `destroy.sh`: region, then `destroy` typed to confirm; the server stack (delete and wait), the key parameter if
+  `describe-parameters` finds it (its value is never read), the billing stack; reminds the owner to remove the node from
+  the tailnet.
+- `--plan` on both: read-only calls run, changes are printed as `[plan] aws …`; `create.sh --plan` asks no key.
+
+**IAM additions for `finalysis-dev-policy`** (printed by `create.sh` with the region and account filled in; also in the
+README's "Self-hosted"):
+
+```json
+{
+  "Sid": "FinalysisSelfHostStartStop",
+  "Effect": "Allow",
+  "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+  "Resource": "arn:aws:ec2:<region>:<account>:instance/*",
+  "Condition": {"StringEquals": {"aws:ResourceTag/finalysis:role": "selfhost"}}
+},
+{
+  "Sid": "FinalysisSelfHostDescribe",
+  "Effect": "Allow",
+  "Action": "ec2:DescribeInstances",
+  "Resource": "*"
+}
+```
+
+**Tests** (54, in `com.finalysis.ai.selfhost`): `SelfHostTemplateTest` (22) parses both templates with a SnakeYAML
+constructor for the short-form functions, and checks every point of §5.6, plus the header that only sets variables, the
+key's file handling in order, the bind units, a single `ufw allow`, the watchdog copy, the load before the signal, and
+`bash -n` on the assembled user data. `CfnLintTest` (1) requires no error and no warning, and is skipped without
+`cfn-lint` on the PATH (it was skipped in the run above; it passed with cfn-lint 1.46.0 from a throwaway venv, and so
+did the templates by hand). `IdleWatchdogScriptTest` (9): fake `journalctl`, `systemctl` and `logger`; the boot guard;
+status checks alone stop at 20 minutes; a chat resets; generate and embed count; `/api/show`, `/api/pull`, `GET
+/api/chat` and lines that aren't request logs don't; old lines are filtered; the journal's arguments; a broken journal
+never powers off; a whole session minute by minute stops at the first tick 20 minutes after the last request.
+`SelfHostScriptsTest` (22): a fake `aws` keeping stacks and the parameter as files, and logging wrappers for every other
+tool the scripts run; the calls in order; the printed outputs; the key only in `put-parameter`'s stdin JSON and in no
+argument of any process or the output (a mutation that adds it as an argument is caught); `--plan` makes no change and
+asks no key; the quota refusal (and the default quota's 0); the placeholder, a non-key and bad answers refused; a failed
+server stack still deletes the key; a second run asks no key and only redeploys the billing stack; a failed stack needs
+destroy first; another region keeps billing in us-east-1; `destroy.sh`'s order, its confirmation, its second run and
+its `--plan`.
+
+**A frontend failure seen once** (no frontend change in this step): the first `npm test`, run while `./mvnw clean
+verify` was running, had three failures: "setup: two sentences, the password twice, then the key once; the app opens
+only after the last group" (`VaultGate.test.tsx`, timed out at 5 s), "setup shows the backend's refusal in its own
+words" (`VaultGate.test.tsx`, it saw the previous test's text, a knock-on of that timeout) and "Self-hosted needs a
+Tailscale name, never a web address, and a region like the backend takes it" (`CorgiSettings.test.tsx`, timed out at
+5 s). All passed on the next full run, made alone. That `vitest.json` was kept outside the repo, in the session's
+scratch folder. Like 7e's, the failures look like timeouts under load, not regressions.
+
+**For the owner after 9c-3** (§5.7; these need the server, so after 9c-2 and 9c-3 are in):
+
+1. The §12 / README "Before the first `create.sh`" steps, then `scripts/selfhost/create.sh --plan`; check the quota
+   code and the image line, then `scripts/selfhost/create.sh`; confirm the SNS e-mail; add the IAM statements.
+2. Settings → Corgi → Self-hosted: name `finalysis-selfhost`, the region; Test; Start.
+3. The dev set against the server for the comparison row:
+   `-Deval.provider=ollama -Deval.baseUrl=http://finalysis-selfhost:11434 -Deval.model=<the tag>`.
+4. The nomic search-floor sweep (`chat-sweep-dev`) on Self-hosted, to set `min-similarity-by-model` for
+   `nomic-embed-text` (0.40 provisional) and, if it differs a lot, to decide about the categorization examples' global
+   floor (§10).
+5. A categorization run on the sample data with timing: calls, items, ms per 25-merchant batch, from `AiCallLog`'s
+   lines.
+6. Stop from Settings when done (or let the watchdog do it); `destroy.sh` when the server isn't needed any more.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

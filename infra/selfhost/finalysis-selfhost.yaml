@@ -1,0 +1,372 @@
+AWSTemplateFormatVersion: '2010-09-09'
+# The Finalysis self-hosted server (docs/plans/phase-9.md §5): one GPU instance running Ollama, reachable only
+# through Tailscale. No inbound rule, no public port, no SSH (admin through SSM Session Manager). Created and
+# destroyed by scripts/selfhost/create.sh and destroy.sh, run by the owner with their own admin credentials. The
+# billing alarm is its own stack in us-east-1 (finalysis-selfhost-billing.yaml).
+#
+# The Tailscale auth key is never in this template, its parameters, its outputs or the user data: create.sh stores it
+# as an SSM SecureString, the first boot reads it once into a file under /run and deletes it, and create.sh deletes
+# the parameter when the stack is done (§5.2). SelfHostTemplateTest and cfn-lint check this file.
+Description: >-
+  Finalysis self-hosted server: one GPU instance running Ollama, reached only through Tailscale
+  (docs/plans/phase-9.md section 5).
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: g6.xlarge
+    AllowedValues:
+      - g6.xlarge
+      - g5.xlarge
+    Description: The GPU instance type. Each has an hourly rate in finalysis.ai.selfhost.hourly-rates.
+  ChatModel:
+    Type: String
+    Default: finalysis-unset-chat-model
+    AllowedPattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$'
+    ConstraintDescription: 'an Ollama model tag (letters, digits and . _ : / -)'
+    Description: >-
+      The Ollama tag of the chat and categorization model. The default is a placeholder that the first boot refuses;
+      create.sh asks for the tag.
+  RootVolumeGb:
+    Type: Number
+    Default: 80
+    MinValue: 60
+    MaxValue: 500
+    Description: The root disk in GB (drivers, CUDA, the model, nomic-embed-text, headroom). Billed while stopped too.
+  TailscaleKeyParameter:
+    Type: String
+    Default: /finalysis/selfhost/tailscale-auth-key
+    AllowedPattern: '^/[A-Za-z0-9/_.-]{1,200}$'
+    Description: The NAME of the SSM SecureString parameter that holds the Tailscale auth key, never the key itself.
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: A zone that offers the instance type (create.sh picks one); the default VPC's subnet there is used.
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id
+    Description: >-
+      The AWS Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 24.04), NVIDIA drivers preinstalled, from its
+      public SSM parameter so it resolves per region.
+
+Resources:
+  ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Finalysis self-hosted server - Session Manager, and reading the one Tailscale key parameter
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # The AWS-managed aws/ssm key already lets the account decrypt through SSM, so no KMS statement is needed.
+      Policies:
+        - PolicyName: read-tailscale-key-parameter
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${TailscaleKeyParameter}
+
+  ServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ServerRole
+
+  # No inbound rules: the server is reached through Tailscale only. Outbound stays open (the default) for Tailscale,
+  # packages and model downloads. No VpcId, so the group is in the default VPC.
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Finalysis self-hosted server - no inbound rules, reached through Tailscale only
+
+  # AWS::EC2::Instance has no metadata options of its own; IMDSv2 is required through this launch template.
+  ServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+
+  Server:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT30M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref ServerLaunchTemplate
+        Version: !GetAtt ServerLaunchTemplate.LatestVersionNumber
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref ServerInstanceProfile
+      SecurityGroupIds:
+        - !GetAtt ServerSecurityGroup.GroupId
+      # The idle watchdog's poweroff stops the instance (the disk is kept); it never terminates it.
+      InstanceInitiatedShutdownBehavior: stop
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: !Ref RootVolumeGb
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: finalysis-selfhost
+        - Key: finalysis:role
+          Value: selfhost
+        # Read by the app (DescribeInstances returns tags) for the stopped-storage note, with no extra permission.
+        - Key: finalysis:root-volume-gb
+          Value: !Ref RootVolumeGb
+      # First boot only. The !Sub part sets the stack's values; the rest is plain text, never substituted, and carries
+      # infra/selfhost/idle-watchdog.sh byte for byte.
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ''
+            - - !Sub |
+                #!/bin/bash
+                # Finalysis self-hosted server, first boot (docs/plans/phase-9.md section 5.1).
+                CHAT_MODEL='${ChatModel}'
+                KEY_PARAMETER='${TailscaleKeyParameter}'
+                STACK='${AWS::StackName}'
+                REGION='${AWS::Region}'
+              - |
+                # Nothing here runs with tracing on (set -x), so the Tailscale key never reaches cloud-init's log.
+                set -euo pipefail
+                set +x
+
+                EMBED_MODEL=nomic-embed-text
+                TAILSCALE_NAME=finalysis-selfhost
+                KEY_FILE=/run/finalysis/tailscale-auth-key
+                STEP="starting"
+
+                signal() {
+                    /opt/aws-cfn/bin/cfn-signal --exit-code "$1" --reason "$2" --stack "$STACK" --resource Server \
+                        --region "$REGION" || true
+                }
+
+                fail() {
+                    trap - ERR
+                    rm -f "$KEY_FILE"
+                    signal 1 "$1"
+                    exit 1
+                }
+
+                trap 'fail "First boot failed while $STEP"' ERR
+
+                STEP="installing the CloudFormation helper"
+                export DEBIAN_FRONTEND=noninteractive
+                APT="apt-get -q -y -o DPkg::Lock::Timeout=600"
+                $APT update
+                $APT install python3-venv curl unzip ufw
+                python3 -m venv /opt/aws-cfn
+                /opt/aws-cfn/bin/pip install -q https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+
+                STEP="checking the GPU"
+                if ! nvidia-smi -L | grep -q '^GPU '; then
+                    fail "nvidia-smi sees no GPU"
+                fi
+
+                if [ "$CHAT_MODEL" = finalysis-unset-chat-model ]; then
+                    fail "No chat model chosen: ChatModel is the placeholder finalysis-unset-chat-model"
+                fi
+
+                STEP="installing the AWS CLI"
+                if ! command -v aws >/dev/null; then
+                    curl -fsSL -o /tmp/awscliv2.zip https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+                    unzip -q /tmp/awscliv2.zip -d /tmp
+                    /tmp/aws/install
+                    rm -rf /tmp/aws /tmp/awscliv2.zip
+                fi
+
+                STEP="installing Ollama"
+                curl -fsSL https://ollama.com/install.sh | sh
+                for _ in $(seq 1 30); do
+                    curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
+                    sleep 2
+                done
+
+                STEP="pulling the models"
+                ollama pull "$CHAT_MODEL" >/dev/null || fail "ollama pull $CHAT_MODEL failed"
+                ollama pull "$EMBED_MODEL" >/dev/null || fail "ollama pull $EMBED_MODEL failed"
+
+                STEP="installing Tailscale"
+                curl -fsSL https://tailscale.com/install.sh | sh
+                systemctl enable --now tailscaled
+
+                # The key: read once from SSM into a mode-600 file in memory (/run), used as a file (never an
+                # argument), then deleted. The instance stays in the tailnet across stops, so it is never needed again.
+                STEP="joining the tailnet"
+                umask 077
+                mkdir -p /run/finalysis
+                aws ssm get-parameter --region "$REGION" --name "$KEY_PARAMETER" --with-decryption \
+                    --query Parameter.Value --output text > "$KEY_FILE" \
+                    || fail "Could not read the Tailscale key parameter $KEY_PARAMETER"
+                tailscale up --auth-key="file:$KEY_FILE" --hostname="$TAILSCALE_NAME" || fail "tailscale up failed"
+                rm -f "$KEY_FILE"
+                umask 022
+
+                # Ollama listens on the Tailscale address only: a one-shot unit, ordered after tailscaled, writes
+                # OLLAMA_HOST to a file in /run that a drop-in for ollama.service reads, on every boot.
+                STEP="binding Ollama to the Tailscale address"
+                cat > /usr/local/sbin/finalysis-ollama-bind <<'BIND'
+                #!/bin/bash
+                # Writes Ollama's listen address: this server's Tailscale IPv4, port 11434, nothing else.
+                set -euo pipefail
+                ip=""
+                for _ in $(seq 1 90); do
+                    ip=$(tailscale ip -4 2>/dev/null | head -n 1 || true)
+                    [ -n "$ip" ] && break
+                    sleep 2
+                done
+                if [ -z "$ip" ]; then
+                    echo "No Tailscale IPv4 address after 180 s" >&2
+                    exit 1
+                fi
+                mkdir -p /run/finalysis
+                printf 'OLLAMA_HOST=%s:11434\n' "$ip" > /run/finalysis/ollama.env
+                BIND
+                chmod 755 /usr/local/sbin/finalysis-ollama-bind
+                cat > /etc/systemd/system/finalysis-ollama-bind.service <<'UNIT'
+                [Unit]
+                Description=Finalysis: bind Ollama to the Tailscale address
+                Wants=tailscaled.service
+                After=tailscaled.service
+                Before=ollama.service
+
+                [Service]
+                Type=oneshot
+                RemainAfterExit=yes
+                ExecStart=/usr/local/sbin/finalysis-ollama-bind
+
+                [Install]
+                WantedBy=multi-user.target
+                UNIT
+                mkdir -p /etc/systemd/system/ollama.service.d
+                cat > /etc/systemd/system/ollama.service.d/finalysis-bind.conf <<'UNIT'
+                [Unit]
+                Requires=finalysis-ollama-bind.service
+                After=finalysis-ollama-bind.service
+
+                [Service]
+                EnvironmentFile=/run/finalysis/ollama.env
+                UNIT
+                systemctl daemon-reload
+                systemctl enable finalysis-ollama-bind.service
+                systemctl start finalysis-ollama-bind.service
+                systemctl restart ollama
+                TS_IP=$(tailscale ip -4 | head -n 1)
+                for _ in $(seq 1 30); do
+                    curl -fsS "http://$TS_IP:11434/api/version" >/dev/null 2>&1 && break
+                    sleep 2
+                done
+                curl -fsS "http://$TS_IP:11434/api/version" >/dev/null || fail "Ollama doesn't answer on the Tailscale address"
+                if curl -fsS --max-time 3 http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+                    fail "Ollama still answers on 127.0.0.1"
+                fi
+
+                # A second layer behind the empty security group: 11434 on tailscale0 only, nothing else inbound.
+                STEP="setting the host firewall"
+                ufw default deny incoming
+                ufw default allow outgoing
+                ufw allow in on tailscale0 to any port 11434 proto tcp
+                ufw --force enable
+
+                STEP="installing the idle watchdog"
+                cat > /usr/local/sbin/finalysis-idle-watchdog <<'WATCHDOG'
+                #!/bin/bash
+                # Finalysis idle watchdog (docs/plans/phase-9.md §5.1). A systemd timer runs it every minute on the self-hosted
+                # server. It powers the machine off after 20 minutes without a model request, and never in the first 20 minutes
+                # after boot. The template sets the shutdown behaviour to "stop", so poweroff stops the instance: the disk is kept
+                # and no IAM permission is needed.
+                #
+                # A model request is a [GIN] line in Ollama's journal for POST /api/chat, /api/generate or /api/embed. The app's
+                # status checks (/api/version, /api/tags, /api/ps) don't count, or the Test button would keep the server running.
+                # Times are journald's own (short-unix), not the [GIN] line's local time.
+                #
+                # If the journal can't be read, it logs that and does nothing, so a broken journal never powers off a busy server;
+                # the billing alarm is the backstop then.
+                #
+                # The template carries this file byte for byte (SelfHostTemplateTest checks they match). The WATCHDOG_* variables
+                # exist for that test only.
+                set -euo pipefail
+
+                IDLE_SECONDS=1200
+
+                now=${WATCHDOG_NOW:-$(date +%s)}
+                uptime_file=${WATCHDOG_UPTIME_FILE:-/proc/uptime}
+
+                up=$(cut -d ' ' -f 1 "$uptime_file")
+                up=${up%%.*}
+                if [ "$up" -lt "$IDLE_SECONDS" ]; then
+                    exit 0
+                fi
+
+                since=$((now - IDLE_SECONDS))
+                if ! journal=$(journalctl --unit=ollama --since="@$since" --output=short-unix --no-pager --quiet); then
+                    logger -t finalysis-idle-watchdog "Could not read Ollama's journal; not powering off."
+                    exit 1
+                fi
+
+                requests=$(printf '%s\n' "$journal" | awk -v since="$since" '
+                    { t = $1; sub(/\..*/, "", t) }
+                    t + 0 >= since && /\[GIN\]/ && /POST +"\/api\/(chat|generate|embed)"/ { n++ }
+                    END { print n + 0 }')
+
+                if [ "$requests" -gt 0 ]; then
+                    exit 0
+                fi
+
+                logger -t finalysis-idle-watchdog "No model request for 20 minutes; powering off (the instance stops)."
+                systemctl poweroff
+                WATCHDOG
+                chmod 755 /usr/local/sbin/finalysis-idle-watchdog
+                cat > /etc/systemd/system/finalysis-idle-watchdog.service <<'UNIT'
+                [Unit]
+                Description=Finalysis: power off after 20 minutes without a model request
+
+                [Service]
+                Type=oneshot
+                ExecStart=/usr/local/sbin/finalysis-idle-watchdog
+                UNIT
+                cat > /etc/systemd/system/finalysis-idle-watchdog.timer <<'UNIT'
+                [Unit]
+                Description=Finalysis: run the idle watchdog every minute
+
+                [Timer]
+                OnBootSec=1min
+                OnUnitActiveSec=1min
+                AccuracySec=5s
+
+                [Install]
+                WantedBy=timers.target
+                UNIT
+                systemctl daemon-reload
+                systemctl enable --now finalysis-idle-watchdog.timer
+
+                # Load the chat model once: proves it runs, and counts as a model request, so a first boot longer
+                # than 20 minutes still leaves the owner 20 minutes before the watchdog can stop the server.
+                STEP="loading the chat model"
+                curl -fsS --max-time 600 "http://$TS_IP:11434/api/generate" -d "{\"model\":\"$CHAT_MODEL\"}" >/dev/null
+
+                trap - ERR
+                signal 0 "Ready: Ollama on the Tailscale address, $CHAT_MODEL and $EMBED_MODEL pulled, idle watchdog on"
+
+Outputs:
+  InstanceId:
+    Description: The server's instance id (the app finds it by the tag finalysis:role=selfhost).
+    Value: !Ref Server
+  TailscaleName:
+    Description: The server's name in the tailnet, for Settings, Corgi, Self-hosted.
+    Value: finalysis-selfhost

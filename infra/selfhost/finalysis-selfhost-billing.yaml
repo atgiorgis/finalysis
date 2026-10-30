@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+# The self-hosted server's billing alarm (docs/plans/phase-9.md §5.1, amended at 9c-1): always its own small stack in
+# us-east-1, whatever the server's region, because AWS publishes billing metrics only there. One definition, so
+# create.sh and destroy.sh treat every region the same.
+#
+# The metric exists only after "Receive Billing Alerts" is turned on in the account (Billing, Billing preferences); that
+# is a manual step, printed by create.sh. EstimatedCharges is the whole account's month-to-date estimate, not this
+# server's alone, and it lags by hours.
+Description: >-
+  Finalysis self-hosted server: a CloudWatch alarm on the account's EstimatedCharges, with an SNS e-mail
+  (docs/plans/phase-9.md section 5.1).
+
+Parameters:
+  BillingAlarmUsd:
+    Type: Number
+    MinValue: 1
+    MaxValue: 100000
+    Description: The alarm fires when the account's estimated charges this month pass this many US dollars.
+  AlarmEmail:
+    Type: String
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: an e-mail address
+    Description: Where the alarm is sent. AWS e-mails a confirmation link first; the alarm reaches no one until it is used.
+
+Rules:
+  BillingMetricsLiveInUsEast1:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-east-1]
+        AssertDescription: Billing metrics exist only in us-east-1, so this stack goes there.
+
+Resources:
+  BillingTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Finalysis billing alarm
+
+  BillingSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+      TopicArn: !Ref BillingTopic
+
+  BillingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >-
+        The account's estimated charges this month passed the threshold set by scripts/selfhost/create.sh. Check that
+        the Finalysis self-hosted server is stopped.
+      Namespace: AWS/Billing
+      MetricName: EstimatedCharges
+      Dimensions:
+        - Name: Currency
+          Value: USD
+      Statistic: Maximum
+      Period: 21600
+      EvaluationPeriods: 1
+      Threshold: !Ref BillingAlarmUsd
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref BillingTopic
+
+Outputs:
+  BillingTopicArn:
+    Description: The topic the alarm e-mails through.
+    Value: !Ref BillingTopic
