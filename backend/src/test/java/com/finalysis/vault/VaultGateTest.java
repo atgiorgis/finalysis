@@ -91,7 +91,8 @@ class VaultGateTest {
             }
         }
         assertThat(checked).hasSizeGreaterThan(40).contains("GET /api/accounts", "POST /api/vault/password",
-                "POST /api/vault/activity", "PUT /api/settings/ai");
+                "POST /api/vault/activity", "PUT /api/settings/ai", "GET /api/selfhost", "POST /api/selfhost/start",
+                "POST /api/selfhost/stop", "POST /api/selfhost/test");
         // Every allowlisted endpoint that is a controller mapping was found (health is actuator's).
         assertThat(allowedSeen).containsExactlyInAnyOrder("GET /api/status", "POST /api/vault/setup",
                 "POST /api/vault/unlock", "POST /api/vault/recover", "POST /api/vault/lock");

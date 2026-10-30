@@ -60,6 +60,8 @@ class PackageDependencyTest {
             "software.amazon.."};
     static final String[] OLLAMA_CLASSES = {"org.springframework.ai.ollama..", "org.springframework.ai.model.ollama.."};
     static final String OUTBOUND = "com.finalysis.ai.outbound..";
+    static final String SELFHOST = "com.finalysis.ai.selfhost..";
+    static final String EC2_CLASSES = "software.amazon.awssdk.services.ec2..";
 
     static final ArchRule INGESTION_KNOWS_NO_TRANSFERS_OR_REVIEW = noClasses()
             .that().resideInAPackage("com.finalysis.ingestion..")
@@ -146,7 +148,7 @@ class PackageDependencyTest {
      */
     static final ArchRule NO_PROVIDER_IN_CODE = noClasses()
             .that().resideInAPackage("com.finalysis..")
-            .and().resideOutsideOfPackages(BEDROCK_CONFIG, OLLAMA_CLIENTS)
+            .and().resideOutsideOfPackages(BEDROCK_CONFIG, OLLAMA_CLIENTS, SELFHOST)
             .should().dependOnClassesThat().resideInAnyPackage(BEDROCK_CLASSES)
             .orShould().dependOnClassesThat().resideInAnyPackage(OLLAMA_CLASSES)
             .because("code depends only on Spring AI's interfaces; providers live in their own packages");
@@ -171,6 +173,27 @@ class PackageDependencyTest {
             .that().resideOutsideOfPackage(OLLAMA_CLIENTS)
             .should().dependOnClassesThat().resideInAPackage(OLLAMA_CLIENTS)
             .because("the Ollama clients are built behind com.finalysis.ai's OllamaClients interface");
+
+    /**
+     * Phase 9 step 9c (docs/plans/phase-9.md §5.4): the AWS SDK's EC2 classes only in {@code com.finalysis.ai.selfhost},
+     * which uses no model provider; nothing outside it depends on it (chat reads the cost through {@code SelfHostMeter}).
+     */
+    static final ArchRule EC2_ONLY_IN_SELFHOST = noClasses()
+            .that().resideOutsideOfPackage(SELFHOST)
+            .should().dependOnClassesThat().resideInAPackage(EC2_CLASSES)
+            .because("only the Self-hosted controls talk to EC2");
+
+    static final ArchRule SELFHOST_USES_NO_MODEL_PROVIDER = noClasses()
+            .that().resideInAPackage(SELFHOST)
+            .should().dependOnClassesThat().resideInAnyPackage("org.springframework.ai..",
+                    "software.amazon.awssdk.services.bedrock..", "software.amazon.awssdk.services.bedrockruntime..",
+                    BEDROCK_CONFIG, OLLAMA_CLIENTS)
+            .because("the Self-hosted controls start and stop a server; Ollama is reached through OllamaClients");
+
+    static final ArchRule NOTHING_DEPENDS_ON_SELFHOST = noClasses()
+            .that().resideOutsideOfPackage(SELFHOST)
+            .should().dependOnClassesThat().resideInAPackage(SELFHOST)
+            .because("features read the server's cost through com.finalysis.ai's SelfHostMeter");
 
     /** Phase 9: no feature depends on a provider package, only on {@code com.finalysis.ai}'s interfaces. */
     static final ArchRule NO_FEATURE_DEPENDS_ON_A_PROVIDER_PACKAGE = noClasses()
@@ -232,6 +255,7 @@ class PackageDependencyTest {
         assertThat(app.contain(CategorizationModelClient.class)).isTrue();
         assertThat(app.contain(AiProperties.class)).isTrue();
         assertThat(app.contain(BedrockClientConfiguration.class)).isTrue();
+        assertThat(app.contain(com.finalysis.ai.selfhost.SelfHostControl.class)).isTrue();
         assertThat(app.contain(TxnBucketSql.class)).isTrue();
     }
 
@@ -263,6 +287,13 @@ class PackageDependencyTest {
         NOTHING_DEPENDS_ON_PROVIDER_CONFIG.check(app);
         NOTHING_DEPENDS_ON_THE_OLLAMA_PACKAGE.check(app);
         NO_FEATURE_DEPENDS_ON_A_PROVIDER_PACKAGE.check(app);
+    }
+
+    @Test
+    void ec2OnlyInTheSelfHostedControls() {
+        EC2_ONLY_IN_SELFHOST.check(app);
+        SELFHOST_USES_NO_MODEL_PROVIDER.check(app);
+        NOTHING_DEPENDS_ON_SELFHOST.check(app);
     }
 
     @Test
@@ -342,6 +373,19 @@ class PackageDependencyTest {
         assertThat(NO_PROVIDER_IN_CODE.evaluate(bedrock).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(sdk).hasViolation()).isTrue();
         assertThat(NO_PROVIDER_IN_CODE.evaluate(springAi).hasViolation()).isFalse();
+    }
+
+    @Test
+    void theEc2RuleFailsOnEc2OutsideTheSelfHostedControls() {
+        JavaClasses ec2 = new ClassFileImporter().importClasses(UsesEc2.class);
+
+        assertThat(EC2_ONLY_IN_SELFHOST.evaluate(ec2).hasViolation()).isTrue();
+        assertThat(NO_PROVIDER_IN_CODE.evaluate(ec2).hasViolation()).isTrue();
+    }
+
+    @SuppressWarnings("unused")
+    static class UsesEc2 {
+        private software.amazon.awssdk.services.ec2.Ec2Client client;
     }
 
     @SuppressWarnings("unused")

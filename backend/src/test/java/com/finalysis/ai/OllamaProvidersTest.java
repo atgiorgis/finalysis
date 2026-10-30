@@ -202,6 +202,37 @@ class OllamaProvidersTest {
         assertThat(stub.requests()).extracting(OllamaStub.Request::path).containsExactly("/api/version", "/api/tags");
     }
 
+    /** Settings' Test button on the Self-hosted server (docs/plans/phase-9.md §5.5): the version alone. */
+    @Test
+    void theVersionAloneIsOneGet() {
+        assertThat(factory().version(stub.baseUrl(), Duration.ofSeconds(1))).isEqualTo(OllamaStub.VERSION);
+        assertThat(stub.requests()).extracting(OllamaStub.Request::method, OllamaStub.Request::path)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("GET", "/api/version"));
+    }
+
+    /** The warm-up after a Self-hosted start sends the model's name and nothing else: no prompt, no user data. */
+    @Test
+    void theWarmUpSendsOnlyTheModelsName() {
+        factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofSeconds(1));
+
+        List<OllamaStub.Request> requests = stub.requests();
+        assertThat(requests).extracting(OllamaStub.Request::method, OllamaStub.Request::path)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("POST", "/api/generate"));
+        assertThat(OllamaStub.fields(requests.getFirst().json())).containsExactly("model");
+        assertThat(requests.getFirst().json().get("model").stringValue()).isEqualTo(CHAT_MODEL);
+    }
+
+    @Test
+    void aWarmUpThatFailsOrTimesOutThrows() {
+        stub.generateReply(OllamaStub.status(404, "model not found"));
+        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofSeconds(1)))
+                .isInstanceOf(RuntimeException.class);
+
+        stub.generateReply(OllamaStub.delayed(OllamaStub.raw("{\"done\":true}"), 2_000));
+        assertThatThrownBy(() -> factory().warmUp(stub.baseUrl(), CHAT_MODEL, Duration.ofMillis(300)))
+                .isInstanceOf(RuntimeException.class);
+    }
+
     @Test
     void aModelCountsAsPulledWithOrWithoutItsLatestTag() {
         assertThat(AiProviders.pulled("nomic-embed-text", List.of("nomic-embed-text:latest"))).isTrue();
@@ -222,6 +253,10 @@ class OllamaProvidersTest {
         assertThatThrownBy(() -> providers(server, Duration.ofSeconds(1)))
                 .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
         assertThatThrownBy(() -> factory().probe(server, Duration.ofSeconds(1)))
+                .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
+        assertThatThrownBy(() -> factory().version(server, Duration.ofSeconds(1)))
+                .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
+        assertThatThrownBy(() -> factory().warmUp(server, CHAT_MODEL, Duration.ofSeconds(1)))
                 .isInstanceOf(NoCloudAiGuard.OllamaCallBlockedError.class);
         assertThat(stub.requests()).isEmpty();
     }

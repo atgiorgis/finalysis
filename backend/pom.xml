@@ -158,6 +158,20 @@
             <version>${aws-sdk.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- EC2 Start, Stop and Describe for the Self-hosted server (docs/plans/phase-9.md §5.4, §5.5), used only in
+             com.finalysis.ai.selfhost (PackageDependencyTest). Its Apache HTTP client is the one Bedrock already uses;
+             the Netty client it would bring is left out. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
+            <version>${aws-sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>

@@ -44,14 +44,16 @@ public record ChatTurnResponse(long conversationId, int turn, String answer, Ans
      * @param cacheWriteTokens the fixed prefix's tokens written to the cache; null as inputTokens
      * @param estimatedCost    dollars, six decimals, each kind of token at its own price, on Cloud; {@code 0.000000} on
      *                         Local; null on Self-hosted, and when a Cloud model has no price
-     * @param costNote         why the cost is null on Self-hosted ({@value #SELF_HOSTED_COST}); null otherwise
+     * @param costNote         on Self-hosted, where the cost is time, not tokens: the server's running line for a turn
+     *                         just answered ("running 42 min · ~$0.70", docs/plans/phase-9.md §4.2), or
+     *                         {@value #SELF_HOSTED_COST} for a turn read back from history or when the running time
+     *                         can't be read; null on the other paths
      */
     public record Usage(String model, AiPath path, int rounds, Integer inputTokens, Integer outputTokens,
                         Integer cacheReadTokens, Integer cacheWriteTokens, int callsWithoutUsage, String estimatedCost,
                         String costNote) {
 
-        public static final String SELF_HOSTED_COST =
-                "Self-hosted cost is the server's running time; it isn't computed yet (step 9c)";
+        public static final String SELF_HOSTED_COST = "Self-hosted cost is the server's running time";
 
         /** The usage of a turn or summary on this path, its cost as stored ({@link ChatConversationStore#storedCost}). */
         public static Usage of(String model, AiPath path, int rounds, Integer inputTokens, Integer outputTokens,
@@ -61,6 +63,15 @@ public record ChatTurnResponse(long conversationId, int turn, String answer, Ans
             return new Usage(model, path, rounds, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
                     callsWithoutUsage, cost == null ? null : cost.setScale(6, RoundingMode.HALF_EVEN).toPlainString(),
                     path == AiPath.SELF_HOSTED ? SELF_HOSTED_COST : null);
+        }
+
+        /** This usage with the Self-hosted server's running line as its cost note, when there is one. */
+        public Usage withRunningLine(String line) {
+            if (path != AiPath.SELF_HOSTED || line == null) {
+                return this;
+            }
+            return new Usage(model, path, rounds, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
+                    callsWithoutUsage, estimatedCost, line);
         }
     }
 

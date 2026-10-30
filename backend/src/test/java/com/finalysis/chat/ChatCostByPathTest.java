@@ -106,7 +106,22 @@ class ChatCostByPathTest {
         ChatTurnResponse.Usage selfHosted = ChatTurnResponse.Usage.of("m", AiPath.SELF_HOSTED, 1, 10, 5, 0, 0, 0, null);
         assertThat(selfHosted.estimatedCost()).isNull();
         assertThat(selfHosted.costNote()).isEqualTo(ChatTurnResponse.Usage.SELF_HOSTED_COST)
-                .contains("running time").contains("9c");
+                .isEqualTo("Self-hosted cost is the server's running time");
         assertThat(selfHosted.path()).isEqualTo(AiPath.SELF_HOSTED);
+    }
+
+    /**
+     * A Self-hosted turn just answered carries the server's running line (docs/plans/phase-9.md §4.2); one read back
+     * from history, or with no line to give, keeps the fixed note. No other path takes a line.
+     */
+    @Test
+    void aLiveSelfHostedTurnShowsTheRunningLine() {
+        ChatTurnResponse.Usage selfHosted = ChatTurnResponse.Usage.of("m", AiPath.SELF_HOSTED, 1, 10, 5, 0, 0, 0, null);
+        assertThat(selfHosted.withRunningLine("running 42 min · ~$0.70").costNote())
+                .isEqualTo("running 42 min · ~$0.70");
+        assertThat(selfHosted.withRunningLine("running 42 min · ~$0.70").estimatedCost()).isNull();
+        assertThat(selfHosted.withRunningLine(null).costNote()).isEqualTo(ChatTurnResponse.Usage.SELF_HOSTED_COST);
+        ChatTurnResponse.Usage local = ChatTurnResponse.Usage.of("m", AiPath.LOCAL, 1, 10, 5, 0, 0, 0, null);
+        assertThat(local.withRunningLine("running 1 min").costNote()).isNull();
     }
 }

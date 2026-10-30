@@ -3,6 +3,7 @@ package com.finalysis.chat;
 import com.finalysis.ai.AiProviders;
 import com.finalysis.ai.ActiveProviders;
 import com.finalysis.ai.AiPath;
+import com.finalysis.ai.SelfHostMeter;
 import com.finalysis.api.InvalidField;
 import com.finalysis.api.InvalidRequestException;
 import com.finalysis.api.NotFoundException;
@@ -65,6 +66,7 @@ public class ChatService {
     private static final TypeReference<List<Citation>> CITATIONS = new TypeReference<>() {
     };
 
+    private final SelfHostMeter selfHost;
     private final ChatModelClient client;
     private final AiProviders providers;
     private final ChatConversationStore store;
@@ -86,7 +88,8 @@ public class ChatService {
                        OutboundTurnFactory turns,
                        QuestionRedactor redactor, ContextBlockFactory context, ChatPayloadGuard guard, ChatPrompt prompt,
                        TurnLoop loop, ConversationMemory memory, CitationResolver citations, ChatProperties limits,
-                       Clock clock, JsonMapper json) {
+                       Clock clock, JsonMapper json, SelfHostMeter selfHost) {
+        this.selfHost = selfHost;
         this.client = client;
         this.providers = providers;
         this.store = store;
@@ -260,7 +263,8 @@ public class ChatService {
                         r.outcome().rows(), r.outcome().millis())).toList(),
                 ChatTurnResponse.Usage.of(client.modelId(), path, result.rounds(), result.inputTokens(),
                         result.outputTokens(), cacheTokens(result, result.cacheReadTokens()),
-                        cacheTokens(result, result.cacheWriteTokens()), result.callsWithoutUsage(), result.cost()),
+                        cacheTokens(result, result.cacheWriteTokens()), result.callsWithoutUsage(), result.cost())
+                        .withRunningLine(path == AiPath.SELF_HOSTED ? selfHost.usage().line() : null),
                 result.limit(),
                 new ChatTurnResponse.Redactions(outbound.aliasesUsed(), outbound.identifiersRemoved(),
                         turn.withheldMerchants(), turn.refusedMerchants()));

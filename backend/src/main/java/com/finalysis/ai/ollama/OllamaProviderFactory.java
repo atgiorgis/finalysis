@@ -27,6 +27,7 @@ import org.springframework.ai.ollama.management.PullModelStrategy;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.core.retry.RetryTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -104,6 +105,24 @@ public class OllamaProviderFactory implements OllamaClients {
         }
         Object reported = version == null ? null : version.get("version");
         return new Probe(reported instanceof String text ? text : "unknown", names);
+    }
+
+    @Override
+    public String version(URI baseUrl, Duration timeout) {
+        check(baseUrl);
+        Map<?, ?> version = restClient(timeout, timeout).baseUrl(baseUrl.toString()).build()
+                .get().uri("/api/version").retrieve().body(Map.class);
+        Object reported = version == null ? null : version.get("version");
+        return reported instanceof String text ? text : "unknown";
+    }
+
+    @Override
+    public void warmUp(URI baseUrl, String model, Duration timeout) {
+        check(baseUrl);
+        // Only the model's name: with no prompt, Ollama loads the model and generates nothing.
+        restClient(timeout, timeout).baseUrl(baseUrl.toString()).build()
+                .post().uri("/api/generate").contentType(MediaType.APPLICATION_JSON).body(Map.of("model", model))
+                .retrieve().toBodilessEntity();
     }
 
     private void check(URI baseUrl) {

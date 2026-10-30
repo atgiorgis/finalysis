@@ -221,6 +221,36 @@ class PhoneAccessTest {
                 .as("localhost stays stateless").isEmpty();
     }
 
+    /**
+     * Start and Stop work from the phone (docs/plans/phase-9.md §5.5, §16 decision 9): behind the login like every
+     * endpoint, then the same answers as on the computer (here without the aws profile: disabled, with the reason).
+     */
+    @Test
+    void theSelfHostedControlsAnswerOnThePhoneOnlyAfterLogin() throws Exception {
+        X509Certificate ca = caOf(turnOn());
+        HttpClient phone = phoneTrusting(ca);
+        String origin = "https://127.0.0.1:" + lanPort;
+
+        assertThat(phone.send(lan("GET", "/api/selfhost", null, null), HttpResponse.BodyHandlers.ofString()).body())
+                .contains("urn:finalysis:problem:login-required");
+        assertThat(phone.send(lan("POST", "/api/selfhost/start", "", origin), HttpResponse.BodyHandlers.ofString())
+                .body()).contains("urn:finalysis:problem:login-required");
+
+        HttpResponse<String> ok = phone.send(lan("POST", "/api/access/login", "{\"password\":\"" + PASSWORD + "\"}",
+                origin), HttpResponse.BodyHandlers.ofString());
+        String cookie = ok.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
+
+        HttpResponse<String> status = phone.send(withCookie(lan("GET", "/api/selfhost", null, null), cookie),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(status.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(status.body()).get("reason").stringValue())
+                .isEqualTo("Start and Stop need the aws profile (Cloud credentials).");
+        HttpResponse<String> start = phone.send(withCookie(lan("POST", "/api/selfhost/start", "", origin), cookie),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(start.statusCode()).isEqualTo(409);
+        assertThat(start.body()).contains("urn:finalysis:problem:selfhost-unavailable");
+    }
+
     @Test
     void logoutFromThePhoneIsLockEndingEverySessionAndClosingTheListenerUntilUnlock() throws Exception {
         X509Certificate ca = caOf(turnOn());

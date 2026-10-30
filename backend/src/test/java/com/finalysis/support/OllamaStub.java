@@ -23,7 +23,8 @@ import tools.jackson.databind.node.ObjectNode;
  * A stand-in Ollama server for the tests (docs/plans/phase-9.md §4.4): the JDK's {@link HttpServer} on a random
  * loopback port, registered with {@link NoCloudAiGuard#allowStub} so the suite's host guard lets requests through to it
  * and nowhere else. It answers {@code /api/version}, {@code /api/tags} (the models it was started with),
- * {@code /api/embed} (a deterministic vector per input, of the configured length) and {@code /api/chat} from a script,
+ * {@code /api/embed} (a deterministic vector per input, of the configured length), {@code /api/generate} (a model
+ * load, as the Self-hosted warm-up sends it) and {@code /api/chat} from a script,
  * and records every request's method, path and body for the tests to read field by field. Anything else is a 404.
  */
 public final class OllamaStub implements AutoCloseable {
@@ -49,6 +50,7 @@ public final class OllamaStub implements AutoCloseable {
     private volatile List<String> models;
     private volatile int dimensions = 768;
     private volatile Reply embedFailure;
+    private volatile Reply generateReply;
 
     private OllamaStub(List<String> models) throws IOException {
         this.models = List.copyOf(models);
@@ -96,6 +98,12 @@ public final class OllamaStub implements AutoCloseable {
         return this;
     }
 
+    /** Every {@code /api/generate} request (the warm-up after a Self-hosted start) is answered with this; null: loaded. */
+    public OllamaStub generateReply(Reply reply) {
+        this.generateReply = reply;
+        return this;
+    }
+
     /** Every {@code /api/embed} request is answered with this until cleared (null). */
     public OllamaStub embedFailing(Reply reply) {
         embedFailure = reply;
@@ -114,6 +122,7 @@ public final class OllamaStub implements AutoCloseable {
         requests.clear();
         chat.clear();
         embedFailure = null;
+        generateReply = null;
         dimensions = 768;
     }
 
@@ -188,6 +197,8 @@ public final class OllamaStub implements AutoCloseable {
             case "/api/tags" -> new Reply(200, tags(), 0);
             case "/api/embed" -> embedFailure != null ? embedFailure : new Reply(200, embed(body), 0);
             case "/api/chat" -> nextChat();
+            case "/api/generate" -> generateReply != null ? generateReply
+                    : new Reply(200, "{\"model\":\"stub\",\"response\":\"\",\"done\":true,\"done_reason\":\"load\"}", 0);
             default -> status(404, "not found");
         };
         if (reply.delayMillis() > 0) {

@@ -1117,6 +1117,86 @@ scratch folder. Like 7e's, the failures look like timeouts under load, not regre
    lines.
 6. Stop from Settings when done (or let the watchdog do it); `destroy.sh` when the server isn't needed any more.
 
+### Step 9c-2 notes: EC2 Start, Stop and status, the running line (backend)
+
+Done in code: "Phase 9 step 9c-2: Self-hosted Start, Stop, status and running cost". Backend 3,733 tests, 0 failures, 0 errors, 1 skipped (Maven
+summary; 3,688 at 9c-1 plus 45; the skip is `CfnLintTest`, as at 9c-1); frontend 342 tests (33 files), all passed
+(unchanged); no UI change, so no layout run. No live call, no EC2 or Tailscale action: EC2 is a fake in the
+unit tests and, under the `aws` profile, refused while signed by the suite's guard.
+
+**Rates** (decided at the 9c-1 review): `finalysis.ai.selfhost.hourly-rates` g6.xlarge 0.8048 and g5.xlarge 1.006,
+us-east-1 on-demand Linux, marked "check the EC2 pricing page" in `application.yml`; the owner confirms them before this
+review.
+
+**`com.finalysis.ai.selfhost`** (new; the AWS SDK's `ec2` module, 2.51.2 like the rest of the SDK, without its Netty
+client):
+
+- `SelfHostControl` finds the server on every request with two filters, `tag:finalysis:role=selfhost` and
+  `instance-state-name` in pending, running, stopping, stopped (a terminated server is never found); none, or two or
+  more, is a plain-word reason. It keeps no instance id; the API never shows one, nor an address or the region.
+- **States**: pending → STARTING "instance starting"; running → RUNNING, or, after a Start made by this app, STARTING
+  "waiting for Tailscale" while `GET /api/version` on the server's name fails, then "loading the model" during one
+  warm-up (`POST /api/generate` with the model's name only: Ollama loads it and generates nothing, so no text leaves),
+  then RUNNING; stopping → STOPPING; stopped → STOPPED. A server started elsewhere (the console, `create.sh`) is simply
+  running: no probe, no warm-up. A start whose Ollama hasn't answered after 10 minutes stops showing progress and says
+  why in a `note`; a model that doesn't load is a `note` too. When a warm-up ends, or the status first sees the server
+  running or stopped, Corgi's reachability is checked again (an AI lease, off the request thread), so the badge and
+  the chat box follow without a reload.
+- **Cost**: whole minutes since `LaunchTime` (EC2 resets it on every start) × the type's rate / 60, `BigDecimal`,
+  half-even to the cent, as strings: `minutesRunning`, `hourlyRate`, `estimatedCost`, and the line "running 42 min ·
+  ~$0.70" (STARTING and RUNNING) or "stopping after 42 min · ~$0.70" (STOPPING; EC2 bills until stopped); nothing while
+  stopped. A type without a rate shows minutes only. `storageNote`: "While stopped, its 80 GB disk is still billed (gp3,
+  per GB-month).", the size from the `finalysis:root-volume-gb` tag (omitted if the tag is missing).
+- **Disabled, with the reason**: "Start and Stop need the aws profile (Cloud credentials)." without the profile (no
+  client is built, nothing is called); "No AWS region: set the server's region in Settings."; the no-server and
+  two-servers reasons; "AWS refused DescribeInstances (UnauthorizedOperation): check the IAM statements from create.sh
+  in finalysis-dev-policy." (the error code only, never AWS's message, which can name the account and identity);
+  "Couldn't reach AWS for …: no credentials, or no network.". An EC2 failure is never a 500.
+- **Start** from stopped calls `StartInstances`; from pending or running does nothing; while stopping is refused ("The
+  server is still stopping; Start it when it has stopped."). **Stop** from pending or running calls `StopInstances`;
+  otherwise does nothing.
+- The EC2 clients (`AwsEc2Clients`): one per region, the `aws` profile's credentials (`finalysis-dev`), Apache HTTP
+  client, a 10-second call limit (`finalysis.ai.selfhost.aws-timeout`). They exist only when
+  `finalysis.ai.cloud-available` is on.
+
+**Endpoints** (`SelfHostController`): `GET /api/selfhost` (the status above), `POST /api/selfhost/start` and `/stop`
+(202 with the status; 409 `selfhost-unavailable` with `detail` and `reason`), `POST /api/selfhost/test {name}` (the
+name checked as Settings stores it, else 400; answers `{reachable, version, message}`: "Reachable, Ollama 0.12.6", or
+"Not resolvable: check the name, and that Tailscale is running on this Mac.", "Refused: …", "Timed out: the server
+may be stopped or still starting.", "Ollama answered with an error (HTTP n)."). All behind the vault's gate and, from
+the phone, the login, like every endpoint. The README's API table and error catalogue get these at 9e, with 9b's
+`PUT /api/settings/ai` and `ai-busy`, which aren't there either.
+
+**Chat**: `SelfHostMeter` (in `com.finalysis.ai`) gives chat the server's figures. A Self-hosted turn just answered
+carries the running line as its `costNote`; a turn read back from history carries the fixed note "Self-hosted cost is
+the server's running time" (was "…; it isn't computed yet (step 9c)"), as decided; no migration. `GET /api/chat/usage`
+gains `selfHosted {state, minutesRunning, hourlyRate, estimatedCost, line, reason}` whatever the path, so a server left
+running shows; it isn't in the dollar sums. `OllamaClients` gains `version` (the Test button) and `warmUp`, built in
+`ai.ollama` behind the host guards like the rest.
+
+**Tests** (45 new): `SelfHostControlTest` (27) on a fake EC2 client (implementing the SDK's `Ec2Client`, so
+the filters are the real request's) and a fake Ollama: the filters, each disabled reason, no server and two, AWS's
+code without its message, every state, minutes truncated, half-even ties, the clock moving the line, stopping, a type
+without a rate, the meter, a start's three progress lines and one warm-up, a failed warm-up, the 10-minute limit, no
+name, start and stop in each state, the recheck on stopping, Test and the reasons. `SelfHostRatesTest` (3): every
+instance type the template allows has a shipped rate, and nothing else. `SelfHostApiTest` (5): the endpoints without
+the profile, 409 with the reason, Test against the stub (one `GET /api/version`), names refused, chat's usage block.
+`SelfHostAwsProfileTest` (2): under `aws`, the client per region with its timeout, and a request refused while signed,
+reported in plain words. `SelfHostedTurnCostTest` (1): a whole Self-hosted turn against the stub, the live line, the
+history note, the usage block. `OllamaProvidersTest` +3: the version alone, the warm-up's body (`model` only), a failed
+or slow warm-up. `PackageDependencyTest`: EC2 classes only in `.selfhost`, which uses no model provider and on which
+nothing depends, with a violation proof. `VaultGateTest` names the four endpoints; `PhoneAccessTest`: the endpoints
+answer on the phone only after login. `ChatCostByPathTest`: the new note, and the line on Self-hosted turns only.
+
+**Found on the way**:
+
+- The suite's refusing credentials throw an `IllegalStateException` that the SDK passes through unwrapped, so a refused
+  signing first came back as a 500. The control now turns it into the "Couldn't reach AWS" reason, as it does an
+  `SdkException`.
+- The path is stored in the shared test database (`app_setting`), so the new Spring tests that switch it delete the
+  `ai.%` rows after each test, as `AiPathSwitchTest` does. The first full run without that cleanup failed 73 tests in
+  11 classes (Cloud contexts started later read a stored OFF); all passed once it was added.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

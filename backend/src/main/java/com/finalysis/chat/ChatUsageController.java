@@ -1,5 +1,7 @@
 package com.finalysis.chat;
 
+import com.finalysis.ai.SelfHostMeter;
+import com.finalysis.ai.SelfHostUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -30,20 +32,26 @@ public class ChatUsageController {
      * @param spentThisMonth     estimated dollars since the first of the month, local midnight, six decimals, from the
      *                           same ledger as {@code spentToday}; rows older than the retention are purged
      * @param questionsThisMonth chat turns in the ledger since then (summaries aren't questions)
+     * @param selfHosted         the Self-hosted server's running time and estimate now (docs/plans/phase-9.md §4.2),
+     *                           whatever the path, so a server left running shows; its {@code reason} says why it can't
+     *                           be read (no aws profile, no region, no server). Not in the dollar sums above
      */
     public record ChatUsageResponse(LocalDate day, String spentToday, String maxTurnCost, String maxDailyCost,
                                     OffsetDateTime resetsAt, YearMonth month, String spentThisMonth,
-                                    long questionsThisMonth) {
+                                    long questionsThisMonth, SelfHostUsage selfHosted) {
     }
 
     private final ChatConversationStore store;
     private final ChatProperties limits;
     private final Clock clock;
+    private final SelfHostMeter selfHost;
 
-    public ChatUsageController(ChatConversationStore store, ChatProperties limits, Clock clock) {
+    public ChatUsageController(ChatConversationStore store, ChatProperties limits, Clock clock,
+                               SelfHostMeter selfHost) {
         this.store = store;
         this.limits = limits;
         this.clock = clock;
+        this.selfHost = selfHost;
     }
 
     @GetMapping("/api/chat/usage")
@@ -54,7 +62,7 @@ public class ChatUsageController {
         OffsetDateTime monthStart = now.toLocalDate().withDayOfMonth(1).atStartOfDay(now.getZone()).toOffsetDateTime();
         return new ChatUsageResponse(midnight.toLocalDate(), dollars(spent), cap(limits.maxTurnCost()),
                 cap(limits.maxDailyCost()), midnight.plusDays(1).toOffsetDateTime(), YearMonth.from(midnight),
-                dollars(store.costSince(monthStart)), store.turnsSince(monthStart));
+                dollars(store.costSince(monthStart)), store.turnsSince(monthStart), selfHost.usage());
     }
 
     private static String dollars(BigDecimal spent) {
