@@ -307,7 +307,8 @@ A `NoEcho` CloudFormation parameter would end up in user data, which stays reada
 
 1. `create.sh` reads the key from stdin (`read -rs`, no echo, `set +x`) and stores it as an SSM `SecureString` under a
    fixed name, passing it to `aws ssm put-parameter --cli-input-json file:///dev/stdin`, so the key is never on a
-   command line (process arguments) or in shell history.
+   command line (process arguments) or in shell history. *(Amended at 9c-5: the CLI can't read `--cli-input-json`
+   from a pipe; the request goes through a mode-600 file in a private temp folder instead. See the 9c-5 notes.)*
 2. User data reads it once with `aws ssm get-parameter --with-decryption` into a mode-600 file under `/run` (memory,
    gone at reboot), runs `tailscale up --auth-key=file:<that file>` so the key is never an argument, and deletes the
    file; cloud-init output excludes the key (those commands run with tracing off).
@@ -1055,7 +1056,8 @@ byte for byte; a test compares them.
   default quota when none is applied; below 4 vCPUs it stops with the request link) → the image parameter → the zone →
   threshold and e-mail → the key (`read -rs`, checked against `^tskey-[A-Za-z0-9-]+$`, so it never needs JSON escaping)
   → the billing stack → `put-parameter` with `--cli-input-json file:///dev/stdin`, the JSON written by `printf` (a
-  builtin) into the pipe → the server stack (`deploy` waits for the signal) → `delete-parameter` → the outputs. An
+  builtin) into the pipe (*replaced at 9c-5 by a mode-600 temp file; the billing stack is also skipped when it
+  exists*) → the server stack (`deploy` waits for the signal) → `delete-parameter` → the outputs. An
   `EXIT` trap deletes the key parameter on any failure once it is stored.
 - `destroy.sh`: region, then `destroy` typed to confirm; the server stack (delete and wait), the key parameter if
   `describe-parameters` finds it (its value is never read), the billing stack; reminds the owner to remove the node from
@@ -1307,6 +1309,64 @@ every Ollama request". Backend 3,734 tests, 0 failures, 0 errors, 1 skipped (Mav
   the configured value).
 - **Left for Phase 10** (AI-05's rest, with AI-04): the KV cache type (`OLLAMA_KV_CACHE_TYPE`, a server setting) and
   keep-alive. A 16K context costs more KV-cache memory than 4K; on the laptop (9d) that is part of what Phase 10 tunes.
+
+### Step 9c-5 notes: `create.sh`'s key step on the real CLI (script fix)
+
+**The owner's first real run** stopped at the key step: `aws: [ERROR]: An error occurred (ParamValidation): Error
+parsing parameter 'cli-input-json': Invalid JSON received.` The billing stack had been created; nothing was stored
+(the trap's `delete-parameter` got `ParameterNotFound`); the server stack wasn't attempted.
+
+**Found without any AWS call** (bash 3.2.57, AWS CLI 2.38.1, on the owner's Mac):
+
+- The JSON was valid. The script's `printf` on `/bin/bash` 3.2 with a dummy key of the real shape
+  (`tskey-auth-…CNTRL-…`) gives JSON that Python's parser accepts. Nothing in it reads as a format directive. A CR
+  or newline from `read -rs` can't reach it, because the key check `^tskey-[A-Za-z0-9-]+$` refuses both, and the
+  owner's key passed it. (`plutil -lint` checks property lists only, so it can't validate JSON.)
+- The CLI doesn't read `--cli-input-json` from a pipe. Run fully cut off from AWS (`env -i`, dummy credentials,
+  `AWS_CONFIG_FILE=/dev/null`, an endpoint on a closed loopback port):
+  - That JSON piped to `file:///dev/stdin` gives the owner's exact error.
+  - Through `file:///dev/fd/3`, even with fd 3 opened on a regular file, gives the same error.
+  - From a regular file, the JSON parses, and the CLI gets as far as the closed endpoint.
+- The tests had passed because the fake `aws` read its stdin with `cat`, which a pipe satisfies.
+
+**Fix**:
+- The request is written by the `printf` builtin, under `umask 077`, to `put-parameter.json` in a
+  `mktemp -d` folder (mode 700, under `$TMPDIR`; on macOS that's already a per-user folder).
+- It's passed as `--cli-input-json file://<that file>`. Only the path is an argument, never the key.
+- The folder is deleted right after the call and by the `EXIT` trap on any failure. `KEY` is cleared once the file is
+  written.
+- `--plan` prints the call with `file://<a mode-600 temp file>`.
+
+**Rerun after billing**: `create.sh` reads the billing stack's state before asking for the threshold and e-mail.
+- Complete (`CREATE_COMPLETE`, `UPDATE_COMPLETE`, `UPDATE_ROLLBACK_COMPLETE`): it's left as it is, the threshold and
+  e-mail aren't asked, and the run goes on to the key.
+- Busy or failed: the script stops before any change. Failed points to `destroy.sh`.
+- Changing an existing alarm's threshold or e-mail now means deleting that stack and running again. Before, a rerun
+  redeployed it.
+
+Also fixed: `--help` printed `set -euo pipefail` after the header, and bash 3.2 couldn't parse an apostrophe inside a
+`${…:-…}` default within the final heredoc.
+
+**Tests** (`SelfHostScriptsTest`, 30, was 22). Backend 3,742 tests, 0 failures, 0 errors, 1 skipped (Maven summary; the skip is
+`CfnLintTest`); frontend 353 tests (34 files), all passed. No live call, no EC2 or Tailscale action:
+- The fake `put-parameter` now behaves as the real CLI does. It reads only a regular `file://` file, refusing
+  `/dev/stdin` and `/dev/fd/N`. It parses the file with Python's JSON parser, and anything unreadable or invalid gets
+  the CLI's own "Invalid JSON received".
+- The key case runs with four realistic keys. Each must round-trip exactly (no newline, no CR), through a mode-600
+  file in a mode-700 folder, with the temp folder gone afterwards and the key in no argument or output.
+- New cases:
+  - The old pipe version of the script fails as the owner's run did.
+  - Invalid JSON fails.
+  - A failed `put-parameter` leaves no temp file and creates no server.
+  - A rerun with the billing stack present skips it and goes on to the key, the server and the key's deletion.
+  - A billing stack in a failed state stops before any change.
+  - A second full run changes nothing.
+- The mutation check now hands the key to `mktemp` as an argument, and the logging wrappers, which now include `mktemp`
+  and `rm`, catch it.
+
+**For the owner's rerun**: the billing stack from the first run is kept as it is. The rerun asks for the region,
+instance type, model tag and key; the threshold and e-mail aren't asked again. Confirm the SNS subscription e-mail if
+you haven't yet.
 
 ---
 

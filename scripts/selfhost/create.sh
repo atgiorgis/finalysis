@@ -7,12 +7,13 @@
 #   scripts/selfhost/create.sh --plan    runs only the read-only checks and prints every call that would change
 #                                        something, without making it (and doesn't ask for the key)
 #
-# The Tailscale auth key is read from stdin with no echo, stored as an SSM SecureString through
-# --cli-input-json on stdin (never a command-line argument, so never in the process list or shell history), read
-# once by the server's first boot, and deleted here when the stack is done, or if anything fails.
+# The Tailscale auth key is read from stdin with no echo, stored as an SSM SecureString through --cli-input-json
+# from a mode-600 file in a private temp folder (never a command-line argument, so never in the process list or shell
+# history; the folder is deleted right after the call and on any exit), read once by the server's first boot, and
+# deleted here when the stack is done, or if anything fails.
 #
-# Safe to run again: an existing, complete server stack is left as it is (no key asked); the billing stack is
-# updated only if its values changed. A stack in a failed state needs scripts/selfhost/destroy.sh first.
+# Safe to run again: an existing, complete server stack or billing stack is left as it is (no key asked for an existing
+# server, no threshold or e-mail for an existing billing stack). A stack in a failed state needs destroy.sh first.
 # Needs bash 3.2 (macOS) and the AWS CLI v2; no jq.
 set -euo pipefail
 set +x
@@ -141,12 +142,28 @@ if [ "$NEW" = 1 ]; then
     echo "Zone: $ZONE"
 fi
 
-ask "Billing alarm threshold, whole US dollars this month [50]: " 50
-ALARM_USD=$REPLY
-[[ $ALARM_USD =~ ^[1-9][0-9]{0,5}$ ]] || die "the threshold must be a whole number of dollars, at least 1"
-ask "E-mail for the billing alarm: "
-ALARM_EMAIL=$REPLY
-[[ $ALARM_EMAIL =~ $EMAIL_PATTERN ]] || die "not an e-mail address: $ALARM_EMAIL"
+BILLING_STATUS=$(aws cloudformation describe-stacks --region "$BILLING_REGION" --stack-name "$BILLING_STACK" \
+    --query 'Stacks[0].StackStatus' --output text 2>/dev/null) || BILLING_STATUS=NONE
+case "$BILLING_STATUS" in
+    NONE) BILLING_NEW=1 ;;
+    CREATE_COMPLETE | UPDATE_COMPLETE | UPDATE_ROLLBACK_COMPLETE)
+        BILLING_NEW=0
+        echo "The billing alarm stack $BILLING_STACK already exists in $BILLING_REGION ($BILLING_STATUS); it is left as"
+        echo "it is. To change its threshold or e-mail, delete that stack and run this again."
+        ;;
+    *_IN_PROGRESS) die "the stack $BILLING_STACK is busy ($BILLING_STATUS); wait for it and run this again" ;;
+    *) die "the stack $BILLING_STACK is in state $BILLING_STATUS; run scripts/selfhost/destroy.sh first" ;;
+esac
+
+ALARM_EMAIL=""
+if [ "$BILLING_NEW" = 1 ]; then
+    ask "Billing alarm threshold, whole US dollars this month [50]: " 50
+    ALARM_USD=$REPLY
+    [[ $ALARM_USD =~ ^[1-9][0-9]{0,5}$ ]] || die "the threshold must be a whole number of dollars, at least 1"
+    ask "E-mail for the billing alarm: "
+    ALARM_EMAIL=$REPLY
+    [[ $ALARM_EMAIL =~ $EMAIL_PATTERN ]] || die "not an e-mail address: $ALARM_EMAIL"
+fi
 
 KEY=""
 if [ "$NEW" = 1 ] && [ "$PLAN" = 0 ]; then
@@ -156,8 +173,10 @@ if [ "$NEW" = 1 ] && [ "$PLAN" = 0 ]; then
     [[ $KEY =~ $KEY_PATTERN ]] || die "that doesn't look like a Tailscale auth key (tskey-...)"
 fi
 
-# The key parameter is deleted on any exit once it is stored, so a failed run never leaves it behind.
+# The key parameter is deleted on any exit once it is stored, so a failed run never leaves it behind; so is the
+# private temp folder that holds the put-parameter request.
 KEY_STORED=0
+KEY_DIR=""
 delete_key() {
     if [ "$KEY_STORED" = 1 ]; then
         if aws ssm delete-parameter --region "$REGION" --name "$KEY_PARAMETER" >/dev/null; then
@@ -168,24 +187,42 @@ delete_key() {
         KEY_STORED=0
     fi
 }
-trap delete_key EXIT
+delete_key_file() {
+    if [ -n "$KEY_DIR" ]; then
+        rm -rf "$KEY_DIR"
+        KEY_DIR=""
+    fi
+}
+trap 'delete_key_file; delete_key' EXIT
 
-echo "Billing alarm stack $BILLING_STACK in $BILLING_REGION (billing metrics live only there)."
-change cloudformation deploy --region "$BILLING_REGION" --stack-name "$BILLING_STACK" \
-    --template-file "$BILLING_TEMPLATE" --no-fail-on-empty-changeset \
-    --parameter-overrides "BillingAlarmUsd=$ALARM_USD" "AlarmEmail=$ALARM_EMAIL"
+if [ "$BILLING_NEW" = 1 ]; then
+    echo "Billing alarm stack $BILLING_STACK in $BILLING_REGION (billing metrics live only there)."
+    change cloudformation deploy --region "$BILLING_REGION" --stack-name "$BILLING_STACK" \
+        --template-file "$BILLING_TEMPLATE" --no-fail-on-empty-changeset \
+        --parameter-overrides "BillingAlarmUsd=$ALARM_USD" "AlarmEmail=$ALARM_EMAIL"
+fi
 
 if [ "$NEW" = 1 ]; then
     if [ "$PLAN" = 1 ]; then
-        echo "[plan] aws ssm put-parameter --region $REGION --cli-input-json file:///dev/stdin" \
-            "(stdin: {\"Name\":\"$KEY_PARAMETER\",\"Type\":\"SecureString\",\"Value\":<the key>,\"Overwrite\":true})"
+        echo "[plan] aws ssm put-parameter --region $REGION --cli-input-json file://<a mode-600 temp file>" \
+            "(contents: {\"Name\":\"$KEY_PARAMETER\",\"Type\":\"SecureString\",\"Value\":<the key>,\"Overwrite\":true})"
     else
-        # printf is a shell builtin: the key goes from this shell's memory into the pipe, never into an argument.
-        KEY_STORED=1
-        printf '{"Name":"%s","Type":"SecureString","Value":"%s","Overwrite":true,"Description":"%s"}' \
-            "$KEY_PARAMETER" "$KEY" "Finalysis: Tailscale key for the first boot; create.sh deletes it" \
-            | aws ssm put-parameter --region "$REGION" --cli-input-json file:///dev/stdin >/dev/null
+        # The AWS CLI (2.38) can't read --cli-input-json from a pipe (file:///dev/stdin, /dev/fd/N: "Invalid JSON
+        # received"), so the request goes through a regular file, readable only by you, in a folder only you can open,
+        # deleted right after the call and on any exit. printf is a shell builtin: the key goes from this shell's memory
+        # into the file, never into an argument; only the file's path is.
+        KEY_DIR=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/finalysis-key.XXXXXX")
+        KEY_FILE="$KEY_DIR/put-parameter.json"
+        (
+            umask 077
+            printf '{"Name":"%s","Type":"SecureString","Value":"%s","Overwrite":true,"Description":"%s"}' \
+                "$KEY_PARAMETER" "$KEY" "Finalysis: Tailscale key for the first boot; create.sh deletes it" \
+                >"$KEY_FILE"
+        )
         KEY=""
+        KEY_STORED=1
+        aws ssm put-parameter --region "$REGION" --cli-input-json "file://$KEY_FILE" >/dev/null
+        delete_key_file
         echo "Stored the key as a SecureString ($KEY_PARAMETER) for the first boot."
     fi
 
@@ -210,6 +247,7 @@ else
 fi
 
 DONE="Done."
+ALARM_TO=${ALARM_EMAIL:-"the alarm's address"}
 [ "$PLAN" = 0 ] || DONE="Plan done: nothing was created."
 
 cat <<EOF
@@ -244,6 +282,7 @@ TerminateInstances: creating and destroying stay these scripts'.
 Manual steps (no script does these):
   - Turn on Receive Billing Alerts (Billing → Billing preferences); billing metrics live in us-east-1, so the
     alarm is there.
-  - Confirm the SNS subscription: AWS e-mails $ALARM_EMAIL a link; the alarm reaches no one until it is used.
+  - Confirm the SNS subscription: AWS e-mails $ALARM_TO a link; the alarm reaches no one until
+    it is used.
   - In Tailscale: an ACL that lets only your devices reach $TAILSCALE_NAME on port 11434.
 EOF

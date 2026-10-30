@@ -12,9 +12,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import com.finalysis.support.OllamaStub;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -26,6 +30,11 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>The fake can't know whether the quota code and the image's SSM parameter are right; {@code --plan} prints both, so
  * the owner's first real run shows them before anything is created.
+ *
+ * <p>Step 9c-5: the fake's {@code ssm put-parameter} behaves as the real CLI (2.38) does with {@code --cli-input-json}:
+ * it reads only a regular {@code file://} file (a pipe, {@code file:///dev/stdin}, fails with the CLI's own "Invalid
+ * JSON received", as the owner's first real run did) and parses it with a real JSON parser (Python's), failing the same
+ * way on anything that isn't JSON.
  */
 class SelfHostScriptsTest {
 
@@ -37,7 +46,10 @@ class SelfHostScriptsTest {
             "https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas/L-DB2E81BA";
     /** Region, instance type, chat model, alarm threshold, e-mail: a new server's questions before the key. */
     private static final String ANSWERS = "us-east-1\ng6.xlarge\nministral-3:14b\n40\nowner@example.com\n";
-    private static final List<String> WRAPPED = List.of("dirname", "sed", "tr", "sort", "head", "cat");
+    private static final List<String> WRAPPED = List.of("dirname", "sed", "tr", "sort", "head", "cat", "mktemp", "rm");
+    /** The real CLI's message for --cli-input-json it can't read or parse (seen on the owner's run, reproduced locally). */
+    private static final String INVALID_JSON =
+            "An error occurred (ParamValidation): Error parsing parameter 'cli-input-json': Invalid JSON received.";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @TempDir
@@ -45,11 +57,13 @@ class SelfHostScriptsTest {
 
     private Path bin;
     private Path state;
+    private Path tmp;
 
     @BeforeEach
     void fakes() throws IOException {
         bin = temp.resolve("bin");
         state = Files.createDirectories(temp.resolve("state"));
+        tmp = Files.createDirectories(temp.resolve("tmp"));
         executable(bin.resolve("aws"), """
                 #!/bin/bash
                 # A fake AWS CLI: records the call, answers from files under $FAKE_DIR/state.
@@ -77,7 +91,25 @@ class SelfHostScriptsTest {
                         echo CREATE_COMPLETE > "$s/stack-$region-$stack" ;;
                     "cloudformation delete-stack") echo DELETE_IN_PROGRESS > "$s/stack-$region-$stack" ;;
                     "cloudformation wait") /bin/rm -f "$s/stack-$region-$stack" ;;
-                    "ssm put-parameter") /bin/cat > "$FAKE_DIR/put-parameter.stdin"; : > "$s/key-parameter" ;;
+                    "ssm put-parameter")
+                        # As the real CLI 2.38: --cli-input-json is read only from a regular file (not /dev/stdin, not
+                        # /dev/fd/N even onto a file: both fail on the owner's Mac), then parsed as JSON.
+                        src=""; prev=""
+                        for a in "$@"; do
+                            [ "$prev" = --cli-input-json ] && src=$a
+                            prev=$a
+                        done
+                        path=${src#file://}
+                        case "$path" in /dev/*) path="" ;; esac
+                        if [ "$path" = "$src" ] || [ ! -f "$path" ] \
+                                || ! /usr/bin/python3 -I -c 'import json, sys; json.load(open(sys.argv[1]))' "$path" 2>/dev/null; then
+                            echo "aws: [ERROR]: An error occurred (ParamValidation): Error parsing parameter 'cli-input-json': Invalid JSON received." >&2; exit 252
+                        fi
+                        /usr/bin/stat -f '%Lp' "$path" > "$FAKE_DIR/put-parameter.mode"
+                        /usr/bin/stat -f '%Lp' "${path%/*}" > "$FAKE_DIR/put-parameter.dir-mode"
+                        /bin/cat "$path" > "$FAKE_DIR/put-parameter.json"
+                        if [ -f "$s/fail-put" ]; then echo "An error occurred (AccessDeniedException)" >&2; exit 254; fi
+                        : > "$s/key-parameter" ;;
                     "ssm describe-parameters")
                         if [ -f "$s/key-parameter" ]; then echo /finalysis/selfhost/tailscale-auth-key; else echo None; fi ;;
                     "ssm delete-parameter") /bin/rm -f "$s/key-parameter" ;;
@@ -91,7 +123,8 @@ class SelfHostScriptsTest {
     }
 
     private SelfHostFiles.Run run(Path script, String stdin, String... args) throws Exception {
-        return SelfHostFiles.bash(script, bin + ":/usr/bin:/bin", Map.of("FAKE_DIR", temp.toString()), stdin, args);
+        return SelfHostFiles.bash(script, bin + ":/usr/bin:/bin",
+                Map.of("FAKE_DIR", temp.toString(), "TMPDIR", tmp.toString()), stdin, args);
     }
 
     /** The aws calls so far, one per line, without the leading "aws ". */
@@ -122,7 +155,7 @@ class SelfHostScriptsTest {
 
         assertThat(run.exit()).as(run.output()).isZero();
         List<String> calls = calls();
-        assertThat(calls).hasSize(10);
+        assertThat(calls).hasSize(11);
         assertThat(calls.get(0)).isEqualTo("sts get-caller-identity --query Account --output text");
         assertThat(calls.get(1)).startsWith("cloudformation describe-stacks --region us-east-1 --stack-name finalysis-selfhost ");
         assertThat(calls.get(2)).isEqualTo("service-quotas get-service-quota --region us-east-1 --service-code ec2"
@@ -131,16 +164,19 @@ class SelfHostScriptsTest {
                 + " --query Parameter.Value --output text");
         assertThat(calls.get(4)).startsWith("ec2 describe-instance-type-offerings --region us-east-1")
                 .contains("Name=instance-type,Values=g6.xlarge");
-        assertThat(calls.get(5)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost-billing"
+        assertThat(calls.get(5)).isEqualTo("cloudformation describe-stacks --region us-east-1 --stack-name"
+                + " finalysis-selfhost-billing --query Stacks[0].StackStatus --output text");
+        assertThat(calls.get(6)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost-billing"
                         + " --template-file ").endsWith("infra/selfhost/finalysis-selfhost-billing.yaml"
                         + " --no-fail-on-empty-changeset --parameter-overrides BillingAlarmUsd=40 AlarmEmail=owner@example.com");
-        assertThat(calls.get(6)).isEqualTo("ssm put-parameter --region us-east-1 --cli-input-json file:///dev/stdin");
-        assertThat(calls.get(7)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost --template-file ")
+        assertThat(calls.get(7)).matches("ssm put-parameter --region us-east-1 --cli-input-json file://"
+                + Pattern.quote(tmp.toString()) + "/finalysis-key\\.[A-Za-z0-9]{6}/put-parameter\\.json");
+        assertThat(calls.get(8)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost --template-file ")
                 .endsWith("infra/selfhost/finalysis-selfhost.yaml --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset"
                         + " --parameter-overrides InstanceType=g6.xlarge ChatModel=ministral-3:14b"
                         + " AvailabilityZone=us-east-1a TailscaleKeyParameter=" + KEY_PARAMETER);
-        assertThat(calls.get(8)).isEqualTo("ssm delete-parameter --region us-east-1 --name " + KEY_PARAMETER);
-        assertThat(calls.get(9)).startsWith("cloudformation describe-stacks").contains("Outputs");
+        assertThat(calls.get(9)).isEqualTo("ssm delete-parameter --region us-east-1 --name " + KEY_PARAMETER);
+        assertThat(calls.get(10)).startsWith("cloudformation describe-stacks").contains("Outputs");
         assertThat(state.resolve("key-parameter")).doesNotExist();
     }
 
@@ -162,30 +198,90 @@ class SelfHostScriptsTest {
         assertThat(run.output()).doesNotContain("RunInstances\"", "TerminateInstances\"");
     }
 
-    @Test
-    void theKeyGoesOnlyThroughStdinIntoTheSecureStringAndIsInNoArgumentOrOutput() throws Exception {
-        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+    /**
+     * The key goes from stdin into the SecureString through a mode-600 file in a mode-700 temp folder, both gone when
+     * the script ends, and is in no argument or output. Realistic keys (Tailscale's tskey-auth-{id}CNTRL-{secret}, long,
+     * letters and digits), as the owner's matched the script's pattern; the fake parses each request as JSON.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {KEY,
+            "tskey-auth-kQx7Ab3CNTRL-Zp9rT4uVw2yX8aB6cD1eF5gH3jK7mNqR2sT",
+            "tskey-auth-k1a2B3c4D5CNTRL-0123456789abcdefABCDEF0123456789abcdef",
+            "tskey-client-kZ9yX8wCNTRL-AbCdEfGhIjKlMnOpQrStUvWxYz012345"})
+    void theKeyGoesThroughAPrivateTempFileIntoTheSecureStringAndIsInNoArgumentOrOutput(String key) throws Exception {
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + key + "\n");
 
         assertThat(run.exit()).as(run.output()).isZero();
-        JsonNode stored = JSON.readTree(Files.readString(temp.resolve("put-parameter.stdin")));
+        JsonNode stored = JSON.readTree(Files.readString(temp.resolve("put-parameter.json")));
+        assertThat(OllamaStub.fields(stored)).containsExactly("Name", "Type", "Value", "Overwrite", "Description");
         assertThat(stored.get("Name").stringValue()).isEqualTo(KEY_PARAMETER);
         assertThat(stored.get("Type").stringValue()).isEqualTo("SecureString");
-        assertThat(stored.get("Value").stringValue()).isEqualTo(KEY);
+        assertThat(stored.get("Value").stringValue()).as("exactly the key: no newline, no CR").isEqualTo(key);
         assertThat(stored.get("Overwrite").booleanValue()).isTrue();
-        assertThat(everyArgument()).doesNotContain(KEY).doesNotContain("tskey-");
-        assertThat(run.output()).doesNotContain(KEY).doesNotContain("kTe5tN0t");
+        assertThat(Files.readString(temp.resolve("put-parameter.mode")).strip()).as("the file's mode").isEqualTo("600");
+        assertThat(Files.readString(temp.resolve("put-parameter.dir-mode")).strip()).as("its folder's").isEqualTo("700");
+        assertThat(tmp).as("the temp folder is gone").isEmptyDirectory();
+        String secret = key.substring(key.lastIndexOf('-') + 1);
+        assertThat(everyArgument()).doesNotContain(key).doesNotContain("tskey-").doesNotContain(secret);
+        assertThat(run.output()).doesNotContain(key).doesNotContain(secret);
+    }
+
+    /** The owner's first real run: the request piped to file:///dev/stdin, which the CLI can't read. The fake fails too. */
+    @Test
+    void theOldPipeIsRefusedAsTheRealCliRefusesIt() throws Exception {
+        Path script = copyOfCreate(Files.readString(CREATE).replace(
+                "aws ssm put-parameter --region \"$REGION\" --cli-input-json \"file://$KEY_FILE\" >/dev/null",
+                "aws ssm put-parameter --region \"$REGION\" --cli-input-json file:///dev/stdin <\"$KEY_FILE\" >/dev/null"));
+
+        SelfHostFiles.Run run = run(script, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(run.output()).contains(INVALID_JSON);
+        assertThat(calls()).noneMatch(c -> c.startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost "));
+        assertThat(tmp).isEmptyDirectory();
+    }
+
+    /** Anything that isn't JSON fails in the fake as in the CLI. */
+    @Test
+    void invalidJsonIsRefusedAsTheRealCliRefusesIt() throws Exception {
+        Path script = copyOfCreate(Files.readString(CREATE).replace("\"Overwrite\":true,\"Description\"",
+                "\"Overwrite\":true,,\"Description\""));
+
+        SelfHostFiles.Run run = run(script, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(run.output()).contains(INVALID_JSON);
+        assertThat(tmp).isEmptyDirectory();
     }
 
     @Test
-    void aMutationThatPassesTheKeyAsAnArgumentIsCaught() throws Exception {
+    void aFailedPutParameterLeavesNoTempFileAndCreatesNoServer() throws Exception {
+        Files.writeString(state.resolve("fail-put"), "");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(tmp).isEmptyDirectory();
+        assertThat(calls()).noneMatch(c -> c.startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost "));
+        assertThat(run.output()).doesNotContain(KEY);
+    }
+
+    /** A copy of create.sh beside a link to infra/, with one change. */
+    private Path copyOfCreate(String text) throws IOException {
+        assertThat(text).as("the change applied").isNotEqualTo(Files.readString(CREATE));
         Path copy = temp.resolve("repo");
         Path script = copy.resolve("scripts/selfhost/create.sh");
         Files.createDirectories(script.getParent());
         Files.createSymbolicLink(copy.resolve("infra"), REPO.resolve("infra"));
-        String original = Files.readString(CREATE);
-        String needle = "| aws ssm put-parameter --region \"$REGION\" --cli-input-json file:///dev/stdin >/dev/null";
-        assertThat(original).contains(needle);
-        executable(script, original.replace(needle, needle.replace(" >/dev/null", " --description \"$KEY\" >/dev/null")));
+        executable(script, text);
+        return script;
+    }
+
+    @Test
+    void aMutationThatPassesTheKeyAsAnArgumentIsCaught() throws Exception {
+        // the key handed to an external command (mktemp) as an argument: the logging wrapper must see it
+        Path script = copyOfCreate(Files.readString(CREATE).replace("        KEY=\"\"\n        KEY_STORED=1\n",
+                "        mktemp -u \"$KEY\" >/dev/null\n        KEY=\"\"\n        KEY_STORED=1\n"));
 
         SelfHostFiles.Run run = run(script, ANSWERS + KEY + "\n");
 
@@ -212,15 +308,16 @@ class SelfHostScriptsTest {
         assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
         assertThat(calls()).extracting(c -> c.split(" ")[0] + " " + c.split(" ")[1]).containsExactly(
                 "sts get-caller-identity", "cloudformation describe-stacks", "service-quotas get-service-quota",
-                "ssm get-parameter", "ec2 describe-instance-type-offerings");
+                "ssm get-parameter", "ec2 describe-instance-type-offerings", "cloudformation describe-stacks");
         assertThat(run.output()).doesNotContain("Tailscale auth key")
                 .contains("[plan] aws cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost-billing")
-                .contains("[plan] aws ssm put-parameter --region us-east-1 --cli-input-json file:///dev/stdin"
-                        + " (stdin: {\"Name\":\"" + KEY_PARAMETER + "\",\"Type\":\"SecureString\",\"Value\":<the key>,")
+                .contains("[plan] aws ssm put-parameter --region us-east-1 --cli-input-json file://<a mode-600 temp file>"
+                        + " (contents: {\"Name\":\"" + KEY_PARAMETER + "\",\"Type\":\"SecureString\",\"Value\":<the key>,")
                 .contains("[plan] aws cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost --template-file")
                 .contains("[plan] aws ssm delete-parameter --region us-east-1 --name " + KEY_PARAMETER)
                 .contains("Plan done: nothing was created.");
         assertThat(state).isEmptyDirectory();
+        assertThat(tmp).isEmptyDirectory();
     }
 
     @Test
@@ -292,16 +389,45 @@ class SelfHostScriptsTest {
         assertThat(run(CREATE, ANSWERS + KEY + "\n").exit()).isZero();
         Files.delete(temp.resolve("calls.log"));
 
-        SelfHostFiles.Run again = run(CREATE, "us-east-1\n40\nowner@example.com\n");
+        SelfHostFiles.Run again = run(CREATE, "us-east-1\n");
 
         assertThat(again.exit()).as(again.output()).isZero();
         assertThat(again.output()).contains("already exists (CREATE_COMPLETE); it is left as it is")
-                .doesNotContain("Tailscale auth key");
-        assertThat(calls()).filteredOn(SelfHostScriptsTest::changes).containsExactly(
-                "cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost-billing --template-file "
-                        + REPO.resolve("infra/selfhost/finalysis-selfhost-billing.yaml")
-                        + " --no-fail-on-empty-changeset --parameter-overrides BillingAlarmUsd=40"
-                        + " AlarmEmail=owner@example.com");
+                .contains("The billing alarm stack finalysis-selfhost-billing already exists in us-east-1 (CREATE_COMPLETE)")
+                .doesNotContain("Tailscale auth key").doesNotContain("Billing alarm threshold");
+        assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
+    }
+
+    /** The owner's case: the billing stack was made, then the key step failed. A rerun skips billing and goes on. */
+    @Test
+    void aRerunAfterTheBillingStackSkipsItAndGoesOnToTheKey() throws Exception {
+        stack("us-east-1", "finalysis-selfhost-billing", "CREATE_COMPLETE");
+
+        SelfHostFiles.Run run = run(CREATE, "us-east-1\ng6.xlarge\nministral-3:14b\n" + KEY + "\n");
+
+        assertThat(run.exit()).as(run.output()).isZero();
+        assertThat(run.output()).contains("already exists in us-east-1 (CREATE_COMPLETE); it is left as")
+                .doesNotContain("Billing alarm threshold").doesNotContain("E-mail for the billing alarm")
+                .contains("AWS e-mails the alarm's address a link");
+        List<String> changes = calls().stream().filter(SelfHostScriptsTest::changes).toList();
+        assertThat(changes).hasSize(3);
+        assertThat(changes.get(0)).startsWith("ssm put-parameter --region us-east-1 --cli-input-json file://" + tmp);
+        assertThat(changes.get(1)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost ");
+        assertThat(changes.get(2)).isEqualTo("ssm delete-parameter --region us-east-1 --name " + KEY_PARAMETER);
+        assertThat(state.resolve("key-parameter")).doesNotExist();
+        assertThat(tmp).isEmptyDirectory();
+    }
+
+    @Test
+    void aBillingStackInAFailedStateNeedsDestroyFirst() throws Exception {
+        stack("us-east-1", "finalysis-selfhost-billing", "ROLLBACK_COMPLETE");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(run.output()).contains("finalysis-selfhost-billing is in state ROLLBACK_COMPLETE; run"
+                + " scripts/selfhost/destroy.sh first").doesNotContain("Tailscale auth key");
+        assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
     }
 
     @Test
