@@ -1430,6 +1430,69 @@ Tailscale action.
 cfn-lint isn't installed here, so `CfnLintTest` stays skipped. The template's structure is unchanged (only the user
 data's text). The real check is the owner's next `create.sh` run, after `destroy.sh` clears the rolled-back stack.
 
+### Step 9c-7 notes: zone choice and a retry when EC2 has no capacity (script fix)
+
+**The owner's second real `create.sh` run** failed before launch. EC2 refused the instance in the zone the script had
+chosen (the first offering zone, alphabetically): "We currently do not have sufficient g6.xlarge capacity in the
+Availability Zone you requested (us-east-1a) … choosing us-east-1b, us-east-1c, us-east-1d, us-east-1f." The stack
+rolled back, and no instance was created, so 9c-6's boot fix wasn't exercised.
+
+**`create.sh`**:
+
+- **Zones**: every zone in the region that offers the instance type, sorted, is the list to try. It's printed as
+  "Zones to try, in order: …", with `--plan` too.
+- **`--zone <az>`** (or `--zone=<az>`) puts that zone first, with the others after it in order.
+  - A malformed value is refused before any call (exit 2).
+  - A zone that doesn't offer the type is refused before anything changes, listing the zones that do.
+  - It works with `--plan`.
+  - Choice made here: `--zone` sets the first try, not the only one. If it has no capacity, the next zones are still
+    tried. Ask if you'd rather it try only that zone.
+- **The retry**: each attempt prints "Attempt n of N: zone …". When a deploy fails, the script polls the stack until it
+  stops changing (15 s apart, up to 30 minutes). It then reads the Server resource's `CREATE_FAILED` reason from the
+  stack events. If all of these hold:
+  - the stack is `ROLLBACK_COMPLETE`;
+  - the reason contains `InsufficientInstanceCapacity` or matches "do not have sufficient … capacity";
+  - the stack is its own, created by this run (the script reaches the deploy only when no stack existed at the start,
+    and each retry starts only after the delete has finished);
+
+  then it deletes that stack, waits for `stack-delete-complete`, and tries the next zone. With no zones left, it stops
+  with "no zone had g6.xlarge capacity (tried: …); try again later, or choose the other instance type". The last
+  rolled-back stack is deleted too, so a rerun isn't blocked.
+- **Any other failure** stops at once, printing the zone, the stack status and the Server's reason (or a pointer to
+  the stack events). It says to delete the stack with `destroy.sh` before running again, and leaves the stack in place
+  for the owner, as before. A capacity failure whose rollback didn't finish cleanly (`ROLLBACK_FAILED`) counts as
+  "any other failure".
+- **The key parameter** is stored once before the first attempt and stays across retries. The `EXIT` trap deletes it
+  once at the end, whether the run succeeds, runs out of zones or stops.
+- Also fixed: `--help` again printed `set -euo pipefail` (its range now ends at the header, and a test checks it), and
+  an apostrophe inside a `${…:-…}` default broke bash 3.2's parser, the same quirk as 9c-5.
+
+**Tests**: backend 3,761 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,751 at 9c-6 plus 10; the skip is
+`CfnLintTest`); frontend 353 tests (34 files), all passed. No live call, no EC2 or Tailscale action.
+`SelfHostScriptsTest` has 40 (was 30). The fake `aws` now:
+- reads the zone from `AvailabilityZone=`;
+- fails a deploy for lack of capacity in the zones a test names, writing `ROLLBACK_COMPLETE` (or `ROLLBACK_FAILED`) and
+  EC2's message as the Server's reason;
+- answers `describe-stack-events`;
+- makes a non-capacity failure leave a `ROLLBACK_COMPLETE` stack with a FAILURE-signal reason.
+
+New cases:
+- A capacity failure in the first zone, then success in the second. The calls run in order: deploy in a, the settled
+  status, the stack events, `delete-stack`, `wait stack-delete-complete`, deploy in b, then `delete-parameter`.
+- The key put once and deleted once across three attempts, before the first and after the last, never in an argument.
+- No capacity anywhere: three deploys, deletes and waits, the clear message, and no stack or key left.
+- A non-capacity failure: one deploy, no delete, the reason printed, the stack left.
+- A capacity failure that didn't roll back cleanly isn't deleted.
+- `--zone` tried first, then the others.
+- `--zone=` with `--plan`.
+- A zone that doesn't offer the type is refused.
+- A malformed or missing `--zone` is refused before any call.
+- `--help` prints the header only.
+- `--plan` now shows the ordered zones.
+
+**For the owner's next run**: `destroy.sh` first, if the rolled-back stack from the second run is still there; then
+`create.sh`, or `create.sh --zone us-east-1b` to start where EC2 said it had capacity.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

@@ -68,9 +68,10 @@ class SelfHostScriptsTest {
                 #!/bin/bash
                 # A fake AWS CLI: records the call, answers from files under $FAKE_DIR/state.
                 { printf 'aws'; printf ' %s' "$@"; printf '\\n'; } >> "$FAKE_DIR/calls.log"
-                region=""; stack=""; prev=""
+                region=""; stack=""; zone=""; prev=""
                 for a in "$@"; do
                     case "$prev" in --region) region=$a ;; --stack-name) stack=$a ;; esac
+                    case "$a" in AvailabilityZone=*) zone=${a#AvailabilityZone=} ;; esac
                     prev=$a
                 done
                 s="$FAKE_DIR/state"
@@ -87,10 +88,23 @@ class SelfHostScriptsTest {
                         if [ ! -f "$f" ]; then echo "An error occurred (ValidationError): Stack with id $stack does not exist" >&2; exit 255; fi
                         case "$*" in *Outputs*) echo i-0fake1234567890ab ;; *) /bin/cat "$f" ;; esac ;;
                     "cloudformation deploy")
-                        if [ -f "$s/fail-deploy-$stack" ]; then echo "Waiter StackCreateComplete failed" >&2; exit 255; fi
-                        echo CREATE_COMPLETE > "$s/stack-$region-$stack" ;;
+                        f="$s/stack-$region-$stack"
+                        if [ -n "$zone" ] && [ -f "$s/capacity-$zone" ]; then
+                            # EC2's message, as on the owner's second run
+                            if [ -f "$s/rollback-failed" ]; then echo ROLLBACK_FAILED > "$f"; else echo ROLLBACK_COMPLETE > "$f"; fi
+                            echo "We currently do not have sufficient g6.xlarge capacity in the Availability Zone you requested ($zone). Our system will be working on provisioning additional capacity. (Service: Ec2, Status Code: 500, Request ID: fake)" > "$s/reason-$region-$stack"
+                            echo "Waiter StackCreateComplete failed: Waiter encountered a terminal failure state" >&2; exit 255
+                        fi
+                        if [ -f "$s/fail-deploy-$stack" ]; then
+                            echo ROLLBACK_COMPLETE > "$f"
+                            echo "Received 1 FAILURE signal(s) out of 1. Unable to satisfy 100% MinSuccessfulInstancesPercent requirement" > "$s/reason-$region-$stack"
+                            echo "Waiter StackCreateComplete failed" >&2; exit 255
+                        fi
+                        echo CREATE_COMPLETE > "$f" ;;
+                    "cloudformation describe-stack-events")
+                        if [ -f "$s/reason-$region-$stack" ]; then /bin/cat "$s/reason-$region-$stack"; else echo None; fi ;;
                     "cloudformation delete-stack") echo DELETE_IN_PROGRESS > "$s/stack-$region-$stack" ;;
-                    "cloudformation wait") /bin/rm -f "$s/stack-$region-$stack" ;;
+                    "cloudformation wait") /bin/rm -f "$s/stack-$region-$stack" "$s/reason-$region-$stack" ;;
                     "ssm put-parameter")
                         # As the real CLI 2.38: --cli-input-json is read only from a regular file (not /dev/stdin, not
                         # /dev/fd/N even onto a file: both fail on the owner's Mac), then parsed as JSON.
@@ -327,7 +341,8 @@ class SelfHostScriptsTest {
         assertThat(run.output()).contains("GPU quota: Running On-Demand G and VT instances (L-DB2E81BA) in us-east-1.")
                 .contains("quota: 8.0 vCPUs (needs 4)")
                 .contains("Image: " + AMI_PARAMETER + "\n  resolves to ami-0123456789abcdef0")
-                .contains("Zone: us-east-1a");
+                .contains("Zones to try, in order: us-east-1a us-east-1b us-east-1c\n")
+                .contains("[plan] next zone, in order: us-east-1a us-east-1b us-east-1c\n");
     }
 
     @Test
@@ -462,6 +477,181 @@ class SelfHostScriptsTest {
         assertThat(run(CREATE, "us-east-1\ng6.xlarge\nministral-3:14b\n40\nnobody\n").output())
                 .contains("not an e-mail address");
         assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
+    }
+
+    // ---------------------------------------------------------------------------- zones and capacity (9c-7)
+
+    private static final String SETTLED = "cloudformation describe-stacks --region us-east-1 --stack-name finalysis-selfhost"
+            + " --query Stacks[0].StackStatus --output text";
+    private static final String EVENTS = "cloudformation describe-stack-events --region us-east-1 --stack-name"
+            + " finalysis-selfhost --query StackEvents[?LogicalResourceId=='Server' && ResourceStatus=='CREATE_FAILED']"
+            + ".ResourceStatusReason | [0] --output text";
+    private static final String DELETE = "cloudformation delete-stack --region us-east-1 --stack-name finalysis-selfhost";
+    private static final String WAIT = "cloudformation wait stack-delete-complete --region us-east-1 --stack-name"
+            + " finalysis-selfhost";
+
+    private void noCapacityIn(String... zones) throws IOException {
+        for (String zone : zones) {
+            Files.writeString(state.resolve("capacity-" + zone), "");
+        }
+    }
+
+    private List<String> serverDeploys() throws IOException {
+        return calls().stream().filter(c -> c.startsWith("cloudformation deploy --region us-east-1 --stack-name"
+                + " finalysis-selfhost ")).map(c -> c.replaceAll(".*AvailabilityZone=(\\S+).*", "$1")).toList();
+    }
+
+    @Test
+    void aCapacityFailureInTheFirstZoneDeletesTheRolledBackStackAndTriesTheNext() throws Exception {
+        noCapacityIn("us-east-1a");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).as(run.output()).isZero();
+        List<String> calls = calls();
+        int first = calls.indexOf(calls.stream().filter(c -> c.contains("AvailabilityZone=us-east-1a")).findFirst()
+                .orElseThrow());
+        assertThat(calls.subList(first + 1, first + 6)).containsExactly(SETTLED, EVENTS, DELETE, WAIT,
+                calls.get(first + 5));
+        assertThat(calls.get(first + 5)).startsWith("cloudformation deploy --region us-east-1 --stack-name finalysis-selfhost ")
+                .contains("AvailabilityZone=us-east-1b");
+        assertThat(calls.get(first + 6)).isEqualTo("ssm delete-parameter --region us-east-1 --name " + KEY_PARAMETER);
+        assertThat(serverDeploys()).containsExactly("us-east-1a", "us-east-1b");
+        assertThat(run.output()).contains("Attempt 1 of 3: zone us-east-1a.")
+                .contains("No g6.xlarge capacity in us-east-1a: We currently do not have sufficient g6.xlarge capacity")
+                .contains("Deleting the rolled-back stack finalysis-selfhost (created by this run) before the next zone.")
+                .contains("Attempt 2 of 3: zone us-east-1b.").contains("Instance id:    i-0fake1234567890ab");
+    }
+
+    @Test
+    void theKeyIsPutOnceAndDeletedOnceAcrossRetries() throws Exception {
+        noCapacityIn("us-east-1a", "us-east-1b");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).as(run.output()).isZero();
+        assertThat(serverDeploys()).containsExactly("us-east-1a", "us-east-1b", "us-east-1c");
+        assertThat(calls()).filteredOn(c -> c.startsWith("ssm put-parameter")).hasSize(1);
+        assertThat(calls()).filteredOn(c -> c.startsWith("ssm delete-parameter")).hasSize(1);
+        int put = indexOf("ssm put-parameter");
+        int delete = indexOf("ssm delete-parameter");
+        assertThat(put).isLessThan(calls().indexOf(calls().stream().filter(c -> c.contains("AvailabilityZone=us-east-1a"))
+                .findFirst().orElseThrow()));
+        assertThat(delete).isGreaterThan(calls().indexOf(calls().stream()
+                .filter(c -> c.contains("AvailabilityZone=us-east-1c")).findFirst().orElseThrow()));
+        assertThat(state.resolve("key-parameter")).doesNotExist();
+        assertThat(tmp).isEmptyDirectory();
+        assertThat(everyArgument()).doesNotContain(KEY);
+    }
+
+    private int indexOf(String prefix) throws IOException {
+        List<String> calls = calls();
+        for (int i = 0; i < calls.size(); i++) {
+            if (calls.get(i).startsWith(prefix)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    @Test
+    void noCapacityInAnyZoneEndsWithAClearMessageAndNothingLeftBehind() throws Exception {
+        noCapacityIn("us-east-1a", "us-east-1b", "us-east-1c");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(serverDeploys()).containsExactly("us-east-1a", "us-east-1b", "us-east-1c");
+        assertThat(calls()).filteredOn(DELETE::equals).hasSize(3);
+        assertThat(calls()).filteredOn(WAIT::equals).hasSize(3);
+        assertThat(run.output()).contains("Attempt 3 of 3: zone us-east-1c.")
+                .contains("no zone had g6.xlarge capacity (tried: us-east-1a us-east-1b us-east-1c); try again later,"
+                        + " or choose the other instance type")
+                .contains("Deleted the key parameter");
+        assertThat(state.resolve("stack-us-east-1-finalysis-selfhost")).doesNotExist();
+        assertThat(state.resolve("key-parameter")).doesNotExist();
+    }
+
+    @Test
+    void aFailureForAnyOtherReasonStopsWithoutARetryAndLeavesTheStack() throws Exception {
+        Files.writeString(state.resolve("fail-deploy-finalysis-selfhost"), "");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(serverDeploys()).containsExactly("us-east-1a");
+        assertThat(calls()).doesNotContain(DELETE, WAIT);
+        assertThat(run.output()).contains("The server stack failed in us-east-1a (stack status ROLLBACK_COMPLETE).")
+                .contains("Reason: Received 1 FAILURE signal(s) out of 1.")
+                .contains("delete it (scripts/selfhost/destroy.sh) before running this again.")
+                .contains("Deleted the key parameter");
+        assertThat(Files.readString(state.resolve("stack-us-east-1-finalysis-selfhost")).strip())
+                .isEqualTo("ROLLBACK_COMPLETE");
+    }
+
+    /** Only a stack that rolled back cleanly is deleted; a capacity failure whose rollback failed is left. */
+    @Test
+    void aCapacityFailureThatDidntRollBackCleanlyIsLeftForTheOwner() throws Exception {
+        noCapacityIn("us-east-1a");
+        Files.writeString(state.resolve("rollback-failed"), "");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(serverDeploys()).containsExactly("us-east-1a");
+        assertThat(calls()).doesNotContain(DELETE);
+        assertThat(run.output()).contains("(stack status ROLLBACK_FAILED)");
+    }
+
+    @Test
+    void zoneIsTriedFirstThenTheOthersInOrder() throws Exception {
+        noCapacityIn("us-east-1c");
+
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n", "--zone", "us-east-1c");
+
+        assertThat(run.exit()).as(run.output()).isZero();
+        assertThat(run.output()).contains("Zones to try, in order: us-east-1c us-east-1a us-east-1b\n");
+        assertThat(serverDeploys()).containsExactly("us-east-1c", "us-east-1a");
+    }
+
+    @Test
+    void zoneWorksWithPlanAndInTheEqualsForm() throws Exception {
+        SelfHostFiles.Run run = run(CREATE, ANSWERS, "--zone=us-east-1b", "--plan");
+
+        assertThat(run.exit()).as(run.output()).isZero();
+        assertThat(run.output()).contains("Zones to try, in order: us-east-1b us-east-1a us-east-1c\n")
+                .contains("AvailabilityZone=us-east-1b TailscaleKeyParameter=");
+        assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
+    }
+
+    @Test
+    void aZoneThatDoesntOfferTheTypeIsRefusedBeforeAnythingChanges() throws Exception {
+        SelfHostFiles.Run run = run(CREATE, ANSWERS + KEY + "\n", "--zone", "us-east-1f");
+
+        assertThat(run.exit()).isNotZero();
+        assertThat(run.output()).contains("us-east-1f doesn't offer g6.xlarge; zones that do: us-east-1a us-east-1b us-east-1c")
+                .doesNotContain("Tailscale auth key");
+        assertThat(calls()).noneMatch(SelfHostScriptsTest::changes);
+    }
+
+    @Test
+    void aMalformedOrMissingZoneIsRefusedBeforeAnyCall() throws Exception {
+        SelfHostFiles.Run bad = run(CREATE, ANSWERS, "--zone", "us-east-1a; rm -rf /");
+        assertThat(bad.exit()).isEqualTo(2);
+        assertThat(bad.output()).contains("Not an availability zone");
+        SelfHostFiles.Run missing = run(CREATE, ANSWERS, "--zone");
+        assertThat(missing.exit()).isEqualTo(2);
+        assertThat(missing.output()).contains("--zone needs a zone");
+        assertThat(calls()).isEmpty();
+    }
+
+    @Test
+    void helpPrintsTheHeaderOnly() throws Exception {
+        SelfHostFiles.Run run = run(CREATE, "", "--help");
+
+        assertThat(run.exit()).isZero();
+        assertThat(run.output()).contains("--zone <az>").endsWith("Needs bash 3.2 (macOS) and the AWS CLI v2; no jq.\n")
+                .doesNotContain("set -euo");
     }
 
     // ---------------------------------------------------------------------------- destroy.sh

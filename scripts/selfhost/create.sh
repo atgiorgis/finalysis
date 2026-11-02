@@ -6,7 +6,10 @@
 #   scripts/selfhost/create.sh           asks its questions on stdin, then creates
 #   scripts/selfhost/create.sh --plan    runs only the read-only checks and prints every call that would change
 #                                        something, without making it (and doesn't ask for the key)
+#   --zone <az>                          tries this zone first (it must offer the instance type); with or without --plan
 #
+# Zones: every zone in the region that offers the instance type, in order (--zone first). When EC2 has no capacity in
+# one, the rolled-back stack this run created is deleted and the next zone is tried; the key is stored once for all.
 # The Tailscale auth key is read from stdin with no echo, stored as an SSM SecureString through --cli-input-json
 # from a mode-600 file in a private temp folder (never a command-line argument, so never in the process list or shell
 # history; the folder is deleted right after the call and on any exit), read once by the server's first boot, and
@@ -41,18 +44,31 @@ EMAIL_PATTERN='^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
 KEY_PATTERN='^tskey-[A-Za-z0-9-]+$'
 
 PLAN=0
-case "${1:-}" in
-    "") ;;
-    --plan) PLAN=1 ;;
-    -h | --help)
-        sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
-        exit 0
-        ;;
-    *)
-        echo "Unknown option: $1 (use --plan or --help)" >&2
-        exit 2
-        ;;
-esac
+ZONE_OPTION=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --plan) PLAN=1 ;;
+        --zone)
+            [ $# -ge 2 ] || { echo "--zone needs a zone, e.g. --zone us-east-1b" >&2; exit 2; }
+            ZONE_OPTION=$2
+            shift
+            ;;
+        --zone=*) ZONE_OPTION=${1#--zone=} ;;
+        -h | --help)
+            sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1 (use --plan, --zone <az> or --help)" >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
+if [ -n "$ZONE_OPTION" ] && ! [[ $ZONE_OPTION =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+[a-z]$ ]]; then
+    echo "Not an availability zone: $ZONE_OPTION (e.g. us-east-1b)" >&2
+    exit 2
+fi
 
 die() {
     echo "create.sh: $*" >&2
@@ -135,11 +151,20 @@ if [ "$NEW" = 1 ]; then
         || die "the image parameter doesn't resolve in $REGION"
     echo "  resolves to $AMI"
 
-    ZONE=$(aws ec2 describe-instance-type-offerings --region "$REGION" --location-type availability-zone \
+    OFFERED=$(aws ec2 describe-instance-type-offerings --region "$REGION" --location-type availability-zone \
         --filters "Name=instance-type,Values=$INSTANCE_TYPE" --query 'InstanceTypeOfferings[].Location' \
-        --output text | tr '\t' '\n' | sed '/^$/d' | sort | head -n 1)
-    [ -n "$ZONE" ] && [ "$ZONE" != None ] || die "no zone in $REGION offers $INSTANCE_TYPE"
-    echo "Zone: $ZONE"
+        --output text | tr '\t' '\n' | sed '/^$/d;/^None$/d' | sort)
+    [ -n "$OFFERED" ] || die "no zone in $REGION offers $INSTANCE_TYPE"
+    ZONES=()
+    if [ -n "$ZONE_OPTION" ]; then
+        printf '%s\n' "$OFFERED" | grep -qx "$ZONE_OPTION" \
+            || die "$ZONE_OPTION doesn't offer $INSTANCE_TYPE; zones that do: $(printf '%s ' $OFFERED)"
+        ZONES=("$ZONE_OPTION")
+    fi
+    for z in $OFFERED; do
+        [ "$z" = "$ZONE_OPTION" ] || ZONES+=("$z")
+    done
+    echo "Zones to try, in order: ${ZONES[*]}"
 fi
 
 BILLING_STATUS=$(aws cloudformation describe-stacks --region "$BILLING_REGION" --stack-name "$BILLING_STACK" \
@@ -195,6 +220,57 @@ delete_key_file() {
 }
 trap 'delete_key_file; delete_key' EXIT
 
+# The stack's status once it has stopped changing (a failed create rolls back first); NONE when there is no stack.
+settled_status() {
+    local status=""
+    for _ in $(seq 1 120); do
+        status=$(aws cloudformation describe-stacks --region "$REGION" --stack-name "$STACK" \
+            --query 'Stacks[0].StackStatus' --output text 2>/dev/null) || status=NONE
+        case "$status" in
+            *_IN_PROGRESS) sleep 15 ;;
+            *) break ;;
+        esac
+    done
+    printf '%s' "$status"
+}
+
+# Deploys the server stack in each zone of ZONES in turn. Only a failure for lack of EC2 capacity moves on, and only
+# after deleting the rolled-back stack this attempt created (the stack didn't exist before it); any other failure
+# stops here, the stack left for you to read and delete.
+deploy_server() {
+    local attempt=0 total=${#ZONES[@]} zone status reason
+    while [ "$attempt" -lt "$total" ]; do
+        zone=${ZONES[$attempt]}
+        attempt=$((attempt + 1))
+        echo "Attempt $attempt of $total: zone $zone."
+        if aws cloudformation deploy --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
+                --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
+                --parameter-overrides "InstanceType=$INSTANCE_TYPE" "ChatModel=$CHAT_MODEL" "AvailabilityZone=$zone" \
+                "TailscaleKeyParameter=$KEY_PARAMETER"; then
+            return 0
+        fi
+        status=$(settled_status)
+        reason=$(aws cloudformation describe-stack-events --region "$REGION" --stack-name "$STACK" \
+            --query "StackEvents[?LogicalResourceId=='Server' && ResourceStatus=='CREATE_FAILED'].ResourceStatusReason | [0]" \
+            --output text 2>/dev/null) || reason=""
+        [ "$reason" != None ] || reason=""
+        if [ "$status" = ROLLBACK_COMPLETE ] && { [[ $reason == *InsufficientInstanceCapacity* ]] \
+                || [[ $reason =~ do\ not\ have\ sufficient.*capacity ]]; }; then
+            echo "No $INSTANCE_TYPE capacity in $zone: $reason"
+            echo "Deleting the rolled-back stack $STACK (created by this run) before the next zone."
+            aws cloudformation delete-stack --region "$REGION" --stack-name "$STACK"
+            aws cloudformation wait stack-delete-complete --region "$REGION" --stack-name "$STACK"
+            continue
+        fi
+        echo "The server stack failed in $zone (stack status $status)." >&2
+        echo "Reason: ${reason:-none reported for the Server resource; see the stack events}" >&2
+        echo "The stack $STACK is left as it is for you to read; delete it (scripts/selfhost/destroy.sh) before" \
+            "running this again." >&2
+        exit 1
+    done
+    die "no zone had $INSTANCE_TYPE capacity (tried: ${ZONES[*]}); try again later, or choose the other instance type"
+}
+
 if [ "$BILLING_NEW" = 1 ]; then
     echo "Billing alarm stack $BILLING_STACK in $BILLING_REGION (billing metrics live only there)."
     change cloudformation deploy --region "$BILLING_REGION" --stack-name "$BILLING_STACK" \
@@ -228,13 +304,16 @@ if [ "$NEW" = 1 ]; then
 
     echo "Server stack $STACK in $REGION. The first boot installs Ollama and Tailscale and pulls the models; the"
     echo "stack completes only when all of that worked (up to 30 minutes)."
-    change cloudformation deploy --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
-        --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
-        --parameter-overrides "InstanceType=$INSTANCE_TYPE" "ChatModel=$CHAT_MODEL" "AvailabilityZone=$ZONE" \
-        "TailscaleKeyParameter=$KEY_PARAMETER"
     if [ "$PLAN" = 1 ]; then
+        change cloudformation deploy --region "$REGION" --stack-name "$STACK" --template-file "$TEMPLATE" \
+            --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset \
+            --parameter-overrides "InstanceType=$INSTANCE_TYPE" "ChatModel=$CHAT_MODEL" "AvailabilityZone=${ZONES[0]}" \
+            "TailscaleKeyParameter=$KEY_PARAMETER"
+        echo "[plan] if EC2 has no $INSTANCE_TYPE capacity there: delete the rolled-back stack, wait, and deploy in the"
+        echo "[plan] next zone, in order: ${ZONES[*]}"
         echo "[plan] aws ssm delete-parameter --region $REGION --name $KEY_PARAMETER"
     else
+        deploy_server
         delete_key
     fi
 fi
