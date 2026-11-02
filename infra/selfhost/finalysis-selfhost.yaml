@@ -145,6 +145,8 @@ Resources:
                 # Nothing here runs with tracing on (set -x), so the Tailscale key never reaches cloud-init's log.
                 set -euo pipefail
                 set +x
+                # cloud-init runs user data with no HOME, and some tools refuse to start without one (the ollama CLI panicked).
+                export HOME=/root
 
                 EMBED_MODEL=nomic-embed-text
                 TAILSCALE_NAME=finalysis-selfhost
@@ -192,14 +194,46 @@ Resources:
 
                 STEP="installing Ollama"
                 curl -fsSL https://ollama.com/install.sh | sh
-                for _ in $(seq 1 30); do
-                    curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
+
+                # Ollama on loopback until Tailscale is up; the models are pulled through the service's API, so they land in its own
+                # model directory (/usr/share/ollama/.ollama) and no CLI (which needs HOME) runs. The installer writes the unit but,
+                # while systemd is still booting, starts nothing, so this section never relies on it having started anything.
+                OLLAMA_LOCAL=http://127.0.0.1:11434
+                OLLAMA_WAIT_TRIES=60
+                # --- finalysis: ollama section (SelfHostUserDataOllamaTest runs it against a stub) ---
+                STEP="starting Ollama"
+                systemctl daemon-reload
+                if ! systemctl cat ollama.service >/dev/null 2>&1; then
+                    fail "Ollama's installer left no ollama.service unit"
+                fi
+                # --no-block: a unit started from cloud-init must not wait on boot ordering; the API wait below is the check.
+                systemctl enable --now --no-block ollama
+                ollama_up=0
+                for _ in $(seq 1 "$OLLAMA_WAIT_TRIES"); do
+                    if curl -fsS --max-time 5 "$OLLAMA_LOCAL/api/version" >/dev/null 2>&1; then
+                        ollama_up=1
+                        break
+                    fi
                     sleep 2
                 done
+                if [ "$ollama_up" != 1 ]; then
+                    fail "Ollama didn't answer on $OLLAMA_LOCAL/api/version after $OLLAMA_WAIT_TRIES tries"
+                fi
 
                 STEP="pulling the models"
-                ollama pull "$CHAT_MODEL" >/dev/null || fail "ollama pull $CHAT_MODEL failed"
-                ollama pull "$EMBED_MODEL" >/dev/null || fail "ollama pull $EMBED_MODEL failed"
+                pull_model() {
+                    local reply
+                    if ! reply=$(curl -fsS --max-time 3600 -H 'Content-Type: application/json' \
+                            -d "$(printf '{"name":"%s","stream":false}' "$1")" "$OLLAMA_LOCAL/api/pull"); then
+                        fail "Pulling $1 through Ollama's API failed"
+                    fi
+                    if ! printf '%s' "$reply" | grep -Eq '"status": *"success"'; then
+                        fail "Pulling $1: Ollama didn't report success"
+                    fi
+                }
+                pull_model "$CHAT_MODEL"
+                pull_model "$EMBED_MODEL"
+                # --- finalysis: end of the ollama section ---
 
                 STEP="installing Tailscale"
                 curl -fsSL https://tailscale.com/install.sh | sh
@@ -358,7 +392,8 @@ Resources:
                 # Load the chat model once: proves it runs, and counts as a model request, so a first boot longer
                 # than 20 minutes still leaves the owner 20 minutes before the watchdog can stop the server.
                 STEP="loading the chat model"
-                curl -fsS --max-time 600 "http://$TS_IP:11434/api/generate" -d "{\"model\":\"$CHAT_MODEL\"}" >/dev/null
+                curl -fsS --max-time 600 "http://$TS_IP:11434/api/generate" -d "{\"model\":\"$CHAT_MODEL\"}" >/dev/null \
+                    || fail "The chat model didn't load through the API on the Tailscale address"
 
                 trap - ERR
                 signal 0 "Ready: Ollama on the Tailscale address, $CHAT_MODEL and $EMBED_MODEL pulled, idle watchdog on"

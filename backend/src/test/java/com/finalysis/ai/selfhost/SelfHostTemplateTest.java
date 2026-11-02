@@ -238,9 +238,58 @@ class SelfHostTemplateTest {
     void theFirstBootChecksTheGpuAndRefusesThePlaceholderModel() {
         assertThat(body).contains("if ! nvidia-smi -L | grep -q '^GPU '; then\n    fail \"nvidia-smi sees no GPU\"");
         assertThat(body).contains("if [ \"$CHAT_MODEL\" = " + PLACEHOLDER + " ]; then");
-        assertThat(body).contains("ollama pull \"$CHAT_MODEL\" >/dev/null || fail");
-        assertThat(body).contains("EMBED_MODEL=nomic-embed-text").contains("ollama pull \"$EMBED_MODEL\" >/dev/null || fail");
+        assertThat(body).contains("EMBED_MODEL=nomic-embed-text");
         assertThat(body.indexOf("checking the GPU")).isLessThan(body.indexOf("installing Ollama"));
+    }
+
+    /** 9c-6: cloud-init gives user data no HOME, and the ollama CLI panicked without one on the owner's first run. */
+    @Test
+    void theFirstBootSetsHomeBeforeAnythingRuns() {
+        int home = body.indexOf("export HOME=/root\n");
+        assertThat(home).isPositive().isGreaterThan(body.indexOf("set +x\n"))
+                .isLessThan(body.indexOf("STEP=\"installing the CloudFormation helper\""));
+    }
+
+    /**
+     * 9c-6: after the installer (which, while systemd is still booting, writes the unit but starts nothing), the first
+     * boot reloads systemd, checks the unit exists, enables and starts it, and waits a bounded time for the API.
+     */
+    @Test
+    void theFirstBootEnablesTheOllamaServiceItselfAndWaitsForItsApi() {
+        int installer = body.indexOf("curl -fsSL https://ollama.com/install.sh | sh\n");
+        int reload = body.indexOf("systemctl daemon-reload\n", installer);
+        int unit = body.indexOf("if ! systemctl cat ollama.service >/dev/null 2>&1; then");
+        int enable = body.indexOf("systemctl enable --now --no-block ollama\n");
+        int wait = body.indexOf("for _ in $(seq 1 \"$OLLAMA_WAIT_TRIES\"); do\n"
+                + "    if curl -fsS --max-time 5 \"$OLLAMA_LOCAL/api/version\"");
+        int failure = body.indexOf("fail \"Ollama didn't answer on $OLLAMA_LOCAL/api/version after $OLLAMA_WAIT_TRIES tries\"");
+        assertThat(List.of(installer, reload, unit, enable, wait, failure)).doesNotContain(-1).isSorted();
+        assertThat(body).contains("OLLAMA_LOCAL=http://127.0.0.1:11434\n").containsPattern("OLLAMA_WAIT_TRIES=[1-9][0-9]*\n");
+    }
+
+    /**
+     * 9c-6: both models are pulled through the service's API on loopback (POST /api/pull, not streamed, the reply
+     * checked), before Tailscale and the rebind; no ollama CLI command anywhere; Ollama never on 0.0.0.0.
+     */
+    @Test
+    void theModelsArePulledThroughTheApiNeverTheCli() {
+        assertThat(body).contains("-d \"$(printf '{\"name\":\"%s\",\"stream\":false}' \"$1\")\" \"$OLLAMA_LOCAL/api/pull\"")
+                .contains("grep -Eq '\"status\": *\"success\"'")
+                .contains("fail \"Pulling $1 through Ollama's API failed\"");
+        int chat = body.indexOf("pull_model \"$CHAT_MODEL\"\n");
+        int embed = body.indexOf("pull_model \"$EMBED_MODEL\"\n");
+        assertThat(List.of(body.indexOf("systemctl enable --now --no-block ollama"), chat, embed,
+                body.indexOf("STEP=\"installing Tailscale\""), body.indexOf("systemctl restart ollama")))
+                .doesNotContain(-1).isSorted();
+        assertThat(body).doesNotContainPattern("(?m)^\\s*(sudo\\s+)?(\\S+/)?ollama\\s+(pull|run|serve|create)\\b")
+                .doesNotContain("0.0.0.0");
+    }
+
+    /** 9c-6: the end-of-boot load is an API call with its result checked. */
+    @Test
+    void theChatModelLoadIsAnApiCallThatFailsTheBoot() {
+        assertThat(body).contains("\"http://$TS_IP:11434/api/generate\" -d \"{\\\"model\\\":\\\"$CHAT_MODEL\\\"}\" >/dev/null \\\n"
+                + "    || fail \"The chat model didn't load through the API on the Tailscale address\"");
     }
 
     @Test

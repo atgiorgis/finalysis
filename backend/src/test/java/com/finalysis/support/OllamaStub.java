@@ -51,6 +51,7 @@ public final class OllamaStub implements AutoCloseable {
     private volatile int dimensions = 768;
     private volatile Reply embedFailure;
     private volatile Reply generateReply;
+    private volatile Reply pullReply;
 
     private OllamaStub(List<String> models) throws IOException {
         this.models = List.copyOf(models);
@@ -105,6 +106,12 @@ public final class OllamaStub implements AutoCloseable {
     }
 
     /** Every {@code /api/embed} request is answered with this until cleared (null). */
+    /** What {@code POST /api/pull} answers; by default Ollama's non-streamed success, {@code {"status":"success"}}. */
+    public OllamaStub pullReply(Reply reply) {
+        this.pullReply = reply;
+        return this;
+    }
+
     public OllamaStub embedFailing(Reply reply) {
         embedFailure = reply;
         return this;
@@ -123,6 +130,7 @@ public final class OllamaStub implements AutoCloseable {
         chat.clear();
         embedFailure = null;
         generateReply = null;
+        pullReply = null;
         dimensions = 768;
     }
 
@@ -199,6 +207,7 @@ public final class OllamaStub implements AutoCloseable {
             case "/api/chat" -> nextChat();
             case "/api/generate" -> generateReply != null ? generateReply
                     : new Reply(200, "{\"model\":\"stub\",\"response\":\"\",\"done\":true,\"done_reason\":\"load\"}", 0);
+            case "/api/pull" -> pullReply != null ? pullReply : new Reply(200, "{\"status\":\"success\"}", 0);
             default -> status(404, "not found");
         };
         if (reply.delayMillis() > 0) {

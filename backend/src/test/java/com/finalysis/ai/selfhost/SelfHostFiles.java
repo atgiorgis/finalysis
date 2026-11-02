@@ -40,6 +40,14 @@ final class SelfHostFiles {
         return (Map<String, Object>) new Yaml(new CloudFormationConstructor()).load(Files.readString(file));
     }
 
+    /** The server's user data: the {@code !Sub} header (the stack's values) and the plain body, joined with ''. */
+    static List<String> userData() throws IOException {
+        Map<String, Object> server = map(map(map(template(TEMPLATE).get("Resources")).get("Server")).get("Properties"));
+        List<Object> join = list(map(map(server.get("UserData")).get("Fn::Base64")).get("Fn::Join"));
+        List<Object> parts = list(join.get(1));
+        return List.of((String) map(parts.get(0)).get("Fn::Sub"), (String) parts.get(1));
+    }
+
     @SuppressWarnings("unchecked")
     static Map<String, Object> map(Object value) {
         return (Map<String, Object>) value;
@@ -84,9 +92,23 @@ final class SelfHostFiles {
     /** Runs {@code /bin/bash script args} with this PATH, extra environment and stdin, in the repo. */
     static Run bash(Path script, String path, Map<String, String> env, String stdin, String... args)
             throws IOException, InterruptedException {
+        return bash(false, script, path, env, stdin, args);
+    }
+
+    /** As {@link #bash}, with only PATH and {@code env} in the environment: no HOME, as under cloud-init. */
+    static Run bashBareEnvironment(Path script, String path, Map<String, String> env) throws IOException,
+            InterruptedException {
+        return bash(true, script, path, env, "");
+    }
+
+    private static Run bash(boolean bare, Path script, String path, Map<String, String> env, String stdin,
+                            String... args) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>(List.of("/bin/bash", script.toString()));
         command.addAll(List.of(args));
         ProcessBuilder builder = new ProcessBuilder(command).directory(REPO.toFile()).redirectErrorStream(true);
+        if (bare) {
+            builder.environment().clear();
+        }
         builder.environment().put("PATH", path);
         builder.environment().putAll(env);
         Process process = builder.start();

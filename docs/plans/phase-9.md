@@ -1368,6 +1368,68 @@ Also fixed: `--help` printed `set -euo pipefail` after the header, and bash 3.2 
 instance type, model tag and key; the threshold and e-mail aren't asked again. Confirm the SNS subscription e-mail if
 you haven't yet.
 
+### Step 9c-6 notes: the first boot starts Ollama itself and pulls through its API (template fix)
+
+**The owner's first real `create.sh` run** got past the key step (9c-5). The server stack then rolled back with
+"Received FAILURE signal". The boot log:
+- The GPU was seen and Ollama was downloaded.
+- The installer printed "WARNING: systemd is not running": cloud-init runs while systemd is still booting, so the
+  installer wrote the unit but started nothing.
+- `ollama pull` then panicked with "$HOME is not defined", because cloud-init runs user data with no HOME.
+- Tailscale was never reached. The key parameter was deleted by `create.sh`'s trap.
+
+**Fix, in the user data** (`infra/selfhost/finalysis-selfhost.yaml`):
+
+1. `export HOME=/root` right after `set +x`, as a backstop for anything else that reads it.
+2. After the installer, the first boot doesn't rely on it having started anything:
+   - `systemctl daemon-reload`, then `systemctl cat ollama.service`. A missing unit fails with "Ollama's installer
+     left no ollama.service unit".
+   - `systemctl enable --now --no-block ollama`. `--no-block` so a unit started from cloud-init never waits on boot
+     ordering.
+   - A bounded wait for `GET http://127.0.0.1:11434/api/version` (60 tries, 2 s apart, 5 s each). If it never
+     answers, the boot fails with "Ollama didn't answer on … after 60 tries".
+3. Both models are pulled through the service: `POST /api/pull` with `{"name": …, "stream": false}` for the chat tag
+   and `nomic-embed-text`. The reply must say `"status":"success"`; an HTTP error or any other reply fails the boot,
+   naming the model. The models land in the service's own directory (`/usr/share/ollama/.ollama`), and no `ollama`
+   CLI command is left in the user data.
+4. The bind is unchanged:
+   - Ollama starts on its default `127.0.0.1:11434` for the pulls (the unit sets no `OLLAMA_HOST`).
+   - Then Tailscale joins, and the one-shot unit writes the Tailscale address. The drop-in (`Requires`/`After` the
+     one-shot, `EnvironmentFile`) is installed, and `systemctl restart ollama` rebinds it.
+   - The existing checks still run: it must answer on the Tailscale address and must no longer answer on 127.0.0.1.
+   - The pulls come before the rebind, so they never need the Tailscale address. Nothing binds `0.0.0.0` (checked).
+5. The end-of-boot model load was already `POST /api/generate` on the Tailscale address. Its failure now fails the
+   boot with a clear reason instead of the generic "while loading the chat model".
+
+The Ollama section is marked in the user data (`# --- finalysis: ollama section …` / `# --- finalysis: end of the
+ollama section ---`), and its two inputs (`OLLAMA_LOCAL`, `OLLAMA_WAIT_TRIES`) are set just above it, so a test can
+run exactly that text.
+
+**Tests**: backend 3,751 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,742 at 9c-5 plus 4 template checks
+and 5 shell tests; the skip is `CfnLintTest`); frontend 353 tests (34 files), all passed. No live call, no EC2 or
+Tailscale action.
+- `IdleWatchdogScriptTest`: unchanged (9).
+- `SelfHostTemplateTest`, 26 (was 22). The old `ollama pull` assertions are replaced, and the new checks are:
+  - HOME is set before the first step.
+  - Installer → `daemon-reload` → the unit check → `enable --now --no-block` → the bounded `/api/version` wait → its
+    failure message, in that order.
+  - Both pulls go through `/api/pull` with the reply checked, before Tailscale and before the rebind.
+  - No `ollama pull|run|serve|create` command (the pattern matches the previous template) and no `0.0.0.0`.
+  - The model load's failure message.
+- `SelfHostUserDataOllamaTest`, 5 (new). It runs the template's own section under `/bin/bash` 3.2 with only PATH in
+  the environment (no HOME, `set -u`), against `OllamaStub` on loopback (which gained `/api/pull`). `systemctl` is a
+  fake that logs its calls; `ollama` is a fake that panics like the real one did, so any CLI call fails the test.
+  Cases:
+  - The happy path: the systemctl calls in order, then `GET /api/version` and the two `POST /api/pull` requests
+    with exactly `name` and `stream: false`.
+  - An Ollama that never answers: a clear failure and no pulls.
+  - A missing unit: fails before anything is started.
+  - A failed pull: fails naming the model.
+  - A pull reply without success: fails the boot.
+
+cfn-lint isn't installed here, so `CfnLintTest` stays skipped. The template's structure is unchanged (only the user
+data's text). The real check is the owner's next `create.sh` run, after `destroy.sh` clears the rolled-back stack.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)
