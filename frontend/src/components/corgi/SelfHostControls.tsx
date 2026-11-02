@@ -6,6 +6,9 @@ import { useDataVersion } from '../../shell/ShellData'
 /** How often the status is read while the server is starting or stopping (docs/plans/phase-9.md §5.5). */
 export const POLL_MS = 5000
 
+/** What the owner's first restart showed (9c-8 notes); the app waits 15 minutes (`finalysis.ai.selfhost.start-wait`). */
+export const RESTART_NOTE = 'After a stop, a start can take up to 10 minutes while Tailscale reconnects.'
+
 const STATE_TEXT: Record<SelfHostState, string> = {
   STOPPED: 'Stopped',
   STARTING: 'Starting',
@@ -170,6 +173,7 @@ export default function SelfHostControls({ name }: { name: string }) {
         </dl>
       )}
       {status?.note && <p className="selfhost-note">{status.note}</p>}
+      {status?.state && <p className="muted selfhost-restart">{RESTART_NOTE}</p>}
       {status?.storageNote && <p className="muted selfhost-storage">{status.storageNote}</p>}
     </div>
   )

@@ -6,12 +6,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.finalysis.ai.AiPath;
 import com.finalysis.ai.AiPathSettings;
 import com.finalysis.ai.OllamaClients;
+import com.finalysis.ai.OllamaHostGuard;
 import com.finalysis.ai.OllamaProperties;
 import com.finalysis.ai.ProviderSet;
 import com.finalysis.ai.SelfHostUsage;
+import com.finalysis.ai.ollama.HostResolver;
+import com.finalysis.ai.ollama.OllamaProviderFactory;
 import com.finalysis.support.MutableClock;
+import com.finalysis.support.OllamaStub;
 import java.math.BigDecimal;
 import java.net.ConnectException;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
@@ -26,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -60,7 +66,7 @@ class SelfHostControlTest {
             Duration.ofSeconds(300), Duration.ofSeconds(3), 16_384);
     private static final SelfHostProperties PROPERTIES = new SelfHostProperties(
             Map.of("g6.xlarge", new BigDecimal("0.8048"), "g5.xlarge", new BigDecimal("1.006")),
-            Duration.ofSeconds(300), Duration.ofSeconds(10));
+            Duration.ofSeconds(300), Duration.ofSeconds(10), Duration.ofMinutes(15));
 
     private final MutableClock clock = new MutableClock();
     private final FakeEc2 ec2 = new FakeEc2();
@@ -327,21 +333,126 @@ class SelfHostControlTest {
     }
 
     @Test
-    void ollamaThatNeverAnswersStopsTheProgressAfterTenMinutesWithANote() {
+    void ollamaThatNeverAnswersStopsTheProgressAfterTheStartWaitWithANote() {
         ec2.server("stopped", null, "g6.xlarge", "80");
         control.start();
         ec2.become("running", clock.instant());
         ollama.versionFailure = new ResourceAccessException("x", new UnknownHostException("finalysis-selfhost"));
 
-        clock.advance(Duration.ofMinutes(10));
+        clock.advance(Duration.ofMinutes(15));
         assertThat(control.status().progress()).isEqualTo("waiting for Tailscale");
         clock.advance(Duration.ofMinutes(1));
 
         SelfHostStatus status = control.status();
         assertThat(status.state()).isEqualTo("RUNNING");
-        assertThat(status.note()).isEqualTo("Ollama didn't answer on finalysis-selfhost within 10 minutes of the "
+        assertThat(status.note()).isEqualTo("Ollama didn't answer on finalysis-selfhost within 15 minutes of the "
                 + "start: Not resolvable: check the name, and that Tailscale is running on this Mac.");
         assertThat(ollama.warmUps).isEmpty();
+    }
+
+    /** The owner's first restart: Tailscale took about 10 minutes to reconnect, and the old 10-minute wait gave up. */
+    @Test
+    void aTenMinuteTailscaleReconnectStillFinishesTheStart() {
+        ec2.server("stopped", null, "g6.xlarge", "80");
+        control.start();
+        ec2.become("running", clock.instant());
+        ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
+
+        clock.advance(Duration.ofMinutes(10).plusSeconds(30));
+        assertThat(control.status().progress()).isEqualTo("waiting for Tailscale");
+        ollama.versionFailure = null;
+
+        assertThat(control.status().progress()).isEqualTo("loading the model");
+    }
+
+    @Test
+    void theStartWaitIsASetting() {
+        SelfHostControl patient = new SelfHostControl(new Ec2Clients() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public Ec2Client client(String region) {
+                return ec2;
+            }
+        }, new SelfHostProperties(PROPERTIES.hourlyRates(), PROPERTIES.warmUpTimeout(), PROPERTIES.awsTimeout(),
+                Duration.ofMinutes(20)), selection::get, rechecks::incrementAndGet, ollama, OLLAMA, clock, background);
+        ec2.server("stopped", null, "g6.xlarge", "80");
+        patient.start();
+        ec2.become("running", clock.instant());
+        ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
+
+        clock.advance(Duration.ofMinutes(20));
+        assertThat(patient.status().progress()).isEqualTo("waiting for Tailscale");
+        clock.advance(Duration.ofMinutes(1));
+        assertThat(patient.status().note()).startsWith("Ollama didn't answer on finalysis-selfhost within 20 minutes");
+    }
+
+    // ---------------------------------------------------------------------------- Test, through the real clients
+
+    /**
+     * The owner's first run (9c-8 notes): curl reached Ollama on the server's IPv4 tailnet address, but Test said
+     * "Refused" since Java tried the name's IPv6 address first. Here the real clients and a stub on 127.0.0.1 only,
+     * with a resolver that answers ::1 first: Test reaches the stub.
+     */
+    @Test
+    void testReachesTheServersIpv4AddressWhenItsNameAlsoHasAnIpv6One() throws Exception {
+        try (OllamaStub stub = OllamaStub.start()) {
+            String name = "finalysis-selfhost.invalid";
+            SelfHostControl real = withRealClients(stub, name, InetAddress.getByAddress(name,
+                    new byte[] {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}),
+                    InetAddress.getByAddress(name, new byte[] {127, 0, 0, 1}));
+
+            assertThat(real.test(name)).isEqualTo(new SelfHostControl.TestResult(true, OllamaStub.VERSION,
+                    "Reachable, Ollama " + OllamaStub.VERSION));
+            assertThat(stub.requests("/api/version")).hasSize(1);
+        }
+    }
+
+    @Test
+    void testOfANameWithNoAddressSaysNotResolvable() throws Exception {
+        try (OllamaStub stub = OllamaStub.start()) {
+            String name = "finalysis-selfhost.invalid";
+            SelfHostControl real = withRealClients(stub, name);
+
+            assertThat(real.test(name).message()).isEqualTo(
+                    "Not resolvable: check the name, and that Tailscale is running on this Mac.");
+            assertThat(stub.requests()).isEmpty();
+        }
+    }
+
+    /** The control with the real Ollama clients on the stub's port; the name resolves to these addresses (none: no address). */
+    private SelfHostControl withRealClients(OllamaStub stub, String name, InetAddress... addresses) {
+        HostResolver resolver = host -> {
+            if (addresses.length == 0) {
+                throw new UnknownHostException(host);
+            }
+            return addresses;
+        };
+        OllamaHostGuard guard = request -> {
+            boolean allowed = name.equals(request.getHost())
+                    || "127.0.0.1".equals(request.getHost()) && request.getPort() == stub.port();
+            if (!allowed) {
+                throw new AssertionError("not the test's name or stub: " + request);
+            }
+        };
+        OllamaProviderFactory clients = new OllamaProviderFactory(new StaticListableBeanFactory(Map.of("guard", guard))
+                .getBeanProvider(OllamaHostGuard.class), resolver);
+        OllamaProperties onStubPort = new OllamaProperties(stub.port(), OLLAMA.models(), OLLAMA.embeddingDimensions(),
+                OLLAMA.selfHostedReadTimeout(), OLLAMA.localReadTimeout(), OLLAMA.probeTimeout(), OLLAMA.numCtx());
+        return new SelfHostControl(new Ec2Clients() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public Ec2Client client(String region) {
+                return ec2;
+            }
+        }, PROPERTIES, selection::get, rechecks::incrementAndGet, clients, onStubPort, clock, background);
     }
 
     @Test
@@ -448,6 +559,11 @@ class SelfHostControlTest {
     void theReasonsInPlainWords() {
         assertThat(SelfHostControl.unreachable(new ResourceAccessException("x", new ConnectException("refused"))))
                 .isEqualTo("Refused: the server answers, but Ollama isn't listening on port 11434.");
+        ConnectException unresolved = new ConnectException();
+        unresolved.initCause(new java.nio.channels.UnresolvedAddressException());
+        assertThat(SelfHostControl.unreachable(new ResourceAccessException("x", unresolved)))
+                .as("Java's client reports an unresolvable name as a ConnectException")
+                .isEqualTo("Not resolvable: check the name, and that Tailscale is running on this Mac.");
         assertThat(SelfHostControl.unreachable(new ResourceAccessException("x",
                 new java.net.SocketTimeoutException("read timed out"))))
                 .isEqualTo("Timed out: the server may be stopped or still starting.");

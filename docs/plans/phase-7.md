@@ -1015,6 +1015,20 @@ tests (24 files); layout check 69 passed, 1 skipped (the phone-only check in the
   `frontend/test-reports/vitest.json` (Vitest's JSON reporter, git-ignored, outside Playwright's `test-results/`,
   which each layout run empties), so a failing run keeps the names of its failed tests. On a recurrence: copy that
   file before the next run and record the names here.
+  - **Recurrence, 2026-11-02 (Phase 9 step 9c-8).** The first `npm test` after a full `caffeinate -i ./mvnw clean
+    verify` (which passed): **9 failed tests in 7 of 34 files** (346 passed of 355). All nine failed with the same
+    error, "Test timed out in 5000ms", the per-test limit, not a `findBy…` wait. The run straight after passed 355 of
+    355. The report is kept, git-ignored, as `frontend/test-reports/vitest-2026-11-02-9c8-timeouts.json`. The tests:
+  - `CategoryDetails.test.tsx`: "rows that don’t add up to the panel are shown as such, without the ✓"
+  - `ChatPage.test.tsx`: "a follow-up asks the same conversation and adds below"; "a fallback is labelled; a limit is
+    said plainly; a gone transaction has no link; no price says so"
+  - `ImportPage.test.tsx`: "a chosen or dropped file shows its name and size; two at once are refused"
+  - `OverviewPage.test.tsx`: "a partial month with nothing yet: the caveat, no spending, the flags by account"
+  - `VaultGate.test.tsx`: "after too many attempts the wait is shown as a time"
+  - `VaultSettings.test.tsx`: "with the vault off, Settings says the data is in the plain dev database and offers
+    nothing"
+  - `CorgiSettings.test.tsx`: "a refused field is named, as the backend says it"; "Self-hosted needs a Tailscale name,
+    never a web address, and a region like the backend takes it"
 - **Fixtures re-captured: empty diff.** A throwaway Postgres (port 55432) and the packaged backend on port 18080
   (AI off), the README's newman folders (266 requests, 760 assertions, 0 failures), then `npm run capture-fixtures`:
   `git diff` over `src/test/fixtures/` is empty.

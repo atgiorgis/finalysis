@@ -26,15 +26,28 @@ export const PATH_NAMES: Record<AiPath, string> = {
 
 const TONES: Record<AiPath, PathTone> = { CLOUD: 'cloud', SELF_HOSTED: 'self-hosted', LOCAL: 'local', OFF: 'off' }
 
+/** The Cloud path's provider: Bedrock (docs/plans/phase-9.md §3.2). */
+export const CLOUD_PROVIDER = 'bedrock'
+
 /** A cloud provider's name in prose; one the UI doesn't know is named as the backend reports it. */
 const PROVIDER_NAMES: Record<string, string> = { bedrock: 'Amazon Bedrock' }
 
-export function providerName(ai: AiStatus): string {
-  return (ai.provider && PROVIDER_NAMES[ai.provider]) ?? ai.provider ?? 'a cloud provider'
-}
-
 /** A provider's name on the Cloud badge. */
 const PROVIDER_LABELS: Record<string, string> = { bedrock: 'Bedrock' }
+
+/**
+ * The Cloud path's provider: the status's only while the status is Cloud's, else Bedrock. Another path's status names
+ * its own provider (`ollama`), never Cloud's (9c-8 notes).
+ */
+function cloudProvider(ai?: AiStatus | null): string {
+  return (ai?.path === 'CLOUD' && ai.provider) || CLOUD_PROVIDER
+}
+
+/** The Cloud provider's name in prose: "Amazon Bedrock". */
+export function providerName(ai?: AiStatus | null): string {
+  const provider = cloudProvider(ai)
+  return PROVIDER_NAMES[provider] ?? provider
+}
 
 /** Whether the status says Corgi can't run on its selected path (not OFF, not locked). */
 export function isOff(ai: AiStatus | null | undefined): boolean {
@@ -43,13 +56,14 @@ export function isOff(ai: AiStatus | null | undefined): boolean {
 
 /**
  * The badge of a path (§3.5): Cloud amber "Cloud · Bedrock", Self-hosted blue "Self-hosted · <name>", Local green
- * "Local". `ai` gives the provider and the server's name; without them the badge names the path alone.
+ * "Local". `ai` gives the server's name, and Cloud's provider when it is Cloud's status; without a name the Self-hosted
+ * badge names the path alone.
  */
 export function badgeFor(path: AiPath, ai?: AiStatus | null): { label: string; tone: PathTone } {
   switch (path) {
     case 'CLOUD': {
-      const provider = ai?.provider ? (PROVIDER_LABELS[ai.provider] ?? ai.provider) : 'Bedrock'
-      return { label: `Cloud · ${provider}`, tone: 'cloud' }
+      const provider = cloudProvider(ai)
+      return { label: `Cloud · ${PROVIDER_LABELS[provider] ?? provider}`, tone: 'cloud' }
     }
     case 'SELF_HOSTED':
       return { label: ai?.server ? `Self-hosted · ${ai.server}` : 'Self-hosted', tone: 'self-hosted' }
@@ -77,7 +91,7 @@ export function bannerText(path: AiPath, ai?: AiStatus | null): string | null {
   switch (path) {
     case 'CLOUD':
       return (
-        `Cloud AI is on (${ai ? providerName(ai) : 'Amazon Bedrock'}): merchant names and amounts are sent for ` +
+        `Cloud AI is on (${providerName(ai)}): merchant names and amounts are sent for ` +
         'categorization, and chat questions with the figures they need are sent for answers.'
       )
     case 'SELF_HOSTED':

@@ -84,6 +84,22 @@ test('three cards, each with its models, its badge in its colour and the banner 
   expect(within(section).getByRole('radio', { name: /^Off: categorization uses rules only/ })).not.toBeChecked()
 })
 
+test('with another path selected, the Cloud card still names its own provider: Bedrock, never the selected one', async () => {
+  for (const selected of [
+    ai({ path: 'SELF_HOSTED', provider: 'ollama', server: 'finalysis-selfhost', models: OLLAMA_MODELS }),
+    ai({ path: 'LOCAL', provider: 'ollama', models: OLLAMA_MODELS }),
+  ]) {
+    renderApp('/settings', { '/api/status': backend(selected).route })
+    await corgi()
+
+    const cloud = card('Cloud')
+    expect(within(cloud).getByText('Cloud · Bedrock')).toHaveClass('path-badge-cloud')
+    expect(cloud).toHaveTextContent(CLOUD_BANNER)
+    expect(cloud).not.toHaveTextContent(/ollama/i)
+    cleanup()
+  }
+})
+
 test('a path the backend can’t offer is disabled with the reason', async () => {
   renderApp('/settings', {
     '/api/status': backend(ai({ path: 'LOCAL', available: ['SELF_HOSTED', 'LOCAL'], provider: 'ollama',

@@ -8,7 +8,11 @@ import com.finalysis.ai.OllamaHostGuard;
 import com.finalysis.ai.OllamaProperties;
 import com.finalysis.ai.PromptCache;
 import com.finalysis.ai.ProviderSet;
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -25,10 +29,13 @@ import org.springframework.ai.ollama.api.OllamaEmbeddingOptions;
 import org.springframework.ai.ollama.management.ModelManagementOptions;
 import org.springframework.ai.ollama.management.PullModelStrategy;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.retry.RetryPolicy;
 import org.springframework.core.retry.RetryTemplate;
+import org.springframework.http.HttpRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.support.HttpRequestWrapper;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -52,6 +59,11 @@ import org.springframework.web.client.RestClient;
  *   <li>Every client, probe and request passes the {@link OllamaHostGuard}s first: none in production; the test
  *       suite's fails any host but a test's stub on loopback. A client is checked when it is built, since Spring AI's
  *       retry handling wraps whatever a request throws.</li>
+ *   <li>A host name is sent to its IPv4 address: each request looks the name up and uses its first IPv4 address,
+ *       or the name itself when it has none. Tailscale gives a server an IPv4 and an IPv6 address, Java tries the IPv6
+ *       one first, and the server's Ollama listens on its IPv4 tailnet address only (infra/selfhost). Local's
+ *       {@code 127.0.0.1} is an address already. Looked up per request, so a name that didn't resolve when the
+ *       clients were built (Tailscale off) works once it does. Only the address changes: the status shows the name.</li>
  *   <li>No prompt cache: the providers report none.</li>
  * </ul>
  */
@@ -64,9 +76,17 @@ public class OllamaProviderFactory implements OllamaClients {
             .pullModelStrategy(PullModelStrategy.NEVER).build();
 
     private final ObjectProvider<OllamaHostGuard> guards;
+    private final HostResolver resolver;
 
+    @Autowired
     public OllamaProviderFactory(ObjectProvider<OllamaHostGuard> guards) {
+        this(guards, HostResolver.SYSTEM);
+    }
+
+    /** For tests: names are looked up with this resolver. */
+    public OllamaProviderFactory(ObjectProvider<OllamaHostGuard> guards, HostResolver resolver) {
         this.guards = guards;
+        this.resolver = resolver;
     }
 
     @Override
@@ -134,7 +154,35 @@ public class OllamaProviderFactory implements OllamaClients {
         guards.orderedStream().forEach(guard -> guard.check(baseUrl));
     }
 
-    /** A client with these timeouts that runs every request past the host guards first. */
+    /**
+     * The URI with its host name replaced by the name's first IPv4 address; unchanged when the host is an address
+     * already, or the name has no IPv4 address (then the request uses the name, and fails as unresolvable if it is).
+     */
+    public URI ipv4Address(URI uri) {
+        String host = uri.getHost();
+        if (host == null || host.startsWith("[") || host.chars().allMatch(c -> c == '.' || Character.isDigit(c))) {
+            return uri;
+        }
+        InetAddress[] addresses;
+        try {
+            addresses = resolver.resolve(host);
+        } catch (UnknownHostException e) {
+            return uri;
+        }
+        for (InetAddress address : addresses) {
+            if (address instanceof Inet4Address) {
+                try {
+                    return new URI(uri.getScheme(), uri.getRawUserInfo(), address.getHostAddress(), uri.getPort(),
+                            uri.getRawPath(), uri.getRawQuery(), uri.getRawFragment());
+                } catch (URISyntaxException e) {
+                    return uri;
+                }
+            }
+        }
+        return uri;
+    }
+
+    /** A client with these timeouts that runs every request past the host guards, to the host's IPv4 address. */
     private RestClient.Builder restClient(Duration connectTimeout, Duration readTimeout) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
@@ -144,9 +192,23 @@ public class OllamaProviderFactory implements OllamaClients {
         return RestClient.builder()
                 .requestFactory(factory)
                 .requestInterceptor((request, body, execution) -> {
-                    guards.orderedStream().forEach(guard -> guard.check(request.getURI()));
-                    return execution.execute(request, body);
+                    check(request.getURI());
+                    URI target = ipv4Address(request.getURI());
+                    if (target.equals(request.getURI())) {
+                        return execution.execute(request, body);
+                    }
+                    check(target); // the guards see where the request goes, too
+                    return execution.execute(sentTo(request, target), body);
                 });
+    }
+
+    private static HttpRequest sentTo(HttpRequest request, URI target) {
+        return new HttpRequestWrapper(request) {
+            @Override
+            public URI getURI() {
+                return target;
+            }
+        };
     }
 
     private static ChatProvider chatProvider(ChatModel model, String modelId) {

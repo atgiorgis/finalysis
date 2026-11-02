@@ -1493,6 +1493,78 @@ New cases:
 **For the owner's next run**: `destroy.sh` first, if the rolled-back stack from the second run is still there; then
 `create.sh`, or `create.sh --zone us-east-1b` to start where EC2 said it had capacity.
 
+### Step 9c-8 notes: the first Self-hosted run (IPv4, the start wait, the Cloud card's labels)
+
+**The owner's first successful `create.sh` run** (2026-11-02) finished in **us-east-1c**, after capacity failures in
+us-east-1b and us-east-1a: 9c-7's retry deleted each rolled-back stack and went on, and 9c-6's boot (Ollama started by
+systemd, both models pulled through the API, Tailscale up) completed. The watchdog stopped the server 20 minutes after
+boot, before it had been used: expected, since it powers off after 20 minutes without a model request and boot time
+counts toward the first 20. (The owner's message was cut off here, after "expected; recorded"; the rest of this note
+is to be added.)
+
+Three things the run showed, fixed with no AWS call:
+
+1. **Test said "Refused" while curl reached Ollama.** `curl http://100.82.143.114:11434/api/version` from the Mac
+   answered `{"version":"0.40.13"}`. Tailscale gives the server an IPv4 (`100.x`) and an IPv6 (`fd7a:…`) address;
+   Java resolved `finalysis-selfhost` to the IPv6 one first. Ollama listens only on the IPv4 tailnet address
+   (`OLLAMA_HOST` takes one bind address, and the template documents IPv4), so the IPv6 connection was refused.
+   - **Fix, in `ai.ollama`**: every request the factory's clients send (chat, categorization, embeddings, the probe,
+     the version check behind Test, the warm-up) looks its host name up and goes to the **first IPv4 address**. A name
+     with no IPv4 address keeps the name. An address (Local's `127.0.0.1`) is never looked up. The server's binding
+     is unchanged.
+   - **Choice made here**: the lookup runs **per request**, in the clients' request interceptor, not once when the
+     base URL is built. The clients are built when the path is chosen, possibly while Tailscale is off. A
+     build-time address would stay as the name until the next switch, and Tailscale's addresses are stable, so a
+     lookup per request (cached by the JVM) costs nothing. Only the address changes: the status, the badge, the
+     banner and the notes show the name.
+   - The host guards see the request's host and, when it changes, the address it goes to. The test suite's guard
+     therefore still blocks any name before a lookup.
+   - **Found on the way**: Java's HTTP client reports an unresolvable name as a `ConnectException` caused by an
+     `UnresolvedAddressException`, never an `UnknownHostException`. So Test's "Not resolvable" could never show; it
+     read "Refused". `SelfHostControl.unreachable` now looks for either lookup failure anywhere in the cause chain
+     before anything else.
+2. **The first Start after a stop gave up at 10 minutes.** Tailscale took about 10 minutes to re-establish the tunnel
+   (relayed through DERP first, then direct), and the app gave up at exactly 10: "Ollama didn't answer on
+   finalysis-selfhost within 10 minutes of the start". The wait is now a setting, `finalysis.ai.selfhost.start-wait`,
+   with a **default of 15m**; a non-positive value is refused at startup. The README (Self-hosted → Start and Stop) and
+   the Self-hosted card both say a start after a stop can take up to 10 minutes while Tailscale reconnects.
+3. **The Cloud card took the selected path's provider.** With Self-hosted selected, the Cloud card read "Cloud ·
+   ollama" and "Cloud AI is on (ollama)": the card worded its badge and banner from the active status. Each card now
+   names its own provider:
+   - The Cloud card passes no status, so it reads "Cloud · Bedrock" and SEC-01's "Cloud AI is on (Amazon Bedrock)".
+   - `badgeFor` and `bannerText` take a status's provider for Cloud only while that status is on Cloud. So the chat
+     header and the app banner still name an unknown cloud provider as the backend reports it.
+
+**Tests**: backend 3,773 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,761 at 9c-7 plus 12; the skip is
+`CfnLintTest`); frontend 355 tests (34 files), all passed; layout check 169 passed. No live call, no EC2 or Tailscale
+action.
+- The first `npm test` after the Maven verify had 9 timeouts ("Test timed out in 5000ms") in 7 files this step
+  doesn't touch, a recurrence of 7e's. The next run passed 355 of 355. The names and the kept report are in
+  phase-7.md's step 8 notes.
+- `OllamaIpv4Test` (new, 7 tests): a stub listening on 127.0.0.1 only, like the server, and a stub resolver; the name
+  ends in `.invalid` (never resolves, RFC 6761). It checks:
+  - `::1` is refused by the stub, as the server refused IPv6;
+  - with `::1` listed first and `127.0.0.1` second, chat, categorization, embeddings, the probe, the version check and
+    the warm-up all reach the stub, with one lookup per request;
+  - an IPv4 address alone is used;
+  - an IPv6 address alone keeps the name;
+  - no address keeps the name, and the request fails as unresolvable without reaching the stub;
+  - a loopback address is never looked up;
+  - only the host changes.
+- `SelfHostControlTest`:
+  - Test through the real clients, IPv6 listed first → "Reachable";
+  - Test of a name with no address → "Not resolvable…";
+  - the unresolvable `ConnectException` reads "Not resolvable";
+  - the start wait at 15 minutes;
+  - a 10½-minute reconnect still finishes the start;
+  - a 20-minute setting is honoured.
+- `SelfHostRatesTest`: the shipped 15m; zero is refused.
+- Frontend:
+  - the Cloud card reads "Cloud · Bedrock" and its SEC-01 banner while Self-hosted or Local is selected, with no
+    "ollama";
+  - `badgeFor` and `bannerText` for Cloud ignore another path's provider;
+  - the restart note is shown in the server's block.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

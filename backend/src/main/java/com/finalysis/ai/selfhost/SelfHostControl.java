@@ -14,6 +14,7 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.net.http.HttpTimeoutException;
+import java.nio.channels.UnresolvedAddressException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -58,9 +59,6 @@ public class SelfHostControl implements SelfHostMeter {
     static final String INSTANCE_STARTING = "instance starting";
     static final String WAITING_FOR_TAILSCALE = "waiting for Tailscale";
     static final String LOADING_MODEL = "loading the model";
-
-    /** How long after a start the app waits for Ollama to answer before it stops showing progress. */
-    static final Duration START_LIMIT = Duration.ofMinutes(10);
 
     private static final Logger log = LoggerFactory.getLogger(SelfHostControl.class);
 
@@ -194,7 +192,7 @@ public class SelfHostControl implements SelfHostMeter {
 
     /**
      * EC2 says running after a start this app made: wait for Ollama on the server's name, then load the model once.
-     * Returns the progress line, or null when the start is over (given up after {@link #START_LIMIT}).
+     * Returns the progress line, or null when the start is over (given up after {@code start-wait}).
      */
     private String afterBoot(Context context, Server server, Start ours, Instant now) {
         URI base = baseUrl(context.selection().selfhostName());
@@ -206,10 +204,10 @@ public class SelfHostControl implements SelfHostMeter {
         try {
             ollama.version(base, ollamaProperties.probeTimeout());
         } catch (RuntimeException e) {
-            if (server.launchTime() != null && Duration.between(server.launchTime(), now).compareTo(START_LIMIT) > 0) {
+            if (server.launchTime() != null && Duration.between(server.launchTime(), now).compareTo(properties.startWait()) > 0) {
                 ours.finished = true;
                 ours.note = "Ollama didn't answer on " + context.selection().selfhostName() + " within "
-                        + START_LIMIT.toMinutes() + " minutes of the start: " + unreachable(e);
+                        + properties.startWait().toMinutes() + " minutes of the start: " + unreachable(e);
                 return null;
             }
             return WAITING_FOR_TAILSCALE;
@@ -321,12 +319,18 @@ public class SelfHostControl implements SelfHostMeter {
         }
     }
 
-    /** Why a request to the server failed, in plain words, from the exception's causes. */
+    /**
+     * Why a request to the server failed, in plain words, from the exception's causes. A name that doesn't resolve is
+     * looked for first: Java's HTTP client reports it as a {@code ConnectException} caused by an
+     * {@code UnresolvedAddressException}, which would otherwise read as refused (9c-8 notes).
+     */
     static String unreachable(Throwable failure) {
         for (Throwable t = failure; t != null; t = t.getCause()) {
-            if (t instanceof UnknownHostException) {
+            if (t instanceof UnknownHostException || t instanceof UnresolvedAddressException) {
                 return "Not resolvable: check the name, and that Tailscale is running on this Mac.";
             }
+        }
+        for (Throwable t = failure; t != null; t = t.getCause()) {
             if (t instanceof ConnectException) {
                 return "Refused: the server answers, but Ollama isn't listening on port " + OllamaProperties.DEFAULT_PORT
                         + ".";

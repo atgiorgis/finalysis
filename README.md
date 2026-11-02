@@ -1695,6 +1695,13 @@ takes a while (drivers check, Ollama, Tailscale, model downloads); the stack com
    No `RunInstances`, no `TerminateInstances`: creating and destroying stay the scripts', with your credentials.
 3. In Finalysis: Settings → Corgi → Self-hosted: Tailscale name `finalysis-selfhost`, and the region.
 
+### Start and Stop
+
+Settings → Corgi → Self-hosted has **Test**, **Start** and **Stop**. After a stop, **a start can take up to 10 minutes
+while Tailscale reconnects** (relayed first, then direct): the card shows "waiting for Tailscale" meanwhile, and the
+app waits up to 15 minutes (`finalysis.ai.selfhost.start-wait`) before it gives up and says why. The app reaches the
+server at its name's IPv4 Tailscale address, the only one Ollama listens on; Settings and the badge show the name.
+
 ### Destroy
 
 ```sh

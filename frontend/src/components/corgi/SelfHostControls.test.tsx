@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { AiStatus, SelfHostStatus } from '../../api'
 import { fixtures, selfHostFixture } from '../../test/fixtures'
 import { renderApp } from '../../test/renderApp'
-import { POLL_MS } from './SelfHostControls'
+import { POLL_MS, RESTART_NOTE } from './SelfHostControls'
 
 afterEach(() => {
   cleanup()
@@ -122,6 +122,9 @@ test('stopped: the state, the rate’s type, the stopped-disk note; Start on, St
   const status = await screen.findByLabelText('Server status')
   expect(within(status).getByText('Stopped')).toBeInTheDocument()
   expect(screen.getByText(STORAGE)).toBeInTheDocument()
+  expect(screen.getByText('After a stop, a start can take up to 10 minutes while Tailscale reconnects.'))
+    .toHaveClass('muted')
+  expect(RESTART_NOTE).toContain('10 minutes')
   expect(button('Start')).toBeEnabled()
   expect(button('Stop')).toBeDisabled()
   expect(screen.queryByText(/running \d+ min/)).not.toBeInTheDocument()

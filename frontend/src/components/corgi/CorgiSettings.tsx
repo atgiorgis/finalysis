@@ -43,6 +43,21 @@ function orderedRoles(models: Record<string, string>): (readonly [string, string
   ].map((role) => [role, models[role]] as const)
 }
 
+/**
+ * What a card's badge and banner are worded from: each card names its own provider, never the selected path's. Cloud's
+ * is Bedrock (a constant), Self-hosted's server is the name being typed, Local needs nothing.
+ */
+function cardStatus(path: AiPath, ai: AiStatus, name: string): AiStatus | null {
+  switch (path) {
+    case 'CLOUD':
+      return null
+    case 'SELF_HOSTED':
+      return { ...ai, server: name || undefined }
+    default:
+      return ai
+  }
+}
+
 function Badge({ path, ai }: { path: AiPath; ai: AiStatus | null }) {
   const badge = badgeFor(path, ai)
   return (
@@ -164,7 +179,7 @@ export default function CorgiSettings({ ai }: { ai: AiStatus }) {
                   onChange={() => ask(path)}
                 />
                 <span className="path-card-title">{PATH_NAMES[path]}</span>
-                <Badge path={path} ai={path === 'SELF_HOSTED' && name ? { ...ai, server: name } : ai} />
+                <Badge path={path} ai={cardStatus(path, ai, name)} />
               </label>
               <p className="muted path-card-what">{WHAT_IT_IS[path]}</p>
               {unavailable && <p className="path-card-reason">Needs the aws profile.</p>}
@@ -182,7 +197,7 @@ export default function CorgiSettings({ ai }: { ai: AiStatus }) {
               )}
               <p className="path-card-banner">
                 <span className="muted">Banner: </span>
-                {bannerText(path, path === 'SELF_HOSTED' ? { ...ai, server: name || undefined } : ai)}
+                {bannerText(path, cardStatus(path, ai, name))}
               </p>
               {path === 'SELF_HOSTED' && (
                 <div className="path-card-server">

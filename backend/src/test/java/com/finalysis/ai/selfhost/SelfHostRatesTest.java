@@ -49,11 +49,20 @@ class SelfHostRatesTest {
         assertThat(shipped.hourlyRates().get("g5.xlarge")).isEqualByComparingTo("1.006");
         assertThat(shipped.warmUpTimeout()).isEqualTo(Duration.ofMinutes(5));
         assertThat(shipped.awsTimeout()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(shipped.startWait()).as("a restart can take up to 10 minutes while Tailscale reconnects")
+                .isEqualTo(Duration.ofMinutes(15));
     }
 
     @Test
     void aRateMustBePositive() {
         assertThatThrownBy(() -> new SelfHostProperties(Map.of("g6.xlarge", BigDecimal.ZERO), Duration.ofMinutes(5),
-                Duration.ofSeconds(10))).hasMessageContaining("hourly-rates.g6.xlarge must be positive");
+                Duration.ofSeconds(10), Duration.ofMinutes(15)))
+                .hasMessageContaining("hourly-rates.g6.xlarge must be positive");
+    }
+
+    @Test
+    void theStartWaitMustBePositive() {
+        assertThatThrownBy(() -> new SelfHostProperties(Map.of(), Duration.ofMinutes(5), Duration.ofSeconds(10),
+                Duration.ZERO)).hasMessageContaining("timeouts must be positive");
     }
 }

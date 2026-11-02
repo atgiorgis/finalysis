@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 import type { ChatUsage } from './api'
 import {
   AI_NAME,
+  badgeFor,
   bannerText,
   costText,
   LOCAL_COST,
@@ -28,6 +29,14 @@ test('the badge per path: Cloud amber with its provider, Self-hosted blue with i
     tone: 'self-hosted',
   })
   expect(pathBadge({ path: 'LOCAL', provider: 'ollama' })).toEqual({ label: 'Local', tone: 'local' })
+})
+
+test('Cloud’s badge and banner never take another path’s provider (9c-8)', () => {
+  const selfHosted = { path: 'SELF_HOSTED' as const, provider: 'ollama', server: 'finalysis-selfhost' }
+  expect(badgeFor('CLOUD', selfHosted)).toEqual({ label: 'Cloud · Bedrock', tone: 'cloud' })
+  expect(bannerText('CLOUD', selfHosted)).toContain('Cloud AI is on (Amazon Bedrock)')
+  expect(badgeFor('CLOUD', null)).toEqual({ label: 'Cloud · Bedrock', tone: 'cloud' })
+  expect(bannerText('CLOUD', { path: 'LOCAL', provider: 'ollama' })).not.toContain('ollama')
 })
 
 test('no badge while Off or locked; "Corgi is off" in muted ink when the path can’t run', () => {

@@ -13,11 +13,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                      the template allows has one ({@code SelfHostRatesTest})
  * @param warmUpTimeout how long the one model load after Start may take
  * @param awsTimeout    one EC2 call's limit, retries included
+ * @param startWait     how long after a start the app waits for Ollama to answer on the server's name; a restart can
+ *                      take up to 10 minutes while Tailscale reconnects (9c-8 notes)
  */
 @ConfigurationProperties("finalysis.ai.selfhost")
 public record SelfHostProperties(@DefaultValue Map<String, BigDecimal> hourlyRates,
                                  @DefaultValue("300s") Duration warmUpTimeout,
-                                 @DefaultValue("10s") Duration awsTimeout) {
+                                 @DefaultValue("10s") Duration awsTimeout,
+                                 @DefaultValue("15m") Duration startWait) {
 
     public SelfHostProperties {
         hourlyRates = Map.copyOf(hourlyRates);
@@ -26,7 +29,7 @@ public record SelfHostProperties(@DefaultValue Map<String, BigDecimal> hourlyRat
                 throw new IllegalArgumentException("finalysis.ai.selfhost.hourly-rates." + type + " must be positive");
             }
         });
-        for (Duration timeout : new Duration[] {warmUpTimeout, awsTimeout}) {
+        for (Duration timeout : new Duration[] {warmUpTimeout, awsTimeout, startWait}) {
             if (timeout.isNegative() || timeout.isZero()) {
                 throw new IllegalArgumentException("finalysis.ai.selfhost timeouts must be positive");
             }

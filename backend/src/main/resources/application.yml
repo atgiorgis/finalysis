@@ -151,6 +151,9 @@ finalysis:
         "[g5.xlarge]": 1.006
       warm-up-timeout: 300s           # the one model load after Start
       aws-timeout: 10s                # one EC2 call, retries included
+      # How long after Start the app waits for Ollama on the server's name. A restart can take up to 10 minutes while
+      # Tailscale reconnects (relayed first, then direct); 15m leaves room (9c-8 notes).
+      start-wait: 15m
     # The AI stage (docs/plans/phase-4.md §4.5, step 7 notes); used only while a profile turns AI on.
     categorization:
       batch-size: 25          # items (merchant + direction) per call
