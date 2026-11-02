@@ -485,6 +485,19 @@ Found in run 7 (step 9a-4 notes, `docs/eval/README.md` run 7):
 - **An invented `account` parameter on `get_account_totals`** (Ministral 3 14B 8 times, both gpt-oss models once): the
   tool's schema or description invites it.
 
+Found in the step checks:
+
+- **Vitest timeouts under Maven load.** The first `npm test` after a full `caffeinate -i ./mvnw clean verify` fails a
+  handful of unrelated tests, and the next run passes them all. Four sightings so far (the owner's count). Two are
+  recorded with details in phase-7.md's step 8 notes:
+  - step 7e: 7 tests, names not kept;
+  - 9c-8: 9 tests in 7 files, all "Test timed out in 5000ms", the report kept.
+
+  Candidates:
+  - run the two suites one after the other in the step instructions, with Maven fully finished before `npm test`
+    starts;
+  - or raise Vitest's per-test timeout (`testTimeout`) when the machine is under load.
+
 ---
 
 ## 12. The owner's manual setup steps
@@ -1498,9 +1511,10 @@ New cases:
 **The owner's first successful `create.sh` run** (2026-11-02) finished in **us-east-1c**, after capacity failures in
 us-east-1b and us-east-1a: 9c-7's retry deleted each rolled-back stack and went on, and 9c-6's boot (Ollama started by
 systemd, both models pulled through the API, Tailscale up) completed. The watchdog stopped the server 20 minutes after
-boot, before it had been used: expected, since it powers off after 20 minutes without a model request and boot time
-counts toward the first 20. (The owner's message was cut off here, after "expected; recorded"; the rest of this note
-is to be added.)
+boot, before it had been used (expected; recorded as a first-day quirk; from here on the owner starts the server from
+the app when needed). The watchdog powers off after 20 minutes without a model request, and the time since boot
+counts. Start from the app then worked, and the cost line read "running 10 min · ~$0.13 · g6.xlarge at $0.8048 an
+hour".
 
 Three things the run showed, fixed with no AWS call:
 
