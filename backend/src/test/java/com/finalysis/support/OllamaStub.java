@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -52,6 +53,7 @@ public final class OllamaStub implements AutoCloseable {
     private volatile Reply embedFailure;
     private volatile Reply generateReply;
     private volatile Reply pullReply;
+    private volatile Function<JsonNode, Reply> chatAnswer;
 
     private OllamaStub(List<String> models) throws IOException {
         this.models = List.copyOf(models);
@@ -83,7 +85,16 @@ public final class OllamaStub implements AutoCloseable {
         return URI.create("http://127.0.0.1:" + port());
     }
 
-    /** Queues answers for {@code /api/chat}, in order; with none queued, a chat request is a 500. */
+    /**
+     * Answers every {@code /api/chat} request no queued answer covers from its body, until cleared (null): for a run
+     * whose prompts, and their item keys, the test can't know in advance (9c-10).
+     */
+    public OllamaStub chatAnswering(Function<JsonNode, Reply> answer) {
+        this.chatAnswer = answer;
+        return this;
+    }
+
+    /** Queues answers for {@code /api/chat}, in order; with none queued (and no answering function), a 500. */
     public synchronized OllamaStub then(Reply... replies) {
         chat.addAll(List.of(replies));
         return this;
@@ -131,6 +142,7 @@ public final class OllamaStub implements AutoCloseable {
         embedFailure = null;
         generateReply = null;
         pullReply = null;
+        chatAnswer = null;
         dimensions = 768;
     }
 
@@ -204,7 +216,7 @@ public final class OllamaStub implements AutoCloseable {
             case "/api/version" -> new Reply(200, JSON.createObjectNode().put("version", VERSION).toString(), 0);
             case "/api/tags" -> new Reply(200, tags(), 0);
             case "/api/embed" -> embedFailure != null ? embedFailure : new Reply(200, embed(body), 0);
-            case "/api/chat" -> nextChat();
+            case "/api/chat" -> nextChat(body);
             case "/api/generate" -> generateReply != null ? generateReply
                     : new Reply(200, "{\"model\":\"stub\",\"response\":\"\",\"done\":true,\"done_reason\":\"load\"}", 0);
             case "/api/pull" -> pullReply != null ? pullReply : new Reply(200, "{\"status\":\"success\"}", 0);
@@ -231,9 +243,13 @@ public final class OllamaStub implements AutoCloseable {
         }
     }
 
-    private synchronized Reply nextChat() {
+    private synchronized Reply nextChat(String body) {
         Reply next = chat.poll();
-        return next != null ? next : status(500, "no scripted answer");
+        if (next != null) {
+            return next;
+        }
+        Function<JsonNode, Reply> answer = chatAnswer;
+        return answer != null ? answer.apply(JSON.readTree(body)) : status(500, "no scripted answer");
     }
 
     private String tags() {

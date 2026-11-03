@@ -176,6 +176,13 @@ class EvalRunnerTest {
                 "0.97");
 
         assertThat(variant(result, Variant.A).usage().chatCalls()).isZero();
+        // every call's time as AiCallLog wrote it (9c-10): B's one categorization call; C's embeddings and its call
+        assertThat(variant(result, Variant.A).calls()).isEmpty();
+        assertThat(b.calls()).extracting(AiCallTimings.Call::role, AiCallTimings.Call::outcome)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("categorization", "OK"));
+        assertThat(c.calls()).extracting(AiCallTimings.Call::role).containsOnly("categorization", "embedding")
+                .filteredOn("embedding"::equals).hasSize(c.usage().embeddingCalls());
+        assertThat(result.target()).isEqualTo(com.finalysis.chat.eval.ChatEvalTarget.BEDROCK);
         assertThat(result.settings()).containsEntry("eval.min-confidence", "0.70")
                 .containsEntry("finalysis.ai.examples.max-examples-per-batch", "50")
                 .containsEntry("models.categorization", AiIntegrationTest.CATEGORIZATION_MODEL)

@@ -1,8 +1,6 @@
 package com.finalysis.chat.eval;
 
 import com.finalysis.ai.AiProviders;
-import com.finalysis.ai.AiPathSettings;
-import com.finalysis.ai.AiPath;
 import com.finalysis.support.EvalDatabaseGuard;
 import com.finalysis.vault.PlainDatabaseConnection;
 import com.finalysis.vault.VaultService;
@@ -13,7 +11,6 @@ import com.finalysis.chat.eval.ChatEvalResults.Run;
 import com.finalysis.support.ImportTestSupport;
 import com.finalysis.support.IntegrationTest;
 import com.finalysis.support.NoCloudAiGuard;
-import java.time.Duration;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -162,15 +159,7 @@ class ChatLiveEvalIT {
     void evaluate() throws Exception {
         ChatEvalSet questions = ChatEvalTarget.only(ChatEvalSet.load(setFile(set)), subset);
         ChatEvalTarget runTarget = target.withSubset(subset);
-        if (target.ollama()) {
-            AiProviders.State state = providers.switchTo(new AiPathSettings.Selection(target.path(),
-                    target.path() == AiPath.SELF_HOSTED ? target.host() : null, null), Duration.ofSeconds(10));
-            if (!state.reachable()) {
-                throw new ChatEvalGuards.EvalRefusedException("Ollama at " + target.host() + " can't run the "
-                        + "evaluation: " + state.reason() + "; nothing was sent");
-            }
-            runTarget = runTarget.withOllamaVersion(state.ollamaVersion());
-        }
+        runTarget = runTarget.connect(providers);
         Run run = runner.run(questions, model, prices, maxCost, maxTurnCost != null, runTarget);
         ChatEvalReport report = ChatEvalReport.of(git, startedAt, questions, run);
         EvalDatabaseGuard.check(plainDatabase, vault.status(), postgres);

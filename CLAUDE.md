@@ -81,3 +81,5 @@ Phase 9: Corgi on three paths (Cloud = Bedrock, Self-hosted = an EC2 GPU instanc
 
 ## Notes
 - CI (GitHub Actions) is not active yet; run ./mvnw clean verify and npm test locally before every commit.
+- Before `./mvnw clean verify`, the owner's backend must be stopped and the Java extension's auto-build off
+  (`java.autobuild.enabled: false`): both use `backend/target`, which the build deletes and rewrites.

@@ -95,12 +95,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
     /** Where the run went (Phase 9 step 9b-1): the path, and on Ollama the host only, the model tag and the version. */
     String pathLine() {
         ChatEvalTarget target = run.target();
-        if (!target.ollama()) {
-            return "Path: Cloud (Amazon Bedrock)";
-        }
-        return "Path: " + (target.path() == com.finalysis.ai.AiPath.LOCAL ? "Local" : "Self-hosted") + " (Ollama "
-                + (target.ollamaVersion() == null ? "version unknown" : target.ollamaVersion()) + "), host `"
-                + target.host() + "`; model tag `" + run.model() + "`";
+        return target.ollama() ? target.describe() + "; model tag `" + run.model() + "`" : target.describe();
     }
 
     /** On Ollama the limit is off: there is no token cost, and the run budget doesn't apply either. */

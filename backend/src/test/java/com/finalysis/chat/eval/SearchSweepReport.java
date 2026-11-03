@@ -23,9 +23,11 @@ import tools.jackson.databind.json.JsonMapper;
  * The search-floor sweep's results (step 8), in {@code docs/eval/} as
  * {@code chat-sweep-dev-<commit12>-<timestamp>.json} and {@code .md}.
  *
- * @param settings the search and embedding settings of the run, by property name
+ * @param target         where the run went: Cloud, or Ollama's path, host and version (9c-10)
+ * @param embeddingModel the model the index and the queries were embedded with, as the active providers report it
+ * @param settings       the search and embedding settings of the run, by property name
  */
-record SearchSweepReport(String commit, boolean dirty, String startedAt, String embeddingModel,
+record SearchSweepReport(String commit, boolean dirty, String startedAt, ChatEvalTarget target, String embeddingModel,
                          Map<String, String> settings, Sweep sweep) {
 
     private static final DateTimeFormatter STAMP =
@@ -54,6 +56,7 @@ record SearchSweepReport(String commit, boolean dirty, String startedAt, String 
         md.append("- Set: `").append(sweep.set()).append("`, SHA-256 `").append(sweep.setSha256()).append("`\n");
         md.append("- Commit: `").append(commit).append("`").append(dirty ? " (working tree dirty)" : " (clean)")
                 .append("; started ").append(startedAt).append("\n");
+        md.append("- ").append(target.describe()).append("\n");
         md.append("- Embedding model: `").append(embeddingModel).append("`; no chat model was called\n");
         md.append("- Queries: `").append(SearchSweepRunner.QUERIES).append("`, each run once through "
                 + "`search_transactions` (limit 10) at the lowest floor; higher floors are worked out from it "

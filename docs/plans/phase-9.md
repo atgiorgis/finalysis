@@ -1637,6 +1637,91 @@ EC2 or Tailscale action.
   tests now expect the specific line.
 - The frontend fixtures and the layout fixture use the new wording.
 
+### Step 9c-10 notes: the eval harness on Ollama (the sweep's provider; categorization's flags)
+
+No AWS or model call; all of it runs against the stub.
+
+1. **The search-floor sweep ignored `-Deval.provider`.** The owner ran it on `0fb5414` with
+   `-Deval.provider=ollama -Deval.baseUrl=http://finalysis-selfhost:11434 -Deval.model=ministral-3:14b
+   -Deval.run=sweep`. The report said "Embedding model: amazon.titan-embed-text-v2:0" and `default-path` CLOUD, so it
+   swept Titan. `ChatSearchSweepIT` pinned `finalysis.ai.default-path=CLOUD`, never read the provider flags, and
+   named the model from the `finalysis.ai.roles.embedding` property, not from what ran.
+   - **Fix**: the sweep selects the provider as the dev run does. On Ollama the context starts Off with the
+     `-Deval.model` tag and switches to the base URL's path. The index is built, and the queries embedded, with that
+     path's `nomic-embed-text`. The header names the path, Ollama's version, the host and the embedding model, which
+     is read from the active providers.
+   - `-Deval.model` is required on Ollama because the path's reachability check needs the chat model pulled; the
+     sweep never calls it.
+   - The switch and its reachability check are now one method, `ChatEvalTarget.connect`, used by the chat run, the
+     sweep and the categorization run. `ChatEvalTarget.describe` gives the header's path line.
+2. **The categorization eval (`-Pai-eval`, CAT-05) takes the same flags**: `-Deval.provider=ollama
+   -Deval.baseUrl=… -Deval.model=<tag>`.
+   - **The dev set only**: with Ollama, any other set is refused in `@BeforeAll`, before any set file is read or
+     named.
+   - The run switches to the path. `EvalRunner` now runs on any path but Off, and checks that the context is on the
+     target's path.
+   - **The report** records the path, the host, the model tag and Ollama's version. The Prices line and the cost column
+     read "none" (Ollama has no token cost), and no estimate is made.
+   - **A new "Call times" table**: each AI variant's calls by role (count, min, median, max, total, how many didn't
+     end OK). The JSON has every call's role, time and outcome.
+   - **Choice made here**: the times are `AiCallLog`'s own, read from its log lines while each variant runs
+     (`AiCallTimings`, a Logback list appender on that one logger). That way embedding calls and failed calls are
+     timed too, with the same numbers the app logs. The lines hold counts only, and only role, `ms` and outcome are
+     kept. Cloud runs get the table as well.
+   - Only the recording thread's lines count: the variant runs on it (`AiCategorizer` has no executor). The search
+     index's background refresh logs its own embedding calls; the first full build counted them in B.
+   - **Why a forced run on the sample data shows nothing**: the owner's forced categorization of the sample data made
+     zero model calls, because the seed rules cover every sample merchant. The dev set's fictional merchants are where
+     the AI's share lives.
+3. **The Titan sweep's finding**, recorded in `docs/eval/README.md`'s known issues: only one meaning match in 22
+   queries, every other hit a name or word match. So the search floor is close to irrelevant on Titan. A Phase 10
+   candidate: embed richer merchant documents, or try another embedding model.
+
+**Found on the way**:
+- **A path switch leaked into later tests.** A test that switches the path saves the switch in the shared test
+  vault's settings, so the next contexts started on Local. Like `AiPathSwitchTest`, the two new tests switch back to
+  Off and clear the `ai.*` settings afterwards.
+- **The 33rd test context stopped the shared database.** The two new tests each need their own Spring context
+  (a stub port), so the suite now starts 33. Spring keeps 32 by default and closes the least recently used one beyond
+  that. Closing a context stopped the shared Testcontainers Postgres under every other context: 21 classes after it
+  failed to start, twice, with a log of 33 contexts started and exactly 1 closed. `spring.test.context.cache.maxSize`
+  is now 64 (`src/test/resources/spring.properties`), so no context closes during a run.
+- **The build shared `backend/target` with other processes.** One run lost compiled files mid-build. The owner's
+  backend (`spring-boot:run`) and the Java extension's auto-build both use `backend/target`. The owner stopped the
+  backend and turned auto-build off for the final run, and CLAUDE.md now says to do that before every
+  `clean verify`.
+- **A timing test failed under load.** One run failed `MerchantSearchTimingTest` (a 61 ms median against 50 ms) at a
+  load average of about 17. It passed alone and in the final run.
+- **Vitest timed out under load again.** The first `npm test`, run while the machine was loaded, had 7 per-test
+  timeouts in 6 files this step doesn't touch:
+  - `corgiNaming`;
+  - `AlertsPage`;
+  - `DrillPage` (2);
+  - `ImportPage`;
+  - `VaultSettings`;
+  - `SelfHostControls`.
+
+  The run after the final Maven build passed. This is the §11 item.
+
+**Tests**: backend 3,780 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,775 at 9c-9 plus 5; the skip is
+`CfnLintTest`); frontend 355 tests (34 files), all passed. Both were run one after the other, with the owner's backend
+stopped and auto-build off. No live call, no EC2 or Tailscale action.
+- **The Titan sweep's record** is committed with this step: `docs/eval/chat-sweep-dev-0fb5414abce8-20261103T141355Z`
+  `.json` and `.md`. Across 22 queries it found 9 candidates: 1 meaning match, 3 name matches and 5 word matches.
+- `ChatSearchSweepOllamaTest` (new): the sweep as the IT runs it, against a stub on the Local path. The context starts
+  Off; the index and the queries are embedded by the stub's `/api/embed` with `nomic-embed-text`; there's no chat
+  call; and the header names the Local path, Ollama's version, the host and `nomic-embed-text`, never Titan.
+- `CategorizationEvalOllamaTest` (new): the harness's nine synthetic rows on the Local path. The stub answers each
+  batch from the item keys it was sent (`OllamaStub.chatAnswering`, new). It checks:
+  - every chat call carries the model tag, and C and D embed through the stub;
+  - B's calls are timed as `categorization` and C's as `categorization` and `embedding`;
+  - there's no cost;
+  - the header's path line, "Prices: none" and "none" in the cost column.
+  It also checks the dev-only refusal and that a model tag is required.
+- `AiCallTimingsTest` (new): the lines this thread logs while recording are read (a failed call included); none
+  from another thread, and none after; per-role min, median, max and total.
+- `EvalRunnerTest`: a Cloud run's call times, and its target is Bedrock.
+
 ---
 
 ## 16. Decisions at approval (2026-10-28)

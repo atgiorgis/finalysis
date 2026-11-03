@@ -66,7 +66,16 @@ record EvalReport(String commit, boolean dirty, String startedAt, EvalResult res
     /** What the console shows: the summary table and, for a dev run, the sweep. */
     String consoleSummary() {
         return "Categorization eval: " + result.set() + " (" + result.rows() + " rows, commit " + commit
-                + (dirty ? ", dirty" : "") + ")\n\n" + summaryTable() + "\n" + sweepTables();
+                + (dirty ? ", dirty" : "") + ")\n" + pathLine() + "\n\n" + summaryTable() + "\n" + sweepTables();
+    }
+
+    /**
+     * Where the run went (9c-10): "Path: Cloud (Amazon Bedrock); model `<id>`", or on Ollama the path, its version,
+     * the host only and the model tag.
+     */
+    String pathLine() {
+        return result.target().describe() + (result.target().ollama() ? "; model tag `" : "; model `")
+                + result.model() + "`";
     }
 
     String markdown() {
@@ -77,15 +86,18 @@ record EvalReport(String commit, boolean dirty, String startedAt, EvalResult res
         md.append("- Commit: `").append(commit).append("`").append(dirty ? " (working tree dirty)" : " (clean)")
                 .append("\n");
         md.append("- Started: ").append(startedAt).append("\n");
+        md.append("- ").append(pathLine()).append("\n");
         md.append("- Inputs: min-confidence ").append(result.inputs().minConfidence().toPlainString())
                 .append(", direct-min-similarity ").append(result.inputs().directMinSimilarity()).append("\n");
         md.append("- Seeding (import, cleaning, seed rules): ").append(seconds(result.seedMillis())).append(" s\n");
-        md.append("- Prices: ").append(result.pricesSource()).append("\n\n");
+        md.append("- Prices: ").append(result.target().ollama() ? "none: Ollama has no token cost"
+                : result.pricesSource()).append("\n\n");
         md.append("Definitions: coverage = categorized / rows; accuracy = correct / categorized; overall = correct / "
                 + "rows; review = left for the review queue (low confidence or invalid answer). Costs are estimates; "
                 + "`>=` marks a lower bound (a call reported no usage).\n\n");
         md.append("## Summary\n\n").append(summaryTable()).append("\n");
         md.append("## By source\n\n").append(bySourceTable()).append("\n");
+        md.append("## Call times\n\n").append(callTimesTable()).append("\n");
         md.append("## Examples\n\n").append(examplesTable()).append("\n");
         md.append("Measured examples share of input tokens ((C - B) / C): ")
                 .append(pct(result.measuredExamplesSharePct()))
@@ -138,8 +150,35 @@ record EvalReport(String commit, boolean dirty, String startedAt, EvalResult res
                     .append(" | ").append(usage.inputTokens())
                     .append(" | ").append(usage.outputTokens())
                     .append(" | ").append(usage.embeddingInputTokens())
-                    .append(" | ").append(cost(usage))
+                    .append(" | ").append(result.target().ollama() ? "none" : cost(usage))
                     .append(" | ").append(seconds(variant.wallMillis())).append(" |\n");
+        }
+        return table.toString();
+    }
+
+    /**
+     * Each AI variant's model calls by role, as {@code AiCallLog} timed them (ms): count, min, median, max, total, and
+     * how many didn't end OK. Every call's time is in the JSON.
+     */
+    String callTimesTable() {
+        StringBuilder table = new StringBuilder("| Variant | Role | Calls | Min (ms) | Median (ms) | Max (ms) "
+                + "| Total (ms) | Not OK |\n|---|---|---:|---:|---:|---:|---:|---:|\n");
+        for (VariantResult variant : result.variants()) {
+            if (variant.variant() == Variant.A) {
+                continue;
+            }
+            if (variant.calls().isEmpty()) {
+                table.append("| ").append(variant.variant()).append(" | none | 0 | | | | | |\n");
+                continue;
+            }
+            for (AiCallTimings.RoleTimes role : AiCallTimings.byRole(variant.calls())) {
+                long notOk = variant.calls().stream()
+                        .filter(c -> c.role().equals(role.role()) && !"OK".equals(c.outcome())).count();
+                table.append("| ").append(variant.variant()).append(" | ").append(role.role())
+                        .append(" | ").append(role.calls()).append(" | ").append(role.minMs())
+                        .append(" | ").append(role.medianMs()).append(" | ").append(role.maxMs())
+                        .append(" | ").append(role.totalMs()).append(" | ").append(notOk).append(" |\n");
+            }
         }
         return table.toString();
     }

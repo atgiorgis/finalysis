@@ -13,6 +13,25 @@ files per run:
 
 The Phase 4 summary is [phase-4-accuracy.md](phase-4-accuracy.md).
 
+**Self-hosted and Local (Phase 9 step 9c-10).** The dev set can run against an Ollama model, with the chat
+evaluation's flags:
+
+```sh
+cd backend && ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-confidence=0.80 -Deval.direct-min-similarity=0.97 \
+    -Deval.provider=ollama -Deval.baseUrl=http://finalysis-selfhost:11434 -Deval.model=ministral-3:14b
+```
+
+- The base URL's host gives the path: a Tailscale name means Self-hosted, `127.0.0.1` means Local. Only the host is
+  recorded.
+- The run switches to that path. It refuses to start unless Ollama answers with the model pulled.
+- With `-Deval.provider=ollama`, only the dev set runs; any other set is refused before a file is read.
+- The report records the path, the host, the model tag and Ollama's version. A "Call times" table gives each variant's
+  calls by role (count, min, median, max, total, how many didn't end OK), as `AiCallLog` timed them; every call's time
+  is in the JSON (Cloud runs have the table too).
+- Cost is shown as "none": Ollama has no token cost.
+- The sample data's merchants are all covered by seed rules, so a categorization run on them makes no model call. The
+  dev set's fictional merchants are where the AI's share lives.
+
 Phase 5's analytics totals against the sample data's answer key (ANA-06) are in
 [phase-5-totals.md](phase-5-totals.md), with the alerts against its labelled anomalies. They come from
 `AnalyticsSampleDataTest` and `AlertSampleDataTest`, which run in every `./mvnw verify` and call no model.
@@ -31,12 +50,21 @@ Results of the opt-in chat evaluation (`docs/plans/phase-6.md` §13, step 8 note
   summary, per category, your own questions apart, grounding, refusals, tool choice, cost and latency; every answer as
   shown, for reading. Scoring is deterministic: no model judges.
 - `chat-sweep-dev-<commit>-<timestamp>.json` and `.md`: the dev-only retrieval sweep of the search floor (0.30 to
-  0.60), embeddings only.
+  0.60), embeddings only. Since Phase 9 step 9c-10 it takes the dev run's flags (`-Deval.provider=ollama
+  -Deval.baseUrl=… -Deval.model=<tag>`). On Ollama the index and the queries are embedded with `nomic-embed-text` on
+  that path, and the header names the path, the host and the embedding model.
 
 The chat holdout is evaluated once: a holdout run refuses to start while any `chat-holdout-*` file exists here (the
 categorization holdout's `holdout-*` files don't count), and it needs `-Deval.holdout.confirm=true` and a clean tree.
 
 **Known issues**
+
+- **The search floor barely matters on Titan.** The Titan sweep of 2026-11-03 (meant for nomic, see the next item)
+  found only one meaning match in 22 queries: every other hit was a name or word match. So the search floor is close
+  to irrelevant on Titan. Phase 10 candidate: embed richer merchant documents, or try another embedding model.
+- **Sweeps before Phase 9 step 9c-10 ignored `-Deval.provider`.** The sweep on `0fb5414` with
+  `-Deval.provider=ollama` ran on Cloud: its report says "Embedding model: amazon.titan-embed-text-v2:0" and
+  `default-path` CLOUD. It's a Titan sweep, not a nomic one.
 
 - **Unicode spaces and dashes (fixed in Phase 9 step 9a-2).** Runs before that commit penalized models that write
   Unicode spaces and dashes (`May 2026` with a narrow no-break space, `53.5 %`, `2026‑06‑13` with non-breaking

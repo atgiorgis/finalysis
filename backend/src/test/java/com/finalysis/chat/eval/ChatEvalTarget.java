@@ -1,10 +1,12 @@
 package com.finalysis.chat.eval;
 
 import com.finalysis.ai.AiPath;
+import com.finalysis.ai.AiProviders;
 import com.finalysis.ai.AiPathSettings;
 import com.finalysis.ai.OllamaProperties;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,7 +17,8 @@ import java.util.Set;
  * Where an evaluation run sends its questions (docs/plans/phase-9.md §4.3): Bedrock by default, or an Ollama server
  * named by {@code -Deval.baseUrl}, on the path its host gives (loopback: Local; any other host: Self-hosted, by that
  * name). Only the host is ever recorded: the base URL must be {@code http://<host>[:11434][/]}, and a URL with user info,
- * a query, a fragment, a path or another port is refused before anything starts.
+ * a query, a fragment, a path or another port is refused before anything starts. Shared by the chat run, the search
+ * sweep and the categorization run (9c-10), which all switch to the path the same way ({@link #connect}).
  *
  * @param provider      {@code bedrock} or {@code ollama}
  * @param path          the path the run uses: CLOUD for Bedrock
@@ -23,21 +26,21 @@ import java.util.Set;
  * @param ollamaVersion Ollama's version as its {@code /api/version} reported it; null for Bedrock or before the check
  * @param subset        the question ids of a subset run ({@code -Deval.questions}); empty for a whole set
  */
-record ChatEvalTarget(String provider, AiPath path, String host, String ollamaVersion, List<String> subset) {
+public record ChatEvalTarget(String provider, AiPath path, String host, String ollamaVersion, List<String> subset) {
 
-    static final String PROVIDER_PROPERTY = "eval.provider";
-    static final String BASE_URL_PROPERTY = "eval.baseUrl";
+    public static final String PROVIDER_PROPERTY = "eval.provider";
+    public static final String BASE_URL_PROPERTY = "eval.baseUrl";
     static final String QUESTIONS_PROPERTY = "eval.questions";
-    static final String BEDROCK_PROVIDER = "bedrock";
-    static final String OLLAMA_PROVIDER = "ollama";
+    public static final String BEDROCK_PROVIDER = "bedrock";
+    public static final String OLLAMA_PROVIDER = "ollama";
 
-    static final ChatEvalTarget BEDROCK = new ChatEvalTarget(BEDROCK_PROVIDER, AiPath.CLOUD, null, null, List.of());
+    public static final ChatEvalTarget BEDROCK = new ChatEvalTarget(BEDROCK_PROVIDER, AiPath.CLOUD, null, null, List.of());
 
-    ChatEvalTarget {
+    public ChatEvalTarget {
         subset = List.copyOf(subset);
     }
 
-    boolean ollama() {
+    public boolean ollama() {
         return OLLAMA_PROVIDER.equals(provider);
     }
 
@@ -45,7 +48,7 @@ record ChatEvalTarget(String provider, AiPath path, String host, String ollamaVe
         return !subset.isEmpty();
     }
 
-    ChatEvalTarget withOllamaVersion(String version) {
+    public ChatEvalTarget withOllamaVersion(String version) {
         return new ChatEvalTarget(provider, path, host, version, subset);
     }
 
@@ -57,7 +60,7 @@ record ChatEvalTarget(String provider, AiPath path, String host, String ollamaVe
      * @throws ChatEvalGuards.EvalRefusedException an unknown provider, a base URL for Bedrock, or Ollama without a valid
      *                                             base URL
      */
-    static ChatEvalTarget parse(String provider, String baseUrl) {
+    public static ChatEvalTarget parse(String provider, String baseUrl) {
         String chosen = provider == null || provider.isBlank() ? BEDROCK_PROVIDER
                 : provider.strip().toLowerCase(Locale.ROOT);
         boolean url = baseUrl != null && !baseUrl.isBlank();
@@ -77,6 +80,37 @@ record ChatEvalTarget(String provider, AiPath path, String host, String ollamaVe
             default -> throw new ChatEvalGuards.EvalRefusedException("-D" + PROVIDER_PROPERTY
                     + " must be bedrock or ollama, was " + provider.strip());
         };
+    }
+
+    /**
+     * Switches the context to this target's path and checks it can run: Ollama answers with the configured chat and
+     * embedding models pulled. Bedrock is the context's Cloud path already. Returns the target with Ollama's version.
+     *
+     * @throws ChatEvalGuards.EvalRefusedException Ollama can't run the evaluation; nothing was sent
+     */
+    public ChatEvalTarget connect(AiProviders providers) {
+        if (!ollama()) {
+            return this;
+        }
+        AiProviders.State state = providers.switchTo(new AiPathSettings.Selection(path,
+                path == AiPath.SELF_HOSTED ? host : null, null), Duration.ofSeconds(10));
+        if (!state.reachable()) {
+            throw new ChatEvalGuards.EvalRefusedException("Ollama at " + host + " can't run the evaluation: "
+                    + state.reason() + "; nothing was sent");
+        }
+        return withOllamaVersion(state.ollamaVersion());
+    }
+
+    /**
+     * Where a run went, for a report's header: "Path: Cloud (Amazon Bedrock)", or the path, Ollama's version and the
+     * host only, e.g. "Path: Self-hosted (Ollama 0.40.13), host `finalysis-selfhost`".
+     */
+    public String describe() {
+        if (!ollama()) {
+            return "Path: Cloud (Amazon Bedrock)";
+        }
+        return "Path: " + (path == AiPath.LOCAL ? "Local" : "Self-hosted") + " (Ollama "
+                + (ollamaVersion == null ? "version unknown" : ollamaVersion) + "), host `" + host + "`";
     }
 
     /**

@@ -23,6 +23,7 @@ import com.finalysis.categorize.eval.EvalMetrics.SweepPoint;
 import com.finalysis.categorize.eval.EvalMetrics.VariantMetrics;
 import com.finalysis.categorize.eval.EvalRecorder.Batch;
 import com.finalysis.categorize.eval.EvalSeeder.Seeded;
+import com.finalysis.chat.eval.ChatEvalTarget;
 import com.finalysis.categorize.eval.ExampleDiagnostics.ItemSimilarities;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -56,6 +57,10 @@ import org.springframework.transaction.PlatformTransactionManager;
  * runs {@link AiCategorizer} as built by the app, with the run's {@code min-confidence}; an {@link EvalRecorder} keeps
  * every answer's confidence, so the sweep needs no further call. After C and D, an exact scan of the embeddings they
  * left gives each item's nearest eligible example ({@link ExampleDiagnostics}, step 9c notes).
+ *
+ * <p>Any path but Off (Phase 9 step 9c-10): Cloud, or the Self-hosted or Local model the run switched to, recorded as
+ * the run's target. Every variant keeps each model call's time as {@code AiCallLog} wrote it ({@link AiCallTimings}).
+ * On Ollama there is no token cost, so no estimate is made.
  *
  * <p>Imported into a test context with {@code @Import}; never component-scanned.
  */
@@ -112,19 +117,23 @@ public class EvalRunner {
 
     /**
      * @param neighbours how near each item came to an eligible example (C and D only; null otherwise)
+     * @param calls      every model call's role, time and outcome, from {@code AiCallLog}'s lines (none for A)
      */
     record VariantResult(Variant variant, String description, String status, Map<String, String> settings,
                          long wallMillis, VariantMetrics metrics, List<SweepPoint> sweep, Usage usage,
-                         ExamplesStats examples, ExampleDiagnostics neighbours, List<ScoredRow> rows) {
+                         ExamplesStats examples, ExampleDiagnostics neighbours, List<ScoredRow> rows,
+                         List<AiCallTimings.Call> calls) {
     }
 
     /**
      * @param measuredExamplesSharePct (C's input tokens - B's) / C's: the examples' measured share, when both reported
      *                                 usage for every call and made the same number of calls; null otherwise
+     * @param target                   where the run went: Cloud, or Ollama's path, host and version
+     * @param model                    the categorization model: Bedrock's id or the Ollama tag
      */
     record EvalResult(String set, String setSha256, int rows, EvalInputs inputs, Map<String, String> settings,
                       String pricesSource, long seedMillis, List<VariantResult> variants,
-                      BigDecimal measuredExamplesSharePct) {
+                      BigDecimal measuredExamplesSharePct, ChatEvalTarget target, String model) {
     }
 
     /** Outcomes of items that reached the examples: sent to the model, or assigned directly. */
@@ -147,6 +156,8 @@ public class EvalRunner {
     /** Settings read from the environment as configured; nothing that names credentials or a profile. */
     static final List<String> ENVIRONMENT_SETTINGS = List.of(
             "finalysis.ai.cloud-available", "finalysis.ai.default-path", "finalysis.ai.provider",
+            "finalysis.ai.ollama.models.chat", "finalysis.ai.ollama.models.embedding", "finalysis.ai.ollama.num-ctx",
+            "finalysis.ai.ollama.self-hosted-read-timeout", "finalysis.ai.ollama.local-read-timeout",
             "finalysis.ai.roles.categorization",
             "finalysis.ai.roles.embedding", "finalysis.ai.native-structured-output",
             "finalysis.ai.embedding.dimensions",
@@ -192,9 +203,17 @@ public class EvalRunner {
         this.environment = environment;
     }
 
+    /** A Cloud run, as before Phase 9. */
     public EvalResult run(EvalSet set, EvalInputs inputs, EvalPrices prices) {
-        if (providers.path() != AiPath.CLOUD || !providers.usable() || !embedder.enabled()) {
-            throw new IllegalStateException("The evaluation needs AI on, with a chat and an embedding model");
+        return run(set, inputs, prices, ChatEvalTarget.BEDROCK);
+    }
+
+    /** A run on the target's path, which the context must already be on ({@link ChatEvalTarget#connect}). */
+    public EvalResult run(EvalSet set, EvalInputs inputs, EvalPrices prices, ChatEvalTarget target) {
+        if (providers.path() == AiPath.OFF || providers.path() != target.path() || !providers.usable()
+                || !embedder.enabled()) {
+            throw new IllegalStateException("The evaluation needs AI on the " + target.path()
+                    + " path, with a chat and an embedding model");
         }
         if (categorization.runAfterImport()) {
             throw new IllegalStateException("run-after-import must be off: seeding would start AI runs by itself");
@@ -210,7 +229,7 @@ public class EvalRunner {
         List<ScoredRow> rulesOnly = score(set, seeded, new EvalRecorder());
         variants.add(new VariantResult(Variant.A, Variant.A.description, "DONE", Map.of(), rulesMillis,
                 EvalMetrics.of(rulesOnly), null, Usage.none(), examplesStats(new EvalRecorder(), 0), null,
-                rulesOnly));
+                rulesOnly, List.of()));
 
         for (Variant variant : List.of(Variant.B, Variant.C, Variant.D)) {
             undoAi();
@@ -224,20 +243,27 @@ public class EvalRunner {
                     exampleSettings, redactionContext, lock, jdbc, transactions);
 
             EvalRecorder recorder = new EvalRecorder();
-            start = System.nanoTime();
-            AiRunResult result = categorizer.run(false, recorder);
-            long millis = millisSince(start);
+            AiRunResult result;
+            long millis;
+            List<AiCallTimings.Call> calls;
+            try (AiCallTimings timings = AiCallTimings.start()) {
+                start = System.nanoTime();
+                result = categorizer.run(false, recorder);
+                millis = millisSince(start);
+                calls = timings.calls();
+            }
 
             List<ScoredRow> rows = score(set, seeded, recorder);
             variants.add(new VariantResult(variant, variant.description, result.status().name(),
                     variantSettings(settings, exampleSettings, variant), millis, EvalMetrics.of(rows),
-                    inputs.sweep() ? EvalMetrics.sweep(rows) : null, usage(result, prices),
+                    inputs.sweep() ? EvalMetrics.sweep(rows) : null, usage(result, prices, target),
                     examplesStats(recorder, exampleSettings.maxExamplesPerBatch()),
-                    variant == Variant.B ? null : neighbours(recorder, exampleSettings), rows));
+                    variant == Variant.B ? null : neighbours(recorder, exampleSettings), rows, calls));
         }
         return new EvalResult(set.name(), set.sha256(), set.rows().size(), inputs, settings(inputs), prices.source(),
                 seeded.millis(), List.copyOf(variants),
-                measuredShare(variants.get(1).usage(), variants.get(2).usage()));
+                measuredShare(variants.get(1).usage(), variants.get(2).usage()), target,
+                providers.categorization().modelId());
     }
 
     private SimilarMerchantProperties exampleSettings(Variant variant, EvalInputs inputs) {
@@ -295,15 +321,16 @@ public class EvalRunner {
         return ExampleDiagnostics.of(items, BigDecimal.valueOf(exampleSettings.minSimilarity()));
     }
 
-    private Usage usage(AiRunResult result, EvalPrices prices) {
+    /** The run's counts; on Ollama no cost estimate (no token cost: the report says "none"). */
+    private Usage usage(AiRunResult result, EvalPrices prices, ChatEvalTarget target) {
         int withoutUsage = result.callsWithoutUsage() + result.embeddings().callsWithoutUsage();
         return new Usage(result.calls(), result.retries(), result.inputTokens(), result.outputTokens(),
                 result.callsWithoutUsage(), result.embeddings().calls(), result.embeddings().inputTokens(),
                 result.embeddings().callsWithoutUsage(), result.itemsSelected(), result.itemsSent(),
                 result.itemsWithExamples(), result.itemsDirect(),
-                prices.cost(providers.categorization().modelId(), result.inputTokens(), result.outputTokens(),
-                        embedder.modelId(), result.embeddings().inputTokens()),
-                withoutUsage > 0);
+                target.ollama() ? null : prices.cost(providers.categorization().modelId(), result.inputTokens(),
+                        result.outputTokens(), embedder.modelId(), result.embeddings().inputTokens()),
+                !target.ollama() && withoutUsage > 0);
     }
 
     private static ExamplesStats examplesStats(EvalRecorder recorder, int cap) {
