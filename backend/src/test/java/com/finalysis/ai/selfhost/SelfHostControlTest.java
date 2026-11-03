@@ -294,7 +294,7 @@ class SelfHostControlTest {
         ec2.become("running", clock.instant());
         ollama.versionFailure = new ResourceAccessException("timeout", new HttpTimeoutException("timed out"));
         assertThat(control.status()).extracting(SelfHostStatus::state, SelfHostStatus::progress)
-                .containsExactly("STARTING", "waiting for Tailscale");
+                .containsExactly("STARTING", "waiting for Ollama: timed out");
         assertThat(ollama.versions).containsExactly(URI.create("http://finalysis-selfhost:11434"));
 
         ollama.versionFailure = null;
@@ -340,7 +340,7 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new UnknownHostException("finalysis-selfhost"));
 
         clock.advance(Duration.ofMinutes(15));
-        assertThat(control.status().progress()).isEqualTo("waiting for Tailscale");
+        assertThat(control.status().progress()).isEqualTo("waiting for Ollama: not resolvable");
         clock.advance(Duration.ofMinutes(1));
 
         SelfHostStatus status = control.status();
@@ -359,10 +359,31 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
 
         clock.advance(Duration.ofMinutes(10).plusSeconds(30));
-        assertThat(control.status().progress()).isEqualTo("waiting for Tailscale");
+        assertThat(control.status().progress()).isEqualTo("waiting for Ollama: timed out");
         ollama.versionFailure = null;
 
         assertThat(control.status().progress()).isEqualTo("loading the model");
+    }
+
+    /** 9c-9: the owner's start sat at "waiting for Tailscale" while the name didn't resolve in the backend. */
+    @Test
+    void theStartsProgressSaysWhatTheLastCheckMet() {
+        ec2.server("stopped", null, "g6.xlarge", "80");
+        control.start();
+        ec2.become("running", clock.instant());
+        ConnectException unresolved = new ConnectException();
+        unresolved.initCause(new java.nio.channels.UnresolvedAddressException());
+
+        for (var expected : List.of(
+                Map.entry(new ResourceAccessException("x", new UnknownHostException(NAME)), "not resolvable"),
+                Map.entry(new ResourceAccessException("x", unresolved), "not resolvable"),
+                Map.entry(new ResourceAccessException("x", new ConnectException("refused")), "refused on port 11434"),
+                Map.entry(new ResourceAccessException("x", new HttpTimeoutException("timed out")), "timed out"),
+                Map.entry(HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "x", null, null, null), "HTTP 502"),
+                Map.entry(new IllegalStateException("odd"), "unreachable (IllegalStateException)"))) {
+            ollama.versionFailure = expected.getKey();
+            assertThat(control.status().progress()).isEqualTo("waiting for Ollama: " + expected.getValue());
+        }
     }
 
     @Test
@@ -385,7 +406,7 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
 
         clock.advance(Duration.ofMinutes(20));
-        assertThat(patient.status().progress()).isEqualTo("waiting for Tailscale");
+        assertThat(patient.status().progress()).isEqualTo("waiting for Ollama: timed out");
         clock.advance(Duration.ofMinutes(1));
         assertThat(patient.status().note()).startsWith("Ollama didn't answer on finalysis-selfhost within 20 minutes");
     }

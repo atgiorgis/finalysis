@@ -348,8 +348,9 @@ run by the owner with their own admin credentials. These statements go into the 
   checked against a pattern (letters, digits, hyphens, dots); never a URL.
 - **Start** and **Stop** (Cloud credentials needed; shown disabled with the reason without the `aws` profile). They
   work from the phone too, behind an unlocked vault and a logged-in session like every other endpoint (§16 decision 9).
-- **Status**: stopped, starting (with a progress line: "instance starting" → "waiting for Tailscale" → "loading the
-  model", the last from a one-token warm-up call), running, stopping; polled every 5 s while it changes.
+- **Status**: stopped, starting (with a progress line: "instance starting" → "waiting for Ollama: <what the check
+  met>" (9c-9) → "loading the model", the last from a one-token warm-up call), running, stopping; polled every 5 s
+  while it changes.
 - **Minutes running this session and the estimate** at the hourly rate (§4.2).
 - The app never holds the Tailscale key, an AWS key or the instance's address; it holds the name, the region and the
   tag.
@@ -1578,6 +1579,63 @@ action.
     "ollama";
   - `badgeFor` and `bannerText` for Cloud ignore another path's provider;
   - the restart note is shown in the server's block.
+
+### Step 9c-9 notes: "Not resolvable" from the backend only (reproduction; the start's progress says why)
+
+**The report** (2026-11-03): the server was up, Ollama was listening on its IPv4 tailnet address, and on this Mac
+`dscacheutil`, `dig`, `tailscale ping` and curl all resolved `finalysis-selfhost` to it. Even so:
+- Settings → Test said "Not resolvable: check the name, and that Tailscale is running on this Mac";
+- the Start poll stayed at "waiting for Tailscale".
+
+**The reproduction**: a jshell session on this Mac, with the backend's compiled classes and dependencies (the 9c-8
+code itself, not a copy). Same JDK as the running backend (21.0.12.1), no AWS or model call. It ran:
+
+| Check | Result |
+|---|---|
+| `InetAddress.getAllByName("finalysis-selfhost")` | `[finalysis-selfhost/100.82.143.114]` |
+| `HostResolver.SYSTEM.resolve(...)` (the app's default) | the same |
+| `OllamaProviderFactory.ipv4Address(http://finalysis-selfhost:11434)` | `http://100.82.143.114:11434` |
+| `OllamaProviderFactory.version(...)` by name (`GET /api/version`, a status check) | `0.40.13` |
+| `getAllByName` on a virtual thread, with the backend's `-XX:TieredStopAtLevel=1` | `[finalysis-selfhost/100.82.143.114]` |
+
+So **the platform resolver does see MagicDNS names from Java on this Mac**. The 9c-8 lookup already goes through it
+(`InetAddress.getAllByName`, no JNDI or DNS query of its own), takes the first IPv4 address and keeps the name when
+there's none, and it reached Ollama. Also checked, and no different in the backend:
+- no JVM option, system property or resolver provider changes name lookup;
+- the running backend (started 2026-11-02 10:29, after 9c-8's build) runs from `target/classes` with the same JDK.
+
+- **The cause is not found.** The running backend's own Test endpoint wasn't called: Claude Code's permission check
+  refused a localhost call to it, so the failure wasn't seen in that process. The backend writes no log file.
+- **One finding changes the reading of 9c-8.** Before 9c-8, a name that didn't resolve was reported as "Refused"
+  (the JDK's `ConnectException(UnresolvedAddressException)`, fixed in 9c-8). So the "Refused" seen before 9c-8 may
+  have been this same lookup failure under the old label, not an IPv6 refusal. If so, the backend process never
+  resolved the name, before or after 9c-8, and 9c-8 changed only the message.
+- **The design is unchanged**, as the brief asked: the platform resolver, its first IPv4 address, the name when there
+  is none. "Not resolvable" is reported only when the lookup fails: an `UnknownHostException` from the platform
+  resolver, or the JDK client's own `UnresolvedAddressException`, which comes from the same resolver.
+- **Next, for the owner**: restart the backend (this step's `clean verify` rebuilt `target/classes` under the running
+  one anyway), then Test, then Start. The progress line now names the failure, so a recurrence shows which one.
+
+**The start's progress** now says what the last check on the server's name met, instead of "waiting for Tailscale"
+for every failure. It reads "waiting for Ollama: " followed by one of:
+- "not resolvable";
+- "refused on port 11434";
+- "timed out";
+- "HTTP 502";
+- "unreachable (…)".
+
+The same classification gives Test's sentence and the note after the start wait. The frontend shows the string as
+it comes.
+
+**Tests**: backend 3,775 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,773 at 9c-8 plus 2; the skip is
+`CfnLintTest`); frontend 355 tests (34 files), all passed on the first run; layout check 169 passed. No live call, no
+EC2 or Tailscale action.
+- `OllamaIpv4Test`: the stub-resolver cases stay. New: the platform resolver itself (`InetAddress.getAllByName`, the
+  app's default) for `localhost`, a name the machine resolves without a network. It may list `::1` first, and the stub
+  listens on `127.0.0.1` only, so reaching it shows the IPv4 address was chosen from the platform's list.
+- `SelfHostControlTest`: the progress for each failure, including the JDK's unresolvable `ConnectException`. The wait
+  tests now expect the specific line.
+- The frontend fixtures and the layout fixture use the new wording.
 
 ---
 

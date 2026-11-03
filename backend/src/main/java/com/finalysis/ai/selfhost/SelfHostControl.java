@@ -40,8 +40,9 @@ import software.amazon.awssdk.services.ec2.model.Tag;
  * kept). Its running time is EC2's {@code LaunchTime}, reset on every start; the estimate is minutes × the type's
  * hourly rate / 60 in {@code BigDecimal}, half-even to the cent.
  *
- * <p>A start this app made shows its progress: "instance starting" while EC2 says pending, "waiting for Tailscale"
- * while the server's Ollama doesn't answer on its name, "loading the model" during one warm-up (Ollama's
+ * <p>A start this app made shows its progress: "instance starting" while EC2 says pending, "waiting for Ollama: "
+ * and what the last check met (not resolvable, refused, timed out) while the server's Ollama doesn't answer on its
+ * name, "loading the model" during one warm-up (Ollama's
  * {@code /api/generate} with the model's name and no prompt), then running. A server started elsewhere is simply
  * running. When a start finishes or a stop is seen, Corgi's reachability is checked again, so the badge follows.
  */
@@ -57,7 +58,7 @@ public class SelfHostControl implements SelfHostMeter {
     static final String LOCKED = "Vault locked";
 
     static final String INSTANCE_STARTING = "instance starting";
-    static final String WAITING_FOR_TAILSCALE = "waiting for Tailscale";
+    static final String WAITING_FOR_OLLAMA = "waiting for Ollama: ";
     static final String LOADING_MODEL = "loading the model";
 
     private static final Logger log = LoggerFactory.getLogger(SelfHostControl.class);
@@ -210,7 +211,7 @@ public class SelfHostControl implements SelfHostMeter {
                         + properties.startWait().toMinutes() + " minutes of the start: " + unreachable(e);
                 return null;
             }
-            return WAITING_FOR_TAILSCALE;
+            return waiting(e);
         }
         ours.warming = true;
         String model = ollamaProperties.models().chat();
@@ -319,30 +320,66 @@ public class SelfHostControl implements SelfHostMeter {
         }
     }
 
+    /** What kind of failure a request to the server met, read from the exception's causes. */
+    private enum Failure { UNRESOLVABLE, REFUSED, TIMED_OUT, HTTP_ERROR, OTHER }
+
     /**
-     * Why a request to the server failed, in plain words, from the exception's causes. A name that doesn't resolve is
-     * looked for first: Java's HTTP client reports it as a {@code ConnectException} caused by an
-     * {@code UnresolvedAddressException}, which would otherwise read as refused (9c-8 notes).
+     * A name that doesn't resolve is looked for first: Java's HTTP client reports it as a {@code ConnectException}
+     * caused by an {@code UnresolvedAddressException}, which would otherwise read as refused (9c-8 notes).
      */
-    static String unreachable(Throwable failure) {
+    private static Failure failure(Throwable failure) {
         for (Throwable t = failure; t != null; t = t.getCause()) {
             if (t instanceof UnknownHostException || t instanceof UnresolvedAddressException) {
-                return "Not resolvable: check the name, and that Tailscale is running on this Mac.";
+                return Failure.UNRESOLVABLE;
             }
         }
         for (Throwable t = failure; t != null; t = t.getCause()) {
             if (t instanceof ConnectException) {
-                return "Refused: the server answers, but Ollama isn't listening on port " + OllamaProperties.DEFAULT_PORT
-                        + ".";
+                return Failure.REFUSED;
             }
             if (t instanceof HttpTimeoutException || t instanceof SocketTimeoutException) {
-                return "Timed out: the server may be stopped or still starting.";
+                return Failure.TIMED_OUT;
             }
-            if (t instanceof RestClientResponseException response) {
-                return "Ollama answered with an error (HTTP " + response.getStatusCode().value() + ").";
+            if (t instanceof RestClientResponseException) {
+                return Failure.HTTP_ERROR;
             }
         }
-        return "Unreachable (" + failure.getClass().getSimpleName() + ").";
+        return Failure.OTHER;
+    }
+
+    private static RestClientResponseException response(Throwable failure) {
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            if (t instanceof RestClientResponseException response) {
+                return response;
+            }
+        }
+        throw new IllegalStateException("no response");
+    }
+
+    /** Why a request to the server failed, in plain words. */
+    static String unreachable(Throwable failure) {
+        return switch (failure(failure)) {
+            case UNRESOLVABLE -> "Not resolvable: check the name, and that Tailscale is running on this Mac.";
+            case REFUSED -> "Refused: the server answers, but Ollama isn't listening on port "
+                    + OllamaProperties.DEFAULT_PORT + ".";
+            case TIMED_OUT -> "Timed out: the server may be stopped or still starting.";
+            case HTTP_ERROR -> "Ollama answered with an error (HTTP " + response(failure).getStatusCode().value() + ").";
+            case OTHER -> "Unreachable (" + failure.getClass().getSimpleName() + ").";
+        };
+    }
+
+    /**
+     * A start's progress line while Ollama doesn't answer on the server's name: what the last check met, so a name
+     * that doesn't resolve isn't mistaken for a tunnel still coming up (9c-9 notes).
+     */
+    static String waiting(Throwable failure) {
+        return WAITING_FOR_OLLAMA + switch (failure(failure)) {
+            case UNRESOLVABLE -> "not resolvable";
+            case REFUSED -> "refused on port " + OllamaProperties.DEFAULT_PORT;
+            case TIMED_OUT -> "timed out";
+            case HTTP_ERROR -> "HTTP " + response(failure).getStatusCode().value();
+            case OTHER -> "unreachable (" + failure.getClass().getSimpleName() + ")";
+        };
     }
 
     private URI baseUrl(String name) {

@@ -48,7 +48,7 @@ function server(more: Partial<SelfHostStatus>): SelfHostStatus {
 const STOPPED = server({})
 const STARTING = server({ state: 'STARTING', progress: 'instance starting', minutesRunning: 0, estimatedCost: '0.00',
   line: 'running 0 min · ~$0.00' })
-const WAITING = server({ ...STARTING, progress: 'waiting for Tailscale', minutesRunning: 1, line: 'running 1 min · ~$0.01' })
+const WAITING = server({ ...STARTING, progress: 'waiting for Ollama: not resolvable', minutesRunning: 1, line: 'running 1 min · ~$0.01' })
 const LOADING = server({ ...STARTING, progress: 'loading the model', minutesRunning: 2, line: 'running 2 min · ~$0.03' })
 const RUNNING = server({ state: 'RUNNING', minutesRunning: 42, estimatedCost: '0.56', line: 'running 42 min · ~$0.56' })
 const STOPPING = server({ state: 'STOPPING', minutesRunning: 42, line: 'stopping after 42 min · ~$0.56' })
@@ -150,7 +150,7 @@ test('Start, then each progress line read every 5 seconds, then running with its
   expect(button('Stop')).toBeEnabled()
 
   for (const [progress, line] of [
-    ['waiting for Tailscale', 'running 1 min · ~$0.01'],
+    ['waiting for Ollama: not resolvable', 'running 1 min · ~$0.01'],
     ['loading the model', 'running 2 min · ~$0.03'],
   ]) {
     await act(async () => {

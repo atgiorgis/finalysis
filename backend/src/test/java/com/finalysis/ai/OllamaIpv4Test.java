@@ -10,6 +10,7 @@ import com.finalysis.chat.ChatToolCallbacks;
 import com.finalysis.chat.tool.ToolRegistryTestSupport;
 import com.finalysis.support.OllamaStub;
 import java.net.ConnectException;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -150,6 +151,23 @@ class OllamaIpv4Test {
         OllamaProviderFactory factory = factory(ipv6Loopback());
 
         assertThat(factory.ipv4Address(named())).isEqualTo(named());
+    }
+
+    /**
+     * 9c-9: the platform resolver itself (InetAddress.getAllByName, the app's default), for a name this machine
+     * resolves without any network: {@code localhost}. It may list {@code ::1} first; the stub listens on
+     * {@code 127.0.0.1} only, so reaching it means the IPv4 address was chosen from the platform's list.
+     */
+    @Test
+    void thePlatformResolversIpv4AddressIsTheOneConnectedTo() throws Exception {
+        OllamaProviderFactory platform = OllamaProvidersTest.factory();
+        URI localhost = URI.create("http://localhost:" + stub.port());
+
+        assertThat(java.util.Arrays.stream(InetAddress.getAllByName("localhost")))
+                .as("the platform lists an IPv4 address for localhost").anyMatch(a -> a instanceof Inet4Address);
+        assertThat(platform.ipv4Address(localhost)).isEqualTo(URI.create("http://127.0.0.1:" + stub.port()));
+        assertThat(platform.version(localhost, Duration.ofSeconds(2))).isEqualTo(OllamaStub.VERSION);
+        assertThat(stub.requests("/api/version")).hasSize(1);
     }
 
     @Test

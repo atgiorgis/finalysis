@@ -683,7 +683,7 @@ const SERVER = {
   storageNote: 'While stopped, its 80 GB disk is still billed (gp3, per GB-month).',
 }
 const SERVER_STATES = {
-  starting: { ...SERVER, state: 'STARTING', progress: 'waiting for Tailscale', minutesRunning: 3, estimatedCost: '0.04',
+  starting: { ...SERVER, state: 'STARTING', progress: 'waiting for Ollama: timed out', minutesRunning: 3, estimatedCost: '0.04',
     line: 'running 3 min · ~$0.04', note: null },
   running: { ...SERVER, state: 'RUNNING', progress: null, minutesRunning: 42, estimatedCost: '0.56',
     line: 'running 42 min · ~$0.56',
