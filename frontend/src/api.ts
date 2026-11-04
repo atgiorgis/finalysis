@@ -955,7 +955,7 @@ export interface SelfHostStatus {
   controls: boolean
   reason: string | null
   state: SelfHostState | null
-  /** While STARTING: "instance starting", "waiting for Ollama: <what the last check met>" or "loading the model". */
+  /** While STARTING: "instance starting", "waiting for Ollama on <name>: <what the last check met>" or "loading the model". */
   progress: string | null
   instanceType: string | null
   minutesRunning: number | null

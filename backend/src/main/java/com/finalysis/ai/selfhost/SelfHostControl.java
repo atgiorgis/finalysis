@@ -40,9 +40,9 @@ import software.amazon.awssdk.services.ec2.model.Tag;
  * kept). Its running time is EC2's {@code LaunchTime}, reset on every start; the estimate is minutes × the type's
  * hourly rate / 60 in {@code BigDecimal}, half-even to the cent.
  *
- * <p>A start this app made shows its progress: "instance starting" while EC2 says pending, "waiting for Ollama: "
- * and what the last check met (not resolvable, refused, timed out) while the server's Ollama doesn't answer on its
- * name, "loading the model" during one warm-up (Ollama's
+ * <p>A start this app made shows its progress: "instance starting" while EC2 says pending, "waiting for Ollama on
+ * <name>: " and what the last check met (not resolvable, refused, timed out) while the server's Ollama doesn't answer
+ * on its name, "loading the model" during one warm-up (Ollama's
  * {@code /api/generate} with the model's name and no prompt), then running. A server started elsewhere is simply
  * running. When a start finishes or a stop is seen, Corgi's reachability is checked again, so the badge follows.
  */
@@ -58,7 +58,7 @@ public class SelfHostControl implements SelfHostMeter {
     static final String LOCKED = "Vault locked";
 
     static final String INSTANCE_STARTING = "instance starting";
-    static final String WAITING_FOR_OLLAMA = "waiting for Ollama: ";
+    static final String WAITING_FOR_OLLAMA = "waiting for Ollama on ";
     static final String LOADING_MODEL = "loading the model";
 
     private static final Logger log = LoggerFactory.getLogger(SelfHostControl.class);
@@ -211,7 +211,7 @@ public class SelfHostControl implements SelfHostMeter {
                         + properties.startWait().toMinutes() + " minutes of the start: " + unreachable(e);
                 return null;
             }
-            return waiting(e);
+            return waiting(context.selection().selfhostName(), e);
         }
         ours.warming = true;
         String model = ollamaProperties.models().chat();
@@ -272,7 +272,8 @@ public class SelfHostControl implements SelfHostMeter {
         Server server = find(context);
         switch (server.ec2State()) {
             case "stopped" -> {
-                call("StartInstances", () -> context.client().startInstances(b -> b.instanceIds(server.id())));
+                call("StartInstances", server.type(),
+                        () -> context.client().startInstances(b -> b.instanceIds(server.id())));
                 synchronized (lock) {
                     start = new Start(server.id());
                 }
@@ -295,7 +296,8 @@ public class SelfHostControl implements SelfHostMeter {
         Context context = context();
         Server server = find(context);
         if (server.ec2State().equals("pending") || server.ec2State().equals("running")) {
-            call("StopInstances", () -> context.client().stopInstances(b -> b.instanceIds(server.id())));
+            call("StopInstances", server.type(),
+                    () -> context.client().stopInstances(b -> b.instanceIds(server.id())));
             synchronized (lock) {
                 start = null;
             }
@@ -306,7 +308,10 @@ public class SelfHostControl implements SelfHostMeter {
 
     // ------------------------------------------------------------------ Test
 
-    /** {@code GET /api/version} on the server's name through Tailscale: "Reachable, Ollama 0.12.6" or the reason. */
+    /**
+     * {@code GET /api/version} on the server's name through Tailscale: "Reachable: finalysis-selfhost, Ollama 0.12.6",
+     * or "Tried finalysis-selfhost: " and the reason. The name tried is always said, so a typo shows (9c-11 notes).
+     */
     public TestResult test(String name) {
         URI base = baseUrl(name);
         if (base == null) {
@@ -314,9 +319,9 @@ public class SelfHostControl implements SelfHostMeter {
         }
         try {
             String version = ollama.version(base, ollamaProperties.probeTimeout());
-            return new TestResult(true, version, "Reachable, Ollama " + version);
+            return new TestResult(true, version, "Reachable: " + name + ", Ollama " + version);
         } catch (RuntimeException e) {
-            return new TestResult(false, null, unreachable(e));
+            return new TestResult(false, null, "Tried " + name + ": " + unreachable(e));
         }
     }
 
@@ -369,11 +374,12 @@ public class SelfHostControl implements SelfHostMeter {
     }
 
     /**
-     * A start's progress line while Ollama doesn't answer on the server's name: what the last check met, so a name
-     * that doesn't resolve isn't mistaken for a tunnel still coming up (9c-9 notes).
+     * A start's progress line while Ollama doesn't answer on the server's name: the name tried and what the last check
+     * met, so a name that doesn't resolve isn't mistaken for a tunnel still coming up (9c-9 notes), and a typo in the
+     * name shows (9c-11 notes).
      */
-    static String waiting(Throwable failure) {
-        return WAITING_FOR_OLLAMA + switch (failure(failure)) {
+    static String waiting(String name, Throwable failure) {
+        return WAITING_FOR_OLLAMA + name + ": " + switch (failure(failure)) {
             case UNRESOLVABLE -> "not resolvable";
             case REFUSED -> "refused on port " + OllamaProperties.DEFAULT_PORT;
             case TIMED_OUT -> "timed out";
@@ -407,6 +413,19 @@ public class SelfHostControl implements SelfHostMeter {
         return new Context(current, region, ec2.client(region));
     }
 
+    static String refusal(String operation, String code, String instanceType) {
+        if (NO_CAPACITY.equals(code)) {
+            return "The zone has no free " + (instanceType == null ? "instance of this type" : instanceType)
+                    + " right now (" + code + "); try again in a few minutes, or recreate the server in another zone "
+                    + "(scripts/selfhost/destroy.sh, then create.sh, which tries the zones in turn).";
+        }
+        String named = "AWS refused " + operation + (code == null ? "" : " (" + code + ")");
+        if (code == null || AUTHORIZATION_CODES.contains(code)) {
+            return named + ": check the IAM statements from create.sh in finalysis-dev-policy.";
+        }
+        return named + ".";
+    }
+
     /** The one tagged instance that isn't terminated or being terminated. */
     private Server find(Context context) {
         List<Instance> found = call("DescribeInstances", () -> context.client().describeInstances(b -> b.filters(
@@ -429,18 +448,31 @@ public class SelfHostControl implements SelfHostMeter {
                 instance.instanceTypeAsString(), volume);
     }
 
+    private static <T> T call(String operation, Supplier<T> request) {
+        return call(operation, null, request);
+    }
+
+    /** EC2's error codes for a refusal by IAM: the statements create.sh prints are missing or wrong. */
+    static final java.util.Set<String> AUTHORIZATION_CODES = java.util.Set.of("UnauthorizedOperation", "AccessDenied",
+            "AccessDeniedException", "AuthFailure");
+
+    /** EC2's error code when the instance's zone has no free capacity of its type (9c-11 notes). */
+    static final String NO_CAPACITY = "InsufficientInstanceCapacity";
+
     /**
      * An EC2 call; its failures in plain words, never the message (it can name the account or identity), and never a
      * 500. A credentials provider may throw its own {@code IllegalStateException} unwrapped (the test suite's does).
+     * The reasons differ by EC2's code: a zone with no free capacity of the server's type says to wait or recreate
+     * the server elsewhere (a stopped instance stays pinned to its zone); an authorization refusal points at the IAM
+     * statements; any other code is named as it is.
      */
-    private static <T> T call(String operation, Supplier<T> request) {
+    private static <T> T call(String operation, String instanceType, Supplier<T> request) {
         try {
             return request.get();
         } catch (AwsServiceException e) {
             String code = e.awsErrorDetails() == null ? null : e.awsErrorDetails().errorCode();
             log.warn("EC2 {} refused ({})", operation, code);
-            throw new SelfHostUnavailableException("AWS refused " + operation + (code == null ? "" : " (" + code + ")")
-                    + ": check the IAM statements from create.sh in finalysis-dev-policy.");
+            throw new SelfHostUnavailableException(refusal(operation, code, instanceType));
         } catch (SdkException | IllegalStateException e) {
             log.warn("EC2 {} failed ({})", operation, e.getClass().getSimpleName());
             throw new SelfHostUnavailableException("Couldn't reach AWS for " + operation

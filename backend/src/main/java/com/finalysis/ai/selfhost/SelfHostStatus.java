@@ -8,7 +8,7 @@ package com.finalysis.ai.selfhost;
  * @param controls       whether Start and Stop can be used: Cloud credentials, a region and exactly one tagged server
  * @param reason         why not, in plain words; null when they can
  * @param state          STOPPED, STARTING, RUNNING or STOPPING; null when the server can't be read
- * @param progress       while STARTING: "instance starting", "waiting for Ollama: <what the last check met>" or
+ * @param progress       while STARTING: "instance starting", "waiting for Ollama on <name>: <what it met>" or
  *                       "loading the model"
  * @param instanceType   the server's instance type, e.g. g6.xlarge
  * @param minutesRunning whole minutes since its last start (EC2's LaunchTime); null while stopped

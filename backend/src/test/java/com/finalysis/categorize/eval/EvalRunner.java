@@ -378,6 +378,8 @@ public class EvalRunner {
         settings.put("finalysis.ai.categorization.max-items-per-run", String.valueOf(categorization.maxItemsPerRun()));
         settings.put("finalysis.ai.categorization.min-confidence (configured)",
                 categorization.minConfidence().toPlainString());
+        settings.put("finalysis.ai.categorization.min-confidence on this path (configured)",
+                categorization.minConfidence(providers.path()).toPlainString());
         settings.put("finalysis.ai.examples.k", String.valueOf(examples.k()));
         settings.put("finalysis.ai.examples.min-similarity", String.valueOf(examples.minSimilarity()));
         settings.put("finalysis.ai.examples.max-embeddings-per-run", String.valueOf(examples.maxEmbeddingsPerRun()));

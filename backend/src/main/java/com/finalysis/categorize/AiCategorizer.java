@@ -442,7 +442,7 @@ public class AiCategorizer {
                 tally.invalid++;
                 observer.itemDecided(decision(group, AiRunObserver.Outcome.INVALID, null, null, null));
                 group.txnIds().forEach(id -> review.add(new Object[] {ReviewReason.INVALID_ANSWER.name(), id}));
-            } else if (accepted.confidence().compareTo(properties.minConfidence()) < 0) {
+            } else if (accepted.confidence().compareTo(properties.minConfidence(providers.path())) < 0) {
                 tally.lowConfidence++;
                 observer.itemDecided(decision(group, AiRunObserver.Outcome.LOW_CONFIDENCE, accepted.category(),
                         accepted.confidence(), null));

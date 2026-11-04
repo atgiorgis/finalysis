@@ -1310,7 +1310,8 @@ categories. An import never fails because of categorization.
    closed, counted as `redactionBlocked`). Merchants go inside a delimited block as JSON-escaped data,
    never as instructions, and the answer must be a category from the list, for a key that was asked.
    Txns on a transfer link and txns you marked not a transfer are never sent.
-5. **Review.** An answer at or above `min-confidence` (0.80) is applied as `AI`, with its model,
+5. **Review.** An answer at or above `min-confidence` (0.80 on Cloud, 0.85 on Self-hosted and Local; see
+   [The three paths](#the-three-paths)) is applied as `AI`, with its model,
    confidence and prompt version. Below it, or after two invalid answers, the txn stays uncategorized
    and goes to the review queue (`AI_CATEGORY_REVIEW`). Your correction (`PUT …/category`) wins, and
    by default becomes a rule for the merchant, so its other txns follow.
@@ -1629,6 +1630,38 @@ costs a little while it is stopped. Three things keep that bounded: an **idle wa
 20 minutes without a model request; a **billing alarm** e-mails you when the account's month passes a threshold you
 choose (it lags by hours); and Settings shows the running time and an estimate.
 
+**A stopped server stays in its zone, and can fail to start when that zone is full.** A stopped instance keeps its
+disk, and the disk is pinned to one Availability Zone. If that zone has no free g6.xlarge when you press Start, EC2
+refuses with `InsufficientInstanceCapacity`, and Settings says so ("the zone has no free g6.xlarge right now"). It
+happened in testing: a server stopped in us-east-1c couldn't start for a day. There are three choices:
+- **Wait and try again**: capacity comes back, often within minutes, sometimes not for hours.
+- **Recreate it elsewhere**: `destroy.sh`, then `create.sh`, which walks the region's zones until one has capacity
+  (`--zone` picks the first to try). The models are downloaded again on the first boot.
+- **Reserve capacity**: an On-Demand Capacity Reservation in the zone guarantees the start, but it bills at the
+  instance's hourly rate for as long as it's reserved, running or not. It defeats the point of stopping, so it isn't
+  set up here.
+
+### The three paths
+
+Where Corgi runs is chosen in Settings → Corgi, without a restart. The settings that differ by path, with the
+measurements behind them (`docs/plans/phase-9.md`, 9c-11 notes):
+
+| | Cloud | Self-hosted | Local |
+|---|---|---|---|
+| Where | Amazon Bedrock | your GPU server, over Tailscale | this Mac |
+| Chat and categorization model | Sonnet 4.6 (chat), Haiku 4.5 (categorization) | `ministral-3:14b` | `ministral-3:14b` |
+| Embeddings | Titan Text Embeddings V2 | `nomic-embed-text` | `nomic-embed-text` |
+| Search floor (`finalysis.chat.search.min-similarity-by-model`) | 0.40 | 0.50 | 0.50 |
+| Categorization `min-confidence` (`finalysis.ai.categorization.min-confidence-by-path`) | 0.80 | 0.85 | 0.85 |
+| Cost | per token | per hour while the server runs | none |
+
+- **Why the search floors differ.** Similarities aren't comparable across embedding models. On the dev sweep, nomic
+  found 24 of 25 search targets by meaning, and 0.50 keeps 23 of them, every question still answered, with 113
+  unrelated candidates instead of 158 at 0.45. Titan found only one target by meaning: its floor barely matters.
+- **Why the confidence floors differ.** On the dev set, Ministral 3 14B with examples was right 96.6% of the time at
+  0.80, but its 5 wrong answers were all confident. At 0.85 it had 1 wrong and 6 left for review (95.3%). Haiku 4.5 is
+  95.9% with none wrong at 0.80. A wrong category is worse than one left for review.
+
 ### What's in the repo
 
 | File | What |
@@ -1699,7 +1732,8 @@ takes a while (drivers check, Ollama, Tailscale, model downloads); the stack com
 
 Settings → Corgi → Self-hosted has **Test**, **Start** and **Stop**. After a stop, **a start can take up to 10 minutes
 while Tailscale reconnects** (relayed first, then direct). Meanwhile the card shows what the last check met, for
-example "waiting for Ollama: timed out", "not resolvable" or "refused on port 11434". The app waits up to 15 minutes
+example "waiting for Ollama on finalysis-selfhost: timed out", "not resolvable" or "refused on port 11434": the
+name tried is always shown, as Test shows it, so a typo in it is visible. The app waits up to 15 minutes
 (`finalysis.ai.selfhost.start-wait`) before it gives up and says why. The app reaches the server at its name's IPv4
 Tailscale address, the only one Ollama listens on; Settings and the badge show the name.
 

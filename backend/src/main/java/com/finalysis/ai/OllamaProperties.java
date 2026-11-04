@@ -32,8 +32,9 @@ public record OllamaProperties(@DefaultValue("11434") int port, @DefaultValue Mo
     public static final int DEFAULT_PORT = 11434;
 
     /**
-     * No usable chat model is assumed: the owner sets the tag of 9a's pick (Ministral 3 14B) as Ollama names it. Until
-     * then the reachability check reports this placeholder as not pulled, and Corgi stays off on the Ollama paths.
+     * The chat model when no configuration names one: none is assumed. application.yml names 9a's pick,
+     * {@code ministral-3:14b}, final since 9c-11; without it the reachability check reports this placeholder as not
+     * pulled, and Corgi stays off on the Ollama paths.
      */
     public static final String UNSET_CHAT_MODEL = "finalysis-unset-chat-model";
 

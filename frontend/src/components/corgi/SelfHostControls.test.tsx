@@ -48,7 +48,7 @@ function server(more: Partial<SelfHostStatus>): SelfHostStatus {
 const STOPPED = server({})
 const STARTING = server({ state: 'STARTING', progress: 'instance starting', minutesRunning: 0, estimatedCost: '0.00',
   line: 'running 0 min · ~$0.00' })
-const WAITING = server({ ...STARTING, progress: 'waiting for Ollama: not resolvable', minutesRunning: 1, line: 'running 1 min · ~$0.01' })
+const WAITING = server({ ...STARTING, progress: 'waiting for Ollama on finalysis-selfhost: not resolvable', minutesRunning: 1, line: 'running 1 min · ~$0.01' })
 const LOADING = server({ ...STARTING, progress: 'loading the model', minutesRunning: 2, line: 'running 2 min · ~$0.03' })
 const RUNNING = server({ state: 'RUNNING', minutesRunning: 42, estimatedCost: '0.56', line: 'running 42 min · ~$0.56' })
 const STOPPING = server({ state: 'STOPPING', minutesRunning: 42, line: 'stopping after 42 min · ~$0.56' })
@@ -79,7 +79,7 @@ test('without the aws profile, Start and Stop are disabled with the backend’s 
   const user = userEvent.setup()
   const { writes } = renderApp('/settings', { '/api/status': { ...fixtures.statusOff, ai: AI } }, (write) =>
     write.url === '/api/selfhost/test'
-      ? Response.json({ reachable: true, version: '0.12.6', message: 'Reachable, Ollama 0.12.6' })
+      ? Response.json({ reachable: true, version: '0.12.6', message: 'Reachable: finalysis-selfhost, Ollama 0.12.6' })
       : undefined)
   const own = await block()
 
@@ -91,7 +91,7 @@ test('without the aws profile, Start and Stop are disabled with the backend’s 
 
   await user.click(button('Test'))
 
-  expect(await screen.findByText('Reachable, Ollama 0.12.6')).toHaveAttribute('role', 'status')
+  expect(await screen.findByText('Reachable: finalysis-selfhost, Ollama 0.12.6')).toHaveAttribute('role', 'status')
   expect(writes).toEqual([{ method: 'POST', url: '/api/selfhost/test', body: { name: 'finalysis-selfhost' } }])
 })
 
@@ -99,7 +99,8 @@ test('Test sends the name as typed, trimmed, and shows the reason when the serve
   const user = userEvent.setup()
   const { writes } = renderApp('/settings', { '/api/status': { ...fixtures.statusOff, ai: AI } }, () =>
     Response.json({ reachable: false, version: null,
-      message: 'Not resolvable: check the name, and that Tailscale is running on this Mac.' }))
+      message: 'Tried other-box.tail1234.ts.net: Not resolvable: check the name, and that Tailscale is running on this '
+        + 'Mac.' }))
   await controls()
   const nameField = screen.getByRole('textbox', { name: 'Tailscale name' })
 
@@ -150,7 +151,7 @@ test('Start, then each progress line read every 5 seconds, then running with its
   expect(button('Stop')).toBeEnabled()
 
   for (const [progress, line] of [
-    ['waiting for Ollama: not resolvable', 'running 1 min · ~$0.01'],
+    ['waiting for Ollama on finalysis-selfhost: not resolvable', 'running 1 min · ~$0.01'],
     ['loading the model', 'running 2 min · ~$0.03'],
   ]) {
     await act(async () => {

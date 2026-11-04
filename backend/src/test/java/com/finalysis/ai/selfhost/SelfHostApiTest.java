@@ -92,7 +92,7 @@ class SelfHostApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reachable").value(true))
                 .andExpect(jsonPath("$.version").value(OllamaStub.VERSION))
-                .andExpect(jsonPath("$.message").value("Reachable, Ollama " + OllamaStub.VERSION));
+                .andExpect(jsonPath("$.message").value("Reachable: 127.0.0.1, Ollama " + OllamaStub.VERSION));
 
         assertThat(STUB.requests()).extracting(OllamaStub.Request::method, OllamaStub.Request::path)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple("GET", "/api/version"));

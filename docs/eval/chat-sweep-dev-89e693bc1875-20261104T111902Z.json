@@ -1,0 +1,1954 @@
+{
+  "commit" : "89e693bc18759159a3d9d6eff4f26f47989d5900",
+  "dirty" : false,
+  "startedAt" : "2026-11-04T11:19:02.126442Z",
+  "target" : {
+    "provider" : "ollama",
+    "path" : "SELF_HOSTED",
+    "host" : "finalysis-selfhost",
+    "ollamaVersion" : "0.40.14",
+    "subset" : [ ]
+  },
+  "embeddingModel" : "nomic-embed-text",
+  "settings" : {
+    "finalysis.ai.categorization.batch-size" : "25",
+    "finalysis.ai.categorization.max-items-per-run" : "500",
+    "finalysis.ai.categorization.min-confidence" : "0.8",
+    "finalysis.ai.categorization.run-after-import" : "false",
+    "finalysis.ai.chat.prompt-cache" : "true",
+    "finalysis.ai.cloud-available" : "true",
+    "finalysis.ai.default-path" : "OFF",
+    "finalysis.ai.embedding.dimensions" : "1024",
+    "finalysis.ai.examples.direct-assignment" : "false",
+    "finalysis.ai.examples.direct-min-similarity" : "0.97",
+    "finalysis.ai.examples.k" : "5",
+    "finalysis.ai.examples.max-embeddings-per-run" : "500",
+    "finalysis.ai.examples.max-examples-per-batch" : "50",
+    "finalysis.ai.examples.min-similarity" : "0.65",
+    "finalysis.ai.ollama.embedding-dimensions" : "768",
+    "finalysis.ai.ollama.local-read-timeout" : "300s",
+    "finalysis.ai.ollama.models.chat" : "ministral-3:14b",
+    "finalysis.ai.ollama.models.embedding" : "nomic-embed-text",
+    "finalysis.ai.ollama.num-ctx" : "16384",
+    "finalysis.ai.ollama.probe-timeout" : "3s",
+    "finalysis.ai.ollama.self-hosted-read-timeout" : "60s",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].cache-read-per-million" : "0.11",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].cache-write-per-million" : "1.375",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].input-per-million" : "1.1",
+    "finalysis.ai.prices[us.anthropic.claude-haiku-4-5-20251001-v1:0].output-per-million" : "5.5",
+    "finalysis.ai.prices[us.anthropic.claude-sonnet-4-6].cache-read-per-million" : "0.33",
+    "finalysis.ai.prices[us.anthropic.claude-sonnet-4-6].cache-write-per-million" : "4.125",
+    "finalysis.ai.prices[us.anthropic.claude-sonnet-4-6].input-per-million" : "3.3",
+    "finalysis.ai.prices[us.anthropic.claude-sonnet-4-6].output-per-million" : "16.5",
+    "finalysis.ai.provider" : "bedrock",
+    "finalysis.ai.roles.categorization" : "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "finalysis.ai.roles.embedding" : "amazon.titan-embed-text-v2:0",
+    "finalysis.ai.roles.main" : "us.anthropic.claude-sonnet-4-6",
+    "finalysis.ai.roles.vision" : "",
+    "finalysis.ai.selfhost.aws-timeout" : "10s",
+    "finalysis.ai.selfhost.hourly-rates[g5.xlarge]" : "1.006",
+    "finalysis.ai.selfhost.hourly-rates[g6.xlarge]" : "0.8048",
+    "finalysis.ai.selfhost.start-wait" : "15m",
+    "finalysis.ai.selfhost.warm-up-timeout" : "300s",
+    "finalysis.chat.max-daily-cost" : "1.0",
+    "finalysis.chat.max-input-tokens-per-call" : "12000",
+    "finalysis.chat.max-input-tokens-per-turn" : "40000",
+    "finalysis.chat.max-output-tokens" : "1500",
+    "finalysis.chat.max-rounds" : "5",
+    "finalysis.chat.max-tool-calls" : "8",
+    "finalysis.chat.max-turn-cost" : "0.15",
+    "finalysis.chat.max-turn-time" : "45s",
+    "finalysis.chat.retention-days" : "90",
+    "finalysis.chat.search.max-embeddings-per-run" : "500",
+    "finalysis.chat.search.min-similarity" : "0.30",
+    "finalysis.chat.search.min-similarity-by-model[amazon.titan-embed-text-v2:0]" : "0.4",
+    "finalysis.chat.search.min-similarity-by-model[nomic-embed-text]" : "0.4",
+    "spring.ai.bedrock.aws.region" : "us-east-1",
+    "spring.ai.bedrock.aws.timeout" : "30s",
+    "spring.ai.bedrock.converse.chat.options.max-tokens" : "2000",
+    "spring.ai.bedrock.converse.chat.options.model" : "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "spring.ai.bedrock.converse.chat.options.temperature" : "0.0",
+    "spring.ai.bedrock.titan.embedding.input-type" : "TEXT",
+    "spring.ai.bedrock.titan.embedding.model" : "amazon.titan-embed-text-v2:0",
+    "spring.ai.model.chat" : "bedrock-converse",
+    "spring.ai.model.embedding" : "bedrock-titan"
+  },
+  "sweep" : {
+    "set" : "dev",
+    "setSha256" : "6f545ebba947d8647c68b2e40e46c124509918810bd209d75732c3fd50e92578",
+    "index" : [ {
+      "dataset" : "SAMPLE",
+      "status" : "DONE",
+      "merchants" : 49,
+      "embedded" : 30,
+      "cached" : 19,
+      "calls" : 30,
+      "remaining" : 0
+    } ],
+    "queries" : [ {
+      "question" : "d-s01",
+      "query" : "rideshare",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "LYFT RIDE",
+        "match" : "MEANING",
+        "similarity" : 0.71
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.69
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.62
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.54
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "SPOTIFY USA",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "GOOGLE GOOGLE ONE",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "AUTOPAY", "NETFLIX.COM", "SPOTIFY USA", "GOOGLE GOOGLE ONE", "ONLINE PAYMENT THANK YOU", "PAYMENT THANK YOU", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "AUTOPAY", "NETFLIX.COM", "SPOTIFY USA", "GOOGLE GOOGLE ONE", "ONLINE PAYMENT THANK YOU", "PAYMENT THANK YOU", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "AUTOPAY", "NETFLIX.COM", "SPOTIFY USA", "GOOGLE GOOGLE ONE", "ONLINE PAYMENT THANK YOU", "PAYMENT THANK YOU", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "AUTOPAY", "NETFLIX.COM", "SPOTIFY USA", "GOOGLE GOOGLE ONE", "ONLINE PAYMENT THANK YOU", "PAYMENT THANK YOU", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "AUTOPAY", "NETFLIX.COM", "SPOTIFY USA", "GOOGLE GOOGLE ONE", "ONLINE PAYMENT THANK YOU", "PAYMENT THANK YOU", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      } ]
+    }, {
+      "question" : "d-s01",
+      "query" : "ride share",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "LYFT RIDE",
+        "match" : "WORD",
+        "similarity" : null
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.64
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.62
+      }, {
+        "merchant" : "PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "ONLINE TRANSFER TO SAVINGS",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "INTEREST PAYMENT",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "PAYMENT THANK YOU", "AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER TO SAVINGS", "INTEREST PAYMENT", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "PAYMENT THANK YOU", "AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER TO SAVINGS", "INTEREST PAYMENT", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "PAYMENT THANK YOU", "AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER TO SAVINGS", "INTEREST PAYMENT", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "PAYMENT THANK YOU", "AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER TO SAVINGS" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 5
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL", "PAYMENT THANK YOU" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 2
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "LYFT RIDE", "UBER TRIP", "SHELL OIL" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      } ]
+    }, {
+      "question" : "d-s01",
+      "query" : "taxi",
+      "targets" : [ "LYFT", "UBER" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.71
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "CATEGORY",
+        "similarity" : 0.71
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "CATEGORY",
+        "similarity" : 0.71
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "BRIGHTWAY LOGISTICS PAYROLL",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "BRIGHTWAY LOGISTICS PAYROLL", "DOORDASH THAI BASIL", "PAYMENT THANK YOU" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "BRIGHTWAY LOGISTICS PAYROLL", "DOORDASH THAI BASIL", "PAYMENT THANK YOU" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "BRIGHTWAY LOGISTICS PAYROLL", "DOORDASH THAI BASIL", "PAYMENT THANK YOU" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "BRIGHTWAY LOGISTICS PAYROLL", "DOORDASH THAI BASIL", "PAYMENT THANK YOU" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 8
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "AUTOPAY" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 2
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP" ],
+        "found" : [ "LYFT", "UBER" ],
+        "others" : 1
+      } ]
+    }, {
+      "question" : "d-s02",
+      "query" : "food delivery",
+      "targets" : [ "DOORDASH" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "GIANT FOOD",
+        "match" : "WORD",
+        "similarity" : null
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.62
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "CATEGORY",
+        "similarity" : 0.62
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "CATEGORY",
+        "similarity" : 0.62
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.60
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.60
+      }, {
+        "merchant" : "CHIPOTLE",
+        "match" : "CATEGORY",
+        "similarity" : 0.58
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.58
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.58
+      }, {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "CATEGORY",
+        "similarity" : 0.58
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "DOORDASH" ],
+        "others" : 9
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "GIANT FOOD", "SHELL OIL", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S" ],
+        "found" : [ ],
+        "others" : 6
+      } ]
+    }, {
+      "question" : "d-s02",
+      "query" : "delivery",
+      "targets" : [ "DOORDASH" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "ONLINE PMT", "TARGET", "ONLINE TRANSFER FROM CHECKING", "AUTOPAY", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 10
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "ONLINE PMT", "TARGET", "ONLINE TRANSFER FROM CHECKING", "AUTOPAY", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 10
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "ONLINE PMT", "TARGET", "ONLINE TRANSFER FROM CHECKING", "AUTOPAY", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 10
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "ONLINE PMT", "TARGET", "ONLINE TRANSFER FROM CHECKING", "AUTOPAY", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 10
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "ONLINE PMT", "TARGET", "ONLINE TRANSFER FROM CHECKING", "AUTOPAY", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 10
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP" ],
+        "found" : [ ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP" ],
+        "found" : [ ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "gas",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SHELL OIL",
+        "match" : "MEANING",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT" ],
+        "found" : [ "SHELL" ],
+        "others" : 4
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "gas station",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "MEANING",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SHELL OIL", "BLUE BEAN CAFE", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "TARGET" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SHELL OIL", "BLUE BEAN CAFE", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "TARGET" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SHELL OIL", "BLUE BEAN CAFE", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "TARGET" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SHELL OIL", "BLUE BEAN CAFE", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "TARGET" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s03",
+      "query" : "fuel",
+      "targets" : [ "SHELL" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SHELL OIL",
+        "match" : "MEANING",
+        "similarity" : 0.59
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "LYFT RIDE", "UBER TRIP", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "SHELL" ],
+        "others" : 9
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SHELL OIL", "METRO POWER CO ONLINE PMT", "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT" ],
+        "found" : [ "SHELL" ],
+        "others" : 4
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s04",
+      "query" : "pharmacy",
+      "targets" : [ "CVS" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CVS/PHARMACY",
+        "match" : "NAME",
+        "similarity" : null
+      }, {
+        "merchant" : "BEST BUY",
+        "match" : "CATEGORY",
+        "similarity" : 0.59
+      }, {
+        "merchant" : "TARGET",
+        "match" : "CATEGORY",
+        "similarity" : 0.59
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "CATEGORY",
+        "similarity" : 0.59
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "SPOTIFY USA",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SPOTIFY USA", "SHELL OIL" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SPOTIFY USA", "SHELL OIL" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SPOTIFY USA", "SHELL OIL" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY", "TRADER JOE S", "GIANT FOOD", "SPOTIFY USA", "SHELL OIL" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "CVS" ],
+        "others" : 7
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CVS/PHARMACY", "BEST BUY", "TARGET", "AMZN MKTP US" ],
+        "found" : [ "CVS" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s04",
+      "query" : "drugstore",
+      "targets" : [ "CVS" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "BEST BUY",
+        "match" : "CATEGORY",
+        "similarity" : 0.65
+      }, {
+        "merchant" : "TARGET",
+        "match" : "CATEGORY",
+        "similarity" : 0.65
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "CATEGORY",
+        "similarity" : 0.65
+      }, {
+        "merchant" : "CVS/PHARMACY",
+        "match" : "MEANING",
+        "similarity" : 0.64
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "SPOTIFY USA",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY", "TRADER JOE S", "SAFEWAY", "GIANT FOOD", "NETFLIX.COM", "SPOTIFY USA", "BLUE BEAN CAFE" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY", "TRADER JOE S", "SAFEWAY", "GIANT FOOD", "NETFLIX.COM", "SPOTIFY USA", "BLUE BEAN CAFE" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY", "TRADER JOE S", "SAFEWAY", "GIANT FOOD", "NETFLIX.COM", "SPOTIFY USA", "BLUE BEAN CAFE" ],
+        "found" : [ "CVS" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY", "TRADER JOE S", "SAFEWAY", "GIANT FOOD", "NETFLIX.COM" ],
+        "found" : [ "CVS" ],
+        "others" : 7
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY", "TRADER JOE S", "SAFEWAY", "GIANT FOOD" ],
+        "found" : [ "CVS" ],
+        "others" : 6
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "BEST BUY", "TARGET", "AMZN MKTP US", "CVS/PHARMACY" ],
+        "found" : [ "CVS" ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "burrito",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CHIPOTLE",
+        "match" : "MEANING",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.40
+      }, {
+        "merchant" : "SHELL OIL",
+        "match" : "MEANING",
+        "similarity" : 0.40
+      }, {
+        "merchant" : "CVS/PHARMACY",
+        "match" : "CATEGORY",
+        "similarity" : 0.40
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "GIANT FOOD", "SAFEWAY", "TRADER JOE S", "UBER TRIP", "SHELL OIL", "CVS/PHARMACY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "GIANT FOOD", "SAFEWAY", "TRADER JOE S", "UBER TRIP", "SHELL OIL", "CVS/PHARMACY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "GIANT FOOD", "SAFEWAY", "TRADER JOE S", "UBER TRIP", "SHELL OIL", "CVS/PHARMACY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 1
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CHIPOTLE" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "burrito place",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CHIPOTLE",
+        "match" : "MEANING",
+        "similarity" : 0.56
+      }, {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "MEANING",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "PARKSIDE PROPERTY MGMT RENT PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.40
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "UBER TRIP", "GIANT FOOD", "TRADER JOE S", "SAFEWAY", "PARKSIDE PROPERTY MGMT RENT PMT", "TARGET" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "UBER TRIP", "GIANT FOOD", "TRADER JOE S", "SAFEWAY", "PARKSIDE PROPERTY MGMT RENT PMT", "TARGET" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "UBER TRIP", "GIANT FOOD", "TRADER JOE S", "SAFEWAY", "PARKSIDE PROPERTY MGMT RENT PMT", "TARGET" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CHIPOTLE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s05",
+      "query" : "mexican restaurant",
+      "targets" : [ "CHIPOTLE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CHIPOTLE",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "MEANING",
+        "similarity" : 0.41
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.41
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.41
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN", "TRADER JOE S", "UBER TRIP", "GIANT FOOD", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN", "TRADER JOE S", "UBER TRIP", "GIANT FOOD", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN", "TRADER JOE S", "UBER TRIP", "GIANT FOOD", "AMZN MKTP US", "NETFLIX.COM", "SAFEWAY" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "NAKAMURA RAMEN" ],
+        "found" : [ "CHIPOTLE" ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "ramen",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "NAME",
+        "similarity" : null
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "MEANING",
+        "similarity" : 0.56
+      }, {
+        "merchant" : "CHIPOTLE",
+        "match" : "MEANING",
+        "similarity" : 0.54
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "CATEGORY",
+        "similarity" : 0.44
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "CHIPOTLE", "BLUE BEAN CAFE", "GIANT FOOD", "AMZN MKTP US", "SAFEWAY", "TRADER JOE S" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 7
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "CHIPOTLE", "BLUE BEAN CAFE", "GIANT FOOD", "AMZN MKTP US", "SAFEWAY", "TRADER JOE S" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 7
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "CHIPOTLE", "BLUE BEAN CAFE", "GIANT FOOD", "AMZN MKTP US", "SAFEWAY", "TRADER JOE S" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 7
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "CHIPOTLE", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL", "CHIPOTLE", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "NAKAMURA RAMEN", "DOORDASH THAI BASIL" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "NAKAMURA RAMEN" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "ramen restaurant",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "WORD",
+        "similarity" : null
+      }, {
+        "merchant" : "CHIPOTLE",
+        "match" : "CATEGORY",
+        "similarity" : 0.60
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.60
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.60
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.42
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.41
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "AMZN MKTP US", "TRADER JOE S", "GIANT FOOD", "SAFEWAY", "TARGET" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 8
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "AMZN MKTP US", "TRADER JOE S", "GIANT FOOD", "SAFEWAY", "TARGET" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 8
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "AMZN MKTP US", "TRADER JOE S", "GIANT FOOD", "SAFEWAY", "TARGET" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 8
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "AMZN MKTP US" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 4
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s06",
+      "query" : "japanese restaurant",
+      "targets" : [ "NAKAMURA" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "NAKAMURA RAMEN",
+        "match" : "MEANING",
+        "similarity" : 0.67
+      }, {
+        "merchant" : "CHIPOTLE",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "DOORDASH THAI BASIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "BLUE BEAN CAFE",
+        "match" : "CATEGORY",
+        "similarity" : 0.63
+      }, {
+        "merchant" : "TRADER JOE S",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "GIANT FOOD",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.44
+      }, {
+        "merchant" : "SAFEWAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.43
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "MEANING",
+        "similarity" : 0.41
+      }, {
+        "merchant" : "BEST BUY",
+        "match" : "CATEGORY",
+        "similarity" : 0.41
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "TRADER JOE S", "GIANT FOOD", "TARGET", "SAFEWAY", "AMZN MKTP US", "BEST BUY" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "TRADER JOE S", "GIANT FOOD", "TARGET", "SAFEWAY", "AMZN MKTP US", "BEST BUY" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "TRADER JOE S", "GIANT FOOD", "TARGET", "SAFEWAY", "AMZN MKTP US", "BEST BUY" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE", "TRADER JOE S", "GIANT FOOD" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 5
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "NAKAMURA RAMEN", "CHIPOTLE", "DOORDASH THAI BASIL", "BLUE BEAN CAFE" ],
+        "found" : [ "NAKAMURA" ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "phone bill",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.56
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.54
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "INTEREST PAYMENT",
+        "match" : "MEANING",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "AUTOPAY", "PAYMENT THANK YOU", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "INTEREST PAYMENT", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "AUTOPAY", "PAYMENT THANK YOU", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "INTEREST PAYMENT", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "AUTOPAY", "PAYMENT THANK YOU", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "INTEREST PAYMENT", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "AUTOPAY", "PAYMENT THANK YOU", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "INTEREST PAYMENT", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "AUTOPAY", "PAYMENT THANK YOU", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 7
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "phone",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "TARGET",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "GOOGLE GOOGLE ONE",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "METRO POWER CO ONLINE PMT", "TARGET", "AUTOPAY", "UBER TRIP", "ONLINE TRANSFER FROM CHECKING", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "METRO POWER CO ONLINE PMT", "TARGET", "AUTOPAY", "UBER TRIP", "ONLINE TRANSFER FROM CHECKING", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "METRO POWER CO ONLINE PMT", "TARGET", "AUTOPAY", "UBER TRIP", "ONLINE TRANSFER FROM CHECKING", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "METRO POWER CO ONLINE PMT", "TARGET", "AUTOPAY", "UBER TRIP", "ONLINE TRANSFER FROM CHECKING", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 2
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ ],
+        "found" : [ ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s07",
+      "query" : "mobile carrier",
+      "targets" : [ "CLEARLINE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SHELL OIL",
+        "match" : "CATEGORY",
+        "similarity" : 0.61
+      }, {
+        "merchant" : "LYFT RIDE",
+        "match" : "CATEGORY",
+        "similarity" : 0.61
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "CATEGORY",
+        "similarity" : 0.61
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      }, {
+        "merchant" : "AMZN MKTP US",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "AUTOPAY", "AMZN MKTP US" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "AUTOPAY", "AMZN MKTP US" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "AUTOPAY", "AMZN MKTP US" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "AUTOPAY", "AMZN MKTP US" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "SKYWAVE INTERNET AUTOPAY", "ONLINE PMT" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 6
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "CLEARLINE" ],
+        "others" : 3
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SHELL OIL", "LYFT RIDE", "UBER TRIP" ],
+        "found" : [ ],
+        "others" : 3
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "NAME",
+        "similarity" : null
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "ONLINE TRANSFER TO SAVINGS",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.49
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "GOOGLE GOOGLE ONE",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 5
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet bill",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "WORD",
+        "similarity" : null
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.57
+      }, {
+        "merchant" : "ONLINE TRANSFER FROM CHECKING",
+        "match" : "MEANING",
+        "similarity" : 0.55
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "ONLINE TRANSFER TO SAVINGS",
+        "match" : "MEANING",
+        "similarity" : 0.53
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "GOOGLE GOOGLE ONE",
+        "match" : "MEANING",
+        "similarity" : 0.48
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "NETFLIX.COM", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "NETFLIX.COM", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "NETFLIX.COM", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "NETFLIX.COM", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PMT", "GOOGLE GOOGLE ONE" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING", "NETFLIX.COM", "ONLINE TRANSFER TO SAVINGS", "CLEARLINE WIRELESS AUTOPAY", "METRO POWER CO ONLINE PMT", "CITY OF ARLINGTON WATER UTIL PMT", "ONLINE PMT" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 8
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "ONLINE PAYMENT THANK YOU", "ONLINE TRANSFER FROM CHECKING" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 2
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      } ]
+    }, {
+      "question" : "d-s08",
+      "query" : "internet provider",
+      "targets" : [ "SKYWAVE" ],
+      "status" : "OK",
+      "candidates" : [ {
+        "merchant" : "SKYWAVE INTERNET AUTOPAY",
+        "match" : "WORD",
+        "similarity" : null
+      }, {
+        "merchant" : "NETFLIX.COM",
+        "match" : "MEANING",
+        "similarity" : 0.56
+      }, {
+        "merchant" : "METRO POWER CO ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.52
+      }, {
+        "merchant" : "GOOGLE GOOGLE ONE",
+        "match" : "MEANING",
+        "similarity" : 0.51
+      }, {
+        "merchant" : "CLEARLINE WIRELESS AUTOPAY",
+        "match" : "MEANING",
+        "similarity" : 0.50
+      }, {
+        "merchant" : "CITY OF ARLINGTON WATER UTIL PMT",
+        "match" : "CATEGORY",
+        "similarity" : 0.48
+      }, {
+        "merchant" : "SPOTIFY USA",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "ONLINE PMT",
+        "match" : "MEANING",
+        "similarity" : 0.47
+      }, {
+        "merchant" : "ONLINE PAYMENT THANK YOU",
+        "match" : "MEANING",
+        "similarity" : 0.46
+      }, {
+        "merchant" : "UBER TRIP",
+        "match" : "MEANING",
+        "similarity" : 0.45
+      } ],
+      "floors" : [ {
+        "floor" : 0.30,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "GOOGLE GOOGLE ONE", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "SPOTIFY USA", "ONLINE PMT", "ONLINE PAYMENT THANK YOU", "UBER TRIP" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.35,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "GOOGLE GOOGLE ONE", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "SPOTIFY USA", "ONLINE PMT", "ONLINE PAYMENT THANK YOU", "UBER TRIP" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.40,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "GOOGLE GOOGLE ONE", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "SPOTIFY USA", "ONLINE PMT", "ONLINE PAYMENT THANK YOU", "UBER TRIP" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.45,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "GOOGLE GOOGLE ONE", "CLEARLINE WIRELESS AUTOPAY", "CITY OF ARLINGTON WATER UTIL PMT", "SPOTIFY USA", "ONLINE PMT", "ONLINE PAYMENT THANK YOU", "UBER TRIP" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 9
+      }, {
+        "floor" : 0.50,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM", "METRO POWER CO ONLINE PMT", "GOOGLE GOOGLE ONE", "CLEARLINE WIRELESS AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 4
+      }, {
+        "floor" : 0.55,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY", "NETFLIX.COM" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 1
+      }, {
+        "floor" : 0.60,
+        "candidates" : [ "SKYWAVE INTERNET AUTOPAY" ],
+        "found" : [ "SKYWAVE" ],
+        "others" : 0
+      } ]
+    } ],
+    "floors" : [ {
+      "floor" : 0.30,
+      "queries" : 22,
+      "queriesAllFound" : 21,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 24,
+      "candidates" : 217,
+      "others" : 193
+    }, {
+      "floor" : 0.35,
+      "queries" : 22,
+      "queriesAllFound" : 21,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 24,
+      "candidates" : 217,
+      "others" : 193
+    }, {
+      "floor" : 0.40,
+      "queries" : 22,
+      "queriesAllFound" : 21,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 24,
+      "candidates" : 217,
+      "others" : 193
+    }, {
+      "floor" : 0.45,
+      "queries" : 22,
+      "queriesAllFound" : 21,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 24,
+      "candidates" : 182,
+      "others" : 158
+    }, {
+      "floor" : 0.50,
+      "queries" : 22,
+      "queriesAllFound" : 20,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 23,
+      "candidates" : 136,
+      "others" : 113
+    }, {
+      "floor" : 0.55,
+      "queries" : 22,
+      "queriesAllFound" : 20,
+      "questions" : 8,
+      "questionsAllFound" : 8,
+      "targets" : 25,
+      "targetsFound" : 23,
+      "candidates" : 69,
+      "others" : 46
+    }, {
+      "floor" : 0.60,
+      "queries" : 22,
+      "queriesAllFound" : 12,
+      "questions" : 8,
+      "questionsAllFound" : 5,
+      "targets" : 25,
+      "targetsFound" : 15,
+      "candidates" : 42,
+      "others" : 27
+    } ],
+    "highestLossless" : 0.45
+  }
+}

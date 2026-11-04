@@ -294,7 +294,7 @@ class SelfHostControlTest {
         ec2.become("running", clock.instant());
         ollama.versionFailure = new ResourceAccessException("timeout", new HttpTimeoutException("timed out"));
         assertThat(control.status()).extracting(SelfHostStatus::state, SelfHostStatus::progress)
-                .containsExactly("STARTING", "waiting for Ollama: timed out");
+                .containsExactly("STARTING", "waiting for Ollama on finalysis-selfhost: timed out");
         assertThat(ollama.versions).containsExactly(URI.create("http://finalysis-selfhost:11434"));
 
         ollama.versionFailure = null;
@@ -340,7 +340,7 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new UnknownHostException("finalysis-selfhost"));
 
         clock.advance(Duration.ofMinutes(15));
-        assertThat(control.status().progress()).isEqualTo("waiting for Ollama: not resolvable");
+        assertThat(control.status().progress()).isEqualTo("waiting for Ollama on finalysis-selfhost: not resolvable");
         clock.advance(Duration.ofMinutes(1));
 
         SelfHostStatus status = control.status();
@@ -359,7 +359,7 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
 
         clock.advance(Duration.ofMinutes(10).plusSeconds(30));
-        assertThat(control.status().progress()).isEqualTo("waiting for Ollama: timed out");
+        assertThat(control.status().progress()).isEqualTo("waiting for Ollama on finalysis-selfhost: timed out");
         ollama.versionFailure = null;
 
         assertThat(control.status().progress()).isEqualTo("loading the model");
@@ -382,7 +382,7 @@ class SelfHostControlTest {
                 Map.entry(HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "x", null, null, null), "HTTP 502"),
                 Map.entry(new IllegalStateException("odd"), "unreachable (IllegalStateException)"))) {
             ollama.versionFailure = expected.getKey();
-            assertThat(control.status().progress()).isEqualTo("waiting for Ollama: " + expected.getValue());
+            assertThat(control.status().progress()).isEqualTo("waiting for Ollama on finalysis-selfhost: " + expected.getValue());
         }
     }
 
@@ -406,7 +406,7 @@ class SelfHostControlTest {
         ollama.versionFailure = new ResourceAccessException("x", new HttpTimeoutException("timed out"));
 
         clock.advance(Duration.ofMinutes(20));
-        assertThat(patient.status().progress()).isEqualTo("waiting for Ollama: timed out");
+        assertThat(patient.status().progress()).isEqualTo("waiting for Ollama on finalysis-selfhost: timed out");
         clock.advance(Duration.ofMinutes(1));
         assertThat(patient.status().note()).startsWith("Ollama didn't answer on finalysis-selfhost within 20 minutes");
     }
@@ -427,7 +427,7 @@ class SelfHostControlTest {
                     InetAddress.getByAddress(name, new byte[] {127, 0, 0, 1}));
 
             assertThat(real.test(name)).isEqualTo(new SelfHostControl.TestResult(true, OllamaStub.VERSION,
-                    "Reachable, Ollama " + OllamaStub.VERSION));
+                    "Reachable: " + name + ", Ollama " + OllamaStub.VERSION));
             assertThat(stub.requests("/api/version")).hasSize(1);
         }
     }
@@ -438,8 +438,8 @@ class SelfHostControlTest {
             String name = "finalysis-selfhost.invalid";
             SelfHostControl real = withRealClients(stub, name);
 
-            assertThat(real.test(name).message()).isEqualTo(
-                    "Not resolvable: check the name, and that Tailscale is running on this Mac.");
+            assertThat(real.test(name).message()).isEqualTo("Tried " + name
+                    + ": Not resolvable: check the name, and that Tailscale is running on this Mac.");
             assertThat(stub.requests()).isEmpty();
         }
     }
@@ -518,6 +518,50 @@ class SelfHostControlTest {
                 + "IAM statements from create.sh in finalysis-dev-policy.");
     }
 
+    /** 9c-11: the stopped instance in us-east-1c couldn't start for a day; the old reason pointed at IAM. */
+    @Test
+    void aStartWithNoCapacityInTheZoneSaysToWaitOrRecreateNotToCheckIam() {
+        ec2.server("stopped", null, "g6.xlarge", "80");
+        ec2.startFailure = Ec2Exception.builder().message("Insufficient capacity.")
+                .awsErrorDetails(AwsErrorDetails.builder().errorCode("InsufficientInstanceCapacity").build()).build();
+
+        String reason = refusal(control::start);
+
+        assertThat(reason).isEqualTo("The zone has no free g6.xlarge right now (InsufficientInstanceCapacity); try "
+                + "again in a few minutes, or recreate the server in another zone (scripts/selfhost/destroy.sh, then "
+                + "create.sh, which tries the zones in turn).");
+        assertThat(reason).doesNotContain("IAM");
+    }
+
+    @Test
+    void theRefusalsByCode() {
+        for (String code : List.of("UnauthorizedOperation", "AccessDenied", "AccessDeniedException", "AuthFailure")) {
+            assertThat(SelfHostControl.refusal("StopInstances", code, "g6.xlarge")).isEqualTo("AWS refused "
+                    + "StopInstances (" + code + "): check the IAM statements from create.sh in finalysis-dev-policy.");
+        }
+        assertThat(SelfHostControl.refusal("StartInstances", "IncorrectInstanceState", "g6.xlarge"))
+                .as("another code is named, with no IAM hint")
+                .isEqualTo("AWS refused StartInstances (IncorrectInstanceState).");
+        assertThat(SelfHostControl.refusal("StartInstances", null, null))
+                .isEqualTo("AWS refused StartInstances: check the IAM statements from create.sh in finalysis-dev-policy.");
+        assertThat(SelfHostControl.refusal("StartInstances", "InsufficientInstanceCapacity", "g5.xlarge"))
+                .startsWith("The zone has no free g5.xlarge right now");
+    }
+
+    /** 9c-11: the name was typed "finalysis-selhost" for a day; Test and the progress now say the name they tried. */
+    @Test
+    void testAndTheProgressSayTheNameTheyTried() {
+        ollama.versionFailure = new ResourceAccessException("x", new UnknownHostException("finalysis-selhost"));
+
+        assertThat(control.test("finalysis-selhost").message()).startsWith("Tried finalysis-selhost: Not resolvable");
+
+        selection.set(new AiPathSettings.Selection(AiPath.SELF_HOSTED, "finalysis-selhost", "us-east-1"));
+        ec2.server("stopped", null, "g6.xlarge", "80");
+        control.start();
+        ec2.become("running", clock.instant());
+        assertThat(control.status().progress()).isEqualTo("waiting for Ollama on finalysis-selhost: not resolvable");
+    }
+
     // ---------------------------------------------------------------------------- stop
 
     @Test
@@ -567,12 +611,12 @@ class SelfHostControlTest {
     @Test
     void testIsOllamasVersionOnTheNameOrTheReason() {
         assertThat(control.test(NAME)).isEqualTo(new SelfHostControl.TestResult(true, "0.12.6",
-                "Reachable, Ollama 0.12.6"));
+                "Reachable: finalysis-selfhost, Ollama 0.12.6"));
         assertThat(ollama.versions).containsExactly(URI.create("http://finalysis-selfhost:11434"));
 
         ollama.versionFailure = new ResourceAccessException("x", new UnknownHostException(NAME));
         assertThat(control.test(NAME)).isEqualTo(new SelfHostControl.TestResult(false, null,
-                "Not resolvable: check the name, and that Tailscale is running on this Mac."));
+                "Tried finalysis-selfhost: Not resolvable: check the name, and that Tailscale is running on this Mac."));
         assertThat(ec2.regions).as("Test never calls AWS").isEmpty();
     }
 

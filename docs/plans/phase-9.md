@@ -499,6 +499,25 @@ Found in the step checks:
     starts;
   - or raise Vitest's per-test timeout (`testTimeout`) when the machine is under load.
 
+Found in the Self-hosted measurements (9c-11 notes):
+
+- **"[amount]" copied from the history** (CHT, grounding). The conversation history keeps no figures: they're stripped
+  to placeholders. On d-m03 turn 2, Ministral 3 14B wrote "two transactions of [amount] at Safeway" from that
+  history, though its own `get_alerts` result in the same turn had $84.12. Turn 3 repeated it. The answer is scored
+  wrong, but it is still shown. Candidates:
+  - treat a placeholder in an answer as ungrounded, so the turn retries or falls back;
+  - or word the history's placeholders so they can't read as text to copy.
+- **Examples and overconfidence** (CAT-03). With nomic, the examples feature fired for the first time: 3 of 16 items
+  had an example at the 0.65 floor. Most nearest examples fell between 0.45 and 0.60, below it. Ministral's wrong
+  answers came at 0.80 or above, hence 0.85 on its paths. Candidates:
+  - a per-model examples floor, as the search floor has;
+  - measuring the 0.85 on a larger set than the dev set's 16 AI items.
+- **Embedding search by meaning** (CHT-05). On merchant names, Titan found 1 target by meaning in 22 queries;
+  everything else was a name or word match. Nomic found 24 of 25. Candidates:
+  - embed richer merchant documents (category, typical amount);
+  - or another Cloud embedding model.
+  Similarities differ by model, so a change needs its own sweep and floor.
+
 ---
 
 ## 12. The owner's manual setup steps
@@ -1721,6 +1740,113 @@ stopped and auto-build off. No live call, no EC2 or Tailscale action.
 - `AiCallTimingsTest` (new): the lines this thread logs while recording are read (a failed call included); none
   from another thread, and none after; per-role min, median, max and total.
 - `EvalRunnerTest`: a Cloud run's call times, and its target is Bedrock.
+
+### Step 9c-11 notes: the Self-hosted measurements; 9c closed
+
+The owner ran every measurement here; I made no AWS or model call. The three reports are in `docs/eval/`:
+
+- `chat-dev-bb822aa6b00e-20261103T120333Z`: the chat dev set on the server. It was committed with 9c-9 (`0fb5414`)
+  by a `git add -A` that swept it in unread. It belongs there, but from now on files are added by name. Its header
+  records the host as `100.82.143.114`, the base URL the owner used while the name was mistyped: a tailnet address,
+  reachable only inside the tailnet.
+- `chat-sweep-dev-89e693bc1875-20261104T111902Z`: the nomic search-floor sweep.
+- `dev-89e693bc1875-20261104T112142Z`: the categorization dev set on the server.
+
+**Chat, dev set, Ministral 3 14B (Q4) on Ollama 0.40.13 over Tailscale**:
+
+| Measure | Self-hosted |
+|---|---|
+| Questions correct | 50 / 60 (83.3%) |
+| Correct, IDENTITY excluded | 48 / 58 (full precision on Bedrock, run 7: 49) |
+| Tool choice | 67 / 68 |
+| Grounded on the first try | 66 / 67 |
+| Search | 8 / 8 |
+| Token cost | $0 |
+| Turn latency, median | 3.4 s (mean 5.2, max 60.2) |
+
+- **The one ERROR, d-l01**, was the first question: the cold model load ran past `max-turn-time` (45 s; the turn took
+  60.2 s). The warm-up after Start hadn't run because the name in Settings was mistyped (below), so Ollama loaded the
+  model on the first chat call.
+- **d-m03 turn 2 shows "[amount]"**: "two transactions of [amount] at Safeway". The model copied the placeholder from
+  the figure-stripped conversation history, though the turn's own `get_alerts` result had $84.12. Turn 3 repeats it.
+  Scored wrong; a Phase 10 candidate (§11).
+
+**Search floor, nomic-embed-text** (Ollama 0.40.14 on the recreated server):
+
+| Floor | Targets found | Questions with every target | Non-target candidates |
+|---:|---:|---:|---:|
+| 0.40 | 24 / 25 | 8 / 8 | 193 |
+| 0.45 | 24 / 25 | 8 / 8 | 158 |
+| 0.50 | 23 / 25 | 8 / 8 | 113 |
+| 0.55 | 23 / 25 | 8 / 8 | 46 |
+| 0.60 | 15 / 25 | 5 / 8 | 27 |
+
+- Nomic finds targets **by meaning**: 117 meaning matches among the candidates. Titan's sweep found 1.
+- **The floor is set to 0.50** (`finalysis.chat.search.min-similarity-by-model[nomic-embed-text]`): 23 of 25 targets,
+  every question, and 113 unrelated candidates instead of 158 at 0.45. At 0.55, two targets sit right on the line.
+- Titan's floor stays 0.40, where it barely matters.
+
+**Categorization, dev set (148 rows), Ministral 3 14B on the server**:
+
+| Variant | Overall correct | Wrong | Review |
+|---|---:|---:|---:|
+| A: rules only | 87.2% | 0 | 0 |
+| B: + AI, no examples | 89.2% | 0 | 16 |
+| C: + AI + examples, at 0.80 | 96.6% | 5 | 0 |
+| C at min-confidence 0.85 (the run's sweep) | 95.3% | 1 | 6 |
+| Haiku 4.5 on Cloud, rules + AI at 0.80 (Phase 4) | 95.9% | 0 | 6 |
+
+- **The examples feature fired for the first time.** 3 of the 16 items sent had a nomic example at or above the 0.65
+  floor.
+- **The model's wrong answers are confident.** All 5 of C's wrong answers were at 0.80 or above. So the Ollama paths
+  now ask for **0.85** (`finalysis.ai.categorization.min-confidence-by-path`: `SELF_HOSTED` and `LOCAL`), and Cloud
+  keeps 0.80. A path not listed uses `min-confidence`.
+- **Timing**: one 16-item batch, 11 s warm (C 11.4 s, D 11.0 s) and 40 s cold (B, the first call). Embeddings: 124
+  per variant, 16 ms median.
+- D is C: no item reached direct assignment's 0.97.
+
+**Operational findings**:
+- **Capacity.** `create.sh` succeeded in us-east-1c (Nov 2) and us-east-1d (Nov 4), each after capacity failures in
+  the zones before it (9c-7's retry).
+  - The stopped instance in 1c then couldn't be started for a day: `InsufficientInstanceCapacity` on every Start.
+    A stopped instance stays in its zone, so it was destroyed and recreated in 1d.
+  - The Start error used to blame IAM for this. It now says the zone has no free g6.xlarge, to try again in a few
+    minutes, or to recreate the server in another zone.
+  - Only an authorization code (`UnauthorizedOperation`, `AccessDenied`, `AccessDeniedException`, `AuthFailure`, or
+    none) still points at the IAM statements. Any other code is named as it is.
+- **The name was mistyped.** Settings held `finalysis-selhost` from Nov 2 to Nov 3. That is the whole of the "waiting
+  for Tailscale" and "Not resolvable" investigation in 9c-9: the backend looked up a name that didn't exist, while
+  every manual check used the right one.
+  - Test now says the name it tried ("Reachable: finalysis-selfhost, Ollama 0.40.14", or "Tried finalysis-selhost:
+    Not resolvable: …").
+  - The start's progress line does too ("waiting for Ollama on finalysis-selhost: not resolvable").
+  - 9c-9's reproduction stands: Java resolves the real name.
+- **Restart to ready**: about 3 to 4 minutes when the name is right.
+
+**Settings changed**:
+- `finalysis.chat.search.min-similarity-by-model[nomic-embed-text]`: 0.40 → 0.50.
+- `finalysis.ai.categorization.min-confidence-by-path`: new, with `SELF_HOSTED` 0.85 and `LOCAL` 0.85.
+- `finalysis.ai.ollama.models.chat`: `ministral-3:14b` is now in application.yml, the pick being final. The code
+  default stays the placeholder, so a configuration that names no model never assumes one.
+
+**Tests**: backend 3,789 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,780 at 9c-10 plus 9; the skip is
+`CfnLintTest`); frontend 355 tests (34 files), all passed; layout check 169 passed, 1 skipped. Run one after the
+other, with the owner's backend stopped and auto-build off. No live call, no EC2 or Tailscale action.
+- `ShippedAiSettingsTest` (new): application.yml ships `ministral-3:14b`, min-confidence 0.85 on Self-hosted and
+  Local and 0.80 on Cloud, and floors of 0.50 (nomic) and 0.40 (Titan).
+- `AiCategorizerTest`:
+  - an answer at 0.82 is applied on Cloud and goes to review on Self-hosted and Local;
+  - the per-path threshold falls back to `min-confidence`;
+  - an out-of-range or OFF entry is refused.
+- `SelfHostControlTest`:
+  - a capacity refusal on Start names the zone's missing type and never IAM;
+  - the reason for each code;
+  - Test and the progress line name the mistyped name tried.
+  The pinned Test and progress strings now include the name.
+- The frontend's and the layout check's fixtures use the new wording.
+
+**9c is closed.** Left for the owner, from the 9c-3 list: the categorization timing run is the dev run above.
+9d and 9e follow on instruction.
 
 ---
 

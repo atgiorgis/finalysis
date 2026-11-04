@@ -127,9 +127,8 @@ finalysis:
     # both on port 11434 (finalysis.ai.ollama.port exists for tests only; startup refuses another port outside them).
     ollama:
       models:
-        # The owner sets the Ollama tag of 9a's pick, Ministral 3 14B (docs/eval/README.md run 7). Until then the
-        # placeholder finalysis-unset-chat-model is reported as "not pulled" and Corgi stays off on these paths.
-        # chat: <tag>
+        # 9a's pick, final at 9c-11 (docs/eval/README.md run 7; the Self-hosted dev run in phase-9.md's 9c-11 notes)
+        chat: ministral-3:14b
         embedding: nomic-embed-text   # 768 dimensions
       embedding-dimensions: 768
       self-hosted-read-timeout: 60s   # one call; a GPU instance over Tailscale
@@ -161,6 +160,12 @@ finalysis:
       # Answers below it are not applied; their txns go to the review queue. 0.80 from the step 9 dev run: all of
       # its wrong AI answers were at 0.70 to 0.75, and review is preferred over a wrong category (step 9c notes).
       min-confidence: 0.80
+      # Per path (docs/plans/phase-9.md, 9c-11 notes). On the Self-hosted dev run, Ministral 3 14B with examples was
+      # 96.6% at 0.80 with 5 wrong, all confident; at 0.85 it was 95.3%, 1 wrong, 6 to review. Haiku 4.5 on Cloud keeps
+      # 0.80 (95.9%, 0 wrong). A path not listed uses min-confidence.
+      min-confidence-by-path:
+        SELF_HOSTED: 0.85
+        LOCAL: 0.85
       # Off in every profile (no profile file overrides it): with AI on, an import never starts cloud calls by
       # itself; run the AI with POST /api/categorization/run. True runs it in the background after each import.
       run-after-import: false
@@ -203,7 +208,8 @@ finalysis:
       # One floor per embedding model (docs/plans/phase-9.md §4.1): similarities aren't comparable across models.
       min-similarity-by-model:
         "[amazon.titan-embed-text-v2:0]": 0.40   # Titan V2, Cloud: set from the Phase 6 dev sweep
-        "[nomic-embed-text]": 0.40               # Ollama paths: provisional until the owner's dev sweep on Ollama
+        "[nomic-embed-text]": 0.50               # Ollama paths: the 9c-11 dev sweep (23/25 targets, 8/8 questions,
+                                                 # 113 non-targets vs 158 at 0.45; 0.55 leaves two targets on the line)
       max-embeddings-per-run: 500   # cost guard: embedding calls per index refresh; the rest wait for the next one
   # Read-only analytics (docs/plans/phase-5.md §3.3); a bad value fails startup.
   analytics:

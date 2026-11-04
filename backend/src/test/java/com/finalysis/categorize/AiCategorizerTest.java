@@ -352,6 +352,78 @@ class AiCategorizerTest {
                 assertThat(ModelAnswers.items(prompt).getFirst().key()).isEqualTo("i1"));
     }
 
+    // ------------------------------------------------------------------ the threshold per path (9c-11)
+
+    /** The same providers, reporting another path: the threshold follows the path the run is on. */
+    private ActiveProviders on(AiPath path) {
+        return new ActiveProviders() {
+            @Override
+            public AiPath path() {
+                return path;
+            }
+
+            @Override
+            public boolean usable() {
+                return providers.usable();
+            }
+
+            @Override
+            public com.finalysis.ai.ProviderSet providers() {
+                return providers.providers();
+            }
+
+            @Override
+            public Lease lease() {
+                return providers.lease();
+            }
+        };
+    }
+
+    private static final AiCategorizationProperties PER_PATH = new AiCategorizationProperties(25, 500,
+            new BigDecimal("0.80"), false, Map.of(AiPath.SELF_HOSTED, new BigDecimal("0.85"),
+                    AiPath.LOCAL, new BigDecimal("0.85")));
+
+    @Test
+    void anAnswerAt082IsAppliedOnCloudWhereTheThresholdIs080() {
+        insertAll();
+        model.answering(sensible(0.82), 100, 20);
+
+        AiRunResult result = categorizer(on(AiPath.CLOUD), PER_PATH).run(false);
+
+        assertThat(result.itemsLowConfidence()).isZero();
+        assertThat(result.txnsCategorized()).isPositive();
+    }
+
+    @Test
+    void theSameAnswerGoesToReviewOnTheOllamaPathsWhereItIs085() {
+        for (AiPath path : List.of(AiPath.SELF_HOSTED, AiPath.LOCAL)) {
+            insertAll();
+            model.answering(sensible(0.82), 100, 20);
+
+            AiRunResult result = categorizer(on(path), PER_PATH).run(false);
+
+            assertThat(result.txnsCategorized()).as(path.name()).isZero();
+            assertThat(result.itemsLowConfidence()).as(path.name()).isPositive();
+            assertThat(storedWithoutTime("tearoom")).as(path.name()).isEqualTo(review("LOW_CONFIDENCE"));
+            cleanUp();
+        }
+    }
+
+    @Test
+    void theThresholdPerPathFallsBackToTheOneSetting() {
+        assertThat(PER_PATH.minConfidence(AiPath.CLOUD)).isEqualByComparingTo("0.80");
+        assertThat(PER_PATH.minConfidence(AiPath.SELF_HOSTED)).isEqualByComparingTo("0.85");
+        assertThat(PER_PATH.minConfidence(null)).isEqualByComparingTo("0.80");
+        assertThat(new AiCategorizationProperties(25, 500, new BigDecimal("0.70"), false).minConfidence(AiPath.LOCAL))
+                .isEqualByComparingTo("0.70");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AiCategorizationProperties(25, 500,
+                new BigDecimal("0.80"), false, Map.of(AiPath.LOCAL, new BigDecimal("1.2"))))
+                .hasMessageContaining("min-confidence-by-path[LOCAL] must be between 0 and 1");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AiCategorizationProperties(25, 500,
+                new BigDecimal("0.80"), false, Map.of(AiPath.OFF, new BigDecimal("0.5"))))
+                .hasMessageContaining("min-confidence-by-path[OFF]");
+    }
+
     // ------------------------------------------------------------------ invalid answers
 
     /** Problems that make the whole answer unusable: asked again once. */
