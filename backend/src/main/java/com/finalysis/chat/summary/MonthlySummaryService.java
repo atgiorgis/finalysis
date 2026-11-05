@@ -255,9 +255,10 @@ public class MonthlySummaryService {
     }
 
     private static String retryMessage(AnswerCheck check) {
-        return "These figures are not in the records: " + check.ungrounded().stream().map(Figure::asWritten)
-                .distinct().collect(Collectors.joining(", ")) + ". Write the summary again using only figures from "
-                + "the records.";
+        List<String> items = new ArrayList<>(check.ungrounded().stream().map(Figure::asWritten).toList());
+        items.addAll(check.placeholders());
+        return "These figures are not in the records: " + items.stream().distinct().collect(Collectors.joining(", "))
+                + ". Write the summary again using only figures from the records.";
     }
 
     private MonthlySummaryResponse answered(Sent sent, AnswerCheck check, boolean retried, UsageTally usage,
@@ -273,7 +274,7 @@ public class MonthlySummaryService {
         String text = MonthlySummaryTemplate.render(sent.view());
         AnswerCheck check = grounding.check(text, sent.evidence());
         if (!check.grounded()) {
-            log.warn("chat monthly summary template ungrounded figures={}", check.ungrounded().size());
+            log.warn("chat monthly summary template ungrounded figures={}", check.ungroundedCount());
         }
         CitationResolver.CitedAnswer cited = citations.cite(check, sent.turn().refs());
         return respond(sent, MonthlySummaryResponse.Source.TEMPLATE, cited, check, retried, usage, limit, started);
@@ -287,7 +288,7 @@ public class MonthlySummaryService {
                 usage == null ? 0 : usage.calls(), limit, Math.max(0, clock.millis() - started));
         return new MonthlySummaryResponse(sent.records().month().toString(), source, cited.text(),
                 new ChatTurnResponse.Grounding(check.status(), check.figuresChecked(), retried,
-                        check.ungrounded().size()),
+                        check.ungroundedCount()),
                 cited.citations(), sent.records().notes(),
                 usage == null || usage.calls() == 0 ? null : ChatTurnResponse.Usage.of(client.modelId(),
                         client.path(), usage.calls(), usage.inputTokens(), usage.outputTokens(),

@@ -13,10 +13,11 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /**
- * The two automatic retry messages (CHT-04, step 9a), no Spring. They go to the model as user messages, and in dev run 5
- * the shown answers began "You're right, I apologize" (Sonnet d-s08, d-m03) and "You're right." (Haiku d-x08): the
- * model answered a correction the user never made. Both now say they are an automatic check, not the user, and ask for
- * a new answer to the user's question; neither has wording that reads as a correction or invites an apology.
+ * The automatic retry messages (CHT-04, step 9a; the placeholder retries, Phase 10 step 10-1), no Spring. They go to
+ * the model as user messages, and in dev run 5 the shown answers began "You're right, I apologize" (Sonnet d-s08,
+ * d-m03) and "You're right." (Haiku d-x08): the model answered a correction the user never made. Each now says it is an
+ * automatic check, not the user, and asks for a new answer to the user's question; none has wording that reads as a
+ * correction or invites an apology.
  */
 class RetryWordingTest {
 
@@ -26,9 +27,10 @@ class RetryWordingTest {
                     + "|rewrite|redo|try again|you said|you gave|your answer)\\b");
 
     private static List<String> retries() {
-        AnswerCheck check = RetryWordingFixture.ungrounded();
-        return List.of(new AnswerGrounding(RetryWordingFixture.GUARD).retryMessage(check),
-                TurnLoop.CUT_ANSWER_RETRY);
+        AnswerGrounding grounding = new AnswerGrounding(RetryWordingFixture.GUARD);
+        return List.of(grounding.retryMessage(RetryWordingFixture.ungrounded()), TurnLoop.CUT_ANSWER_RETRY,
+                grounding.retryMessage(RetryWordingFixture.placeholder()),
+                grounding.retryMessage(RetryWordingFixture.ungroundedAndPlaceholder()));
     }
 
     @Test
@@ -46,6 +48,8 @@ class RetryWordingTest {
         }
         assertThat(retries().getFirst()).startsWith(AnswerGrounding.RETRY_PREFIX)
                 .endsWith(AnswerGrounding.RETRY_INSTRUCTION).contains("as a new answer to that question");
+        assertThat(retries().get(2)).startsWith(AnswerGrounding.PLACEHOLDER_PREFIX)
+                .endsWith(AnswerGrounding.PLACEHOLDER_INSTRUCTION).contains("as a new answer to that question");
     }
 
     @Test
@@ -53,6 +57,8 @@ class RetryWordingTest {
         assertThat(SummaryFigureStripper.figureFree(AnswerGrounding.RETRY_PREFIX + AnswerGrounding.RETRY_INSTRUCTION))
                 .isTrue();
         assertThat(SummaryFigureStripper.figureFree(TurnLoop.CUT_ANSWER_RETRY)).isTrue();
+        assertThat(SummaryFigureStripper.figureFree(AnswerGrounding.PLACEHOLDER_PREFIX
+                + AnswerGrounding.PLACEHOLDER_INSTRUCTION + AnswerGrounding.PLACEHOLDER_NOTE)).isTrue();
         assertThat(RetryWordingFixture.ungrounded().ungrounded())
                 .extracting(Figure::asWritten).containsExactly("$116.21");
     }

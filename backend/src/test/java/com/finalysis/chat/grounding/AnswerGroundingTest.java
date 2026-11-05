@@ -368,6 +368,54 @@ class AnswerGroundingTest {
         }
     }
 
+    /**
+     * Phase 10 step 10-1: the history's figure placeholders. On d-m03 turn 2 (Self-hosted run, bb822aa) the model wrote
+     * "two transactions of [amount] at Safeway" with $84.12 in its own tool result; the extractor sees no figure in
+     * {@code [amount]}, so the answer was {@code NO_FIGURES} and shown. A placeholder is now ungrounded.
+     */
+    @Nested
+    class HistoryPlaceholders {
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "[amount]|[amount]",
+                "Two transactions of [amount] at Safeway.|[amount]",
+                "It rose [percent] to [number] visits.|[percent],[number]",
+                "It was [AMOUNT].|[AMOUNT]",
+                "It was [Number] times.|[Number]"})
+        void eachPlaceholderIsUngrounded(String answer, String placeholders) {
+            AnswerCheck check = Evidence.shoppingSpike().check(answer);
+
+            assertThat(check.grounded()).isFalse();
+            assertThat(check.status()).isNull();
+            assertThat(check.placeholders()).containsExactly(placeholders.split(","));
+            assertThat(check.ungrounded()).isEmpty();
+            assertThat(check.ungroundedCount()).isEqualTo(check.placeholders().size());
+        }
+
+        @Test
+        void aPlaceholderBesideAGroundedFigureStillFailsTheAnswer() {
+            AnswerCheck check = Evidence.shoppingSpike().check("You spent $1,183.67 [a1], about [amount] a week.");
+
+            assertThat(check.matches()).extracting(m -> m.figure().asWritten()).containsExactly("$1,183.67");
+            assertThat(check.ungrounded()).isEmpty();
+            assertThat(check.placeholders()).containsExactly("[amount]");
+            assertThat(check.grounded()).isFalse();
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "You spent $1,183.67 [a1].",
+                "The amounts are in the table.",
+                "See [the amount] below.",
+                "[ amount ] is not the token.",
+                "An [amounts] list.",
+                "… [earlier answer shortened; call the tool for the full data]"})
+        void otherBracketsAreNotPlaceholders(String answer) {
+            assertThat(Evidence.shoppingSpike().check(answer).placeholders()).isEmpty();
+        }
+    }
+
     @Nested
     class Retry {
 
@@ -383,6 +431,30 @@ class AnswerGroundingTest {
                             + "as a new answer to that question, using only figures from tool results; call a tool if "
                             + "one returns the figure you need (`compare_periods` for differences), or say you can't "
                             + "tell from the data.");
+        }
+
+        /** Step 10-1: placeholders alone get their own message, which lists each one once. */
+        @Test
+        void placeholdersAloneGetTheirOwnRetryMessage() {
+            AnswerCheck check = Evidence.shoppingSpike().check("Two transactions of [amount] at Safeway, [amount] "
+                    + "each, [Percent] of the month.");
+
+            assertThat(new AnswerGrounding(Evidence.GUARD).retryMessage(check)).isEqualTo(
+                    "Automatic check, not a message from the user: these are placeholders from the earlier "
+                            + "conversation, not figures: [amount], [Percent]. Write the answer to the user's question "
+                            + "again from the start, as a new answer to that question, with the figures from this "
+                            + "turn's tool results; call a tool if this turn hasn't returned the figure you need, or "
+                            + "say you can't tell from the data.");
+        }
+
+        /** Step 10-1: an ungrounded figure and a placeholder: the figures' message, then a note naming the placeholder. */
+        @Test
+        void figuresAndPlaceholdersAreBothNamed() {
+            AnswerCheck check = Evidence.shoppingSpike().check("You spent $116.21 more, [amount] in all [a1].");
+
+            String retry = new AnswerGrounding(Evidence.GUARD).retryMessage(check);
+            assertThat(retry).startsWith(AnswerGrounding.RETRY_PREFIX + "$116.21" + AnswerGrounding.RETRY_INSTRUCTION)
+                    .endsWith(" Also, these are placeholders from the earlier conversation, not figures: [amount].");
         }
 
         @Test

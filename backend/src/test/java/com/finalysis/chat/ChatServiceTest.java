@@ -275,6 +275,67 @@ class ChatServiceTest {
         assertThat(storedTurn()).containsEntry("retried", true).containsEntry("answer", response.answer());
     }
 
+    /**
+     * Phase 10 step 10-1, d-m03 turn 2's shape: the turn's tool result has the figure, but the model copies the history's
+     * placeholder instead. The placeholder is ungrounded: one retry naming it, and the figure shown.
+     */
+    @Test
+    void aPlaceholderWithTheFigureInThisTurnsResultIsRetriedAndTheFigureShown() {
+        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)),
+                text("You spent [amount] in March 2026 [c1]."), text(GROUNDED));
+
+        ChatTurnResponse response = ask("How much did I spend in March?");
+
+        assertThat(response.answerSource()).isEqualTo(AnswerSource.MODEL);
+        assertThat(response.answer()).contains("$1,809.48").doesNotContain("[amount]");
+        assertThat(response.grounding()).isEqualTo(new ChatTurnResponse.Grounding(GroundingStatus.GROUNDED, 1, true, 0));
+        List<Message> retry = model.prompts().get(2).getInstructions();
+        assertThat(retry.getLast().getMessageType()).isEqualTo(MessageType.USER);
+        assertThat(retry.getLast().getText())
+                .isEqualTo(AnswerGrounding.PLACEHOLDER_PREFIX + "[amount]" + AnswerGrounding.PLACEHOLDER_INSTRUCTION);
+        assertThat(storedTurn()).containsEntry("retried", true).containsEntry("answer", response.answer());
+    }
+
+    /** A model that copies the placeholder again gets the fallback; the placeholder is never shown or stored. */
+    @Test
+    void aPlaceholderTwiceGivesTheFallback() {
+        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)),
+                text("You spent [amount] in March 2026 [c1]."), text("It was [amount] [c1]."));
+
+        ChatTurnResponse response = ask("How much did I spend in March?");
+
+        assertThat(response.answerSource()).isEqualTo(AnswerSource.FALLBACK);
+        assertThat(response.grounding().status()).isEqualTo(GroundingStatus.FALLBACK);
+        assertThat(response.grounding().ungrounded()).isEqualTo(1);
+        assertThat(response.answer()).contains("1,809.48").doesNotContain("[amount]");
+        assertThat(storedTurn()).containsEntry("answer_source", "FALLBACK").containsEntry("ungrounded", 1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_turn WHERE answer LIKE '%[amount]%'", Integer.class))
+                .isZero();
+    }
+
+    /**
+     * d-m03 turn 3's shape: a follow-up answered from the stripped history with no tool call. The retry names the
+     * placeholder and asks for a tool; the model calls one and the figure is shown.
+     */
+    @Test
+    void aFollowUpThatCopiesThePlaceholderWithoutAToolIsRetriedAndCallsOne() {
+        model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)), text(GROUNDED));
+        ask("How much did I spend in March?");
+        model.then(text("As I said, it was [amount] in March 2026."),
+                model.toolCalls(call("get_month_totals", MARCH_TOTALS)), text(GROUNDED));
+
+        ChatTurnResponse response = ask("Remind me, how much was that?");
+
+        List<Message> turnTwo = model.prompts().get(2).getInstructions();
+        assertThat(turnTwo.stream().map(Message::getText).filter(t -> t != null && t.contains("[amount]")))
+                .as("the history carries the stripped answer").isNotEmpty();
+        assertThat(model.prompts().get(3).getInstructions().getLast().getText())
+                .startsWith(AnswerGrounding.PLACEHOLDER_PREFIX + "[amount]").contains("call a tool");
+        assertThat(response.answerSource()).isEqualTo(AnswerSource.MODEL);
+        assertThat(response.grounding().status()).isEqualTo(GroundingStatus.GROUNDED);
+        assertThat(response.answer()).contains("$1,809.48").doesNotContain("[amount]");
+    }
+
     @Test
     void ungroundedTwiceGivesTheFallbackAndTheModelsTextIsNeverStored() {
         model.then(model.toolCalls(call("get_month_totals", MARCH_TOTALS)), text("You spent $999.99 [c1]."),

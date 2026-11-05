@@ -13,9 +13,12 @@ import java.util.List;
  * @param removed   links, images, tags and URLs removed
  * @param matches   every figure in order, with the values it matched and the ones it cites
  * @param ungrounded the figures that matched nothing, in order
+ * @param placeholders the history's figure placeholders the answer copied ({@code [amount]}, {@code [percent]},
+ *                   {@code [number]}, as written, in order; Phase 10 step 10-1): each is ungrounded, since it stands for
+ *                   a figure no tool result of this turn gave
  */
 public record AnswerCheck(String text, List<CitationMarkers.Marker> markers, int dropped, int removed,
-                          List<FigureMatch> matches, List<Figure> ungrounded) {
+                          List<FigureMatch> matches, List<Figure> ungrounded, List<String> placeholders) {
 
     /**
      * A figure, every value it matched, and the values it cites: those under the refs the model marked in the same
@@ -34,10 +37,23 @@ public record AnswerCheck(String text, List<CitationMarkers.Marker> markers, int
         markers = List.copyOf(markers);
         matches = List.copyOf(matches);
         ungrounded = List.copyOf(ungrounded);
+        placeholders = List.copyOf(placeholders);
     }
 
+    /** A check with no placeholder in the answer. */
+    public AnswerCheck(String text, List<CitationMarkers.Marker> markers, int dropped, int removed,
+                       List<FigureMatch> matches, List<Figure> ungrounded) {
+        this(text, markers, dropped, removed, matches, ungrounded, List.of());
+    }
+
+    /** Every figure matched and no placeholder was copied. */
     public boolean grounded() {
-        return ungrounded.isEmpty();
+        return ungrounded.isEmpty() && placeholders.isEmpty();
+    }
+
+    /** What failed the check: the unmatched figures and the placeholders, counted together. */
+    public int ungroundedCount() {
+        return ungrounded.size() + placeholders.size();
     }
 
     /** {@code GROUNDED} or {@code NO_FIGURES} when every figure matched; null when the answer can't be shown. */

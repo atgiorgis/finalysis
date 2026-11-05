@@ -37,6 +37,29 @@ public class AnswerGrounding {
             + "a new answer to that question, using only figures from tool results; call a tool if one returns the "
             + "figure you need (`compare_periods` for differences), or say you can't tell from the data.";
 
+    /**
+     * How the retry for history placeholders alone starts (Phase 10 step 10-1): the placeholders follow, then
+     * {@link #PLACEHOLDER_INSTRUCTION}. On d-m03 turn 2 (Self-hosted run, bb822aa) the model copied {@code [amount]} from
+     * the stripped history into an answer whose own tool result had the figure, and it was shown.
+     */
+    public static final String PLACEHOLDER_PREFIX = AUTOMATIC + "these are placeholders from the earlier conversation, "
+            + "not figures: ";
+
+    /** What follows the placeholders when they are all the retry is about. */
+    public static final String PLACEHOLDER_INSTRUCTION = ". Write the answer to the user's question again from the "
+            + "start, as a new answer to that question, with the figures from this turn's tool results; call a tool if "
+            + "this turn hasn't returned the figure you need, or say you can't tell from the data.";
+
+    /** Appended after {@link #RETRY_INSTRUCTION} when an answer has both ungrounded figures and placeholders. */
+    public static final String PLACEHOLDER_NOTE = " Also, these are placeholders from the earlier conversation, not "
+            + "figures: ";
+
+    /**
+     * The figure placeholders {@link SummaryFigureStripper} writes into the history, in any case. Exact tokens: a word
+     * in brackets that isn't one of the three is not a placeholder.
+     */
+    private static final Pattern PLACEHOLDER = Pattern.compile("(?i)\\[(?:amount|percent|number)]");
+
     private static final Pattern SENTENCE_END = Pattern.compile("[.!?](?=\\s|$)|\\R");
 
     private final ChatPayloadGuard guard;
@@ -64,20 +87,37 @@ public class AnswerGrounding {
                     .map(CitationMarkers.Marker::ref).collect(Collectors.toSet());
             matches.add(new AnswerCheck.FigureMatch(figure, values, cited(figure, values, marked)));
         }
-        return new AnswerCheck(text, parsed.markers(), parsed.dropped(), plain.removed(), matches, ungrounded);
+        return new AnswerCheck(text, parsed.markers(), parsed.dropped(), plain.removed(), matches, ungrounded,
+                placeholders(text));
+    }
+
+    /** The history's figure placeholders in a text, as written, in order. */
+    static List<String> placeholders(String text) {
+        List<String> found = new ArrayList<>();
+        Matcher m = PLACEHOLDER.matcher(text);
+        while (m.find()) {
+            found.add(m.group());
+        }
+        return found;
     }
 
     /**
      * The one retry's message (§5.5): fixed text and the ungrounded figures as written (each only its own characters:
-     * digits, separators, {@code $}, {@code %}, a sign).
+     * digits, separators, {@code $}, {@code %}, a sign). Placeholders copied from the history (step 10-1) get their own
+     * message when they are all that failed, and a note after the figures' message when both did.
      */
     public String retryMessage(AnswerCheck check) {
         if (check.grounded()) {
             throw new IllegalArgumentException("the answer is grounded; there is nothing to retry");
         }
-        return RETRY_PREFIX
+        String placeholders = check.placeholders().stream().distinct().collect(Collectors.joining(", "));
+        if (check.ungrounded().isEmpty()) {
+            return PLACEHOLDER_PREFIX + placeholders + PLACEHOLDER_INSTRUCTION;
+        }
+        String figures = RETRY_PREFIX
                 + check.ungrounded().stream().map(Figure::asWritten).distinct().collect(Collectors.joining(", "))
                 + RETRY_INSTRUCTION;
+        return placeholders.isEmpty() ? figures : figures + PLACEHOLDER_NOTE + placeholders + ".";
     }
 
     /** The values a figure cites: see {@link AnswerCheck.FigureMatch}. Values under no ref never cite. */

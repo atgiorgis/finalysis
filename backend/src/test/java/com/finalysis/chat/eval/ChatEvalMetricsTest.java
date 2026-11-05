@@ -100,6 +100,33 @@ class ChatEvalMetricsTest {
         assertThat(g.finalModelPct()).isEqualByComparingTo("83.3");
     }
 
+    /**
+     * Step 10-1: retries that listed a placeholder, and shown answers that still have one (a report from before the fix,
+     * such as d-m03 turn 2 of bb822aa).
+     */
+    @Test
+    void groundingCountsPlaceholderRetriesAndShownPlaceholders() {
+        Observation retried = observed(AnswerSource.MODEL, true, List.of("[amount]"), null, 1000, 100, null, 2000);
+        Observation mixed = observed(AnswerSource.FALLBACK, true, List.of("$45.10", "[percent]"), null, 1000, 100, null,
+                2000);
+        Observation year = observed(AnswerSource.MODEL, true, List.of("2026"), null, 1000, 100, null, 2000);
+        Observation old = new Observation("two transactions of [amount] at Safeway", null, AnswerSource.MODEL,
+                GroundingStatus.NO_FIGURES, false, 0, 0, List.of(new ToolUse("get_alerts", "OK", 5)), null, 2, 1000,
+                100, 0, 0, 0, null, 2000, List.of(), null, List.of(), null, List.of());
+        List<QuestionResult> run = List.of(new QuestionResult("d-m03", "MULTI_TURN", "assistant", false, "SAMPLE", 4,
+                List.of(turn(Expect.ANSWER, retried, score(true, false, true, List.of())),
+                        turn(Expect.ANSWER, mixed, score(true, false, true, List.of())),
+                        turn(Expect.ANSWER, year, score(true, false, true, List.of())),
+                        turn(Expect.ANSWER, old, score(false, false, true, List.of())))));
+
+        ChatEvalMetrics.Grounding g = ChatEvalMetrics.of(run, List.of()).grounding();
+
+        assertThat(g.retries()).isEqualTo(3);
+        assertThat(g.placeholderRetries()).isEqualTo(2);
+        assertThat(g.bareYearRetries()).isEqualTo(1);
+        assertThat(g.shownPlaceholders()).isEqualTo(1);
+    }
+
     @Test
     void refusalsInjectionAndLimits() {
         ChatEvalMetrics metrics = ChatEvalMetrics.of(run(), List.of());

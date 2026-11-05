@@ -304,6 +304,28 @@ class ChatEvalScoringTest {
         assertThat(ChatEvalScoring.bareYear("2,026")).isFalse();
     }
 
+    /** Step 10-1: both retry forms list the placeholders, which are counted apart from figures. */
+    @Test
+    void theRetryMessagesPlaceholdersAreRead() {
+        String alone = "Two of [amount], [Percent] in all.";
+        AnswerCheck placeholders = new AnswerCheck(alone, List.of(), 0, 0, List.of(), List.of(),
+                List.of("[amount]", "[Percent]"));
+        assertThat(ChatEvalScoring.retryFigures(new AnswerGrounding(null).retryMessage(placeholders)))
+                .containsExactly("[amount]", "[Percent]");
+
+        String both = "So far in 2026 you spent [amount].";
+        AnswerCheck mixed = new AnswerCheck(both, List.of(), 0, 0, List.of(), FigureExtractor.extract(both),
+                List.of("[amount]"));
+        List<String> listed = ChatEvalScoring.retryFigures(new AnswerGrounding(null).retryMessage(mixed));
+        assertThat(listed).containsExactly("2026", "[amount]");
+        assertThat(listed.stream().filter(ChatEvalScoring::placeholder)).containsExactly("[amount]");
+        assertThat(listed.stream().filter(ChatEvalScoring::bareYear)).containsExactly("2026");
+
+        assertThat(ChatEvalScoring.hasPlaceholder("two transactions of [amount] at Safeway")).isTrue();
+        assertThat(ChatEvalScoring.hasPlaceholder("two transactions of $84.12 at Safeway")).isFalse();
+        assertThat(ChatEvalScoring.hasPlaceholder(null)).isFalse();
+    }
+
     // ------------------------------------------------------------------ limit-stopped turns (step 8d)
 
     private static Shown stopped(String text, LimitHit limit, boolean data) {

@@ -231,7 +231,7 @@ public class ChatService {
             case ERROR -> null;
         };
         int figures = check == null ? 0 : check.figuresChecked();
-        int ungrounded = check == null ? 0 : check.ungrounded().size();
+        int ungrounded = check == null ? 0 : check.ungroundedCount();
         List<Citation> shown = cited == null ? List.of() : cited.citations();
 
         int seq = store.saveTurn(new ChatConversationStore.NewTurn(conversationId, question, outbound.text(),

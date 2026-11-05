@@ -176,7 +176,8 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
         ChatEvalMetrics.Grounding g = metrics.grounding();
         return "| Questions correct | Turns correct | of which fallbacks | First-try grounded | Model answer shown "
                 + "| Fallbacks shown | Failed | Tool choice | Limits reached | Limit-stopped | Bare-year retries "
-                + "| Cost (USD) | Mean turn (s) |\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+                + "| Placeholder retries | Cost (USD) | Mean turn (s) |\n"
+                + "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
                 + "| " + all.questionsCorrect() + " / " + all.questions() + " (" + pct(all.questionsCorrectPct()) + ")"
                 + " | " + all.turnsCorrect() + " / " + all.turns() + " (" + pct(all.turnsCorrectPct()) + ")"
                 + " | " + all.fallbacksCorrect()
@@ -187,6 +188,7 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 + " | " + metrics.limits().values().stream().mapToInt(Integer::intValue).sum()
                 + " | " + metrics.limitStopped()
                 + " | " + g.bareYearRetries() + " of " + g.retries() + " retries"
+                + " | " + g.placeholderRetries()
                 + " | " + money(metrics.usage().cost())
                 + " | " + seconds(metrics.latency().meanTurnMillis()) + " |\n";
     }
@@ -228,6 +230,9 @@ record ChatEvalReport(String commit, boolean dirty, String startedAt, Run run, C
                 + "| Grounding retries | " + g.retries() + " |\n"
                 + "| Retries with a bare year among their figures | " + g.bareYearRetries() + " |\n"
                 + "| Retries caused by bare years alone | " + g.onlyBareYears() + " |\n"
+                + "| Retries for a history placeholder ([amount], [percent], [number]) | " + g.placeholderRetries()
+                + " |\n"
+                + "| Shown answers with a history placeholder | " + g.shownPlaceholders() + " |\n"
                 + "| Refusals expected / detected / both | " + r.expected() + " / " + r.detected() + " / "
                 + r.correct() + " |\n"
                 + "| Refusal precision / recall | " + pct(r.precisionPct()) + " / " + pct(r.recallPct()) + " |\n"

@@ -76,6 +76,7 @@ final class ChatEvalScoring {
     private static final Pattern ZERO = Pattern.compile("(?i)(?<![\\d.,$])0(?![\\d.,%])|\\b(?:zero|no)\\b" + COUNTED
             + "|\\bnone\\b");
     private static final Pattern BARE_YEAR = Pattern.compile("20\\d{2}");
+    private static final Pattern PLACEHOLDER = Pattern.compile("(?i)\\[(?:amount|percent|number)]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private ChatEvalScoring() {
@@ -288,15 +289,47 @@ final class ChatEvalScoring {
         return alternatives.isEmpty() || alternatives.stream().anyMatch(called::containsAll);
     }
 
-    /** The figures a grounding retry listed, as written; empty when the message is not the retry. */
+    /**
+     * What a grounding retry listed, as written: the ungrounded figures, then the history placeholders the answer copied
+     * (step 10-1); empty when the message is not the retry.
+     */
     static List<String> retryFigures(String message) {
-        if (message == null || !message.startsWith(AnswerGrounding.RETRY_PREFIX)) {
+        if (message == null) {
+            return List.of();
+        }
+        if (message.startsWith(AnswerGrounding.PLACEHOLDER_PREFIX)) {
+            return listed(message.substring(AnswerGrounding.PLACEHOLDER_PREFIX.length()),
+                    AnswerGrounding.PLACEHOLDER_INSTRUCTION);
+        }
+        if (!message.startsWith(AnswerGrounding.RETRY_PREFIX)) {
             return List.of();
         }
         String rest = message.substring(AnswerGrounding.RETRY_PREFIX.length());
-        int end = rest.indexOf(AnswerGrounding.RETRY_INSTRUCTION);
+        List<String> listed = new ArrayList<>(listed(rest, AnswerGrounding.RETRY_INSTRUCTION));
+        int note = rest.indexOf(AnswerGrounding.PLACEHOLDER_NOTE);
+        if (note >= 0) {
+            String placeholders = rest.substring(note + AnswerGrounding.PLACEHOLDER_NOTE.length());
+            listed.addAll(listed(placeholders.endsWith(".") ? placeholders.substring(0, placeholders.length() - 1)
+                    : placeholders, null));
+        }
+        return List.copyOf(listed);
+    }
+
+    /** The comma-separated items of a retry message before its fixed instruction (all of it when null or absent). */
+    private static List<String> listed(String rest, String instruction) {
+        int end = instruction == null ? -1 : rest.indexOf(instruction);
         return Arrays.stream((end < 0 ? rest : rest.substring(0, end)).split(", ")).map(String::strip)
                 .filter(s -> !s.isEmpty()).toList();
+    }
+
+    /** A history placeholder ({@code [amount]}, {@code [percent]}, {@code [number]}, any case), step 10-1. */
+    static boolean placeholder(String text) {
+        return PLACEHOLDER.matcher(text).matches();
+    }
+
+    /** Whether a shown answer still has a history placeholder in it (step 10-1: never, since the fix). */
+    static boolean hasPlaceholder(String answer) {
+        return answer != null && PLACEHOLDER.matcher(answer).find();
     }
 
     /** A bare year (§15): a whole number 2000 to 2099 written alone, which the extractor counts as a figure. */

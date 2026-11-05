@@ -45,9 +45,12 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
      * @param failed           no answer: a failed model call or a refused request
      * @param bareYearRetries  retries whose listed figures include a bare year (§15)
      * @param onlyBareYears    retries caused by bare years alone
+     * @param placeholderRetries retries that listed a history placeholder the answer copied (step 10-1)
+     * @param shownPlaceholders  shown answers that still have a history placeholder (step 10-1: 0 since the fix)
      */
     record Grounding(int answered, int firstTry, int finalModel, int fallbacks, int failed, int retries,
-                     int bareYearRetries, int onlyBareYears, BigDecimal firstTryPct, BigDecimal finalModelPct) {
+                     int bareYearRetries, int onlyBareYears, int placeholderRetries, int shownPlaceholders,
+                     BigDecimal firstTryPct, BigDecimal finalModelPct) {
     }
 
     /**
@@ -129,8 +132,12 @@ record ChatEvalMetrics(Totals all, Map<String, Totals> byCategory, Totals userWr
                 .filter(o -> o.retryFigures().stream().anyMatch(ChatEvalScoring::bareYear)).count();
         int onlyBareYears = (int) retried.stream().filter(o -> !o.retryFigures().isEmpty()
                 && o.retryFigures().stream().allMatch(ChatEvalScoring::bareYear)).count();
+        int placeholderRetries = (int) retried.stream()
+                .filter(o -> o.retryFigures().stream().anyMatch(ChatEvalScoring::placeholder)).count();
+        int shownPlaceholders = (int) answered.stream().filter(o -> ChatEvalScoring.hasPlaceholder(o.answer())).count();
         return new Grounding(answered.size(), firstTry, finalModel, fallbacks, turns.size() - answered.size(),
-                retried.size(), bareYear, onlyBareYears, pct(firstTry, answered.size()),
+                retried.size(), bareYear, onlyBareYears, placeholderRetries, shownPlaceholders,
+                pct(firstTry, answered.size()),
                 pct(finalModel, answered.size()));
     }
 

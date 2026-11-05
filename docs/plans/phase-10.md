@@ -88,8 +88,13 @@ Stopped storage (80 GB gp3) costs whatever the server costs while stopped, the s
 ungrounded figure. The existing path then applies unchanged: one retry, then the Java fallback. The retry message for
 this case is its own fixed text, framed like the others (`AnswerGrounding.AUTOMATIC` first):
 
-> Automatic message: your answer contains [amount], a placeholder from the earlier conversation, not a figure. Write
-> the answer again from the start, with the figure from this turn's tool results; call the tool if this turn hasn't.
+> Automatic check, not a message from the user: these are placeholders from the earlier conversation, not figures:
+> [amount]. Write the answer to the user's question again from the start, as a new answer to that question, with the
+> figures from this turn's tool results; call a tool if this turn hasn't returned the figure you need, or say you can't
+> tell from the data.
+
+*(Amended at 10-1: the wording first drafted here said "your answer contains", which `RetryWordingTest` forbids,
+since it reads as a correction and invites an apology; see the 10-1 notes.)*
 
 - History, the summary, `chat-10` and SEC-01 are unchanged. Nothing new leaves the machine.
 - It holds on every path and every model, because it is Java.
@@ -590,3 +595,53 @@ any figure. The same applies to any "how many months are left" the model would o
 it. A `ToolArguments` test covers both forms and both given.
 
 Step 10-1 starts at approval. No AWS or model call by me; the owner runs the rerun.
+
+---
+
+## 13. Step notes
+
+### Step 10-1 notes: "[amount]" copied from the history (code)
+
+No AWS or model call. The rerun is the owner's (§2.4), against `chat-dev-bb822aa6b00e-20261103T120333Z`.
+
+**What changed** (as §2.2, with one wording change):
+- `AnswerCheck` gains `placeholders`: the history's `[amount]`, `[percent]` and `[number]` (exact tokens, any case) found
+  in the answer as checked. `grounded()` needs no unmatched figure **and** no placeholder; `ungroundedCount()` counts
+  both, and is what a turn stores as `ungrounded`.
+- `AnswerGrounding.retryMessage`: placeholders alone get `PLACEHOLDER_PREFIX` + the placeholders +
+  `PLACEHOLDER_INSTRUCTION`; figures and placeholders together get the figures' message unchanged, then
+  `PLACEHOLDER_NOTE` + the placeholders. The figures' message still ends its list at `RETRY_INSTRUCTION`, so the eval
+  reads both forms.
+- **The wording differs from the first draft of §2.2.** The draft began "your answer contains", which
+  `RetryWordingTest` refuses (it reads as a correction; dev run 5's "You're right, I apologize"). The message now
+  follows the figures' message: "Automatic check, not a message from the user: these are placeholders from the earlier
+  conversation, not figures: [amount]. Write the answer to the user's question again from the start, ...". §2.2 is
+  amended.
+- The monthly summary (`MonthlySummaryService`) uses the same check; its own retry lists placeholders with the figures.
+- History, the summary, `chat-10` and what leaves the machine are unchanged. `ConversationMemoryTest` and
+  `SummaryFigureStripperTest` pass unchanged.
+
+**The eval report**: a "Placeholder retries" column in the summary; in the grounding table, "Retries for a history
+placeholder" and "Shown answers with a history placeholder". A turn retried for one shows "retried for [[amount]]" with
+the rejected first answer, as figure retries do. Run on bb822aa's data, the last row would have read 2 (d-m03 turns 2
+and 3); after the fix it should read 0.
+
+**Tests**: backend 3,808 tests, 0 failures, 0 errors, 1 skipped (Maven summary; 3,789 at `phase-9-done` plus 19; the
+skip is `CfnLintTest`); frontend 355 tests (34 files), all passed; no UI change, so no layout run.
+- `AnswerGroundingTest` (`HistoryPlaceholders`, `Retry`): each placeholder and its case; a placeholder beside a
+  grounded figure; brackets that are not placeholders (`[the amount]`, `[ amount ]`, `[amounts]`, the shortened-answer
+  marker); both retry forms word for word.
+- `RetryWordingTest`: the placeholder messages pass the no-apology check, say they are automatic, and their fixed text
+  has no figure.
+- `ChatServiceTest`: d-m03 turn 2's shape (the figure in this turn's result, `[amount]` written, one retry, the figure
+  shown); the placeholder twice (fallback, nothing with `[amount]` stored); turn 3's shape (a follow-up copies the
+  placeholder with no tool call; the retry asks for a tool; the model calls one).
+- `ChatEvalScoringTest`, `ChatEvalMetricsTest`, `ChatEvalReportTest`: both retry forms parsed; the counts; the rows.
+
+**The Vitest timeouts again (phase-9.md §11, a fifth sighting).** The first `npm test` after Maven's `clean verify`
+had finished: 56 tests in 17 files, all "Test timed out in 5000ms", in a 15-minute run with the load average near
+100 (Postman's renderer was the busiest process). None of the files is touched by this step. Report kept as
+`frontend/test-reports/vitest-2026-11-05-10-1-timeouts.json` (git-ignored). Rerun once the load average was under 6:
+355 of 355 in about a minute. So "Maven fully finished first" is not enough on its own; the machine's load decides it.
+**That first run's `npm test | tail` also reported exit 0**: the pipe hid the failure. Steps now record npm's own exit
+code.

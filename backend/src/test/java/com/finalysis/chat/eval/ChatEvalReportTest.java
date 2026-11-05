@@ -119,7 +119,10 @@ class ChatEvalReportTest {
                 .contains("**h-u01 turn 1**: missing figures")
                 .contains("- Turn cost limit: $0.10 (-Deval.maxTurnCost, this run only; the app's setting is "
                         + "unchanged)")
-                .contains("| Limits reached | Limit-stopped |");
+                .contains("| Limits reached | Limit-stopped |")
+                .contains("| Bare-year retries | Placeholder retries | Cost (USD) |")
+                .contains("| Retries for a history placeholder ([amount], [percent], [number]) | 0 |")
+                .contains("| Shown answers with a history placeholder | 0 |");
     }
 
     @Test
