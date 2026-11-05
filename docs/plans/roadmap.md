@@ -1,6 +1,6 @@
 # Finalysis Roadmap
 
-**Version:** 5 · **Date:** 2026-10-28 · **Requirements:** `docs/requirements.md` v1.80
+**Version:** 6 · **Date:** 2026-11-05 · **Requirements:** `docs/requirements.md` v1.82
 
 This file supersedes "Finalysis Roadmap V4", which was kept outside the repo. Requirement ids and phase numbers are
 unchanged; the requirements file stays the source of truth for each requirement's wording, phase and status.
@@ -20,7 +20,7 @@ the number, decides the order. These layers are not the three ingestion layers i
 
 | Layer | Phases | Status |
 |---|---|---|
-| 1. Your books | 1–6, 7, 7b, 8–13, 15 | Phases 1–8 and 7b done |
+| 1. Your books | 1–6, 7, 7b, 8–13, 15 | Phases 1–9 and 7b done |
 | 2. Your plan | Goals (phase to be assigned), 14 | Future |
 | 3. Your education | None assigned | Future |
 | 4. Your accountant | None (ids keep their old numbers) | Out of scope (listed, not built) |
@@ -34,7 +34,7 @@ monthly totals and trends, raise alerts, and answer questions about your own dat
 statement line. This layer is the shippable product. The AI categorizes, extracts and explains; SQL and Java do the
 math (GR-01).
 
-**Status: Phases 1–8 done (with 7b); the rest future.**
+**Status: Phases 1–9 done (with 7b); Phase 10 next; the rest future.**
 
 | Phase | Scope | Requirement ids | Status |
 |---|---|---|---|
@@ -48,8 +48,8 @@ math (GR-01).
 | 7 | Chat UI, dashboard, upload page, polish (`docs/plans/phase-7.md`) | UI-01, UI-02 (step 7d), UI-03–UI-05, UI-07, UI-08 (decision; localhost binding) | Done (UI-08 Planned: phone access is Phase 8) |
 | 7b | Goals tab shell | GOAL-06 (the tab only) | Done (GOAL-06 Planned for Layer 2) |
 | 8 | Encryption at rest (an encrypted volume), unlock and auto-lock, login and HTTPS for phone access, the Corgi prompt (`docs/plans/phase-8.md`) | UI-08 (login and HTTPS), SEC-04, SEC-06, SEC-07, SEC-12 | Done (tag `phase-8-done`) |
-| 9 | Eval suites and benchmarks; candidates from Phase 8: field-level encryption, the chat backlog (h-u10, h-x06, the holdout guard per model), document Q&A, recovery key rotation, lock before sleep, kept statement copies listed and downloadable (`docs/plans/phase-8.md` §13) | QA-03, QA-04, AI-07; candidates SEC-05, CHT-07 | Future |
-| 10 | Local AI: the `local` profile (Ollama) and model tiers | AI-03, AI-02, AI-04, AI-05, UI-06 | Future |
+| 9 | Corgi's three paths, chosen in Settings without a restart: Cloud (Bedrock), Self-hosted (an EC2 GPU server through Tailscale, with its template, scripts, watchdog, billing alarm and Start/Stop) and Local (Ollama); small open models benchmarked on Bedrock; the eval harness on Ollama; per-path settings (`docs/plans/phase-9.md`, `docs/eval/tiers.md`) | AI-03, AI-07, AI-08–AI-12, AI-05 (`num_ctx`), QA-04 (part), SEC-01 and UI-05 (per path) | Done (tag `phase-9-done`); AI-10 Local Built, not yet measured (step 9d deferred) |
+| 10 | Corgi's backlog from Phase 9, then Plan with Corgi, recovery-key rotation and a second Self-hosted region ([Phase 10](#phase-10-next)) | CHT-06, CAT-03, SEC-06, AI-08, QA-04 | Next |
 | 11 | Portfolio polish: README, setup script, demo mode, ADRs | QA-05–QA-07 | Future |
 | 12 | Categorization experiments | CAT-06, CAT-07 | Future |
 | 13 | Finalysis MCP server (read-only) | INT-01, INT-02 | Future |
@@ -58,6 +58,35 @@ math (GR-01).
 
 AI-01 (model roles) and AI-06 (token log) are cross-cutting: built in Phases 4 and 6, and Planned until every role is
 used. ANA-04's missing and changed bills are in the Phase 5 backlog, with no phase yet.
+
+### Phase 9 (done)
+
+Done 2026-11-05, tag `phase-9-done`. Corgi runs on one of three paths, chosen in Settings → Corgi without a restart:
+Cloud (Bedrock, with the `aws` profile), Self-hosted (Ministral 3 14B on a g6.xlarge in the owner's AWS account,
+reached only through Tailscale) and Local (Ollama on this computer). Measured side by side in `docs/eval/tiers.md`:
+chat 57/58 on Sonnet 4.6, 49 on the 14B at full precision, 48 on the server; categorization 95.9% on Haiku 4.5 and
+95.3% on the 14B at its 0.85 threshold; search by meaning 24 of 25 targets on nomic, 1 on Titan. Local is built and
+tested against a stub but not measured: step 9d, the laptop measurements, is deferred, since the owner's 2019 Intel
+MacBook has no GPU Ollama can use. The plan as approved is `docs/plans/phase-9.md` (decisions in §16, step notes in §15,
+known limitations §10, Phase 10 candidates §11). Its original roadmap row (eval suites and benchmarks, then a separate
+local-AI phase) became the three paths in one phase.
+
+### Phase 10 (next)
+
+In this order:
+
+1. **The "[amount]" history artifact** (CHT-06): a model copied a figure placeholder from the stripped history into a
+   shown answer (`phase-9.md` §11).
+2. **Examples overconfidence and calibration** (CAT-03): Ministral's wrong categorizations are confident; a
+   per-model examples floor, and the 0.85 threshold measured on more than 16 AI items.
+3. **Plan with Corgi**, from the owner's idea notes (`docs/ideas/`, not yet in the repo).
+4. **Recovery-key rotation** (SEC-06).
+5. **Self-hosted in a second region** (AI-08), for when a region's zones have no capacity.
+6. **gpt-oss-120b on a g6.12xlarge** (QA-04), once the 48-vCPU quota is approved.
+
+Later, no phase yet: Phase 9 step 9d's Local measurements (with AI-02's model tiers, AI-04's loading, AI-05's KV cache
+and keep-alive, and UI-06's notice, which need the same hardware); lock before sleep; field-level encryption (SEC-05);
+kept statement copies listed and downloadable; document Q&A (CHT-07).
 
 ### Phase 7 (done)
 

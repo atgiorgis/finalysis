@@ -450,7 +450,7 @@ The only code in 9d is what the notes need (none expected; `-Deval.questions` is
 
 ---
 
-## 10. Known limitations (draft, finalized at 9e)
+## 10. Known limitations (finalized at 9e)
 
 - **Quantization**: Self-hosted and Local run quantized builds; 9a scored full-precision ones on Bedrock.
 - **Self-hosted cost is an estimate** from the on-demand rate and `LaunchTime`; storage while stopped, data transfer
@@ -460,11 +460,15 @@ The only code in 9d is what the notes need (none expected; `-Deval.questions` is
 - **`DescribeInstances` is account-wide** for the app's identity (§5.4).
 - **The first boot takes a while** (Ollama, Tailscale, model downloads); `create.sh` waits up to 30 minutes. The
   Deep Learning AMI follows AWS's update cadence; a stack created later may get a newer image than the one tested.
-- **The laptop is slow**: 9d records it; no tuning.
+- **Local is unmeasured**: step 9d is deferred (the 2019 Intel MacBook has no GPU Ollama can use). The path is built
+  and tested against a stub; its row in `docs/eval/tiers.md` is empty.
+- **Self-hosted runs a quantized build**: one question fewer than full precision on the chat dev set (48 against 49).
+- **A stopped server is pinned to its zone**: when the zone has no free g6.xlarge, Start fails until capacity
+  returns; the way out is `destroy.sh` and `create.sh` in another zone (README, Self-hosted).
 - **The categorization examples' floor is global** (`finalysis.ai.examples.min-similarity` 0.65, tuned on Titan V2).
-  Only chat's search floor is per embedding model since 9b-1; nomic-embed-text's similarities may sit higher or lower,
-  so on the Ollama paths the similar-merchant examples may be too many or too few until the owner's sweep on nomic
-  sets a floor for it (decided at 9b-1: left global until then).
+  Chat's search floor is per embedding model (nomic 0.50 since 9c-11), but the examples' isn't: on the Self-hosted dev
+  run, 3 of 16 items reached an example at 0.65, and most nearest examples sat between 0.45 and 0.60. A per-model
+  examples floor is Phase 10 item 2 (§11).
 
 ---
 
@@ -498,6 +502,14 @@ Found in the step checks:
   - run the two suites one after the other in the step instructions, with Maven fully finished before `npm test`
     starts;
   - or raise Vitest's per-test timeout (`testTimeout`) when the machine is under load.
+
+Deferred from Phase 9:
+
+- **Step 9d, the Local measurements.** The owner has no hardware with a GPU Ollama can use (the 2019 Intel MacBook's
+  graphics aren't supported; Ollama's Metal acceleration is Apple Silicon's). The Local path stays built and tested
+  against the stub; `docs/eval/tiers.md` marks its row "not yet measured", and requirement AI-10 is `Built`. When
+  hardware is available, 9d runs as §6 describes. The same hardware question holds AI-02's model tiers, AI-04's
+  loading, AI-05's KV cache and keep-alive, and UI-06's notice.
 
 Found in the Self-hosted measurements (9c-11 notes):
 
@@ -1847,6 +1859,84 @@ other, with the owner's backend stopped and auto-build off. No live call, no EC2
 
 **9c is closed.** Left for the owner, from the 9c-3 list: the categorization timing run is the dev run above.
 9d and 9e follow on instruction.
+
+### Step 9d notes: deferred
+
+Step 9d (§6) was to measure the Local path on the owner's 2019 Intel MacBook. It is **deferred**: that machine has no
+GPU Ollama can use (Ollama's Metal acceleration is Apple Silicon's), and the owner has no other hardware for it. So:
+
+- The Local path stays as built in 9b: the same providers, payload checks and per-path settings as Self-hosted,
+  reached at `127.0.0.1:11434`, and tested against the stub (`OllamaProvidersTest`, `OllamaTurnPayloadTest`,
+  `OllamaCategorizationTest`, `AiPathSwitchTest`, Postman folder 15's "Local, with nothing running here").
+- `docs/eval/tiers.md`'s Local column says "not yet measured; the 2019 Intel MacBook has no GPU Ollama can use".
+- Requirement AI-10 is `Built` (a new status in v1.82: built and tested, not yet measured where it will run).
+- The README's Local section says what it needs (Ollama, the two models, a GPU for usable speed) and that it is
+  unmeasured.
+- §11 records the deferral; the roadmap lists it under Phase 10's "Later".
+
+### Step 9e notes: close-out
+
+No AWS or model call.
+
+- **`docs/eval/tiers.md`** (new): the three paths side by side from the committed reports.
+  - Chat: Sonnet 4.6 57/58, the 14B 49 on Bedrock and 48 on the server, with tool choice, invalid arguments, grounding,
+    search, median turn and cost.
+  - Categorization: Haiku 4.5, and the 14B at 0.80 and 0.85.
+  - Search by meaning: Titan 1, nomic 24 of 25.
+
+  Each table names its report files. Run 7's model ladder is linked, not repeated. The Bedrock 14B run predates
+  9a-2 and 9a-3's extractor fixes, so its first-try grounding isn't like for like with the server's; the page says so.
+- **README**:
+  - "Corgi's three paths" is its own section: what each path needs, sends and costs, its settings, and the measured
+    numbers one line each, with a pointer to `tiers.md`.
+  - A Local subsection (Ollama, the two models, a GPU for usable speed; unmeasured).
+  - "Turning on cloud AI" no longer says AI is off without a profile.
+  - `/api/status`'s row describes the `ai` block.
+  - The API table has `PUT /api/settings/ai`, `GET /api/selfhost`, `POST /api/selfhost/start`, `/stop` and `/test`.
+  - The error catalogue has `ai-busy` and `selfhost-unavailable`.
+  - The Postman section has folder 15.
+  - There is no `GET /api/settings/ai`: the setting is read from `/api/status`'s `ai` block, and the folder reads it
+    there.
+- **Requirements v1.82**:
+  - AI-03 rewritten as the three paths, Done.
+  - New AI-08 Self-hosted (Done), AI-09 Cloud (Done), AI-10 Local (Built), AI-11 the per-path threshold and per-model
+    floor (Done), AI-12 Start, Stop, Test and the watchdog (Done).
+  - AI-07 Done; notes on AI-05, QA-04, SEC-01 and UI-05; the new status `Built`.
+  - The brief said v1.81, but 9a-4 had already taken 1.81, so this is 1.82.
+- **Roadmap version 6**:
+  - Phase 9 as built.
+  - Phase 10 in the owner's order: the "[amount]" artifact, examples calibration, Plan with Corgi, recovery-key
+    rotation, a second Self-hosted region, gpt-oss-120b on a g6.12xlarge.
+  - Later: 9d with the hardware-bound AI-02, AI-04, AI-05 and UI-06 parts, lock before sleep, SEC-05, the kept
+    copies UI, CHT-07.
+  - The brief said v5, but v5 was the Phase 8 close-out's, so this is 6.
+  - `docs/ideas/` isn't in the repo, so Plan with Corgi is named without a link.
+- **Postman folder 15, "Settings → Corgi"** (22 requests, after folder 14):
+  - Corgi off, with Cloud not a choice.
+  - The refusals: Cloud without the `aws` profile, an unknown path, Self-hosted without a name or with a web address,
+    a bad region.
+  - Local with nothing running.
+  - Self-hosted on a `.invalid` name.
+  - The server's status, and Start and Stop refused (`selfhost-unavailable`).
+  - Test naming the host tried, and Test refusing a web address.
+  - Off, and the kept name.
+  - Lock, then the switch and the server's status answering 423, and the status with no path.
+  - Unlock with folder 14's last password; still off.
+- **CLAUDE.md**: Phase 9 closed; the next phase line.
+
+**Tests**: backend 3,789 tests, 0 failures, 0 errors, 1 skipped (Maven summary; no new backend test in 9e; the skip is
+`CfnLintTest`); frontend 355 tests (34 files), all passed; layout check 169 passed, 1 skipped. Run one after the
+other, with the owner's backend stopped and auto-build off. No live call, no EC2 or Tailscale action.
+
+**Newman** 6.2.3, every README folder (0–6, 8, 9, 12–15), against a throwaway backend from this checkout:
+- the setup: without the `aws` profile, a new temporary vault, its cluster on 55433, and nothing on port 11434;
+- the result: **333 requests, 858 assertions, 0 failures**.
+- The first run failed 2 assertions, a leftover of 9b's rename: "8. Categorization / Status: AI is off" and "12. Chat
+  (AI off) / Status: AI is off" still expected the old `{"mode": "OFF"}` block. They now check `path` OFF, not
+  reachable, and no provider or models. The second run was on a new vault, since setup is strict.
+- The backend's log had no `ai call` line: no model was called. Its path switches were to OFF, LOCAL (Ollama
+  unreachable) and SELF_HOSTED (unreachable: the `.invalid` name).
+- Stopping it locked the vault (database stopped, nothing left mounted), and the temporary vault was deleted.
 
 ---
 

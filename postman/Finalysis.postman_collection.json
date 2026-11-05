@@ -4373,7 +4373,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('AI off: mode only, no provider or models', () => pm.expect(pm.response.json().ai).to.eql({mode: 'OFF'}));"
+                  "pm.test('AI off: the path is OFF, no provider or models', () => {",
+                  "    const ai = pm.response.json().ai;",
+                  "    pm.expect(ai.path).to.eql('OFF');",
+                  "    pm.expect(ai.reachable).to.eql(false);",
+                  "    pm.expect(ai).to.not.have.property('provider');",
+                  "    pm.expect(ai).to.not.have.property('models');",
+                  "});"
                 ]
               }
             }
@@ -8003,7 +8009,13 @@
                     "type": "text/javascript",
                     "exec": [
                       "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                      "pm.test('AI off: mode only, no provider or models', () => pm.expect(pm.response.json().ai).to.eql({mode: 'OFF'}));"
+                      "pm.test('AI off: the path is OFF, no provider or models', () => {",
+                      "    const ai = pm.response.json().ai;",
+                      "    pm.expect(ai.path).to.eql('OFF');",
+                      "    pm.expect(ai.reachable).to.eql(false);",
+                      "    pm.expect(ai).to.not.have.property('provider');",
+                      "    pm.expect(ai).to.not.have.property('models');",
+                      "});"
                     ]
                   }
                 }
@@ -9947,6 +9959,628 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "pm.test('vault UNLOCKED', () => pm.expect(pm.response.json().vault.state).to.eql('UNLOCKED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "15. Settings → Corgi",
+      "item": [
+        {
+          "name": "Status: Corgi is off, Cloud isn't a choice",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Settings → Corgi (docs/plans/phase-9.md §3). Folder 1 set the path to OFF; the aws profile isn't on.",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ai = pm.response.json().ai;",
+                  "pm.test('the path is OFF', () => pm.expect(ai.path).to.eql('OFF'));",
+                  "pm.test('Self-hosted and Local are the choices', () => pm.expect(ai.available).to.eql(['SELF_HOSTED', 'LOCAL']));",
+                  "pm.test('not reachable while off', () => pm.expect(ai.reachable).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cloud is refused without the aws profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"CLOUD\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 naming the path', () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    const errors = pm.response.json().errors;",
+                  "    pm.expect(errors.map(e => e.field)).to.eql(['path']);",
+                  "    pm.expect(errors[0].message).to.include('Cloud needs the aws profile');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "An unknown path is refused",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"MARS\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Self-hosted needs a name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"SELF_HOSTED\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 naming selfhostName', () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().errors.map(e => e.field)).to.eql(['selfhostName']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A web address isn't a server name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"SELF_HOSTED\", \"selfhostName\": \"http://evil.example\", \"selfhostRegion\": \"us-east-1\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 naming selfhostName', () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().errors.map(e => e.field)).to.eql(['selfhostName']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A bad region is refused",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"SELF_HOSTED\", \"selfhostName\": \"finalysis-absent.invalid\", \"selfhostRegion\": \"US East\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 naming selfhostRegion', () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().errors.map(e => e.field)).to.eql(['selfhostRegion']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Local, with nothing running here",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"LOCAL\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The run expects no Ollama on this machine: the switch is saved, and Corgi is off with the reason.",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ai = pm.response.json();",
+                  "pm.test('the path is LOCAL', () => pm.expect(ai.path).to.eql('LOCAL'));",
+                  "pm.test('not reachable, with a reason', () => {",
+                  "    pm.expect(ai.reachable).to.eql(false);",
+                  "    pm.expect(ai.reason).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('no server name on Local', () => pm.expect(ai).to.not.have.property('server'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Self-hosted, on a name that never resolves",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"SELF_HOSTED\", \"selfhostName\": \"finalysis-absent.invalid\", \"selfhostRegion\": \"us-east-1\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// .invalid never resolves (RFC 6761): nothing leaves the machine.",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ai = pm.response.json();",
+                  "pm.test('the path is SELF_HOSTED, by its name', () => {",
+                  "    pm.expect(ai.path).to.eql('SELF_HOSTED');",
+                  "    pm.expect(ai.server).to.eql('finalysis-absent.invalid');",
+                  "});",
+                  "pm.test('not reachable', () => pm.expect(ai.reachable).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Server status without the aws profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/selfhost"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const server = pm.response.json();",
+                  "pm.test('no controls, with the reason', () => {",
+                  "    pm.expect(server.controls).to.eql(false);",
+                  "    pm.expect(server.reason).to.eql('Start and Stop need the aws profile (Cloud credentials).');",
+                  "});",
+                  "pm.test('no state is guessed', () => pm.expect(server.state).to.eql(null));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start is refused without the aws profile",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/selfhost/start"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 selfhost-unavailable with the reason', () => {",
+                  "    pm.response.to.have.status(409);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.type).to.eql('urn:finalysis:problem:selfhost-unavailable');",
+                  "    pm.expect(body.detail).to.eql('Start and Stop need the aws profile (Cloud credentials).');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stop is refused without the aws profile",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/selfhost/stop"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 selfhost-unavailable', () => {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:selfhost-unavailable');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Test a name that never resolves",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/selfhost/test",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"finalysis-absent.invalid\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test('not reachable, naming the name tried', () => {",
+                  "    pm.expect(result.reachable).to.eql(false);",
+                  "    pm.expect(result.version).to.eql(null);",
+                  "    pm.expect(result.message).to.eql('Tried finalysis-absent.invalid: Not resolvable: check the name, and that Tailscale is running on this Mac.');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Test refuses a web address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/selfhost/test",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"http://evil.example\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 naming name', () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().errors.map(e => e.field)).to.eql(['name']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Off again; the server's name is kept",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"OFF\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('the path is OFF', () => pm.expect(pm.response.json().path).to.eql('OFF'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Self-hosted again needs no name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"SELF_HOSTED\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, the kept name', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().server).to.eql('finalysis-absent.invalid');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Off for the rest",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"OFF\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lock",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/vault/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Switching answers 423 while locked",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/settings/ai",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"path\": \"LOCAL\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Server status answers 423 while locked",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/selfhost"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('423 vault-locked', () => {",
+                  "    pm.response.to.have.status(423);",
+                  "    pm.expect(pm.response.json().type).to.eql('urn:finalysis:problem:vault-locked');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status while locked: no path",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const ai = pm.response.json().ai;",
+                  "pm.test('no path while locked', () => pm.expect(ai).to.not.have.property('path'));",
+                  "pm.test('the reason is the lock', () => pm.expect(ai.reason).to.eql('Vault locked'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unlock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/vault/unlock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"{{vaultPassword3}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status: unlocked, still off",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('vault UNLOCKED', () => pm.expect(body.vault.state).to.eql('UNLOCKED'));",
+                  "pm.test('the path is OFF, as saved before the lock', () => pm.expect(body.ai.path).to.eql('OFF'));"
                 ]
               }
             }

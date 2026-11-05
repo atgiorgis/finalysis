@@ -41,6 +41,11 @@ runs of Phase 4 step 9 are), so a new run leaves the working tree dirty until it
 The holdout is evaluated once: a holdout run refuses to start while any `holdout-*` file exists here, and both
 holdout files are committed, so it can't run again.
 
+## The three paths (Phase 9)
+
+Cloud, Self-hosted and Local side by side (chat, categorization, search by meaning), from the reports below:
+[tiers.md](tiers.md).
+
 ## Chat (Phase 6)
 
 Results of the opt-in chat evaluation (`docs/plans/phase-6.md` §13, step 8 notes), files prefixed `chat-`:

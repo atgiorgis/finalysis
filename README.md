@@ -98,8 +98,12 @@ the chat requests and compared field by field after them. Three folders are manu
 
 The run uses a **throwaway vault** (Phase 8): start the backend with the vault in a new temporary directory, so the run
 begins with an empty database. **0. Vault setup** sets it up with a random password and stops the whole run unless the
-backend reports a vault that is not set up; **14. Vault and login** runs last (lock, the 423s, unlock, password change,
-recovery) and leaves it unlocked. Postgres.app with PostgreSQL 17 is needed ([The vault's
+backend reports a vault that is not set up; **14. Vault and login** (lock, the 423s, unlock, password change, recovery) leaves it unlocked, and
+**15. Settings → Corgi** runs last: the path switches and their refusals (Cloud without the `aws` profile, a
+Self-hosted name that is a web address, a bad region), Local with no Ollama running and Self-hosted on a `.invalid`
+name (never resolves, so nothing leaves the machine), the server's status, Start and Stop refused without the `aws`
+profile (`selfhost-unavailable`), Test naming the host it tried, and the 423s while locked. It expects no Ollama on
+this machine, and leaves Corgi off. Postgres.app with PostgreSQL 17 is needed ([The vault's
 Postgres](#the-vaults-postgres-phase-8)).
 
 ```sh
@@ -110,7 +114,7 @@ npx newman run postman/Finalysis.postman_collection.json \
     --folder "0. Vault setup" --folder "1. Setup" --folder "2. Accounts" --folder "3. CSV mappings and preview" \
     --folder "4. Statements, transfers and review queue" --folder "5. Categories" --folder "6. Errors" \
     --folder "8. Categorization" --folder "9. Analytics" --folder "12. Chat (AI off)" --folder "13. UI reads" \
-    --folder "14. Vault and login"
+    --folder "14. Vault and login" --folder "15. Settings → Corgi"
 # then stop the backend (it locks the vault) and delete the temporary directory
 ```
 
@@ -655,7 +659,7 @@ Applied migrations are never edited. Every schema change is a new migration.
 
 | Method | Path | Purpose | Success | Problem types (besides 400/404) |
 |---|---|---|---|---|
-| `GET` | `/api/status` | Backend health, shown by the frontend, the AI mode (`ai.mode`: `OFF`, or `CLOUD` with provider and models) for the cloud banner, and the vault (`vault.state`, `storage` `VAULT` or `PLAIN`, `setUp`, `reason` and `message` when not ready or failed, `idleLockMinutes`, `lastLockForced`, `collation` when the ICU version changed). Answers while locked; never a path | 200 | — |
+| `GET` | `/api/status` | Backend health, shown by the frontend, where Corgi runs (`ai.path`: `OFF`, `CLOUD`, `SELF_HOSTED` or `LOCAL`; `available`, `reachable` and `reason`; `provider`, `models` and on Self-hosted `server`, the Tailscale name; `pathModels` per path) for the badge and banner, and the vault (`vault.state`, `storage` `VAULT` or `PLAIN`, `setUp`, `reason` and `message` when not ready or failed, `idleLockMinutes`, `lastLockForced`, `collation` when the ICU version changed). Answers while locked; never a path | 200 | — |
 | `GET` | `/actuator/health` | Liveness for tooling: `{"status": "UP"}`, no details; answers while locked | 200 | — |
 | `POST` | `/api/vault/setup` | `{password}` (12+ characters, not a common one): create the vault in state `NOT_SET_UP` and unlock it. The recovery key is in the response **once**, with `Cache-Control: no-store` | 201 `{recoveryKey}` | `password-rejected`, `vault-state`, `vault-not-ready`, `setup-failed` |
 | `POST` | `/api/vault/unlock` | `{password}`: mount, start the database, migrate, check the schema | 204 | `wrong-password`, `too-many-attempts`, `vault-state`, `vault-not-ready`, `vault-file-damaged`, `mount-failed`, `database-failed` |
@@ -669,6 +673,11 @@ Applied migrations are never edited. Every schema change is a new migration.
 | `POST` | `/api/access/login` | `{password}` on the phone's HTTPS listener only: the vault's password; a new session cookie | 204 | `wrong-password`, `too-many-attempts`, `lan-only` |
 | `GET` | `/api/access/session` | `{authenticated, lan}`: whether this browser needs to log in | 200 | — |
 | `PUT` | `/api/vault/settings` | `{idleLockMinutes}` (1 to 240) while unlocked: saved in `app_setting`, in force at once | 204 | `setting-invalid` |
+| `PUT` | `/api/settings/ai` | `{path, selfhostName, selfhostRegion}` while unlocked: switch where Corgi runs, without a restart. A path that isn't available (Cloud without the `aws` profile), Self-hosted without a valid Tailscale name, or a malformed region is a 400; the name and region are kept across switches. Waits up to 60 s for a running categorization or chat answer | 200 (the `ai` block, as in `/api/status`) | `ai-busy` |
+| `GET` | `/api/selfhost` | The Self-hosted server found by its tag in the saved region: `controls` and `reason` (why Start and Stop can't be used), `state`, `progress` while starting (naming the host it tried), `instanceType`, `minutesRunning`, `hourlyRate`, `estimatedCost`, `line`, `storageNote`, `note`. Never fails: what can't be read is the `reason` | 200 | — |
+| `POST` | `/api/selfhost/start` | Start the server when it's stopped (needs the `aws` profile); a no-op while starting or running | 202 (the status) | `selfhost-unavailable` |
+| `POST` | `/api/selfhost/stop` | Stop it when it's starting or running; a no-op otherwise | 202 (the status) | `selfhost-unavailable` |
+| `POST` | `/api/selfhost/test` | `{name}`: Ollama's version on that Tailscale name. A status check the watchdog doesn't count; the message names the host tried | 200 `{reachable, version, message}` | — |
 | `POST` | `/api/accounts` | Register an account (DAT-01); one per institution, type and last four | 201, `Location` | `account-exists` |
 | `GET` | `/api/accounts` | List accounts, sorted by name | 200 | — |
 | `GET` | `/api/accounts/{id}` | Get one account | 200 | — |
@@ -781,6 +790,8 @@ returned.
 | 429 | `too-many-attempts` | Five or more wrong passwords or recovery keys in a row; `Retry-After` gives the seconds to wait (30 s, doubling to 15 minutes; a success resets) | Wait, then try again |
 | 409 | `file-mismatch` | The file sent to keep isn't the one the statement was imported from; nothing is stored | Choose the statement's own file |
 | 409 | `no-vault` | Keeping a copy with the vault off (the plain dev database): there is no encrypted volume | Turn the vault on, or leave the file |
+| 409 | `ai-busy` | Switching paths while a categorization run or a chat answer is still running after 60 s; nothing changed | Try again when it has finished |
+| 409 | `selfhost-unavailable` | Start or Stop can't be done; `detail` says why: no `aws` profile, no region, no server or two tagged, still stopping, the zone has no free capacity of its type (a stopped instance stays in its zone), or an IAM refusal | Follow the detail: wait and retry, recreate the server in another zone, or fix the IAM statements |
 | 422 | `setting-invalid` | An auto-lock setting outside 1 to 240 minutes | Send a value in range |
 | 422 | `password-rejected` | A new vault password under 12 or over 256 characters; one of the 1,000 most common passwords, once or repeated, with only digits or symbols added before or after (`dragondragon`, `!!monkey2024`); or, at password change, one containing an account's name or institution (four letters or more, ignoring case, spaces and punctuation). Never quotes the password | Choose another password |
 | 409 | `vault-state` | Setup on a vault that exists, unlock or recovery on one that isn't locked, password change while locked, or anything with the vault off | Read `GET /api/status` for the state |
@@ -1311,7 +1322,7 @@ categories. An import never fails because of categorization.
    never as instructions, and the answer must be a category from the list, for a key that was asked.
    Txns on a transfer link and txns you marked not a transfer are never sent.
 5. **Review.** An answer at or above `min-confidence` (0.80 on Cloud, 0.85 on Self-hosted and Local; see
-   [The three paths](#the-three-paths)) is applied as `AI`, with its model,
+   [Corgi's three paths](#corgis-three-paths)) is applied as `AI`, with its model,
    confidence and prompt version. Below it, or after two invalid answers, the txn stays uncategorized
    and goes to the review queue (`AI_CATEGORY_REVIEW`). Your correction (`PUT …/category`) wins, and
    by default becomes a rule for the merchant, so its other txns follow.
@@ -1322,9 +1333,9 @@ Categorization also feeds the review queue with Transfer-kind txns that have no 
 
 ### Turning on cloud AI
 
-AI is **off by default**: with no profile, stages 1–3 run, the AI stage does nothing, and
-`GET /api/status` returns `"ai": {"mode": "OFF"}`. Cloud AI through Amazon Bedrock is enabled only
-explicitly, with the `aws` profile:
+Cloud is one of [Corgi's three paths](#corgis-three-paths), and the only one that sends anything to a third party.
+It can be chosen in Settings → Corgi only when the backend runs with the `aws` profile; without it, Settings offers
+Self-hosted and Local, and `GET /api/status`'s `ai.available` doesn't list `CLOUD`:
 
 ```sh
 cd backend && SPRING_PROFILES_ACTIVE=aws ./mvnw spring-boot:run
@@ -1619,6 +1630,57 @@ Java fallback was shown). The dev-to-holdout gap was zero. Details and every run
   write.
 - **Conversations are stored unencrypted** in Postgres until Phase 8, like the statements.
 
+## Corgi's three paths
+
+Where Corgi runs is its **path**, chosen in Settings → Corgi and switched without a restart: **Cloud** (Amazon
+Bedrock), **Self-hosted** (Ollama on a GPU server in your own AWS account, reached only through Tailscale) or **Local**
+(Ollama on this computer), or **Off**. A fresh vault selects Local. When the selected path can't run (no aws profile,
+the server stopped, Ollama not running), Corgi is off and the rest of the app works. The badge in Chat and the banner
+name the path; the banner says what leaves the machine. The measurements are compared in
+[docs/eval/tiers.md](docs/eval/tiers.md); the design is `docs/plans/phase-9.md`.
+
+| | Cloud | Self-hosted | Local |
+|---|---|---|---|
+| Where | Amazon Bedrock | your GPU server, over Tailscale | this computer |
+| What it needs | the `aws` profile and Bedrock access ([Turning on cloud AI](#turning-on-cloud-ai)) | an AWS account with a GPU quota, Tailscale, and `create.sh` ([Self-hosted](#self-hosted)) | Ollama, the two models, and a GPU Ollama can use ([Local](#local)) |
+| What leaves the machine | redacted merchant text and amounts, and chat questions with the figures they need, to Bedrock ([SEC-01](#what-leaves-the-machine)) | the same, to your own server, through Tailscale's encrypted tunnel | nothing |
+| Chat and categorization | Sonnet 4.6 (chat), Haiku 4.5 (categorization) | `ministral-3:14b` | `ministral-3:14b` |
+| Embeddings | Titan Text Embeddings V2 | `nomic-embed-text` | `nomic-embed-text` |
+| Search floor (`finalysis.chat.search.min-similarity-by-model`) | 0.40 | 0.50 | 0.50 |
+| Categorization `min-confidence` (`finalysis.ai.categorization.min-confidence-by-path`) | 0.80 | 0.85 | 0.85 |
+| What it costs | per token, estimated per question; `max-turn-cost` 0.15 and `max-daily-cost` 1.00 | about $0.80 an hour while the server runs (g6.xlarge, us-east-1), and its disk while stopped | nothing |
+
+**Measured** on the dev sets (details and report files in [docs/eval/tiers.md](docs/eval/tiers.md)):
+- **Cloud:** chat 57 of 58 (Sonnet 4.6), median turn 2.7 s; categorization 95.9%, none wrong (Haiku 4.5).
+- **Self-hosted:** chat 48 of 58 (Ministral 3 14B, quantized; 49 at full precision on Bedrock), median turn 3.4 s;
+  categorization 95.3% with 1 wrong at 0.85; search by meaning finds 24 of 25 targets (Titan: 1).
+- **Local:** not yet measured. The test suite covers it against a stub Ollama.
+
+Redaction applies on every path, Local included: the same guard checks every request.
+
+- **Why the search floors differ.** Similarities aren't comparable across embedding models. On the dev sweep, nomic
+  found 24 of 25 search targets by meaning, and 0.50 keeps 23 of them, every question still answered, with 113
+  unrelated candidates instead of 158 at 0.45. Titan found only one target by meaning: its floor barely matters.
+- **Why the confidence floors differ.** On the dev set, Ministral 3 14B with examples was right 96.6% of the time at
+  0.80, but its 5 wrong answers were all confident. At 0.85 it had 1 wrong and 6 left for review (95.3%). Haiku 4.5 is
+  95.9% with none wrong at 0.80. A wrong category is worse than one left for review.
+
+### Local
+
+Corgi on this computer, through [Ollama](https://ollama.com), on `127.0.0.1:11434`. Nothing leaves the machine. It
+needs:
+
+1. **Ollama**, installed and running (the Mac app, or `ollama serve`).
+2. **The two models**: `ollama pull ministral-3:14b` and `ollama pull nomic-embed-text`. The app never downloads a
+   model itself, and Settings says which one isn't pulled.
+3. **A GPU Ollama can use, for usable speed**: Apple Silicon, or a supported NVIDIA or AMD card. On a CPU alone a
+   14B model is very slow. A turn has 45 seconds (`finalysis.chat.max-turn-time`), and each Local call may take up to
+   300 (`finalysis.ai.ollama.local-read-timeout`).
+
+Then choose **Local** in Settings → Corgi. **Local is not yet measured**: the 2019 Intel MacBook it was meant to run on
+has no GPU Ollama can use, so the laptop measurements (Phase 9 step 9d) are deferred. The path is built and tested
+against a stub, with the same providers, payload checks and per-path settings as Self-hosted.
+
 ## Self-hosted
 
 Corgi's **Self-hosted** path runs the same model as Local, through Ollama, on a GPU server in **your own AWS account**,
@@ -1640,27 +1702,6 @@ happened in testing: a server stopped in us-east-1c couldn't start for a day. Th
 - **Reserve capacity**: an On-Demand Capacity Reservation in the zone guarantees the start, but it bills at the
   instance's hourly rate for as long as it's reserved, running or not. It defeats the point of stopping, so it isn't
   set up here.
-
-### The three paths
-
-Where Corgi runs is chosen in Settings → Corgi, without a restart. The settings that differ by path, with the
-measurements behind them (`docs/plans/phase-9.md`, 9c-11 notes):
-
-| | Cloud | Self-hosted | Local |
-|---|---|---|---|
-| Where | Amazon Bedrock | your GPU server, over Tailscale | this Mac |
-| Chat and categorization model | Sonnet 4.6 (chat), Haiku 4.5 (categorization) | `ministral-3:14b` | `ministral-3:14b` |
-| Embeddings | Titan Text Embeddings V2 | `nomic-embed-text` | `nomic-embed-text` |
-| Search floor (`finalysis.chat.search.min-similarity-by-model`) | 0.40 | 0.50 | 0.50 |
-| Categorization `min-confidence` (`finalysis.ai.categorization.min-confidence-by-path`) | 0.80 | 0.85 | 0.85 |
-| Cost | per token | per hour while the server runs | none |
-
-- **Why the search floors differ.** Similarities aren't comparable across embedding models. On the dev sweep, nomic
-  found 24 of 25 search targets by meaning, and 0.50 keeps 23 of them, every question still answered, with 113
-  unrelated candidates instead of 158 at 0.45. Titan found only one target by meaning: its floor barely matters.
-- **Why the confidence floors differ.** On the dev set, Ministral 3 14B with examples was right 96.6% of the time at
-  0.80, but its 5 wrong answers were all confident. At 0.85 it had 1 wrong and 6 left for review (95.3%). Haiku 4.5 is
-  95.9% with none wrong at 0.80. A wrong category is worse than one left for review.
 
 ### What's in the repo
 
