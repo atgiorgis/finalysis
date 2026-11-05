@@ -1,6 +1,7 @@
 # Phase 10 plan: Corgi's backlog, Plan with Corgi, key rotation, a second region
 
-Status: **draft, waiting for approval.** Phase 10 starts from tag `phase-9-done` (`fe88af1`) on branch `v1`.
+Status: **approved** (2026-11-05) with the answers under "Decisions at approval" (§12), which override anything
+older in this file; the body below has been brought in line with them. Phase 10 starts from tag `phase-9-done` (`fe88af1`) on branch `v1`.
 Requirements as of `docs/requirements.md` v1.82, roadmap version 6.
 
 Goal: fix the two faults the Self-hosted measurements found, then add the first planning feature (a long-range
@@ -12,7 +13,7 @@ waits for a quota.
 |---|---|---|---|
 | 10-1 | "[amount]" copied from the history | CHT-04, CHT-06 | nothing |
 | 10-2 | Examples overconfidence | CAT-03, AI-11 | nothing |
-| 10-3 | Plan with Corgi | GOAL-01, 02, 03, 04, 07, INV-01, CHT-01, CHT-04, SEC-03, UI-03, new GOAL-08 | approval of §11 Q1 |
+| 10-3 | Plan with Corgi | GOAL-01, 02, 03, 04, 07, INV-01, CHT-01, CHT-04, SEC-03, UI-03, new GOAL-08 | nothing (§12, Q1) |
 | 10-4 | Recovery-key rotation | SEC-06 | nothing |
 | 10-5 | Self-hosted in a second region | AI-08, AI-12 | the Ohio GPU quota (for the owner's run only) |
 | 10-6 | gpt-oss-120b on a g6.12xlarge | QA-04, AI-08, AI-05 | the 48-vCPU quota (**when the quota is approved**) |
@@ -162,7 +163,7 @@ What it shows:
 
 **The target, as written, needs a right answer, not only a cap.** At 0.85 today: 1 wrong, 6 review. Sending the
 Greenvale refund to review gives wrong 0 and **review 7**. Wrong 0 with review at most 6 needs that item (or one of the
-six) answered correctly at or above 0.85. §11 Q2 asks how to read the target.
+six) answered correctly at or above 0.85. Decided (§12, Q2): wrong 0 is the rule, and review 7 passes.
 
 ### 3.2 The options, and the recommendation
 
@@ -182,7 +183,7 @@ six) answered correctly at or above 0.85. §11 Q2 asks how to read the target.
   model call, and works on every path.
 - **(c) A calibration table per path.** From this run it would have two populated bands with 6 and 13 rows; it is fitted
   on the dev set and checked on the same set (the holdout is never run again), and with a monotone table it is the
-  per-path threshold again under another name. Not now; worth revisiting only with far more AI items (§11 Q3).
+  per-path threshold again under another name. Not now; worth revisiting only with far more AI items (§11 Q3; §12: not in Phase 10).
 
 **What (b) does and doesn't fix:** it catches the Greenvale refund if its examples disagree or don't include Groceries,
 which is what its eligible examples should show; the per-item diagnostics confirm it. It does not undo point 1, the
@@ -216,11 +217,11 @@ cd backend && caffeinate -i ./mvnw test -Pai-eval -Deval.set=dev -Deval.min-conf
 ```
 
 - Baseline: `dev-89e693bc1875-20261104T112142Z`, C at 0.85 (1 wrong, 6 review).
-- Target: C at 0.85, wrong 0, review at most 6 (or 7, per §11 Q2).
+- Pass: C at 0.85 with **wrong 0**. The review count is reported, not targeted (§12, Q2): wrong 0 with review 7 passes.
 - Cost: one Start plus about a minute of run, **about $0.07** (or nothing extra if run in the same session as 10-1's).
 
-Requirements: CAT-03 and AI-11 get a note with the measured result (v1.84). If the target is met, the roadmap's
-"0.85 measured on more than 16 AI items" stays open unless §11 Q3 enlarges the set.
+Requirements: CAT-03 and AI-11 get a note with the measured result (v1.84). The categorization dev set stays version 1
+in Phase 10 (§12, Q3), so the roadmap's "0.85 measured on more than 16 AI items" stays open.
 
 ---
 
@@ -260,19 +261,24 @@ GR-04). Every result carries refs for citations, like the existing tools.
 | Tool | Arguments | Returns |
 |---|---|---|
 | `get_plan_baseline` | `months`: 3 or 6 | the last complete months used; average monthly income, spending and surplus (INV-01); average monthly spending per EXPENSE category; the months' data quality (ANA-08) |
-| `draft_plan` | `target_amount`, `target_month`, `funding` (`SURPLUS` or an account alias), `cuts`: up to 6 × {`category`, `cut_percent` ∈ 10, 25, 50, 100} | months remaining; funded to date (0 for a new plan); required monthly amount; baseline surplus; the gap; each cut's monthly dollars; the cuts' total; the gap after cuts; `closes_gap` |
-| `get_plan` | none | the saved plan (target, month, funding, cuts and their caps), or "no plan" |
-| `get_plan_checkin` | `month` | per planned category: cap, spent, `MET`/`MISSED`/`SO_FAR`; funding observed against the monthly requirement; funded to date against the schedule to date; `INSUFFICIENT_DATA` below the data-quality threshold |
+| `draft_plan` | `target_amount`; exactly one of `target_month` (`YYYY-MM`) or `months_ahead` (1 to 600); `funding` (`SURPLUS` or an account alias), `cuts`: up to 6 × {`category`, `cut_percent` ∈ 10, 25, 50, 100} | the resolved target month; months remaining; funded to date (0 for a new plan); required monthly amount; baseline surplus; the gap; each cut's monthly dollars; the cuts' total; the gap after cuts; `closes_gap` |
+| `get_plan` | none | the saved plan (target, target month, months remaining, funding, cuts and their caps), or "no plan" |
+| `get_plan_checkin` | `month` | per planned category: cap, spent, `MET`/`MISSED`/`SO_FAR`; funding observed against the monthly requirement; funded to date against the schedule to date; months elapsed and months remaining; `INSUFFICIENT_DATA` below the data-quality threshold |
 
 - `draft_plan` is a calculator: nothing is stored. Its arguments are checked like every tool's (`ToolArguments`): a
-  category must be an EXPENSE category the turn has seen; the target month 1 to 600 months ahead; the amount positive,
+  category must be an EXPENSE category the turn has seen; the target 1 to 600 months ahead; the amount positive,
   at most `NUMERIC(12,2)`; a cut on a category with no baseline spending is an error, never a zero.
+- **No date arithmetic by the model** (§12, the 10-3 change). "$60,000 in 10 years" is `months_ahead: 120`; the model
+  never turns years into a month. `draft_plan` takes exactly one of `target_month` or `months_ahead` (both, or neither,
+  is an argument error naming the two), and returns the resolved target month and the months remaining, which are
+  grounded like any figure. Every "how many months are left" or "how many months so far" the model might count comes
+  from a tool: `draft_plan`, `get_plan` and `get_plan_checkin` return it, from the app's clock.
 - **The user's target is an argument the model copies from the question**, then a figure the tool returns, so it is
   grounded like any other. The user typed it; it already goes to the model with the question.
 - **Funding through an account** sums the transfers into it since the plan's start (observed flows). It is never the
   account's balance, which SEC-01 forbids sending.
 - A partial month's check-in shows what is spent so far (`SO_FAR`), with no pace projection; GOAL-03's `ON_TRACK` /
-  `OFF_PACE` stays with the Goals phase (§11 Q5).
+  `OFF_PACE` stays with the Goals phase (§12, Q5).
 
 ### 4.3 Saving and the schema
 
@@ -322,7 +328,7 @@ written into `dev.yml`; a test recomputes them so the file can't drift.
 
 | Id | Question (sketch) | Expected |
 |---|---|---|
-| d-p01 | "I want to save $60,000 in 10 years. What would that take a month?" | the required monthly amount |
+| d-p01 | "I want to save $60,000 in 10 years. What would that take a month?" | the required monthly amount and the resolved target month (`months_ahead: 120`, no date counted by the model) |
 | d-p02 | "What's my monthly surplus?" | the 3-month average surplus |
 | d-p03 | (multi-turn) the goal, then "Which categories could I cut to get there?" | `draft_plan` called with cuts; its gap-after-cuts figure |
 | d-p04 | "If I invest it at 7%, how much will I have?" | a refusal; no figure |
@@ -343,6 +349,8 @@ projections, market data), and a plan the model can save.
 
 ### 4.8 Tests
 
+- `ToolArgumentsTest` (the 10-3 change): `draft_plan` with `target_month` only, with `months_ahead` only (each resolved
+  against the clock to the same month), with both (refused), with neither (refused), and out-of-range values of each.
 - `PlanCalculatorTest` (pure Java): required monthly with `BigDecimal` half-even to the cent; months remaining across
   years; funded to date; each cut; gap closed exactly, short by a cent, over.
 - `PlanBaselineTest` (Testcontainers, sample data): averages per category, surplus, transfers excluded, incomplete months
@@ -368,7 +376,7 @@ projections, market data), and a plan the model can save.
 
 Requirements (v1.85): new **GOAL-08** "Plan with Corgi" (the conversation, the menu, the tools, the no-growth rule);
 GOAL-01, 02, 03, 04, 07 and INV-01 noted with the part this phase builds (they stay Planned, with the rest of Layer 2);
-CHT-01 (16 tools, 4 in the Plan tab), SEC-03 note. Roadmap version 7: the layer exception (§11 Q1).
+CHT-01 (16 tools, 4 in the Plan tab), SEC-03 note. Roadmap version 7: the layer exception (§12, Q1).
 
 ---
 
@@ -396,7 +404,7 @@ nothing: not this vault, and not with any copy of the old key file.
   leaves a `.next` the image doesn't accept; unlock deletes it after the main file works.
 - **Whether `chpass` works while the image is attached** is checked first in the IT. If it needs the image detached,
   rotation stops the database and detaches (requests answer 423 for those seconds, as at lock), runs `chpass`, and
-  remounts with the new key (§11 Q7).
+  remounts with the new key (§12, Q7).
 - **Backups:** a copy of the bundle taken before rotation is still encrypted with the old key, and the old key file
   still opens that copy. Rotation can't reach copies. The screen and the README say: take a new backup now, and delete
   the old ones if the old key may be exposed.
@@ -437,7 +445,7 @@ Start, Stop and status already use the region in Settings. What's left:
 
 - `create.sh --region us-east-2` and `destroy.sh --region us-east-2` (flags beside the prompts; the prompt's default
   stays us-east-1). The billing stack stays in us-east-1 whatever the region.
-- **One server at a time** (§11 Q8): `create.sh` looks for the `finalysis-selfhost` stack in every enabled region the
+- **One server at a time** (§12, Q8): `create.sh` looks for the `finalysis-selfhost` stack in every enabled region the
   account lists, and refuses if one exists elsewhere, naming it and `destroy.sh --region`. The Tailscale name stays
   `finalysis-selfhost`, and the app's single region setting stays right.
 - `hourly-rates` keyed by region and type (`"[us-east-2/g6.xlarge]"`), with a fallback to the type alone; the owner
@@ -556,3 +564,29 @@ If 10-6's quota isn't approved by close-out, Phase 10 closes without it, and 10-
    remounts with the new key. Acceptable?
 8. **One Self-hosted server at a time** across regions (create refuses while one exists elsewhere), keeping one
    Tailscale name and one region setting. *Recommended: yes.*
+
+---
+
+## 12. Decisions at approval (2026-11-05)
+
+On §11's questions:
+
+1. **Yes.** The roadmap records Plan with Corgi as an explicit Layer 2 exception, as Phase 7b did for the Goals tab
+   shell, with the new GOAL-08 in Phase 10 (roadmap version 7, step 10-3).
+2. **Yes.** Wrong 0 with review 7 is a pass for 10-2. The rule is **wrong 0 first**; the review count is reported, not
+   targeted (§3.5).
+3. **No.** The categorization dev set stays version 1 in Phase 10.
+4. **The menu stands:** 10, 25, 50 and 100 percent.
+5. **Yes.** A partial month's check-in is `SO_FAR` only; `ON_TRACK`/`OFF_PACE` waits for the Goals phase.
+6. **Yes.** One plan, versioned.
+7. **Yes.** If `hdiutil chpass` needs the image detached, rotation locks for the seconds it takes and remounts with the
+   new key; the vault IT decides which path (§5.2).
+8. **Yes.** One Self-hosted server at a time; `create.sh` refuses while one exists in another region (§6).
+
+One change to 10-3 (§4.2, §4.8): **`draft_plan` and `get_plan_baseline` never make the model do date arithmetic.**
+"$60,000 in 10 years" must not require the model to turn 10 years into a target month. `draft_plan` takes exactly one
+of `target_month` (`YYYY-MM`) or `months_ahead` (1 to 600); the tool returns the resolved target month, grounded like
+any figure. The same applies to any "how many months are left" the model would otherwise count: the plan tools return
+it. A `ToolArguments` test covers both forms and both given.
+
+Step 10-1 starts at approval. No AWS or model call by me; the owner runs the rerun.
